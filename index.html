@@ -42,6 +42,22 @@ window.onload = function() {
     }
   })
   overpass_layer.addTo(map)
+
+  var overpass_layer2 = new OverpassLayer('(way[leisure=park];relation[leisure=park];);', {
+    style: function(ob) {
+      return {
+          nodeType: 'CircleMarker',
+          color: 'green',
+          fillColor: 'green',
+          fillOpacity: 0.2,
+          weight: 1,
+          radius: 6
+      }
+    },
+    minZoom: 15
+  })
+  overpass_layer2.addTo(map)
+
 }
   </script>
 </head>

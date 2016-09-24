@@ -11,7 +11,7 @@ Parameters:
 
 Options:
 * overpass: An OverpassFrontend object (defaults to the global variable `overpass`)
-* style: An object, styling the result. E.g.: { weight: 2, fillColor: 'red' }
+* style: An object, styling the result. E.g.: { weight: 2, fillColor: 'red' } or a style function. The function will be passed the OverpassObject object and should return the style.
 * minZoom: Show layer only from the given zoom level (default: 16)
 * maxZoom: Show layer only up to the given zoom level (default: no limit)
 

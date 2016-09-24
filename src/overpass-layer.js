@@ -54,7 +54,11 @@ OverpassLayer.prototype.check_update_map = function() {
     },
     function (err, ob) {
       if (!ob.feature) {
-        ob.feature = ob.leafletFeature(this.style)
+        var style = this.style
+        if(typeof this.style == 'function')
+          style = this.style(ob)
+
+        ob.feature = ob.leafletFeature(style)
         // ob.feature.bindPopup('<pre>' + escapeHtml(JSON.stringify(ob.GeoJSON(), null, '  ')) + '</pre>')
       }
       
