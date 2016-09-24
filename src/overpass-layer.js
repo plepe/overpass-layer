@@ -1,11 +1,11 @@
 var BoundingBox = require('boundingbox')
 
-function OverpassLayer(options) {
+function OverpassLayer(query, options) {
   if(!options)
     options = {}
 
+  this.query = query
   this.overpass = 'overpass' in options ? options.overpass : overpass
-  this.query = 'query' in options ? options.query : ''
   this.style = 'style' in options ? options.style : {}
   this.minZoom = 'minZoom' in options ? options.minZoom : 16
   this.maxZoom = 'maxZoom' in options ? options.maxZoom : null

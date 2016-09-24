@@ -31,8 +31,7 @@ window.onload = function() {
   )
   osm_mapnik.addTo(map)
 
-  var overpass_layer = new OverpassLayer({
-    query: 'node[natural=tree];',
+  var overpass_layer = new OverpassLayer('node[natural=tree];', {
     style: {
           nodeType: 'CircleMarker',
           color: 'red',
