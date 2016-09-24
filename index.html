@@ -1,0 +1,52 @@
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>OverpassFrontend example</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="node_modules/leaflet/dist/leaflet.css" />
+  <style>
+.leaflet-popup-content {
+  max-height: 250px;
+  overflow: auto;
+}
+.leaflet-popup-content pre {
+  font-size: 8px;
+}
+  </style>
+  <script src="node_modules/leaflet/dist/leaflet.js"></script>
+  <script src="dist/overpass-layer.js"></script>
+  <script type='text/javascript'>
+var map
+var overpass
+
+window.onload = function() {
+  map = L.map('map').setView([51.505, -0.09], 18)
+  overpass = new Overpass('http://www.overpass-api.de/api/interpreter')
+
+  var osm_mapnik = L.tileLayer('//{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    {
+      maxZoom: 19,
+      attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+    }
+  )
+  osm_mapnik.addTo(map)
+
+  var overpass_layer = new OverpassLayer({
+    query: 'node[natural=tree];',
+    style: {
+          nodeType: 'CircleMarker',
+          color: 'red',
+          fillColor: 'red',
+          fillOpacity: 0.1,
+          weight: 1,
+          radius: 6
+    }
+  })
+  overpass_layer.addTo(map)
+}
+  </script>
+</head>
+<body>
+  <div id='map' style='position: absolute; left: 0; top: 0; bottom: 0; right: 0'></div>
+</body>
+</html>
