@@ -7,6 +7,8 @@ function OverpassLayer(options) {
   this.overpass = 'overpass' in options ? options.overpass : overpass
   this.query = 'query' in options ? options.query : ''
   this.style = 'style' in options ? options.style : {}
+  this.minZoom = 'minZoom' in options ? options.minZoom : 16
+  this.maxZoom = 'maxZoom' in options ? options.maxZoom : null
 
   this.visible_features = {}
 }
@@ -19,6 +21,17 @@ OverpassLayer.prototype.addTo = function(map) {
 
 OverpassLayer.prototype.check_update_map = function() {
   var bounds = new BoundingBox(this.map.getBounds())
+
+  if(this.map.getZoom() < this.minZoom ||
+     (this.maxZoom !== null && this.map.getZoom() > this.maxZoom)) {
+    for (var k in this.visible_features) {
+      var ob = this.visible_features[k]
+      map.removeLayer(ob.feature)
+    }
+
+    this.visible_features = {}
+    return
+  }
 
   // Hide loaded but non-visible objects
   for (var k in this.visible_features) {
