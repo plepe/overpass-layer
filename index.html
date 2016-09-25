@@ -40,9 +40,7 @@ window.onload = function() {
           weight: 1,
           radius: 6
     },
-    featureTitle: function(ob) {
-      return ob.tags.species || 'Tree'
-    },
+    featureTitle: '{{ tags.species.default("Tree") }}',
     featureBody: function(ob) {
       return '<pre>' + JSON.stringify(ob.tags, null, '  ') + '</pre>'
     }
@@ -60,7 +58,10 @@ window.onload = function() {
           radius: 6
       }
     },
-    minZoom: 15
+    minZoom: 15,
+    featureBody: function(ob) {
+      return '<pre>' + JSON.stringify(ob.tags, null, '  ') + '</pre>'
+    }
   })
   overpass_layer2.addTo(map)
 

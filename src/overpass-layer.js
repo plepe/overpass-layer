@@ -1,4 +1,5 @@
 var BoundingBox = require('boundingbox')
+var twig = require('twig').twig
 
 function OverpassLayer(query, options) {
   if(!options)
@@ -11,6 +12,19 @@ function OverpassLayer(query, options) {
   this.maxZoom = 'maxZoom' in options ? options.maxZoom : null
   this.featureTitle = 'featureTitle' in options ? options.featureTitle : function(ob) { return ob.tags.name || ob.tags.operator || ob.tags.ref || ob.id }
   this.featureBody = 'featureBody' in options ? options.featureBody : ''
+
+  if(typeof this.featureTitle == 'string') {
+    var template = twig({ data: this.featureTitle })
+    this.featureTitle = function(template, ob) {
+      return template.render(ob)
+    }.bind(this, template)
+  }
+  if(typeof this.featureBody == 'string') {
+    var template = twig({ data: this.featureBody })
+    this.featureBody = function(template, ob) {
+      return template.render(ob)
+    }.bind(this, template)
+  }
 
   this.visible_features = {}
 }
