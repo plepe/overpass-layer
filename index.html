@@ -39,6 +39,12 @@ window.onload = function() {
           fillOpacity: 0.1,
           weight: 1,
           radius: 6
+    },
+    featureTitle: function(ob) {
+      return ob.tags.species || 'Tree'
+    },
+    featureBody: function(ob) {
+      return '<pre>' + JSON.stringify(ob.tags, null, '  ') + '</pre>'
     }
   })
   overpass_layer.addTo(map)

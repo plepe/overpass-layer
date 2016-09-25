@@ -9,6 +9,8 @@ function OverpassLayer(query, options) {
   this.style = 'style' in options ? options.style : {}
   this.minZoom = 'minZoom' in options ? options.minZoom : 16
   this.maxZoom = 'maxZoom' in options ? options.maxZoom : null
+  this.featureTitle = 'featureTitle' in options ? options.featureTitle : function(ob) { return ob.tags.name || ob.tags.operator || ob.tags.ref || ob.id }
+  this.featureBody = 'featureBody' in options ? options.featureBody : ''
 
   this.visible_features = {}
 }
@@ -59,7 +61,20 @@ OverpassLayer.prototype.check_update_map = function() {
           style = this.style(ob)
 
         ob.feature = ob.leafletFeature(style)
-        // ob.feature.bindPopup('<pre>' + escapeHtml(JSON.stringify(ob.GeoJSON(), null, '  ')) + '</pre>')
+
+        var popup_content = ''
+
+        if(typeof this.featureTitle == 'function')
+          popup_content += '<h1>' + this.featureTitle(ob) + '</h1>'
+        else
+          popup_content += this.featureTitle
+
+        if(typeof this.featureBody == 'function')
+          popup_content += '<h1>' + this.featureBody(ob) + '</h1>'
+        else
+          popup_content += this.featureBody
+
+        ob.feature.bindPopup(popup_content)
       }
       
       ob.feature.addTo(map)
