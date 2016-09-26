@@ -11,7 +11,10 @@ Parameters:
 
 Options:
 * overpass: An OverpassFrontend object (defaults to the global variable `overpass`)
-* style: An object, styling the result. E.g.: { weight: 2, fillColor: 'red' } or a style function. The function will be passed the OverpassObject object and should return the style.
+* style: An object or a function or a TwigJS template (string), styling the result.
+  * If an object is used, e.g.: { weight: 2, fillColor: 'red' }
+  * If a function is used, the function will be passed the OverpassObject object and should return the style as object.
+  * If a TwigJS template is used, the template should create lines with "key: value" (E.g. `color: red\nweight: 2`). See below for possible patterns.
 * minZoom: Show layer only from the given zoom level (default: 16)
 * maxZoom: Show layer only up to the given zoom level (default: no limit)
 * featureTitle: the title of the feature popup. Either a function (which will be passed the OverpassObject object; return HTML text) or a template for TwigJS.

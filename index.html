@@ -40,7 +40,7 @@ window.onload = function() {
           weight: 1,
           radius: 6
     },
-    featureTitle: '{{ tags.species.default("Tree") }}',
+    featureTitle: '{{ tags.species|default("Tree") }}',
     featureBody: function(ob) {
       return '<pre>' + JSON.stringify(ob.tags, null, '  ') + '</pre>'
     }
@@ -64,6 +64,23 @@ window.onload = function() {
     }
   })
   overpass_layer2.addTo(map)
+
+  var overpass_layer3 = new OverpassLayer('(node[amenity=restaurant];way[amenity=restaurant];relation[amenity=restaurant];);', {
+    style:
+      "{% if tags.cuisine == 'italian' %}\n" +
+      "  color: #003f7f\n" +
+      "  fillColor: #003f7f\n" +
+      "{% else %}\n" +
+      "  color: blue\n" +
+      "  fillColor: blue  \n" +
+      "{% endif %}\n" +
+      "fillOpacity: 0.2\n" +
+      "weight: 2\n" +
+      "radius: 9\n",
+    minZoom: 15,
+    featureBody: "Cuisine: {{ tags.cuisine|default('unknown') }}"
+  })
+  overpass_layer3.addTo(map)
 
 }
   </script>

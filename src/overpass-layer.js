@@ -25,6 +25,21 @@ function OverpassLayer(query, options) {
       return template.render(ob)
     }.bind(this, template)
   }
+  if(typeof this.style == 'string') {
+    var template = twig({ data: this.style })
+    this.style = function(template, ob) {
+      var str = template.render(ob).split('\n')
+      var ret = {}
+
+      for(var i = 0; i < str.length; i++) {
+        var m;
+        if(m = str[i].match(/^\s*([a-zA-Z0-9_]+)\s*:\s*(.*)\s*$/))
+          ret[m[1]] = m[2]
+      }
+
+      return ret
+    }.bind(this, template)
+  }
 
   this.visible_features = {}
 }
