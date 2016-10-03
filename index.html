@@ -21,7 +21,10 @@ var overpassFrontend
 
 window.onload = function() {
   map = L.map('map').setView([51.505, -0.09], 18)
-  overpassFrontend = new OverpassFrontend('http://www.overpass-api.de/api/interpreter')
+  overpassFrontend = new OverpassFrontend('http://overpass.osm.rambler.ru/cgi/interpreter', {
+    timeGap: 10,
+    effortPerRequest: 100
+  })
 
   var osm_mapnik = L.tileLayer('//{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
     {
