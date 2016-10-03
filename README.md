@@ -1,5 +1,5 @@
 # overpass-layer
-Show a Leaflet layer using OpenStreetMap data from Overpass API via OverpassFrontend.
+Show a Leaflet layer using OpenStreetMap data from Overpass API via overpass-frontend.
 
 # API
 ## constructor OverpassLayer(query, options)
@@ -10,7 +10,7 @@ Parameters:
 * options: an object, see below.
 
 Options:
-* overpass: An OverpassFrontend object (defaults to the global variable `overpass`)
+* overpassFrontend: An OverpassFrontend object (defaults to the global variable `overpassFrontend`)
 * style: An object or a function or a TwigJS template (string), styling the result.
   * If an object is used, e.g.: { weight: 2, fillColor: 'red' }
   * If a function is used, the function will be passed the OverpassObject object and should return the style as object.

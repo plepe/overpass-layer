@@ -17,11 +17,11 @@
   <script src="dist/overpass-layer.js"></script>
   <script type='text/javascript'>
 var map
-var overpass
+var overpassFrontend
 
 window.onload = function() {
   map = L.map('map').setView([51.505, -0.09], 18)
-  overpass = new Overpass('http://www.overpass-api.de/api/interpreter')
+  overpassFrontend = new OverpassFrontend('http://www.overpass-api.de/api/interpreter')
 
   var osm_mapnik = L.tileLayer('//{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
     {
@@ -33,7 +33,7 @@ window.onload = function() {
 
   var overpass_layer = new OverpassLayer('node[natural=tree];', {
     style: {
-          nodeType: 'CircleMarker',
+          nodeFeature: 'CircleMarker',
           color: 'red',
           fillColor: 'red',
           fillOpacity: 0.1,
@@ -51,7 +51,7 @@ window.onload = function() {
   var overpass_layer2 = new OverpassLayer('(way[leisure=park];relation[leisure=park];);', {
     style: function(ob) {
       return {
-          nodeType: 'CircleMarker',
+          nodeFeature: 'CircleMarker',
           color: 'green',
           fillColor: 'green',
           fillOpacity: 0.2,

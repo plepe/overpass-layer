@@ -6,7 +6,7 @@ function OverpassLayer(query, options) {
     options = {}
 
   this.query = query
-  this.overpass = 'overpass' in options ? options.overpass : overpass
+  this.overpassFrontend = 'overpassFrontend' in options ? options.overpassFrontend : overpassFrontend
   this.style = 'style' in options ? options.style : {}
   this.minZoom = 'minZoom' in options ? options.minZoom : 16
   this.maxZoom = 'maxZoom' in options ? options.maxZoom : null
@@ -76,12 +76,12 @@ OverpassLayer.prototype.check_update_map = function() {
 
   // Abort current requests (in case they are long-lasting - we don't need them
   // anyway). Data which is being submitted will still be loaded to the cache.
-  this.overpass.abort_all_requests()
+  this.overpassFrontend.abortAllRequests()
 
   // Query all trees in the current view
-  this.overpass.bbox_query(this.query, bounds,
+  this.overpassFrontend.BBoxQuery(this.query, bounds,
     {
-      properties: Overpass.ALL
+      properties: OverpassFrontend.ALL
     },
     function (err, ob) {
       if (!ob.feature) {
