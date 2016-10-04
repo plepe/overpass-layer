@@ -1,0 +1,49 @@
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>OverpassFrontend example</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="node_modules/leaflet/dist/leaflet.css" />
+  <style>
+.leaflet-popup-content {
+  max-height: 250px;
+  overflow: auto;
+}
+.leaflet-popup-content pre {
+  font-size: 8px;
+}
+
+#overpass_form {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  background: white;
+  padding: 5px;
+  z-index: 1000;
+}
+#overpass_form textarea {
+  width: 20em;
+}
+  </style>
+  <script src="node_modules/leaflet/dist/leaflet.js"></script>
+  <script src="dist/overpass-layer.js"></script>
+  <script type='text/javascript' src='form.js'></script>
+</head>
+<body>
+  <div id='map' style='position: absolute; left: 0; top: 0; bottom: 0; right: 0'></div>
+  <form id='overpass_form'>
+  Query:<br/>
+  <textarea name='query' style='height: 2em;'>node[natural=tree];</textarea><br/>
+  Style:<br/>
+  <textarea name='style' style='height: 10em;'>
+nodeFeature: CircleMarker
+color: red
+fillColor: red
+fillOpacity: 0.1
+weight: 1
+radius: 6
+  </textarea><br/>
+  <input type='submit' value='Ok'>
+  </form>
+</body>
+</html>

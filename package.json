@@ -20,7 +20,7 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "browserify index.js -o dist/overpass-layer.js",
     "prepublish": "npm run build && npm run lint",
-    "lint": "eslint src/*.js"
+    "lint": "eslint src/*.js form.js"
   },
   "repository": {
     "type": "git",
