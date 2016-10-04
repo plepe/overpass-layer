@@ -57,6 +57,21 @@ OverpassLayer.prototype.addTo = function (map) {
   this.check_update_map()
 }
 
+OverpassLayer.prototype.remove = function () {
+  var k
+  var ob
+
+  for (k in this.visibleFeatures) {
+    ob = this.visibleFeatures[k]
+    this.map.removeLayer(ob.feature)
+  }
+
+  this.visibleFeatures = {}
+
+  this.map.off('moveend')
+  this.map = null
+}
+
 OverpassLayer.prototype.check_update_map = function () {
   var bounds = new BoundingBox(this.map.getBounds())
   var k

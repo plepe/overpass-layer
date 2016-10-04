@@ -36,3 +36,6 @@ The data of an object is available as patterns. Tags and Meta information is onl
 
 ## method addTo(map)
 Add layer to the given map.
+
+## method remove()
+Removes the OverpassLayer and all its features.
