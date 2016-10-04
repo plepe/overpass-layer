@@ -48,7 +48,7 @@ function OverpassLayer (query, options) {
     }.bind(this, template)
   }
 
-  this.visible_features = {}
+  this.visibleFeatures = {}
 }
 
 OverpassLayer.prototype.addTo = function (map) {
@@ -64,22 +64,22 @@ OverpassLayer.prototype.check_update_map = function () {
 
   if (this.map.getZoom() < this.minZoom ||
      (this.maxZoom !== null && this.map.getZoom() > this.maxZoom)) {
-    for (k in this.visible_features) {
-      ob = this.visible_features[k]
+    for (k in this.visibleFeatures) {
+      ob = this.visibleFeatures[k]
       this.map.removeLayer(ob.feature)
     }
 
-    this.visible_features = {}
+    this.visibleFeatures = {}
     return
   }
 
   // Hide loaded but non-visible objects
-  for (k in this.visible_features) {
-    ob = this.visible_features[k]
+  for (k in this.visibleFeatures) {
+    ob = this.visibleFeatures[k]
 
-    if (!ob.isVisible(bounds)) {
+    if (!ob.object.isVisible(bounds)) {
       this.map.removeLayer(ob.feature)
-      delete this.visible_features[k]
+      delete this.visibleFeatures[k]
     }
   }
 
@@ -93,13 +93,15 @@ OverpassLayer.prototype.check_update_map = function () {
       properties: OverpassFrontend.ALL
     },
     function (err, ob) {
-      if (!ob.feature) {
+      if (!(ob.id in this.visibleFeatures)) {
+        var feature
+
         var style = this.style
         if (typeof this.style === 'function') {
           style = this.style(ob)
         }
 
-        ob.feature = ob.leafletFeature(style)
+        feature = ob.leafletFeature(style)
 
         var popupContent = ''
 
@@ -115,11 +117,15 @@ OverpassLayer.prototype.check_update_map = function () {
           popupContent += this.featureBody
         }
 
-        ob.feature.bindPopup(popupContent)
-      }
+        feature.bindPopup(popupContent)
 
-      ob.feature.addTo(this.map)
-      this.visible_features[ob.id] = ob
+        this.visibleFeatures[ob.id] = {
+          object: ob,
+          feature: feature
+        }
+
+        feature.addTo(this.map)
+      }
     }.bind(this),
     function (err) {
     }.bind(this)
