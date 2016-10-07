@@ -53,7 +53,7 @@ function OverpassLayer (query, options) {
 
 OverpassLayer.prototype.addTo = function (map) {
   this.map = map
-  this.map.on('moveend', this.check_update_map.bind(this))
+  this.map.on('moveend', this.check_update_map, this)
   this.check_update_map()
 }
 
@@ -68,7 +68,7 @@ OverpassLayer.prototype.remove = function () {
 
   this.visibleFeatures = {}
 
-  this.map.off('moveend')
+  this.map.off('moveend', this.check_update_map, this)
   this.map = null
 }
 
