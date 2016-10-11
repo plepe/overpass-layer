@@ -49,6 +49,7 @@ function OverpassLayer (query, options) {
   }
 
   this.visibleFeatures = {}
+  this.currentRequest = null
 }
 
 OverpassLayer.prototype.addTo = function (map) {
@@ -100,10 +101,13 @@ OverpassLayer.prototype.check_update_map = function () {
 
   // Abort current requests (in case they are long-lasting - we don't need them
   // anyway). Data which is being submitted will still be loaded to the cache.
-  this.overpassFrontend.abortAllRequests()
+  if (this.currentRequest) {
+    this.currentRequest.abort()
+    this.currentRequest = null
+  }
 
   // Query all trees in the current view
-  this.overpassFrontend.BBoxQuery(this.query, bounds,
+  this.currentRequest = this.overpassFrontend.BBoxQuery(this.query, bounds,
     {
       properties: OverpassFrontend.ALL
     },
@@ -143,6 +147,7 @@ OverpassLayer.prototype.check_update_map = function () {
       }
     }.bind(this),
     function (err) {
+      this.currentRequest = null
     }.bind(this)
   )
 }
