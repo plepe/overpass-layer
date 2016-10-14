@@ -152,9 +152,4 @@ OverpassLayer.prototype.check_update_map = function () {
   )
 }
 
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = OverpassLayer
-}
-if (typeof window !== 'undefined') {
-  window.OverpassLayer = OverpassLayer
-}
+module.exports = OverpassLayer
