@@ -1,4 +1,4 @@
-/* global L:false */
+/* global L:false OverpassLayer:false OverpassFrontend:false */
 var map
 var overpassFrontend
 var overpassForm
@@ -13,6 +13,7 @@ function updateMap () {
     overpassForm.elements.query.value,
     {
       style: overpassForm.elements.style.value,
+      overpassFrontend: overpassFrontend,
       featureBody: function (ob) {
         return '<pre>' + JSON.stringify(ob.tags, null, '  ') + '</pre>'
       }
@@ -30,13 +31,13 @@ window.onload = function () {
     effortPerRequest: 100
   })
 
-  var osm_mapnik = L.tileLayer('//{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+  var osmMapnik = L.tileLayer('//{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
     {
       maxZoom: 19,
       attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
     }
   )
-  osm_mapnik.addTo(map)
+  osmMapnik.addTo(map)
 
   overpassForm = document.getElementById('overpass_form')
   overpassForm.onsubmit = updateMap
