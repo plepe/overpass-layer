@@ -115,19 +115,24 @@ OverpassLayer.prototype.check_update_map = function () {
       if (!(ob.id in this.visibleFeatures)) {
         var feature
 
-        var style = this.options.style
-        if (typeof this.options.style === 'function') {
-          style = this.options.style(ob)
+        var objectData = {}
+        for (var k in this.options) {
+          if (typeof this.options[k] === 'function') {
+            objectData[k] = this.options[k](ob)
+          } else {
+            objectData[k] = this.options[k]
+          }
+        }
 
-          if (typeof style === 'string') {
-            var str = style.split('\n')
-            style = {}
+        var style = objectData.style
+        if (typeof style === 'string') {
+          var str = style.split('\n')
+          style = {}
 
-            for (var i = 0; i < str.length; i++) {
-              var m
-              if ((m = str[i].match(/^\s*([a-zA-Z0-9_]+)\s*:\s*(.*)\s*$/))) {
-                style[m[1]] = m[2]
-              }
+          for (var i = 0; i < str.length; i++) {
+            var m
+            if ((m = str[i].match(/^\s*([a-zA-Z0-9_]+)\s*:\s*(.*)\s*$/))) {
+              style[m[1]] = m[2]
             }
           }
         }
@@ -135,32 +140,22 @@ OverpassLayer.prototype.check_update_map = function () {
         feature = ob.leafletFeature(style)
 
         var featureMarker
-        if (this.options.marker) {
-          var markerHtml = '<img src="' + this.options.marker.iconUrl + '">'
-          if (this.options.markerSign) {
-            markerHtml += '<div>' + this.options.markerSign(ob) + '</div>'
+        if (objectData.marker) {
+          var markerHtml = '<img src="' + objectData.marker.iconUrl + '">'
+          if (objectData.markerSign) {
+            markerHtml += '<div>' + objectData.markerSign + '</div>'
           }
 
-          this.options.marker.html = markerHtml
-          this.options.marker.className = 'overpass-layer-icon'
-          var icon = L.divIcon(this.options.marker)
+          objectData.marker.html = markerHtml
+          objectData.marker.className = 'overpass-layer-icon'
+          var icon = L.divIcon(objectData.marker)
 
           featureMarker = L.marker(ob.center, { icon: icon })
         }
 
         var popupContent = ''
-
-        if (typeof this.options.featureTitle === 'function') {
-          popupContent += '<h1>' + this.options.featureTitle(ob) + '</h1>'
-        } else {
-          popupContent += this.options.featureTitle
-        }
-
-        if (typeof this.options.featureBody === 'function') {
-          popupContent += '<h1>' + this.options.featureBody(ob) + '</h1>'
-        } else {
-          popupContent += this.options.featureBody
-        }
+        popupContent += '<h1>' + objectData.featureTitle + '</h1>'
+        popupContent += objectData.featureBody
 
         feature.bindPopup(popupContent)
         if (featureMarker) {
@@ -169,6 +164,7 @@ OverpassLayer.prototype.check_update_map = function () {
 
         this.visibleFeatures[ob.id] = {
           object: ob,
+          data: objectData,
           feature: feature,
           featureMarker: featureMarker
         }
