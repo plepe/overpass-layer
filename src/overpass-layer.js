@@ -76,6 +76,11 @@ OverpassLayer.prototype.check_update_map = function () {
      (this.options.maxZoom !== null && this.map.getZoom() > this.options.maxZoom)) {
     for (k in this.visibleFeatures) {
       ob = this.visibleFeatures[k]
+
+      if (this.onDisappear) {
+        this.onDisappear(ob.object, ob.data)
+      }
+
       this.map.removeLayer(ob.feature)
       if (ob.featureMarker) {
         this.map.removeLayer(ob.featureMarker)
@@ -91,6 +96,10 @@ OverpassLayer.prototype.check_update_map = function () {
     ob = this.visibleFeatures[k]
 
     if (!ob.object.intersects(bounds)) {
+      if (this.onDisappear) {
+        this.onDisappear(ob.object, ob.data)
+      }
+
       this.map.removeLayer(ob.feature)
       if (ob.featureMarker) {
         this.map.removeLayer(ob.featureMarker)
@@ -172,6 +181,10 @@ OverpassLayer.prototype.check_update_map = function () {
         feature.addTo(this.map)
         if (featureMarker) {
           featureMarker.addTo(this.map)
+        }
+
+        if (this.onAppear) {
+          this.onAppear(ob, objectData)
         }
       }
     }.bind(this),

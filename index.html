@@ -98,6 +98,12 @@ window.onload = function() {
     featureBody: "Cuisine: {{ tags.cuisine|default('unknown') }}"
   })
   overpass_layer3.addTo(map)
+  overpass_layer3.onAppear = function (ob, data) {
+    console.log('appear ' + ob.id)
+  }
+  overpass_layer3.onDisappear = function (ob, data) {
+    console.log('disappear ' + ob.id)
+  }
 
 }
   </script>
