@@ -30,39 +30,13 @@ function OverpassLayer (query, options) {
     }
   }
 
-  if (typeof this.options.featureTitle === 'string') {
-    template = twig({ data: this.options.featureTitle })
-    this.options.featureTitle = function (template, ob) {
-      return template.render(ob)
-    }.bind(this, template)
-  }
-  if (typeof this.options.featureBody === 'string') {
-    template = twig({ data: this.options.featureBody })
-    this.options.featureBody = function (template, ob) {
-      return template.render(ob)
-    }.bind(this, template)
-  }
-  if (typeof this.options.markerSign === 'string') {
-    template = twig({ data: this.options.markerSign })
-    this.options.markerSign = function (template, ob) {
-      return template.render(ob)
-    }.bind(this, template)
-  }
-  if (typeof this.options.style === 'string') {
-    template = twig({ data: this.options.style })
-    this.options.style = function (template, ob) {
-      var str = template.render(ob).split('\n')
-      var ret = {}
-
-      for (var i = 0; i < str.length; i++) {
-        var m
-        if ((m = str[i].match(/^\s*([a-zA-Z0-9_]+)\s*:\s*(.*)\s*$/))) {
-          ret[m[1]] = m[2]
-        }
-      }
-
-      return ret
-    }.bind(this, template)
+  for (var k in this.options) {
+    if (typeof this.options[k] === 'string') {
+      template = twig({ data: this.options[k] })
+      this.options[k] = function (template, ob) {
+        return template.render(ob)
+      }.bind(this, template)
+    }
   }
 
   this.visibleFeatures = {}
@@ -144,6 +118,18 @@ OverpassLayer.prototype.check_update_map = function () {
         var style = this.options.style
         if (typeof this.options.style === 'function') {
           style = this.options.style(ob)
+
+          if (typeof style === 'string') {
+            var str = style.split('\n')
+            style = {}
+
+            for (var i = 0; i < str.length; i++) {
+              var m
+              if ((m = str[i].match(/^\s*([a-zA-Z0-9_]+)\s*:\s*(.*)\s*$/))) {
+                style[m[1]] = m[2]
+              }
+            }
+          }
         }
 
         feature = ob.leafletFeature(style)
