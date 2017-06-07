@@ -19,6 +19,8 @@ Options:
 * maxZoom: Show layer only up to the given zoom level (default: no limit)
 * featureTitle: the title of the feature popup. Either a function (which will be passed the OverpassObject object; return HTML text) or a template for TwigJS.
 * featureBody: the body of the feature popup. Either a function (which will be passed the OverpassObject object; return HTML text) or a template for TwigJS.
+* marker: an icon definition for L.icon (if boolean true or iconSign defined use standard map marker)
+* markerSign: a string which will be shown within the icon. Can be a template for TwigJS, e.g.: "{% if tags.cuisine=='pizza' %}🍕{% else %}🍴{% endif %}".
 
 TwigJS templates
 

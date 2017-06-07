@@ -18,6 +18,15 @@ function OverpassLayer (query, options) {
   this.maxZoom = 'maxZoom' in options ? options.maxZoom : null
   this.featureTitle = 'featureTitle' in options ? options.featureTitle : function (ob) { return ob.tags.name || ob.tags.operator || ob.tags.ref || ob.id }
   this.featureBody = 'featureBody' in options ? options.featureBody : ''
+  this.marker = 'marker' in options ? options.marker : null
+  this.markerSign = 'markerSign' in options ? options.markerSign : null
+  if (this.marker === null && this.markerSign !== null) {
+    this.marker = {
+        iconUrl: 'img/map_pointer.png',
+        iconSize: [ 25, 42 ],
+        iconAnchor: [ 13, 42 ]
+    }
+  }
 
   if (typeof this.featureTitle === 'string') {
     template = twig({ data: this.featureTitle })
@@ -28,6 +37,12 @@ function OverpassLayer (query, options) {
   if (typeof this.featureBody === 'string') {
     template = twig({ data: this.featureBody })
     this.featureBody = function (template, ob) {
+      return template.render(ob)
+    }.bind(this, template)
+  }
+  if (typeof this.markerSign === 'string') {
+    template = twig({ data: this.markerSign })
+    this.markerSign = function (template, ob) {
       return template.render(ob)
     }.bind(this, template)
   }
@@ -65,6 +80,9 @@ OverpassLayer.prototype.remove = function () {
   for (k in this.visibleFeatures) {
     ob = this.visibleFeatures[k]
     this.map.removeLayer(ob.feature)
+    if (ob.featureMarker) {
+      this.map.removeLayer(ob.featureMarker)
+    }
   }
 
   this.visibleFeatures = {}
@@ -83,6 +101,9 @@ OverpassLayer.prototype.check_update_map = function () {
     for (k in this.visibleFeatures) {
       ob = this.visibleFeatures[k]
       this.map.removeLayer(ob.feature)
+      if (ob.featureMarker) {
+        this.map.removeLayer(ob.featureMarker)
+      }
     }
 
     this.visibleFeatures = {}
@@ -95,6 +116,9 @@ OverpassLayer.prototype.check_update_map = function () {
 
     if (!ob.object.intersects(bounds)) {
       this.map.removeLayer(ob.feature)
+      if (ob.featureMarker) {
+        this.map.removeLayer(ob.featureMarker)
+      }
       delete this.visibleFeatures[k]
     }
   }
@@ -122,6 +146,20 @@ OverpassLayer.prototype.check_update_map = function () {
 
         feature = ob.leafletFeature(style)
 
+        var featureMarker
+        if (this.marker) {
+          var markerHtml = '<img src="' + this.marker.iconUrl + '">'
+          if (this.markerSign) {
+            markerHtml += '<div>' + this.markerSign(ob) + '</div>'
+          }
+
+          this.marker.html = markerHtml
+          this.marker.className = 'overpass-layer-icon'
+          var icon = L.divIcon(this.marker)
+
+          featureMarker = L.marker(ob.center, { icon: icon })
+        }
+
         var popupContent = ''
 
         if (typeof this.featureTitle === 'function') {
@@ -137,13 +175,20 @@ OverpassLayer.prototype.check_update_map = function () {
         }
 
         feature.bindPopup(popupContent)
+        if (featureMarker) {
+          featureMarker.bindPopup(popupContent)
+        }
 
         this.visibleFeatures[ob.id] = {
           object: ob,
-          feature: feature
+          feature: feature,
+          featureMarker: featureMarker
         }
 
         feature.addTo(this.map)
+        if (featureMarker) {
+          featureMarker.addTo(this.map)
+        }
       }
     }.bind(this),
     function (err) {
