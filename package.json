@@ -9,10 +9,7 @@
   },
   "devDependencies": {
     "browserify": "*",
-    "eslint": "^3.6.1",
-    "eslint-config-standard": "^6.2.0",
-    "eslint-plugin-promise": "^2.0.1",
-    "eslint-plugin-standard": "^2.0.1",
+    "standard": "^10.0.2",
     "leaflet": "^0.7.0"
   },
   "main": "index.js",
@@ -20,7 +17,7 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "browserify index.js -o dist/overpass-layer.js",
     "prepublish": "npm run build && npm run lint",
-    "lint": "eslint src/*.js form.js"
+    "lint": "standard src/*.js form.js"
   },
   "repository": {
     "type": "git",
