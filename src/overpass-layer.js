@@ -93,7 +93,7 @@ OverpassLayer.prototype.check_update_map = function () {
   for (k in this.visibleFeatures) {
     ob = this.visibleFeatures[k]
 
-    if (!ob.object.isVisible(bounds)) {
+    if (!ob.object.intersects(bounds)) {
       this.map.removeLayer(ob.feature)
       delete this.visibleFeatures[k]
     }
