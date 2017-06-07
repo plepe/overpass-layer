@@ -9,13 +9,15 @@
   },
   "devDependencies": {
     "browserify": "*",
+    "leaflet": "^0.7.0",
     "standard": "^10.0.2",
-    "leaflet": "^0.7.0"
+    "watchify": "^3.9.0"
   },
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "browserify index.js -o dist/overpass-layer.js",
+    "watch": "watchify --debug index.js -o dist/overpass-layer.js -v",
     "prepublish": "npm run build && npm run lint",
     "lint": "standard src/*.js form.js"
   },
