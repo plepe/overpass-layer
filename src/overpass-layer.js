@@ -11,44 +11,46 @@ function OverpassLayer (query, options) {
     options = {}
   }
 
+  this.options = options
+
   this.query = query
-  this.overpassFrontend = 'overpassFrontend' in options ? options.overpassFrontend : overpassFrontend
-  this.style = 'style' in options ? options.style : {}
-  this.minZoom = 'minZoom' in options ? options.minZoom : 16
-  this.maxZoom = 'maxZoom' in options ? options.maxZoom : null
-  this.featureTitle = 'featureTitle' in options ? options.featureTitle : function (ob) { return ob.tags.name || ob.tags.operator || ob.tags.ref || ob.id }
-  this.featureBody = 'featureBody' in options ? options.featureBody : ''
-  this.marker = 'marker' in options ? options.marker : null
-  this.markerSign = 'markerSign' in options ? options.markerSign : null
-  if (this.marker === null && this.markerSign !== null) {
-    this.marker = {
+  this.overpassFrontend = 'overpassFrontend' in this.options ? this.options.overpassFrontend : overpassFrontend
+  this.options.style = 'style' in this.options ? this.options.style : {}
+  this.options.minZoom = 'minZoom' in this.options ? this.options.minZoom : 16
+  this.options.maxZoom = 'maxZoom' in this.options ? this.options.maxZoom : null
+  this.options.featureTitle = 'featureTitle' in this.options ? this.options.featureTitle : function (ob) { return ob.tags.name || ob.tags.operator || ob.tags.ref || ob.id }
+  this.options.featureBody = 'featureBody' in this.options ? this.options.featureBody : ''
+  this.options.marker = 'marker' in this.options ? this.options.marker : null
+  this.options.markerSign = 'markerSign' in this.options ? this.options.markerSign : null
+  if (this.options.marker === null && this.options.markerSign !== null) {
+    this.options.marker = {
         iconUrl: 'img/map_pointer.png',
         iconSize: [ 25, 42 ],
         iconAnchor: [ 13, 42 ]
     }
   }
 
-  if (typeof this.featureTitle === 'string') {
-    template = twig({ data: this.featureTitle })
-    this.featureTitle = function (template, ob) {
+  if (typeof this.options.featureTitle === 'string') {
+    template = twig({ data: this.options.featureTitle })
+    this.options.featureTitle = function (template, ob) {
       return template.render(ob)
     }.bind(this, template)
   }
-  if (typeof this.featureBody === 'string') {
-    template = twig({ data: this.featureBody })
-    this.featureBody = function (template, ob) {
+  if (typeof this.options.featureBody === 'string') {
+    template = twig({ data: this.options.featureBody })
+    this.options.featureBody = function (template, ob) {
       return template.render(ob)
     }.bind(this, template)
   }
-  if (typeof this.markerSign === 'string') {
-    template = twig({ data: this.markerSign })
-    this.markerSign = function (template, ob) {
+  if (typeof this.options.markerSign === 'string') {
+    template = twig({ data: this.options.markerSign })
+    this.options.markerSign = function (template, ob) {
       return template.render(ob)
     }.bind(this, template)
   }
-  if (typeof this.style === 'string') {
-    template = twig({ data: this.style })
-    this.style = function (template, ob) {
+  if (typeof this.options.style === 'string') {
+    template = twig({ data: this.options.style })
+    this.options.style = function (template, ob) {
       var str = template.render(ob).split('\n')
       var ret = {}
 
@@ -96,8 +98,8 @@ OverpassLayer.prototype.check_update_map = function () {
   var k
   var ob
 
-  if (this.map.getZoom() < this.minZoom ||
-     (this.maxZoom !== null && this.map.getZoom() > this.maxZoom)) {
+  if (this.map.getZoom() < this.options.minZoom ||
+     (this.options.maxZoom !== null && this.map.getZoom() > this.options.maxZoom)) {
     for (k in this.visibleFeatures) {
       ob = this.visibleFeatures[k]
       this.map.removeLayer(ob.feature)
@@ -139,39 +141,39 @@ OverpassLayer.prototype.check_update_map = function () {
       if (!(ob.id in this.visibleFeatures)) {
         var feature
 
-        var style = this.style
-        if (typeof this.style === 'function') {
-          style = this.style(ob)
+        var style = this.options.style
+        if (typeof this.options.style === 'function') {
+          style = this.options.style(ob)
         }
 
         feature = ob.leafletFeature(style)
 
         var featureMarker
-        if (this.marker) {
-          var markerHtml = '<img src="' + this.marker.iconUrl + '">'
-          if (this.markerSign) {
-            markerHtml += '<div>' + this.markerSign(ob) + '</div>'
+        if (this.options.marker) {
+          var markerHtml = '<img src="' + this.options.marker.iconUrl + '">'
+          if (this.options.markerSign) {
+            markerHtml += '<div>' + this.options.markerSign(ob) + '</div>'
           }
 
-          this.marker.html = markerHtml
-          this.marker.className = 'overpass-layer-icon'
-          var icon = L.divIcon(this.marker)
+          this.options.marker.html = markerHtml
+          this.options.marker.className = 'overpass-layer-icon'
+          var icon = L.divIcon(this.options.marker)
 
           featureMarker = L.marker(ob.center, { icon: icon })
         }
 
         var popupContent = ''
 
-        if (typeof this.featureTitle === 'function') {
-          popupContent += '<h1>' + this.featureTitle(ob) + '</h1>'
+        if (typeof this.options.featureTitle === 'function') {
+          popupContent += '<h1>' + this.options.featureTitle(ob) + '</h1>'
         } else {
-          popupContent += this.featureTitle
+          popupContent += this.options.featureTitle
         }
 
-        if (typeof this.featureBody === 'function') {
-          popupContent += '<h1>' + this.featureBody(ob) + '</h1>'
+        if (typeof this.options.featureBody === 'function') {
+          popupContent += '<h1>' + this.options.featureBody(ob) + '</h1>'
         } else {
-          popupContent += this.featureBody
+          popupContent += this.options.featureBody
         }
 
         feature.bindPopup(popupContent)
