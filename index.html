@@ -19,6 +19,24 @@
   width: 25px;
   text-align: center;
 }
+#map {
+  position: absolute;
+  left: 201px;
+  top: 0;
+  bottom: 0;
+  right: 0;
+}
+#info {
+  position: absolute;
+  z-index: 10000;
+  top: 0;
+  left: 0;
+  width: 200px;
+  bottom: 0;
+  background: white;
+  border-right: 1px solid black;
+  overflow: auto;
+}
   </style>
   <script src="node_modules/leaflet/dist/leaflet.js"></script>
   <script src="dist/overpass-layer.js"></script>
@@ -98,17 +116,12 @@ window.onload = function() {
     featureBody: "Cuisine: {{ tags.cuisine|default('unknown') }}"
   })
   overpass_layer3.addTo(map)
-  overpass_layer3.onAppear = function (ob, data) {
-    console.log('appear ' + ob.id)
-  }
-  overpass_layer3.onDisappear = function (ob, data) {
-    console.log('disappear ' + ob.id)
-  }
-
+  new OverpassLayerList(document.getElementById('info'), overpass_layer3);
 }
   </script>
 </head>
 <body>
-  <div id='map' style='position: absolute; left: 0; top: 0; bottom: 0; right: 0'></div>
+  <div id='map'></div>
+  <div id='info'></div>
 </body>
 </html>
