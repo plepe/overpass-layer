@@ -136,7 +136,7 @@ window.onload = function() {
   })
   overpass_layer2.addTo(map)
 
-  var overpass_layer3 = new OverpassLayer('(node[amenity=restaurant];way[amenity=restaurant];relation[amenity=restaurant];);', {
+  var overpass_layer3 = new OverpassLayer('(node[amenity~"^(restaurant|cafe)$"];way[amenity~"^(restaurant|cafe)$"];relation[amenity~"^(restaurant|cafe)$"];);', {
     style:
       "{% if tags.cuisine == 'italian' %}\n" +
       "  color: #003f7f\n" +
@@ -149,8 +149,8 @@ window.onload = function() {
       "weight: 2\n" +
       "radius: 9\n",
     minZoom: 16,
-    markerSign: '&#127860;',
-    featureBody: "Cuisine: {{ tags.cuisine|default('unknown') }}"
+    markerSign: '{% if tags.amenity=="restaurant" %}&#127860;{% else %}&#9749;{% endif %}',
+    featureBody: "{{ tags.amenity }}<br/>Cuisine: {{ tags.cuisine|default('unknown') }}"
   })
   overpass_layer3.addTo(map)
   new OverpassLayerList(document.getElementById('info'), overpass_layer3);
