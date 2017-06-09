@@ -17,7 +17,7 @@ OverpassLayerList.prototype.addObject = function (ob) {
     return false
   }.bind(this, ob)
 
-  a.innerHTML = ob.object.tags.name
+  a.innerHTML = ob.data.featureTitle
 
   div.appendChild(a)
 
