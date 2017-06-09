@@ -1,16 +1,19 @@
-function OverpassLayerList(dom, layer) {
+function OverpassLayerList(parentDom, layer) {
   layer.onAppear = this.addObject.bind(this)
   layer.onDisappear = this.delObject.bind(this)
-  this.dom = dom
+  this.dom = document.createElement('ul')
+  this.dom.className = 'overpass-layer-list'
+  parentDom.appendChild(this.dom)
   this.items = {}
 }
 
 OverpassLayerList.prototype.addObject = function (ob) {
-  var div = document.createElement('div')
+  var div = document.createElement('li')
 
   this.items[ob.id] = div
 
   var a = document.createElement('a')
+  a.className = 'title'
   a.href = '#'
   a.onclick = function (ob) {
     ob.feature.openPopup()
