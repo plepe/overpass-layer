@@ -141,7 +141,13 @@ OverpassLayer.prototype.check_update_map = function () {
           for (var i = 0; i < str.length; i++) {
             var m
             if ((m = str[i].match(/^\s*([a-zA-Z0-9_]+)\s*:\s*(.*)\s*$/))) {
-              style[m[1]] = m[2]
+              var v = m[2].trim()
+
+              if (v.match(/^\-?[0-9]+(\.[0-9]+)?/)) {
+                v = parseFloat(v)
+              }
+
+              style[m[1]] = v
             }
           }
         }
