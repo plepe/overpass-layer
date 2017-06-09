@@ -7,3 +7,6 @@ if (typeof window !== 'undefined') {
   window.OverpassLayerList = OverpassLayerList
   window.OverpassFrontend = OverpassFrontend
 }
+
+OverpassLayer.List = OverpassLayerList
+module.exports = OverpassLayer
