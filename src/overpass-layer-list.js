@@ -10,7 +10,16 @@ OverpassLayerList.prototype.addObject = function (ob) {
 
   this.items[ob.id] = div
 
-  div.innerHTML = ob.object.tags.name
+  var a = document.createElement('a')
+  a.href = '#'
+  a.onclick = function (ob) {
+    ob.feature.openPopup()
+    return false
+  }.bind(this, ob)
+
+  a.innerHTML = ob.object.tags.name
+
+  div.appendChild(a)
 
   this.dom.appendChild(div)
 }
