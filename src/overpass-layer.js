@@ -3,6 +3,7 @@
 var BoundingBox = require('boundingbox')
 var twig = require('twig').twig
 var OverpassFrontend = require('overpass-frontend')
+var escapeHtml = require('html-escape')
 
 function OverpassLayer (query, options) {
   var template
@@ -18,7 +19,7 @@ function OverpassLayer (query, options) {
   this.options.style = 'style' in this.options ? this.options.style : {}
   this.options.minZoom = 'minZoom' in this.options ? this.options.minZoom : 16
   this.options.maxZoom = 'maxZoom' in this.options ? this.options.maxZoom : null
-  this.options.featureTitle = 'featureTitle' in this.options ? this.options.featureTitle : function (ob) { return ob.tags.name || ob.tags.operator || ob.tags.ref || ob.id }
+  this.options.featureTitle = 'featureTitle' in this.options ? this.options.featureTitle : function (ob) { return escapeHtml(ob.tags.name || ob.tags.operator || ob.tags.ref || ob.id) }
   this.options.featureBody = 'featureBody' in this.options ? this.options.featureBody : ''
   this.options.marker = 'marker' in this.options ? this.options.marker : null
   this.options.markerSign = 'markerSign' in this.options ? this.options.markerSign : null
@@ -32,7 +33,7 @@ function OverpassLayer (query, options) {
 
   for (var k in this.options) {
     if (typeof this.options[k] === 'string') {
-      template = twig({ data: this.options[k] })
+      template = twig({ data: this.options[k], autoescape: true })
       this.options[k] = function (template, ob) {
         return template.render(ob)
       }.bind(this, template)
