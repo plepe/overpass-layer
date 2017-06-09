@@ -8,6 +8,28 @@
 ul.overpass-layer-list {
 }
 ul.overpass-layer-list > li {
+  position: relative;
+  list-style: none;
+  min-height: 30px;
+}
+ul.overpass-layer-list > li > .markerParent {
+  position: absolute;
+  margin-left: -35px;
+  width: 30px;
+  height: 30px;
+  text-align: center;
+  display: block;
+}
+ul.overpass-layer-list > li > .markerParent > .marker {
+}
+ul.overpass-layer-list > li > .markerParent > .icon {
+  text-align: center;
+  position: absolute;
+  top: 5;
+  left: 0;
+  right: 0;
+  z-index: 1;
+  display: inline-block;
 }
 ul.overpass-layer-list > li > a.title {
   display: inline-block;

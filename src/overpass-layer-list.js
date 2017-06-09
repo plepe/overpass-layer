@@ -12,6 +12,29 @@ OverpassLayerList.prototype.addObject = function (ob) {
 
   this.items[ob.id] = div
 
+  // MARKER&ICON PARENT
+  var p = document.createElement('a')
+  p.className = 'markerParent'
+  p.href = '#'
+  p.onclick = function (ob) {
+    ob.feature.openPopup()
+    return false
+  }.bind(this, ob)
+  div.appendChild(p)
+
+  // MARKER
+  var a = document.createElement('img')
+  a.className = 'marker'
+  a.src = ob.data.marker.iconUrl
+  p.appendChild(a)
+
+  // ICON
+  var a = document.createElement('div')
+  a.className = 'icon'
+  a.innerHTML = ob.data.markerSign
+  p.appendChild(a)
+
+  // TITLE
   var a = document.createElement('a')
   a.className = 'title'
   a.href = '#'
@@ -19,9 +42,7 @@ OverpassLayerList.prototype.addObject = function (ob) {
     ob.feature.openPopup()
     return false
   }.bind(this, ob)
-
   a.innerHTML = ob.data.featureTitle
-
   div.appendChild(a)
 
   this.dom.appendChild(div)
