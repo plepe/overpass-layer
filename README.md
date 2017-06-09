@@ -42,16 +42,17 @@ Add layer to the given map.
 ## method remove()
 Removes the OverpassLayer and all its features.
 
-## event onAppear(ob, data)
+## event onAppear(ob)
 Will be called when an object appears on the map (e.g. load from server, zoom in, viewport moves in)
 
 Parameter:
-* `ob` is an instance of OSMObject (see OverpassFrontend for details)
-* `data` are the parsed options for the current object.
+* `ob.id`: Unique ID of the object (e.g. 'w1234')
+* `ob.object` is an instance of OSMObject (see OverpassFrontend for details)
+* `ob.data` are the parsed options for the current object.
+* `ob.feature`: the leaflet feature which currently highlights the object
+* `ob.featureMarker`: the leaflet marker, if a marker is shown on the object
 
-## event onDisappear(ob, data)
+## event onDisappear(ob)
 Will be called when an object disappears from the map (e.g. zoom out, pan out, ...)
 
-Parameter:
-* `ob` is an instance of OSMObject (see OverpassFrontend for details)
-* `data` are the parsed options for the current object.
+See `onAppear` for the description of parameters.

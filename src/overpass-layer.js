@@ -78,7 +78,7 @@ OverpassLayer.prototype.check_update_map = function () {
       ob = this.visibleFeatures[k]
 
       if (this.onDisappear) {
-        this.onDisappear(ob.object, ob.data)
+        this.onDisappear(ob)
       }
 
       this.map.removeLayer(ob.feature)
@@ -97,7 +97,7 @@ OverpassLayer.prototype.check_update_map = function () {
 
     if (!ob.object.intersects(bounds)) {
       if (this.onDisappear) {
-        this.onDisappear(ob.object, ob.data)
+        this.onDisappear(ob)
       }
 
       this.map.removeLayer(ob.feature)
@@ -172,6 +172,7 @@ OverpassLayer.prototype.check_update_map = function () {
         }
 
         this.visibleFeatures[ob.id] = {
+          id: ob.id,
           object: ob,
           data: objectData,
           feature: feature,
@@ -184,7 +185,7 @@ OverpassLayer.prototype.check_update_map = function () {
         }
 
         if (this.onAppear) {
-          this.onAppear(ob, objectData)
+          this.onAppear(this.visibleFeatures[ob.id])
         }
       }
     }.bind(this),
