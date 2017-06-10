@@ -57,4 +57,12 @@ OverpassLayerList.prototype.delObject = function (ob) {
   delete this.items[ob.id]
 }
 
+OverpassLayerList.prototype.remove = function () {
+  while (this.dom.firstChild) {
+    this.dom.removeChild(this.dom.lastChild)
+  }
+
+  this.items = {}
+}
+
 module.exports = OverpassLayerList
