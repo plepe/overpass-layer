@@ -23,10 +23,12 @@ OverpassLayerList.prototype.addObject = function (ob) {
   div.appendChild(p)
 
   // MARKER
-  var a = document.createElement('img')
-  a.className = 'marker'
-  a.src = ob.data.marker.iconUrl
-  p.appendChild(a)
+  if (ob.data.marker && ob.data.marker.iconUrl) {
+    var a = document.createElement('img')
+    a.className = 'marker'
+    a.src = ob.data.marker.iconUrl
+    p.appendChild(a)
+  }
 
   // ICON
   var a = document.createElement('div')
