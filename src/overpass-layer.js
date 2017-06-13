@@ -197,7 +197,9 @@ OverpassLayer.prototype.check_update_map = function () {
       }
     }.bind(this),
     function (err) {
-      this.currentRequest = null
+      if (err !== 'abort') {
+        this.currentRequest = null
+      }
     }.bind(this)
   )
 }
