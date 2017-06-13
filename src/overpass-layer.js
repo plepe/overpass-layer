@@ -89,6 +89,13 @@ OverpassLayer.prototype.check_update_map = function () {
     }
 
     this.visibleFeatures = {}
+
+    // abort remaining request
+    if (this.currentRequest) {
+      this.currentRequest.abort()
+      this.currentRequest = null
+    }
+
     return
   }
 
