@@ -217,4 +217,31 @@ OverpassLayer.prototype.processObject = function (ob) {
   }
 }
 
+OverpassLayer.prototype.get = function (id, callback) {
+  var done = false
+
+  if (id in this.visibleFeatures) {
+    callback(this.visibleFeatures[id])
+    return
+  }
+
+  this.overpassFrontend.get(id,
+    {
+      properties: OverpassFrontend.ALL
+    },
+    function (err, ob) {
+      if (err === null) {
+        callback(err, this.processObject(ob))
+      }
+
+      done = true
+    }.bind(this),
+    function (err) {
+      if (!done) {
+        callback(err, null)
+      }
+    }
+  )
+}
+
 module.exports = OverpassLayer
