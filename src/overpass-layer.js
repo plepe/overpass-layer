@@ -130,76 +130,17 @@ OverpassLayer.prototype.check_update_map = function () {
     },
     function (err, ob) {
       if (!(ob.id in this.visibleFeatures)) {
-        var feature
+        var data = this.processObject(ob)
 
-        var objectData = {}
-        for (var k in this.options) {
-          if (typeof this.options[k] === 'function') {
-            objectData[k] = this.options[k](ob)
-          } else {
-            objectData[k] = this.options[k]
-          }
-        }
+        this.visibleFeatures[ob.id] = data
 
-        var style = objectData.style
-        if (typeof style === 'string') {
-          var str = style.split('\n')
-          style = {}
-
-          for (var i = 0; i < str.length; i++) {
-            var m
-            if ((m = str[i].match(/^\s*([a-zA-Z0-9_]+)\s*:\s*(.*)\s*$/))) {
-              var v = m[2].trim()
-
-              if (v.match(/^\-?[0-9]+(\.[0-9]+)?/)) {
-                v = parseFloat(v)
-              }
-
-              style[m[1]] = v
-            }
-          }
-        }
-
-        feature = ob.leafletFeature(style)
-
-        var featureMarker
-        if (objectData.marker) {
-          var markerHtml = '<img src="' + objectData.marker.iconUrl + '">'
-          if (objectData.markerSign) {
-            markerHtml += '<div>' + objectData.markerSign + '</div>'
-          }
-
-          objectData.marker.html = markerHtml
-          objectData.marker.className = 'overpass-layer-icon'
-          var icon = L.divIcon(objectData.marker)
-
-          featureMarker = L.marker(ob.center, { icon: icon })
-        }
-
-        var popupContent = ''
-        popupContent += '<h1>' + objectData.featureTitle + '</h1>'
-        popupContent += objectData.featureBody
-
-        feature.bindPopup(popupContent)
-        if (featureMarker) {
-          featureMarker.bindPopup(popupContent)
-        }
-
-        this.visibleFeatures[ob.id] = {
-          id: ob.id,
-          object: ob,
-          data: objectData,
-          feature: feature,
-          featureMarker: featureMarker
-        }
-
-        feature.addTo(this.map)
-        if (featureMarker) {
-          featureMarker.addTo(this.map)
+        data.feature.addTo(this.map)
+        if (data.featureMarker) {
+          data.featureMarker.addTo(this.map)
         }
 
         if (this.onAppear) {
-          this.onAppear(this.visibleFeatures[ob.id])
+          this.onAppear(data)
         }
       }
     }.bind(this),
@@ -209,6 +150,71 @@ OverpassLayer.prototype.check_update_map = function () {
       }
     }.bind(this)
   )
+}
+
+OverpassLayer.prototype.processObject = function (ob) {
+  var feature
+
+  var objectData = {}
+  for (var k in this.options) {
+    if (typeof this.options[k] === 'function') {
+      objectData[k] = this.options[k](ob)
+    } else {
+      objectData[k] = this.options[k]
+    }
+  }
+
+  var style = objectData.style
+  if (typeof style === 'string') {
+    var str = style.split('\n')
+    style = {}
+
+    for (var i = 0; i < str.length; i++) {
+      var m
+      if ((m = str[i].match(/^\s*([a-zA-Z0-9_]+)\s*:\s*(.*)\s*$/))) {
+        var v = m[2].trim()
+
+        if (v.match(/^\-?[0-9]+(\.[0-9]+)?/)) {
+          v = parseFloat(v)
+        }
+
+        style[m[1]] = v
+      }
+    }
+  }
+
+  feature = ob.leafletFeature(style)
+
+  var featureMarker
+  if (objectData.marker) {
+    var markerHtml = '<img src="' + objectData.marker.iconUrl + '">'
+    if (objectData.markerSign) {
+      markerHtml += '<div>' + objectData.markerSign + '</div>'
+    }
+
+    objectData.marker.html = markerHtml
+    objectData.marker.className = 'overpass-layer-icon'
+    var icon = L.divIcon(objectData.marker)
+
+    featureMarker = L.marker(ob.center, { icon: icon })
+  }
+
+  var popupContent = ''
+  popupContent += '<h1>' + objectData.featureTitle + '</h1>'
+  popupContent += objectData.featureBody
+
+  feature.bindPopup(popupContent)
+  if (featureMarker) {
+    featureMarker.bindPopup(popupContent)
+  }
+
+  return {
+    id: ob.id,
+    object: ob,
+    data: objectData,
+    feature: feature,
+    featureMarker: featureMarker
+  }
 }
 
 module.exports = OverpassLayer
