@@ -55,11 +55,7 @@ OverpassLayer.prototype.remove = function () {
   var ob
 
   for (k in this.visibleFeatures) {
-    ob = this.visibleFeatures[k]
-    this.map.removeLayer(ob.feature)
-    if (ob.featureMarker) {
-      this.map.removeLayer(ob.featureMarker)
-    }
+    this._hide(this.visibleFeatures[k])
   }
 
   this.visibleFeatures = {}
