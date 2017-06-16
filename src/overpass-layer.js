@@ -41,6 +41,7 @@ function OverpassLayer (query, options) {
   }
 
   this.visibleFeatures = {}
+  this.shownFeatures = {} // features which are forcibly shown
   this.currentRequest = null
 }
 
@@ -58,7 +59,12 @@ OverpassLayer.prototype.remove = function () {
     this._hide(this.visibleFeatures[k])
   }
 
+  for (k in this.shownFeatures) {
+    this._hide(this.shownFeatures[k])
+  }
+
   this.visibleFeatures = {}
+  this.shownFeatures = {}
 
   this.map.off('moveend', this.check_update_map, this)
   this.map = null
@@ -78,7 +84,9 @@ OverpassLayer.prototype.check_update_map = function () {
         this.onDisappear(ob)
       }
 
-      this._hide(ob)
+      if (!(ob.id in this.shownFeatures)) {
+        this._hide(ob)
+      }
     }
 
     this.visibleFeatures = {}
@@ -101,7 +109,9 @@ OverpassLayer.prototype.check_update_map = function () {
         this.onDisappear(ob)
       }
 
-      this._hide(ob)
+      if (!(ob.id in this.shownFeatures)) {
+        this._hide(ob)
+      }
 
       delete this.visibleFeatures[k]
     }
@@ -121,11 +131,17 @@ OverpassLayer.prototype.check_update_map = function () {
     },
     function (err, ob) {
       if (!(ob.id in this.visibleFeatures)) {
-        var data = this.processObject(ob)
+        var data
+
+        if (ob.id in this.shownFeatures) {
+          data = this.shownFeatures[ob.id]
+        } else {
+          data = this.processObject(ob)
+
+          this._show(data)
+        }
 
         this.visibleFeatures[ob.id] = data
-
-        this._show(data)
 
         if (this.onAppear) {
           this.onAppear(data)
@@ -227,13 +243,28 @@ OverpassLayer.prototype.get = function (id, callback) {
     return
   }
 
+  if (id in this.shownFeatures) {
+    callback(this.shownFeatures[id])
+    return
+  }
+
   this.overpassFrontend.get(id,
     {
       properties: OverpassFrontend.ALL
     },
     function (err, ob) {
       if (err === null) {
-        callback(err, this.processObject(ob))
+        var data
+
+        if (id in this.shownFeatures) {
+          data = this.shownFeatures[id]
+        } else if (id in this.visibleFeatures) {
+          data = this.visibleFeatures[id]
+        } else {
+          data = this.processObject(ob)
+        }
+
+        callback(err, data)
       }
 
       done = true
@@ -247,16 +278,42 @@ OverpassLayer.prototype.get = function (id, callback) {
 }
 
 OverpassLayer.prototype.show = function (id, options, callback) {
+  if (id in this.shownFeatures) {
+    callback(null, this.shownFeatures[id])
+    return
+  }
+
+  if (id in this.visibleFeatures) {
+    this.shownFeatures[id] = this.visibleFeatures[id]
+    callback(null, this.shownFeatures[id])
+    return
+  }
+
   this.get(id,
     function (err, data) {
       if (err) {
         return callback(err, data)
       }
 
-      this._show(data)
+      this.shownFeatures[id] = data
+
+      if (!(id in this.visibleFeatures)) {
+        this._show(data)
+      }
+
       callback(err, data)
     }.bind(this)
   )
+}
+
+OverpassLayer.prototype.hide = function (id) {
+  if (id in this.shownFeatures) {
+    this._hide(this.shownFeatures[id])
+    delete this.shownFeatures[id]
+    delete this.visibleFeatures[id]
+  }
+
+  this.check_update_map()
 }
 
 module.exports = OverpassLayer
