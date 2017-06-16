@@ -250,4 +250,17 @@ OverpassLayer.prototype.get = function (id, callback) {
   )
 }
 
+OverpassLayer.prototype.show = function (id, options, callback) {
+  this.get(id,
+    function (err, data) {
+      if (err) {
+        return callback(err, data)
+      }
+
+      this._show(data)
+      callback(err, data)
+    }.bind(this)
+  )
+}
+
 module.exports = OverpassLayer
