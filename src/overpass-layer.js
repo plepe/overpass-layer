@@ -5,7 +5,7 @@ var twig = require('twig').twig
 var OverpassFrontend = require('overpass-frontend')
 var escapeHtml = require('html-escape')
 
-function OverpassLayer (query, options) {
+function OverpassLayer (options) {
   var template
 
   if (!options) {
@@ -14,27 +14,27 @@ function OverpassLayer (query, options) {
 
   this.options = options
 
-  this.query = query
   this.overpassFrontend = 'overpassFrontend' in this.options ? this.options.overpassFrontend : overpassFrontend
-  this.options.style = 'style' in this.options ? this.options.style : {}
   this.options.minZoom = 'minZoom' in this.options ? this.options.minZoom : 16
   this.options.maxZoom = 'maxZoom' in this.options ? this.options.maxZoom : null
-  this.options.featureTitle = 'featureTitle' in this.options ? this.options.featureTitle : function (ob) { return escapeHtml(ob.tags.name || ob.tags.operator || ob.tags.ref || ob.id) }
-  this.options.featureBody = 'featureBody' in this.options ? this.options.featureBody : ''
-  this.options.marker = 'marker' in this.options ? this.options.marker : null
-  this.options.markerSign = 'markerSign' in this.options ? this.options.markerSign : null
-  if (this.options.marker === null && this.options.markerSign !== null) {
-    this.options.marker = {
+  this.options.feature = 'feature' in this.options ? this.options.feature : {}
+  this.options.feature.style = 'style' in this.options.feature ? this.options.feature.style : {}
+  this.options.feature.title = 'title' in this.options.feature ? this.options.feature.title : function (ob) { return escapeHtml(ob.tags.name || ob.tags.operator || ob.tags.ref || ob.id) }
+  this.options.feature.body = 'body' in this.options.feature ? this.options.feature.body : ''
+  this.options.feature.marker = 'marker' in this.options.feature ? this.options.feature.marker : null
+  this.options.feature.markerSign = 'markerSign' in this.options.feature ? this.options.feature.markerSign : null
+  if (this.options.feature.marker === null && this.options.feature.markerSign !== null) {
+    this.options.feature.marker = {
         iconUrl: 'img/map_pointer.png',
         iconSize: [ 25, 42 ],
         iconAnchor: [ 13, 42 ]
     }
   }
 
-  for (var k in this.options) {
-    if (typeof this.options[k] === 'string') {
-      template = twig({ data: this.options[k], autoescape: true })
-      this.options[k] = function (template, ob) {
+  for (var k in this.options.feature) {
+    if (typeof this.options.feature[k] === 'string') {
+      template = twig({ data: this.options.feature[k], autoescape: true })
+      this.options.feature[k] = function (template, ob) {
         return template.render(ob)
       }.bind(this, template)
     }
@@ -125,7 +125,7 @@ OverpassLayer.prototype.check_update_map = function () {
   }
 
   // Query all trees in the current view
-  this.currentRequest = this.overpassFrontend.BBoxQuery(this.query, bounds,
+  this.currentRequest = this.overpassFrontend.BBoxQuery(this.options.query, bounds,
     {
       properties: OverpassFrontend.ALL
     },
@@ -174,11 +174,11 @@ OverpassLayer.prototype.processObject = function (ob) {
   var feature
 
   var objectData = {}
-  for (var k in this.options) {
-    if (typeof this.options[k] === 'function') {
-      objectData[k] = this.options[k](ob)
+  for (var k in this.options.feature) {
+    if (typeof this.options.feature[k] === 'function') {
+      objectData[k] = this.options.feature[k](ob)
     } else {
-      objectData[k] = this.options[k]
+      objectData[k] = this.options.feature[k]
     }
   }
 
@@ -218,8 +218,8 @@ OverpassLayer.prototype.processObject = function (ob) {
   }
 
   var popupContent = ''
-  popupContent += '<h1>' + objectData.featureTitle + '</h1>'
-  popupContent += objectData.featureBody
+  popupContent += '<h1>' + objectData.title + '</h1>'
+  popupContent += objectData.body
 
   feature.bindPopup(popupContent)
   if (featureMarker) {

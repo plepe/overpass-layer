@@ -44,7 +44,7 @@ OverpassLayerList.prototype.addObject = function (ob) {
     ob.feature.openPopup()
     return false
   }.bind(this, ob)
-  a.innerHTML = ob.data.featureTitle
+  a.innerHTML = ob.data.title
   div.appendChild(a)
 
   this.dom.appendChild(div)
