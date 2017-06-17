@@ -6,7 +6,7 @@ Show a Leaflet layer using OpenStreetMap data from Overpass API via overpass-fro
 Create a Layer with an Overpass query and optional options.
 
 Options:
-* query: e.g. `node[natural=tree];`. Combine queries with: `(way[building];relation[building];);`
+* query: e.g. `node[natural=tree];`. Combine queries with: `(way[building];relation[building];);`. Optionally zoom-dependend queries can be given by using an object with the minimum zoom level as index, e.g. `{ 13: 'way[landuse=forest]', 15: '(way[landuse=forest];node[natural=tree];)' }`: zoom levels 13 and 14 all forests will be shown, from zoom level 15 all forests and trees.
 * overpassFrontend: An OverpassFrontend object (defaults to the global variable `overpassFrontend`)
 * minZoom: Show layer only from the given zoom level (default: 16)
 * maxZoom: Show layer only up to the given zoom level (default: no limit)

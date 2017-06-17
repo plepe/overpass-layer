@@ -74,6 +74,7 @@ OverpassLayer.prototype.check_update_map = function () {
   var bounds = new BoundingBox(this.map.getBounds())
   var k
   var ob
+  var thisRequestFeatures = {}
 
   if (this.map.getZoom() < this.options.minZoom ||
      (this.options.maxZoom !== null && this.map.getZoom() > this.options.maxZoom)) {
@@ -124,12 +125,22 @@ OverpassLayer.prototype.check_update_map = function () {
     this.currentRequest = null
   }
 
-  // Query all trees in the current view
-  this.currentRequest = this.overpassFrontend.BBoxQuery(this.options.query, bounds,
+  var query = this.options.query
+  if (typeof query === 'object') {
+    query = query[Object.keys(query).filter(function (x) { return x <= this.map.getZoom() }).reverse()[0]]
+  }
+
+  if (!query) {
+    return
+  }
+
+  this.currentRequest = this.overpassFrontend.BBoxQuery(query, bounds,
     {
       properties: OverpassFrontend.ALL
     },
     function (err, ob) {
+      thisRequestFeatures[ob.id] = true
+
       if (!(ob.id in this.visibleFeatures)) {
         var data
 
@@ -149,9 +160,25 @@ OverpassLayer.prototype.check_update_map = function () {
       }
     }.bind(this),
     function (err) {
-      if (err !== 'abort') {
-        this.currentRequest = null
+      if (err === 'abort') {
+        return
       }
+
+      for (var k in this.visibleFeatures) {
+        if (!(k in thisRequestFeatures)) {
+          if (!(k in this.shownFeatures)) {
+            this._hide(this.visibleFeatures[k])
+          }
+
+          if (this.onDisappear) {
+            this.onDisappear(this.visibleFeatures[k])
+          }
+
+          delete this.visibleFeatures[k]
+        }
+      }
+
+      this.currentRequest = null
     }.bind(this)
   )
 }
