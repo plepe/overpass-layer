@@ -210,7 +210,7 @@ OverpassLayer.prototype.processObject = function (ob) {
   }
 
   var style = objectData.style
-  if (typeof style === 'string') {
+  if (typeof style === 'string' || 'twig_markup' in style) {
     var str = style.split('\n')
     style = {}
 
