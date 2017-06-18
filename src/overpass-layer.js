@@ -200,10 +200,18 @@ OverpassLayer.prototype._hide = function (data) {
 OverpassLayer.prototype.processObject = function (ob) {
   var feature
 
+  var twigData = {
+    id: ob.id,
+    osm_id: ob.osm_id,
+    type: ob.type,
+    tags: ob.tags,
+    meta: ob.meta
+  }
+
   var objectData = {}
   for (var k in this.options.feature) {
     if (typeof this.options.feature[k] === 'function') {
-      objectData[k] = this.options.feature[k](ob)
+      objectData[k] = this.options.feature[k](twigData)
     } else {
       objectData[k] = this.options.feature[k]
     }
