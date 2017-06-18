@@ -43,6 +43,7 @@ function OverpassLayer (options) {
   this.visibleFeatures = {}
   this.shownFeatures = {} // features which are forcibly shown
   this.currentRequest = null
+  this.lastZoom = null
 }
 
 OverpassLayer.prototype.addTo = function (map) {
@@ -116,6 +117,15 @@ OverpassLayer.prototype.check_update_map = function () {
 
       delete this.visibleFeatures[k]
     }
+  }
+
+  // When zoom level changed, update visible objects
+  if (this.lastZoom !== this.map.getZoom()) {
+    for (k in this.visibleFeatures) {
+      this._processObject(this.visibleFeatures[k])
+    }
+
+    this.lastZoom = this.map.getZoom()
   }
 
   // Abort current requests (in case they are long-lasting - we don't need them
@@ -207,7 +217,10 @@ OverpassLayer.prototype._processObject = function (data) {
     osm_id: ob.osm_id,
     type: ob.type,
     tags: ob.tags,
-    meta: ob.meta
+    meta: ob.meta,
+    map: {
+      zoom: this.map.getZoom()
+    }
   }
 
   var objectData = {}

@@ -23,6 +23,8 @@ Options:
 ### TwigJS templates
 The data of an object is available as patterns. Tags and Meta information is only available, if these properties have been downloaded (see option 'properties'). Variables will automatically be HTML escaped, if not the filter `raw` is used, e.g.: `{{ tags.name|raw }}`.
 
+The templates will be rendered when the object becomes visible and when the zoom level changes.
+
 * `id` (the id of the object is always available, prefixed 'n' for nodes, 'w' for ways and 'r' for relations; e.g. 'n1234')
 * `osm_id` (the numerical id of the object)
 * `type` ('node', 'way' or 'relation')
@@ -32,6 +34,7 @@ The data of an object is available as patterns. Tags and Meta information is onl
 * `meta.changeset` (ID of the changeset, the object was last modified in)
 * `meta.user` (Username of the user, who changed the object last)
 * `meta.uid` (UID of the user, who changed the object last)
+* `map.zoom` (Current zoom level)
 
 Examples:
 `Amenity: {{ tags.amenity }}`: might render as "Amenity: restaurant"

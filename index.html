@@ -186,7 +186,9 @@ window.onload = function() {
       16: '(relation[type=route][route=bicycle][network=rcn];relation[type=route][route=bicycle][network=lcn];)'
     },
     feature: {
-      style: 'color: {% if tags.network=="rcn" %}red{% else %}blue{% endif %}'
+      style:
+        "color: {% if tags.network=='rcn' %}red{% else %}green{% endif %} \n" +
+        "weight: {% if map.zoom>=15 %}5{% else %}3{% endif %}"
     },
     minZoom: 13
   })
