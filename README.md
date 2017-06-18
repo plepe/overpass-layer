@@ -62,3 +62,8 @@ Parameter:
 Will be called when an object disappears from the map (e.g. zoom out, pan out, ...)
 
 See `onAppear` for the description of parameters.
+
+## event onZoomChange(ob)
+Will be called every time when the zoom level changes. Occurs instantly after zoom level change for each object, before assessing if the object is visible at the current zoom level.
+
+See `onAppear` for the description of parameters.

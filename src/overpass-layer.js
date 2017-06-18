@@ -123,6 +123,10 @@ OverpassLayer.prototype.check_update_map = function () {
   if (this.lastZoom !== this.map.getZoom()) {
     for (k in this.visibleFeatures) {
       this._processObject(this.visibleFeatures[k])
+
+      if (this.onZoomChange) {
+        this.onZoomChange(this.visibleFeatures[k])
+      }
     }
 
     this.lastZoom = this.map.getZoom()
