@@ -142,12 +142,14 @@ OverpassLayer.prototype.check_update_map = function () {
       thisRequestFeatures[ob.id] = true
 
       if (!(ob.id in this.visibleFeatures)) {
-        var data
+        var data = {
+          object: ob
+        }
 
         if (ob.id in this.shownFeatures) {
           data = this.shownFeatures[ob.id]
         } else {
-          data = this.processObject(ob)
+          this._processObject(data)
 
           this._show(data)
         }
@@ -197,8 +199,8 @@ OverpassLayer.prototype._hide = function (data) {
   }
 }
 
-OverpassLayer.prototype.processObject = function (ob) {
-  var feature
+OverpassLayer.prototype._processObject = function (data) {
+  var ob = data.object
 
   var twigData = {
     id: ob.id,
@@ -236,9 +238,8 @@ OverpassLayer.prototype.processObject = function (ob) {
     }
   }
 
-  feature = ob.leafletFeature(style)
+  data.feature = ob.leafletFeature(style)
 
-  var featureMarker
   if (objectData.marker) {
     var markerHtml = '<img src="' + objectData.marker.iconUrl + '">'
     if (objectData.markerSign) {
@@ -249,25 +250,20 @@ OverpassLayer.prototype.processObject = function (ob) {
     objectData.marker.className = 'overpass-layer-icon'
     var icon = L.divIcon(objectData.marker)
 
-    featureMarker = L.marker(ob.center, { icon: icon })
+    data.featureMarker = L.marker(ob.center, { icon: icon })
   }
 
   var popupContent = ''
   popupContent += '<h1>' + objectData.title + '</h1>'
   popupContent += objectData.body
 
-  feature.bindPopup(popupContent)
-  if (featureMarker) {
-    featureMarker.bindPopup(popupContent)
+  data.feature.bindPopup(popupContent)
+  if (data.featureMarker) {
+    data.featureMarker.bindPopup(popupContent)
   }
 
-  return {
-    id: ob.id,
-    object: ob,
-    data: objectData,
-    feature: feature,
-    featureMarker: featureMarker
-  }
+  data.id = ob.id
+  data.data = objectData
 }
 
 OverpassLayer.prototype.get = function (id, callback) {
@@ -289,14 +285,16 @@ OverpassLayer.prototype.get = function (id, callback) {
     },
     function (err, ob) {
       if (err === null) {
-        var data
+        var data = {
+          object: ob
+        }
 
         if (id in this.shownFeatures) {
           data = this.shownFeatures[id]
         } else if (id in this.visibleFeatures) {
           data = this.visibleFeatures[id]
         } else {
-          data = this.processObject(ob)
+          this._processObject(data)
         }
 
         callback(err, data)
