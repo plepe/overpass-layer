@@ -238,7 +238,11 @@ OverpassLayer.prototype._processObject = function (data) {
     }
   }
 
-  data.feature = ob.leafletFeature(style)
+  if (data.feature) {
+    data.feature.setStyle(style)
+  } else {
+    data.feature = ob.leafletFeature(style)
+  }
 
   if (objectData.marker) {
     var markerHtml = '<img src="' + objectData.marker.iconUrl + '">'
@@ -250,7 +254,11 @@ OverpassLayer.prototype._processObject = function (data) {
     objectData.marker.className = 'overpass-layer-icon'
     var icon = L.divIcon(objectData.marker)
 
-    data.featureMarker = L.marker(ob.center, { icon: icon })
+    if (data.featureMarker) {
+      data.featureMarker.setIcon(icon)
+    } else {
+      data.featureMarker = L.marker(ob.center, { icon: icon })
+    }
   }
 
   var popupContent = ''
