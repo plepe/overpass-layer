@@ -15,8 +15,9 @@ Options:
     * If an object is used, e.g.: { weight: 2, fillColor: 'red' }
     * If a function is used, the function will be passed the OverpassObject object and should return the style as object.
     * If a TwigJS template is used, the template should create lines with "key: value" (E.g. `color: red\nweight: 2`). See below for possible patterns.
-  * title: the title of the feature popup.
+  * title: the title of the feature popup and the object in the list.
   * body: the body of the feature popup.
+  * description: a short description shown in the list.
   * marker: an icon definition for L.icon (if boolean true or iconSign defined use standard map marker)
   * markerSign: a HTML string which will be shown within the icon.
 

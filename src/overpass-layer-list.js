@@ -48,6 +48,12 @@ OverpassLayerList.prototype.addObject = function (ob) {
   a.innerHTML = ob.data.title
   div.appendChild(a)
 
+  // DESCRIPTION
+  var a = document.createElement('div')
+  a.className = 'description'
+  a.innerHTML = 'description' in ob.data ? ob.data.description : ''
+  div.appendChild(a)
+
   this.dom.appendChild(div)
 }
 
