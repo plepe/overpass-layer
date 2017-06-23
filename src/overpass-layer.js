@@ -1,7 +1,7 @@
 /* global overpassFrontend:false */
 
 var BoundingBox = require('boundingbox')
-var twig = require('twig').twig
+var twig = require('twig')
 var OverpassFrontend = require('overpass-frontend')
 var escapeHtml = require('html-escape')
 
@@ -33,7 +33,7 @@ function OverpassLayer (options) {
 
   for (var k in this.options.feature) {
     if (typeof this.options.feature[k] === 'string') {
-      template = twig({ data: this.options.feature[k], autoescape: true })
+      template = twig.twig({ data: this.options.feature[k], autoescape: true })
       this.options.feature[k] = function (template, ob) {
         return template.render(ob)
       }.bind(this, template)
@@ -373,5 +373,8 @@ OverpassLayer.prototype.hide = function (id) {
 
   this.check_update_map()
 }
+
+// to enable extending twig
+OverpassLayer.twig = twig
 
 module.exports = OverpassLayer
