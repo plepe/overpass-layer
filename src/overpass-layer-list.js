@@ -54,7 +54,18 @@ OverpassLayerList.prototype.addObject = function (ob) {
   a.innerHTML = 'description' in ob.data ? ob.data.description : ''
   div.appendChild(a)
 
-  this.dom.appendChild(div)
+  div.priority = 'priority' in ob.data ? parseFloat(ob.data.priority) : 0
+
+  var current = this.dom.firstChild
+  while (current && current.priority <= div.priority) {
+    current = current.nextSibling
+  }
+
+  if (current) {
+    this.dom.insertBefore(div, current)
+  } else {
+    this.dom.appendChild(div)
+  }
 }
 
 OverpassLayerList.prototype.updateObject = function (ob) {
