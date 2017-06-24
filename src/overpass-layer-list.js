@@ -99,8 +99,7 @@ OverpassLayerList.prototype.updateObject = function (ob) {
 
     // TITLE
     if (p.className === 'title') {
-      var a = p.firstChild
-      a.innerHTML = ob.data.title
+      p.innerHTML = ob.data.title
     }
 
     p = p.nextSibling
