@@ -224,7 +224,8 @@ OverpassLayer.prototype._processObject = function (data) {
     meta: ob.meta,
     map: {
       zoom: this.map.getZoom()
-    }
+    },
+    'const': this.options.const
   }
 
   var objectData = {}

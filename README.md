@@ -21,6 +21,7 @@ Options:
   * marker: an icon definition for L.icon (if boolean true or iconSign defined use standard map marker)
   * markerSign: a HTML string which will be shown within the icon.
   * priority: a numeric value by which the elements in the list will be sorted (lower values first)
+* const: an object variable which is available as prefix in twig functions. See below.
 
 ### TwigJS templates
 The data of an object is available as patterns. Tags and Meta information is only available, if these properties have been downloaded (see option 'properties'). Variables will automatically be HTML escaped, if not the filter `raw` is used, e.g.: `{{ tags.name|raw }}`.
@@ -37,6 +38,7 @@ The templates will be rendered when the object becomes visible and when the zoom
 * `meta.user` (Username of the user, who changed the object last)
 * `meta.uid` (UID of the user, who changed the object last)
 * `map.zoom` (Current zoom level)
+* `const.*` (Values from the 'const' option)
 
 Examples:
 `Amenity: {{ tags.amenity }}`: might render as "Amenity: restaurant"
