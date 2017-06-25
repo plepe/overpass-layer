@@ -218,6 +218,7 @@ OverpassLayer.prototype._processObject = function (data) {
 
   var twigData = {
     id: ob.id,
+    layer_id: this.options.id,
     osm_id: ob.osm_id,
     type: ob.type,
     tags: ob.tags,
@@ -292,6 +293,7 @@ OverpassLayer.prototype._processObject = function (data) {
   }
 
   data.id = ob.id
+  data.layer_id = this.options.id
   data.data = objectData
 }
 
