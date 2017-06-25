@@ -48,6 +48,8 @@ Examples:
 
 You can access the twig instance via `OverpassLayer.twig` for extending (e.g. with custom functions or filters). Use `OverpassLayer.twig.extendFunction(...)`.
 
+If you set an arbitrary value within a twig template (e.g.: `{% set foo = "bar" %}`), it will also be available in further templates of the same object by using (e.g.: `{{ foo }}`). The templates will be evaluated in the order as they are defined.
+
 ## method addTo(map)
 Add layer to the given map.
 
