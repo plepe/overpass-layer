@@ -22,6 +22,7 @@ Options:
   * marker: an icon definition for L.icon (if boolean true or iconSign defined use standard map marker)
   * markerSign: a HTML string which will be shown within the icon.
   * priority: a numeric value by which the elements in the list will be sorted (lower values first)
+  * appUrl: an url for the link of an item in the list, default: '#'.
 * const: an object variable which is available as prefix in twig functions. See below.
 
 ### TwigJS templates
