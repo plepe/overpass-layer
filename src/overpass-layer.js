@@ -135,6 +135,13 @@ OverpassLayer.prototype.check_update_map = function () {
   // Abort current requests (in case they are long-lasting - we don't need them
   // anyway). Data which is being submitted will still be loaded to the cache.
   if (this.currentRequest) {
+    if (this.onLoadEnd) {
+      this.onLoadEnd ({
+        request: this.currentRequest,
+        error: 'abort'
+      })
+    }
+
     this.currentRequest.abort()
     this.currentRequest = null
   }
@@ -180,6 +187,13 @@ OverpassLayer.prototype.check_update_map = function () {
         return
       }
 
+      if (this.onLoadEnd) {
+        this.onLoadEnd ({
+          request: this.currentRequest,
+          error: err
+        })
+      }
+
       for (var k in this.visibleFeatures) {
         if (!(k in thisRequestFeatures)) {
           if (!(k in this.shownFeatures)) {
@@ -197,6 +211,12 @@ OverpassLayer.prototype.check_update_map = function () {
       this.currentRequest = null
     }.bind(this)
   )
+
+  if (this.onLoadStart) {
+    this.onLoadStart({
+      request: this.currentRequest
+    })
+  }
 }
 
 OverpassLayer.prototype._show = function (data) {
