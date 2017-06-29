@@ -68,6 +68,7 @@ Parameter:
 * `ob.data` are the parsed options for the current object.
 * `ob.feature`: the leaflet feature which currently highlights the object
 * `ob.featureMarker`: the leaflet marker, if a marker is shown on the object
+* `ob.popup`: the popup, which is attached to the object (even if it is not shown)
 
 ## event onDisappear(ob)
 Will be called when an object disappears from the map (e.g. zoom out, pan out, ...)
