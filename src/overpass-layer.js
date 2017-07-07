@@ -32,7 +32,7 @@ function OverpassLayer (options) {
   }
 
   for (var k in this.options.feature) {
-    if (typeof this.options.feature[k] === 'string') {
+    if (typeof this.options.feature[k] === 'string' && this.options.feature[k].search('{') !== -1) {
       var template = twig.twig({ data: this.options.feature[k], autoescape: true })
       this.options.feature[k] = function (template, ob) {
         return template.render(ob)
@@ -40,7 +40,7 @@ function OverpassLayer (options) {
     } else if (typeof this.options.feature[k] === 'object' && ['style'].indexOf(k) !== -1) {
       var templates = {}
       for (var k1 in this.options.feature[k]) {
-        if (typeof this.options.feature[k][k1] === 'string') {
+        if (typeof this.options.feature[k][k1] === 'string' && this.options.feature[k][k1].search('{') !== -1) {
           templates[k1] = twig.twig({ data: this.options.feature[k][k1], autoescape: true })
         } else {
           templates[k1] = this.options.feature[k][k1]
