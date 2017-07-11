@@ -59,6 +59,9 @@ Add layer to the given map.
 ## method remove()
 Removes the OverpassLayer and all its features.
 
+## method recalc()
+Calculates the object data for each visible feature and call the update event.
+
 ## event onAppear(ob)
 Will be called when an object appears on the map (e.g. load from server, zoom in, viewport moves in)
 
@@ -77,5 +80,10 @@ See `onAppear` for the description of parameters.
 
 ## event onZoomChange(ob)
 Will be called every time when the zoom level changes. Occurs instantly after zoom level change for each object, before assessing if the object is visible at the current zoom level.
+
+See `onAppear` for the description of parameters.
+
+## event onUpdate(ob)
+Called every time, when the object is being re-calculated (also when zoom level changes).
 
 See `onAppear` for the description of parameters.

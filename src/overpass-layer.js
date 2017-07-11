@@ -142,9 +142,9 @@ OverpassLayer.prototype.check_update_map = function () {
 
   // When zoom level changed, update visible objects
   if (this.lastZoom !== this.map.getZoom()) {
-    for (k in this.visibleFeatures) {
-      this._processObject(this.visibleFeatures[k])
+    this.recalc()
 
+    for (k in this.visibleFeatures) {
       if (this.onZoomChange) {
         this.onZoomChange(this.visibleFeatures[k])
       }
@@ -237,6 +237,16 @@ OverpassLayer.prototype.check_update_map = function () {
     this.onLoadStart({
       request: this.currentRequest
     })
+  }
+}
+
+OverpassLayer.prototype.recalc = function () {
+  for (k in this.visibleFeatures) {
+    this._processObject(this.visibleFeatures[k])
+
+    if (this.onUpdate) {
+      this.onUpdate(this.visibleFeatures[k])
+    }
   }
 }
 

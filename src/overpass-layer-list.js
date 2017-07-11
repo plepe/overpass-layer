@@ -1,7 +1,7 @@
 function OverpassLayerList(parentDom, layer) {
   layer.onAppear = this.addObject.bind(this)
   layer.onDisappear = this.delObject.bind(this)
-  layer.onZoomChange = this.updateObject.bind(this)
+  layer.onUpdate = this.updateObject.bind(this)
   this.dom = document.createElement('ul')
   this.dom.className = 'overpass-layer-list'
   parentDom.appendChild(this.dom)
