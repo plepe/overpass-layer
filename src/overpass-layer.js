@@ -30,6 +30,10 @@ function OverpassLayer (options) {
         iconAnchor: [ 13, 42 ]
     }
   }
+  this.options.queryOptions = 'queryOptions' in this.options ? this.options.queryOptions : {}
+  if (!('properties' in this.options.queryOptions)) {
+    this.options.queryOptions.properties = OverpassFrontend.ALL
+  }
 
   for (var k in this.options.feature) {
     if (typeof this.options.feature[k] === 'string' && this.options.feature[k].search('{') !== -1) {
@@ -177,9 +181,7 @@ OverpassLayer.prototype.check_update_map = function () {
   }
 
   this.currentRequest = this.overpassFrontend.BBoxQuery(query, bounds,
-    {
-      properties: OverpassFrontend.ALL
-    },
+    this.options.queryOptions,
     function (err, ob) {
       thisRequestFeatures[ob.id] = true
 
