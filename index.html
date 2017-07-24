@@ -166,6 +166,13 @@ window.onload = function() {
     minZoom: 16,
     feature: {
       body: "{{ tags.amenity }}<br/>Cuisine: {{ tags.cuisine|default('unknown') }}",
+      'style:highlight': {
+        "color": "black",
+        "opacity": 1,
+        "radius": 15,
+        "weight": 5,
+        "fill": false
+      },
       style:
         "{% if tags.cuisine == 'italian' %}\n" +
         "  color: #003f7f\n" +

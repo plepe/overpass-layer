@@ -41,7 +41,7 @@ function OverpassLayer (options) {
       this.options.feature[k] = function (template, ob) {
         return template.render(ob)
       }.bind(this, template)
-    } else if (typeof this.options.feature[k] === 'object' && ['style'].indexOf(k) !== -1) {
+    } else if (typeof this.options.feature[k] === 'object' && (['style'].indexOf(k) !== -1 || k.match(/^style:/))) {
       var templates = {}
       for (var k1 in this.options.feature[k]) {
         if (typeof this.options.feature[k][k1] === 'string' && this.options.feature[k][k1].search('{') !== -1) {
@@ -253,14 +253,20 @@ OverpassLayer.prototype.recalc = function () {
 }
 
 OverpassLayer.prototype._show = function (data) {
-  data.feature.addTo(this.map)
+  for (var k in data.features) {
+    data.features[k].addTo(this.map)
+  }
+
   if (data.featureMarker) {
     data.featureMarker.addTo(this.map)
   }
 }
 
 OverpassLayer.prototype._hide = function (data) {
-  this.map.removeLayer(data.feature)
+  for (var k in data.features) {
+    this.map.removeLayer(data.features[k])
+  }
+
   if (data.featureMarker) {
     this.map.removeLayer(data.featureMarker)
   }
@@ -291,15 +297,30 @@ OverpassLayer.prototype._processObject = function (data) {
     }
   }
 
-  var style = objectData.style
-  if (typeof style === 'string' || 'twig_markup' in style) {
-    style = strToStyle(style)
+  for (var k in objectData) {
+    if (k.match(/^style(:.*|)$/)) {
+      var style = objectData[k]
+      if (typeof style === 'string' || 'twig_markup' in style) {
+        objectData[k] = strToStyle(style)
+      }
+    }
   }
 
-  if (data.feature) {
-    data.feature.setStyle(style)
-  } else {
-    data.feature = ob.leafletFeature(style)
+  if (!('features' in data)) {
+    data.features = {}
+  }
+
+  for (var k in objectData) {
+    var m = k.match(/^style(|:(.*))$/)
+    if (m) {
+      var styleId = typeof m[2] === 'undefined' ? 'default' : m[2]
+
+      if (data.features[styleId]) {
+        data.features[styleId].setStyle(objectData[k])
+      } else {
+        data.features[styleId] = ob.leafletFeature(objectData[k])
+      }
+    }
   }
 
   if (objectData.marker) {
@@ -329,7 +350,10 @@ OverpassLayer.prototype._processObject = function (data) {
     data.popup = L.popup().setContent(popupContent)
     data.popup.object = data
 
-    data.feature.bindPopup(data.popup)
+    for (var k in data.features) {
+      data.features[k].bindPopup(data.popup)
+    }
+
     if (data.featureMarker) {
       data.featureMarker.bindPopup(data.popup)
     }

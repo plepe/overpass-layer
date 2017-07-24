@@ -12,15 +12,20 @@ Options:
 * minZoom: Show layer only from the given zoom level (default: 16)
 * maxZoom: Show layer only up to the given zoom level (default: no limit)
 * feature: an object describing how the feature will be formated resp. styled. Each of the values may be either a function which will be passed an OverpassObject or a string which will be processed with the templating language TwigJS:
-  * style: An object or a function or a TwigJS template (string), styling the resulting map feature.
+  * style: An object or a function or a TwigJS template (string), styling the resulting map feature. Style-Id: "default".
     * If an object is used, e.g.: { weight: 2, fillColor: 'red' }
     * If a function is used, the function will be passed the OverpassObject object and should return the style as object.
     * If a TwigJS template is used, the template should create lines with "key: value" (E.g. `color: red\nweight: 2`). See below for possible patterns.
+  * "style:*": Additional styles with the style-id as suffix (e.g. "style:casing").
   * title: the title of the feature popup and the object in the list.
   * body: the body of the feature popup.
   * description: a short description shown in the list.
   * marker: an icon definition for L.icon (if boolean true or iconSign defined use standard map marker)
-  * markerSign: a HTML string which will be shown within the icon.
+    * url: url of an icon.
+    * sign: a HTML string which will be shown within the icon.
+    * size: either [ x, y ] or "x,y".
+    * anchor: either [ x, y ] or "x,y".
+    * popupAnchor: either [ x, y ] or "x,y".
   * priority: a numeric value by which the elements in the list will be sorted (lower values first)
   * appUrl: an url for the link of an item in the list, default: '#'.
 * const: an object variable which is available as prefix in twig functions. See below.
@@ -70,7 +75,7 @@ Parameter:
 * `ob.id`: Unique ID of the object (e.g. 'w1234')
 * `ob.object` is an instance of OSMObject (see OverpassFrontend for details)
 * `ob.data` are the parsed options for the current object.
-* `ob.feature`: the leaflet feature which currently highlights the object
+* `ob.features`: an object with all leaflet feature which show the object. Index is the id of the style (e.g. 'highlight' for 'style:highlight'. 'default' for 'style').
 * `ob.featureMarker`: the leaflet marker, if a marker is shown on the object
 * `ob.popup`: the popup, which is attached to the object (even if it is not shown)
 
