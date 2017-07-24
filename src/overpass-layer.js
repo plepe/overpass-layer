@@ -187,7 +187,8 @@ OverpassLayer.prototype.check_update_map = function () {
 
       if (!(ob.id in this.visibleFeatures)) {
         var data = {
-          object: ob
+          object: ob,
+          isShown: false
         }
 
         if (ob.id in this.shownFeatures) {
@@ -260,6 +261,8 @@ OverpassLayer.prototype._show = function (data) {
   if (data.featureMarker) {
     data.featureMarker.addTo(this.map)
   }
+
+  data.isShown = true
 }
 
 OverpassLayer.prototype._hide = function (data) {
@@ -270,6 +273,8 @@ OverpassLayer.prototype._hide = function (data) {
   if (data.featureMarker) {
     this.map.removeLayer(data.featureMarker)
   }
+
+  data.isShown = false
 }
 
 OverpassLayer.prototype._processObject = function (data) {
@@ -384,7 +389,8 @@ OverpassLayer.prototype.get = function (id, callback) {
     function (err, ob) {
       if (err === null) {
         var data = {
-          object: ob
+          object: ob,
+          isShown: false
         }
 
         if (id in this.shownFeatures) {
