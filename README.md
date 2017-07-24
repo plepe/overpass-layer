@@ -11,7 +11,9 @@ Options:
 * overpassFrontend: An OverpassFrontend object (defaults to the global variable `overpassFrontend`)
 * minZoom: Show layer only from the given zoom level (default: 16)
 * maxZoom: Show layer only up to the given zoom level (default: no limit)
+* styles: Array of style-id which should be shown. Default: `['default']`. May be overridden by a feature dependant styles array. Can be a comma-separated string.
 * feature: an object describing how the feature will be formated resp. styled. Each of the values may be either a function which will be passed an OverpassObject or a string which will be processed with the templating language TwigJS:
+  * styles: Array of style-id which should be shown. If not set, the value of the parent 'styles' values will be used. Can be a comma-separated string.
   * style: An object or a function or a TwigJS template (string), styling the resulting map feature. Style-Id: "default".
     * If an object is used, e.g.: { weight: 2, fillColor: 'red' }
     * If a function is used, the function will be passed the OverpassObject object and should return the style as object.
@@ -78,6 +80,7 @@ Parameter:
 * `ob.features`: an object with all leaflet feature which show the object. Index is the id of the style (e.g. 'highlight' for 'style:highlight'. 'default' for 'style').
 * `ob.featureMarker`: the leaflet marker, if a marker is shown on the object
 * `ob.popup`: the popup, which is attached to the object (even if it is not shown)
+* `ob.styles`: array of style-ids which are currently active
 * `ob.isShown`: whether the object is currently shown on the map (boolean)
 
 ## event onDisappear(ob)

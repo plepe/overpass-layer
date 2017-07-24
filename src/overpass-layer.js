@@ -254,8 +254,11 @@ OverpassLayer.prototype.recalc = function () {
 }
 
 OverpassLayer.prototype._show = function (data) {
-  for (var k in data.features) {
-    data.features[k].addTo(this.map)
+  for (var i = 0; i < data.styles.length; i++) {
+    var k = data.styles[i]
+    if (k in data.features) {
+      data.features[k].addTo(this.map)
+    }
   }
 
   if (data.featureMarker) {
@@ -328,6 +331,11 @@ OverpassLayer.prototype._processObject = function (data) {
     }
   }
 
+  var styles = 'styles' in objectData ? objectData.styles : 'styles' in this.options ? this.options.styles : [ 'default' ]
+  if (typeof styles === 'string' || 'twig_markup' in styles) {
+    styles = styles.split(/,/)
+  }
+
   if (objectData.marker) {
     var markerHtml = '<img src="' + objectData.marker.iconUrl + '">'
     if (objectData.markerSign) {
@@ -344,6 +352,18 @@ OverpassLayer.prototype._processObject = function (data) {
       data.featureMarker = L.marker(ob.center, { icon: icon })
     }
   }
+
+  if (data.isShown) {
+    for (var k in data.features) {
+      if (styles.indexOf(k) !== -1 && data.styles.indexOf(k) === -1) {
+        data.features[k].addTo(this.map)
+      }
+      if (styles.indexOf(k) === -1 && data.styles.indexOf(k) !== -1) {
+        this.map.removeLayer(data.features[k])
+      }
+    }
+  }
+  data.styles = styles
 
   var popupContent = ''
   popupContent += '<h1>' + objectData.title + '</h1>'
