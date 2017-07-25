@@ -465,12 +465,14 @@ OverpassLayer.prototype.show = function (id, options, callback) {
 
 OverpassLayer.prototype.hide = function (id) {
   if (id in this.shownFeatures) {
-    this._hide(this.shownFeatures[id])
+    var ob = this.shownFeatures[id]
     delete this.shownFeatures[id]
-    delete this.visibleFeatures[id]
-  }
+    this._processObject(ob)
 
-  this.check_update_map()
+    if (!(id in this.visibleFeatures)) {
+      this._hide(ob)
+    }
+  }
 }
 
 function strToStyle (style) {
