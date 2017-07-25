@@ -70,6 +70,23 @@ Removes the OverpassLayer and all its features.
 ## method recalc()
 Calculates the object data for each visible feature and call the update event.
 
+## method get(id, callback)
+Load the given object, even if it should not be shown in the given layer / at the current zoom level.
+
+The callback will be called with the following parameters: err, ob (see event onAppear).
+
+## method show(id, options, callback)
+Show the given object, even if it should not be shown in the given layer / at the current zoom level.
+
+The options parameter influences how the object should be shown. (Consecutive calls of show() will override the options of previous calls).
+
+Available options:
+
+The callback will be called with the following parameters: err, ob (see event onAppear).
+
+## method hide(id)
+Hide the given object, resp. remove show options. If it is shown due to layer definition, it will still be visible.
+
 ## event onAppear(ob)
 Will be called when an object appears on the map (e.g. load from server, zoom in, viewport moves in)
 
