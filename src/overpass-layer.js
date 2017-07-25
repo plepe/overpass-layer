@@ -67,6 +67,7 @@ function OverpassLayer (options) {
 
   this.visibleFeatures = {}
   this.shownFeatures = {} // features which are forcibly shown
+  this.shownFeatureOptions = {}
   this.currentRequest = null
   this.lastZoom = null
 }
@@ -91,6 +92,7 @@ OverpassLayer.prototype.remove = function () {
 
   this.visibleFeatures = {}
   this.shownFeatures = {}
+  this.shownFeatureOptions = {}
 
   this.map.off('moveend', this.check_update_map, this)
   this.map = null
@@ -282,6 +284,7 @@ OverpassLayer.prototype._hide = function (data) {
 
 OverpassLayer.prototype._processObject = function (data) {
   var ob = data.object
+  var showOptions = ob.id in this.shownFeatureOptions ? this.shownFeatureOptions[ob.id] : {}
 
   var twigData = {
     id: ob.id,
@@ -436,12 +439,16 @@ OverpassLayer.prototype.get = function (id, callback) {
 
 OverpassLayer.prototype.show = function (id, options, callback) {
   if (id in this.shownFeatures) {
+    this.shownFeatureOptions[id] = options
+    this._processObject(this.shownFeatures[id])
     callback(null, this.shownFeatures[id])
     return
   }
 
   if (id in this.visibleFeatures) {
     this.shownFeatures[id] = this.visibleFeatures[id]
+    this.shownFeatureOptions[id] = options
+    this._processObject(this.shownFeatures[id])
     callback(null, this.shownFeatures[id])
     return
   }
@@ -453,6 +460,8 @@ OverpassLayer.prototype.show = function (id, options, callback) {
       }
 
       this.shownFeatures[id] = data
+      this.shownFeatureOptions[id] = options
+      this._processObject(this.shownFeatures[id])
 
       if (!(id in this.visibleFeatures)) {
         this._show(data)
@@ -467,6 +476,7 @@ OverpassLayer.prototype.hide = function (id) {
   if (id in this.shownFeatures) {
     var ob = this.shownFeatures[id]
     delete this.shownFeatures[id]
+    delete this.shownFeatureOptions[id]
     this._processObject(ob)
 
     if (!(id in this.visibleFeatures)) {
