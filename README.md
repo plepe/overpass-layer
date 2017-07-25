@@ -81,6 +81,7 @@ Show the given object, even if it should not be shown in the given layer / at th
 The options parameter influences how the object should be shown. (Consecutive calls of show() will override the options of previous calls).
 
 Available options:
+* styles: Aside from the styles which are shown from the general options, show additional styles. (Array)
 
 The callback will be called with the following parameters: err, ob (see event onAppear).
 

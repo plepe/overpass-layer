@@ -190,19 +190,23 @@ window.onload = function() {
   overpass_layer3.addTo(map)
   overpass_layer3.show(
     'w82770794',
-    {},
+    {
+      'styles': [ 'highlight' ]
+    },
     function (err, ob) {
       console.log(ob)
     })
   overpass_layer3.show(
-    'n1797692539',
-    {},
+    'n597342965',
+    {
+      'styles': [ 'highlight' ]
+    },
     function (err, ob) {
       console.log(ob)
     })
   window.setTimeout(function () {
     overpass_layer3.hide('w82770794')
-    overpass_layer3.hide('n1797692539')
+    overpass_layer3.hide('n597342965')
   }, 5000)
   new OverpassLayerList(document.getElementById('info'), overpass_layer3);
 

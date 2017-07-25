@@ -339,6 +339,10 @@ OverpassLayer.prototype._processObject = function (data) {
     styles = styles.split(/,/)
   }
 
+  if ('styles' in showOptions) {
+    styles = styles.concat(showOptions.styles)
+  }
+
   if (objectData.marker) {
     var markerHtml = '<img src="' + objectData.marker.iconUrl + '">'
     if (objectData.markerSign) {
