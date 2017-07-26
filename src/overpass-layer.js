@@ -109,6 +109,9 @@ OverpassLayer.prototype.check_update_map = function () {
     for (k in this.visibleFeatures) {
       ob = this.visibleFeatures[k]
 
+      if (this.layerList) {
+        this.layerList.delObject(ob)
+      }
       if (this.onDisappear) {
         this.onDisappear(ob)
       }
@@ -134,6 +137,9 @@ OverpassLayer.prototype.check_update_map = function () {
     ob = this.visibleFeatures[k]
 
     if (!ob.object.intersects(bounds)) {
+      if (this.layerList) {
+        this.layerList.delObject(ob)
+      }
       if (this.onDisappear) {
         this.onDisappear(ob)
       }
@@ -203,6 +209,9 @@ OverpassLayer.prototype.check_update_map = function () {
 
         this.visibleFeatures[ob.id] = data
 
+        if (this.layerList) {
+          this.layerList.addObject(data)
+        }
         if (this.onAppear) {
           this.onAppear(data)
         }
@@ -226,6 +235,9 @@ OverpassLayer.prototype.check_update_map = function () {
             this._hide(this.visibleFeatures[k])
           }
 
+          if (this.layerList) {
+            this.layerList.delObject(this.visibleFeatures[k])
+          }
           if (this.onDisappear) {
             this.onDisappear(this.visibleFeatures[k])
           }
@@ -249,6 +261,9 @@ OverpassLayer.prototype.recalc = function () {
   for (k in this.visibleFeatures) {
     this._processObject(this.visibleFeatures[k])
 
+    if (this.layerList) {
+      this.layerList.updateObject(this.visibleFeatures[k])
+    }
     if (this.onUpdate) {
       this.onUpdate(this.visibleFeatures[k])
     }
