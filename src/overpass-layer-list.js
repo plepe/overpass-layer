@@ -56,14 +56,6 @@ OverpassLayerList.prototype.addObject = function (ob) {
 
   div.priority = 'priority' in ob.data ? parseFloat(ob.data.priority) : 0
 
-  // HOVER
-  div.onmouseover = function (id) {
-    this.layer.show(id, { styles: [ 'hover' ] }, function () {})
-  }.bind(this, ob.id)
-  div.onmouseout = function (id) {
-    this.layer.hide(id)
-  }.bind(this, ob.id)
-
   var current = this.dom.firstChild
   while (current && current.priority <= div.priority) {
     current = current.nextSibling
