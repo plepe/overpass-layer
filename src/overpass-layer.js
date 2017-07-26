@@ -1,4 +1,4 @@
-/* global overpassFrontend:false */
+/* global overpassFrontend:false, L */
 
 var BoundingBox = require('boundingbox')
 var twig = require('twig')
@@ -25,9 +25,9 @@ function OverpassLayer (options) {
   this.options.feature.markerSign = 'markerSign' in this.options.feature ? this.options.feature.markerSign : null
   if (this.options.feature.marker === null && this.options.feature.markerSign !== null) {
     this.options.feature.marker = {
-        iconUrl: 'img/map_pointer.png',
-        iconSize: [ 25, 42 ],
-        iconAnchor: [ 13, 42 ]
+      iconUrl: 'img/map_pointer.png',
+      iconSize: [ 25, 42 ],
+      iconAnchor: [ 13, 42 ]
     }
   }
   this.options.queryOptions = 'queryOptions' in this.options ? this.options.queryOptions : {}
@@ -37,7 +37,7 @@ function OverpassLayer (options) {
 
   for (var k in this.options.feature) {
     if (typeof this.options.feature[k] === 'string' && this.options.feature[k].search('{') !== -1) {
-      var template = twig.twig({ data: this.options.feature[k], autoescape: true })
+      template = twig.twig({ data: this.options.feature[k], autoescape: true })
       this.options.feature[k] = function (template, ob) {
         return template.render(ob)
       }.bind(this, template)
@@ -80,7 +80,6 @@ OverpassLayer.prototype.addTo = function (map) {
 
 OverpassLayer.prototype.remove = function () {
   var k
-  var ob
 
   for (k in this.visibleFeatures) {
     this._hide(this.visibleFeatures[k])
@@ -169,7 +168,7 @@ OverpassLayer.prototype.check_update_map = function () {
   // anyway). Data which is being submitted will still be loaded to the cache.
   if (this.currentRequest) {
     if (this.onLoadEnd) {
-      this.onLoadEnd ({
+      this.onLoadEnd({
         request: this.currentRequest,
         error: 'abort'
       })
@@ -191,6 +190,10 @@ OverpassLayer.prototype.check_update_map = function () {
   this.currentRequest = this.overpassFrontend.BBoxQuery(query, bounds,
     this.options.queryOptions,
     function (err, ob) {
+      if (err) {
+        console.log('unexpected error', err)
+      }
+
       thisRequestFeatures[ob.id] = true
 
       if (!(ob.id in this.visibleFeatures)) {
@@ -223,7 +226,7 @@ OverpassLayer.prototype.check_update_map = function () {
       }
 
       if (this.onLoadEnd) {
-        this.onLoadEnd ({
+        this.onLoadEnd({
           request: this.currentRequest,
           error: err
         })
@@ -258,7 +261,7 @@ OverpassLayer.prototype.check_update_map = function () {
 }
 
 OverpassLayer.prototype.recalc = function () {
-  for (k in this.visibleFeatures) {
+  for (var k in this.visibleFeatures) {
     this._processObject(this.visibleFeatures[k])
 
     if (this.layerList) {
@@ -302,6 +305,7 @@ OverpassLayer.prototype._hide = function (data) {
 }
 
 OverpassLayer.prototype._processObject = function (data) {
+  var k
   var ob = data.object
   var showOptions = ob.id in this.shownFeatureOptions ? this.shownFeatureOptions[ob.id] : {}
 
@@ -319,7 +323,7 @@ OverpassLayer.prototype._processObject = function (data) {
   }
 
   var objectData = {}
-  for (var k in this.options.feature) {
+  for (k in this.options.feature) {
     if (typeof this.options.feature[k] === 'function') {
       objectData[k] = this.options.feature[k](twigData)
     } else {
@@ -327,7 +331,7 @@ OverpassLayer.prototype._processObject = function (data) {
     }
   }
 
-  for (var k in objectData) {
+  for (k in objectData) {
     if (k.match(/^style(:.*|)$/)) {
       var style = objectData[k]
       if (typeof style === 'string' || 'twig_markup' in style) {
@@ -340,7 +344,7 @@ OverpassLayer.prototype._processObject = function (data) {
     data.features = {}
   }
 
-  for (var k in objectData) {
+  for (k in objectData) {
     var m = k.match(/^style(|:(.*))$/)
     if (m) {
       var styleId = typeof m[2] === 'undefined' ? 'default' : m[2]
@@ -380,7 +384,7 @@ OverpassLayer.prototype._processObject = function (data) {
   }
 
   if (data.isShown) {
-    for (var k in data.features) {
+    for (k in data.features) {
       if (styles.indexOf(k) !== -1 && data.styles.indexOf(k) === -1) {
         data.features[k].addTo(this.map)
       }
@@ -521,7 +525,7 @@ function strToStyle (style) {
     if ((m = str[i].match(/^\s*([a-zA-Z0-9_]+)\s*:\s*(.*)\s*$/))) {
       var v = m[2].trim()
 
-      if (v.match(/^\-?[0-9]+(\.[0-9]+)?/)) {
+      if (v.match(/^-?[0-9]+(\.[0-9]+)?/)) {
         v = parseFloat(v)
       }
 

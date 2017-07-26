@@ -1,4 +1,4 @@
-function OverpassLayerList(parentDom, layer) {
+function OverpassLayerList (parentDom, layer) {
   this.layer = layer
   this.layer.layerList = this
   this.dom = document.createElement('ul')
@@ -9,6 +9,7 @@ function OverpassLayerList(parentDom, layer) {
 
 OverpassLayerList.prototype.addObject = function (ob) {
   var div = document.createElement('li')
+  var a
 
   this.items[ob.id] = div
   ob.listItem = div
@@ -25,24 +26,23 @@ OverpassLayerList.prototype.addObject = function (ob) {
 
   // MARKER
   if (ob.data.marker && ob.data.marker.iconUrl) {
-    var a = document.createElement('img')
+    a = document.createElement('img')
     a.className = 'marker'
     a.src = ob.data.marker.iconUrl
     p.appendChild(a)
   }
 
   // ICON
-  var a = document.createElement('div')
+  a = document.createElement('div')
   a.className = 'icon'
   a.innerHTML = ob.data.markerSign
   p.appendChild(a)
 
   // TITLE
-  var a = document.createElement('a')
+  a = document.createElement('a')
   a.className = 'title'
   a.href = 'appUrl' in ob.data ? ob.data.appUrl : '#'
   a.onclick = function (ob) {
-
     ob.feature.openPopup()
     return false
   }.bind(this, ob)
@@ -50,7 +50,7 @@ OverpassLayerList.prototype.addObject = function (ob) {
   div.appendChild(a)
 
   // DESCRIPTION
-  var a = document.createElement('div')
+  a = document.createElement('div')
   a.className = 'description'
   a.innerHTML = 'description' in ob.data ? ob.data.description : ''
   div.appendChild(a)
