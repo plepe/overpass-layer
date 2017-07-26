@@ -263,6 +263,10 @@ OverpassLayer.prototype._show = function (data) {
     }
   }
 
+  data.feature = data.styles.length
+      ? data.features[data.styles[0]]
+      : null
+
   if (data.featureMarker) {
     data.featureMarker.addTo(this.map)
   }
@@ -372,6 +376,10 @@ OverpassLayer.prototype._processObject = function (data) {
   }
   data.styles = styles
 
+  data.feature = data.styles.length
+      ? data.features[data.styles[0]]
+      : null
+
   var popupContent = ''
   popupContent += '<h1>' + objectData.title + '</h1>'
   popupContent += objectData.body
@@ -382,8 +390,8 @@ OverpassLayer.prototype._processObject = function (data) {
     data.popup = L.popup().setContent(popupContent)
     data.popup.object = data
 
-    for (var k in data.features) {
-      data.features[k].bindPopup(data.popup)
+    if (data.feature) {
+      data.feature.bindPopup(data.popup)
     }
 
     if (data.featureMarker) {

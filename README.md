@@ -96,6 +96,7 @@ Parameter:
 * `ob.object` is an instance of OSMObject (see OverpassFrontend for details)
 * `ob.data` are the parsed options for the current object.
 * `ob.features`: an object with all leaflet feature which show the object. Index is the id of the style (e.g. 'highlight' for 'style:highlight'. 'default' for 'style').
+* `ob.feature`: the first leaflet feature (of the styles array). it will be used for binding popups to.
 * `ob.featureMarker`: the leaflet marker, if a marker is shown on the object
 * `ob.popup`: the popup, which is attached to the object (even if it is not shown)
 * `ob.styles`: array of style-ids which are currently active
