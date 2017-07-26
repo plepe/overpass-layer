@@ -101,6 +101,7 @@ Parameter:
 * `ob.popup`: the popup, which is attached to the object (even if it is not shown)
 * `ob.styles`: array of style-ids which are currently active
 * `ob.isShown`: whether the object is currently shown on the map (boolean)
+* `ob.listItem`: DOM node of the list item which shows this object (if item is shown and a list has been added for this layer)
 
 ## event onDisappear(ob)
 Will be called when an object disappears from the map (e.g. zoom out, pan out, ...)

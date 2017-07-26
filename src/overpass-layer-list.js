@@ -11,6 +11,7 @@ OverpassLayerList.prototype.addObject = function (ob) {
   var div = document.createElement('li')
 
   this.items[ob.id] = div
+  ob.listItem = div
 
   // MARKER&ICON PARENT
   var p = document.createElement('a')
@@ -111,11 +112,16 @@ OverpassLayerList.prototype.delObject = function (ob) {
 
   this.dom.removeChild(div)
   delete this.items[ob.id]
+  delete ob.listItem
 }
 
 OverpassLayerList.prototype.remove = function () {
   while (this.dom.firstChild) {
     this.dom.removeChild(this.dom.lastChild)
+  }
+
+  for (var k in this.items) {
+    delete this.items[k].listItem
   }
 
   this.items = {}
