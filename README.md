@@ -88,6 +88,10 @@ The callback will be called with the following parameters: err, ob (see event on
 ## method hide(id)
 Hide the given object, resp. remove show options. If it is shown due to layer definition, it will still be visible.
 
+## method twigData(object)
+Return twig data for object (for rendering).
+
+
 ## event onAppear(ob)
 Will be called when an object appears on the map (e.g. load from server, zoom in, viewport moves in)
 

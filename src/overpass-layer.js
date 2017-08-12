@@ -304,12 +304,8 @@ OverpassLayer.prototype._hide = function (data) {
   data.isShown = false
 }
 
-OverpassLayer.prototype._processObject = function (data) {
-  var k
-  var ob = data.object
-  var showOptions = ob.id in this.shownFeatureOptions ? this.shownFeatureOptions[ob.id] : {}
-
-  var twigData = {
+OverpassLayer.prototype.twigData = function (ob) {
+  return {
     id: ob.id,
     layer_id: this.options.id,
     osm_id: ob.osm_id,
@@ -321,6 +317,14 @@ OverpassLayer.prototype._processObject = function (data) {
     },
     'const': this.options.const
   }
+}
+
+OverpassLayer.prototype._processObject = function (data) {
+  var k
+  var ob = data.object
+  var showOptions = ob.id in this.shownFeatureOptions ? this.shownFeatureOptions[ob.id] : {}
+
+  var twigData = this.twigData(ob)
 
   var objectData = {}
   for (k in this.options.feature) {
