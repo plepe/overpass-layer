@@ -263,13 +263,6 @@ OverpassLayer.prototype.check_update_map = function () {
 OverpassLayer.prototype.recalc = function () {
   for (var k in this.visibleFeatures) {
     this._processObject(this.visibleFeatures[k])
-
-    if (this.layerList) {
-      this.layerList.updateObject(this.visibleFeatures[k])
-    }
-    if (this.onUpdate) {
-      this.onUpdate(this.visibleFeatures[k])
-    }
   }
 }
 
@@ -425,6 +418,13 @@ OverpassLayer.prototype._processObject = function (data) {
   data.id = ob.id
   data.layer_id = this.options.id
   data.data = objectData
+
+  if (this.layerList) {
+    this.layerList.updateObject(data)
+  }
+  if (this.onUpdate) {
+    this.onUpdate(data)
+  }
 }
 
 OverpassLayer.prototype.get = function (id, callback) {
