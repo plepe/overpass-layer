@@ -38,9 +38,15 @@ function OverpassLayer (options) {
   for (var k in this.options.feature) {
     if (typeof this.options.feature[k] === 'string' && this.options.feature[k].search('{') !== -1) {
       template = twig.twig({ data: this.options.feature[k], autoescape: true })
-      this.options.feature[k] = function (template, ob) {
-        return template.render(ob)
-      }.bind(this, template)
+      this.options.feature[k] = function (template, k, ob) {
+        try {
+          return template.render(ob)
+        } catch (err) {
+          console.log('Error rendering ' + k + ': ', err)
+        }
+
+        return null
+      }.bind(this, template, k)
     } else if (typeof this.options.feature[k] === 'object' && (['style'].indexOf(k) !== -1 || k.match(/^style:/))) {
       var templates = {}
       for (var k1 in this.options.feature[k]) {
