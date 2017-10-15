@@ -37,12 +37,18 @@ function OverpassLayer (options) {
 
   for (var k in this.options.feature) {
     if (typeof this.options.feature[k] === 'string' && this.options.feature[k].search('{') !== -1) {
-      template = twig.twig({ data: this.options.feature[k], autoescape: true })
+      try {
+        template = twig.twig({ data: this.options.feature[k], autoescape: true })
+      } catch (err) {
+        console.log('Error compiling twig template ' + this.id + '/' + k + ':', err)
+        break
+      }
+
       this.options.feature[k] = function (template, k, ob) {
         try {
           return template.render(ob)
         } catch (err) {
-          console.log('Error rendering ' + k + ': ', err)
+          console.log('Error rendering twig template ' + this.id + '/' + k + ': ', err)
         }
 
         return null
