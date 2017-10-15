@@ -66,7 +66,7 @@ function OverpassLayer (options) {
       this.options.feature[k] = function (templates, ob) {
         var ret = {}
         for (var k1 in templates) {
-          if (typeof templates[k1] === 'object' && 'render' in templates[k1]) {
+          if (typeof templates[k1] === 'object' && templates[k1] !== null && 'render' in templates[k1]) {
             ret[k1] = templates[k1].render(ob)
           } else {
             ret[k1] = templates[k1]
