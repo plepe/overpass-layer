@@ -418,8 +418,8 @@ OverpassLayer.prototype._processObject = function (data) {
     data.popup = L.popup().setContent(popupContent)
     data.popup.object = data
 
-    if (data.feature) {
-      data.feature.bindPopup(data.popup)
+    for (var k in data.features) {
+      data.features[k].bindPopup(data.popup)
     }
 
     if (data.featureMarker) {
