@@ -375,8 +375,26 @@ OverpassLayer.prototype._processObject = function (data) {
     styles = styles.concat(showOptions.styles)
   }
 
+  var markerHtml
   if (objectData.marker) {
-    var markerHtml = '<img src="' + objectData.marker.iconUrl + '">'
+    if ('markerSymbol' in objectData) {
+      markerHtml = objectData.markerSymbol
+
+      var div = document.createElement('div')
+      div.innerHTML = objectData.markerSymbol
+
+      if (div.firstChild) {
+        var c = div.firstChild
+
+        if (c.hasAttribute('anchorx') && c.hasAttribute('anchory')) {
+          objectData.marker.iconAnchor = [ c.getAttribute('anchorx'), c.getAttribute('anchory') ]
+        }
+      }
+
+    } else {
+      markerHtml = '<img src="' + objectData.marker.iconUrl + '">'
+    }
+
     if (objectData.markerSign) {
       markerHtml += '<div>' + objectData.markerSign + '</div>'
     }
