@@ -25,7 +25,17 @@ OverpassLayerList.prototype.addObject = function (ob) {
   div.appendChild(p)
 
   // MARKER
-  if (ob.data.marker && ob.data.marker.iconUrl) {
+  if (ob.data.listMarkerSymbol) {
+    a = document.createElement('div')
+    a.className = 'marker'
+    a.innerHTML = ob.data.listMarkerSymbol
+    p.appendChild(a)
+  } else if (ob.data.markerSymbol) {
+    a = document.createElement('div')
+    a.className = 'marker'
+    a.innerHTML = ob.data.markerSymbol
+    p.appendChild(a)
+  } else if (ob.data.marker && ob.data.marker.iconUrl) {
     a = document.createElement('img')
     a.className = 'marker'
     a.src = ob.data.marker.iconUrl
