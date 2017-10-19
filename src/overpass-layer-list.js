@@ -7,6 +7,26 @@ function OverpassLayerList (parentDom, layer) {
   this.items = {}
 }
 
+OverpassLayerList.prototype._getMarker = function (ob) {
+  var a
+
+  if (ob.data.listMarkerSymbol) {
+    a = document.createElement('div')
+    a.className = 'marker'
+    a.innerHTML = ob.data.listMarkerSymbol
+  } else if (ob.data.markerSymbol) {
+    a = document.createElement('div')
+    a.className = 'marker'
+    a.innerHTML = ob.data.markerSymbol
+  } else if (ob.data.marker && ob.data.marker.iconUrl) {
+    a = document.createElement('img')
+    a.className = 'marker'
+    a.src = ob.data.marker.iconUrl
+  }
+
+  return a
+}
+
 OverpassLayerList.prototype.addObject = function (ob) {
   var div = document.createElement('li')
   var a
@@ -25,20 +45,8 @@ OverpassLayerList.prototype.addObject = function (ob) {
   div.appendChild(p)
 
   // MARKER
-  if (ob.data.listMarkerSymbol) {
-    a = document.createElement('div')
-    a.className = 'marker'
-    a.innerHTML = ob.data.listMarkerSymbol
-    p.appendChild(a)
-  } else if (ob.data.markerSymbol) {
-    a = document.createElement('div')
-    a.className = 'marker'
-    a.innerHTML = ob.data.markerSymbol
-    p.appendChild(a)
-  } else if (ob.data.marker && ob.data.marker.iconUrl) {
-    a = document.createElement('img')
-    a.className = 'marker'
-    a.src = ob.data.marker.iconUrl
+  a = this._getMarker(ob)
+  if (a) {
     p.appendChild(a)
   }
 
@@ -92,11 +100,12 @@ OverpassLayerList.prototype.updateObject = function (ob) {
       while (a) {
         // MARKER
         if (a.className === 'marker') {
-          if (ob.data.marker.iconUrl) {
-            a.src = ob.data.marker.iconUrl
-          } else {
-            a.src = null
+          while (p.lastChild) {
+            p.removeChild(p.lastChild)
           }
+
+          a = this._getMarker(ob)
+          p.appendChild(a)
         }
 
         // ICON
