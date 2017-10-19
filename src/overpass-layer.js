@@ -324,10 +324,9 @@ OverpassLayer.prototype.twigData = function (ob) {
   }
 }
 
-OverpassLayer.prototype._processObject = function (data) {
+OverpassLayer.prototype.evaluate = function (data) {
   var k
   var ob = data.object
-  var showOptions = ob.id in this.shownFeatureOptions ? this.shownFeatureOptions[ob.id] : {}
 
   var twigData = this.twigData(ob)
 
@@ -353,6 +352,21 @@ OverpassLayer.prototype._processObject = function (data) {
     data.features = {}
   }
 
+  objectData.styles = objectData.styles || this.options.styles || [ 'default' ]
+  if (typeof objectData.styles === 'string' || 'twig_markup' in objectData.styles) {
+    objectData.styles = objectData.styles.split(/,/)
+  }
+
+  return objectData
+}
+
+OverpassLayer.prototype._processObject = function (data) {
+  var k
+  var ob = data.object
+  var showOptions = ob.id in this.shownFeatureOptions ? this.shownFeatureOptions[ob.id] : {}
+
+  objectData = this.evaluate(data)
+
   for (k in objectData) {
     var m = k.match(/^style(|:(.*))$/)
     if (m) {
@@ -366,10 +380,6 @@ OverpassLayer.prototype._processObject = function (data) {
     }
   }
 
-  objectData.styles = objectData.styles || this.options.styles || [ 'default' ]
-  if (typeof objectData.styles === 'string' || 'twig_markup' in objectData.styles) {
-    objectData.styles = objectData.styles.split(/,/)
-  }
 
   if ('styles' in showOptions) {
     objectData.styles = objectData.styles.concat(showOptions.styles)
