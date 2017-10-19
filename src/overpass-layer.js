@@ -366,13 +366,13 @@ OverpassLayer.prototype._processObject = function (data) {
     }
   }
 
-  var styles = 'styles' in objectData ? objectData.styles : 'styles' in this.options ? this.options.styles : [ 'default' ]
-  if (typeof styles === 'string' || 'twig_markup' in styles) {
-    styles = styles.split(/,/)
+  objectData.styles = objectData.styles || this.options.styles || [ 'default' ]
+  if (typeof objectData.styles === 'string' || 'twig_markup' in objectData.styles) {
+    objectData.styles = objectData.styles.split(/,/)
   }
 
   if ('styles' in showOptions) {
-    styles = styles.concat(showOptions.styles)
+    objectData.styles = objectData.styles.concat(showOptions.styles)
   }
 
   var markerHtml
@@ -412,15 +412,15 @@ OverpassLayer.prototype._processObject = function (data) {
 
   if (data.isShown) {
     for (k in data.features) {
-      if (styles.indexOf(k) !== -1 && data.styles.indexOf(k) === -1) {
+      if (objectData.styles.indexOf(k) !== -1 && data.styles.indexOf(k) === -1) {
         data.features[k].addTo(this.map)
       }
-      if (styles.indexOf(k) === -1 && data.styles.indexOf(k) !== -1) {
+      if (objectData.styles.indexOf(k) === -1 && data.styles.indexOf(k) !== -1) {
         this.map.removeLayer(data.features[k])
       }
     }
   }
-  data.styles = styles
+  data.styles = objectData.styles
 
   data.feature = data.styles.length
       ? data.features[data.styles[0]]
