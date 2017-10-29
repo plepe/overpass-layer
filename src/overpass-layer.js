@@ -34,6 +34,7 @@ function OverpassLayer (options) {
   if (!('properties' in this.options.queryOptions)) {
     this.options.queryOptions.properties = OverpassFrontend.ALL
   }
+  this.options.styleNoBindPopup = this.options.styleNoBindPopup || []
 
   for (var k in this.options.feature) {
     if (typeof this.options.feature[k] === 'string' && this.options.feature[k].search('{') !== -1) {
@@ -360,6 +361,10 @@ OverpassLayer.prototype.evaluate = function (data) {
   return objectData
 }
 
+OverpassLayer.prototype._shallBindPopupToStyle = function (styleId) {
+  return this.options.styleNoBindPopup.indexOf(styleId) === -1
+}
+
 OverpassLayer.prototype._processObject = function (data) {
   var k
   var ob = data.object
@@ -447,7 +452,9 @@ OverpassLayer.prototype._processObject = function (data) {
     data.popup.object = data
 
     for (var k in data.features) {
-      data.features[k].bindPopup(data.popup)
+      if (this._shallBindPopupToStyle(k)) {
+        data.features[k].bindPopup(data.popup)
+      }
     }
 
     if (data.featureMarker) {

@@ -33,6 +33,7 @@ Options:
   * appUrl: an url for the link of an item in the list, default: '#'.
 * const: an object variable which is available as prefix in twig functions. See below.
 * queryOptions: options for OverpassFrontend.BBoxQuery.
+* styleNoBindPopup: array, list of styles where popup should not bind to. Default: []
 
 ### TwigJS templates
 The data of an object is available as patterns. Tags and Meta information is only available, if these properties have been downloaded (see option 'properties'). Variables will automatically be HTML escaped, if not the filter `raw` is used, e.g.: `{{ tags.name|raw }}`.
