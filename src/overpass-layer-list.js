@@ -109,9 +109,10 @@ OverpassLayerList.prototype.updateObject = function (ob) {
         }
 
         // ICON
-        if (a.className === 'icon') {
-          a.innerHTML = ob.data.markerSign
-        }
+        a = document.createElement('div')
+        a.className = 'icon'
+        a.innerHTML = ob.data.markerSign
+        p.appendChild(a)
 
         a = a.nextSibling
       }
