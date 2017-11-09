@@ -353,9 +353,17 @@ OverpassLayer.prototype.evaluate = function (data) {
     data.features = {}
   }
 
-  objectData.styles = objectData.styles || this.options.styles || [ 'default' ]
+  objectData.styles =
+    'styles' in objectData ? objectData.styles :
+    'styles' in this.options ? this.options.styles :
+    [ 'default' ]
   if (typeof objectData.styles === 'string' || 'twig_markup' in objectData.styles) {
-    objectData.styles = objectData.styles.split(/,/)
+    var styles = objectData.styles.trim()
+    if (styles === '') {
+      objectData.styles = []
+    } else {
+      objectData.styles = styles.split(/,/)
+    }
   }
 
   return objectData
