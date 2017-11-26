@@ -4,6 +4,7 @@ var BoundingBox = require('boundingbox')
 var twig = require('twig')
 var OverpassFrontend = require('overpass-frontend')
 var escapeHtml = require('html-escape')
+var isTrue = require('./isTrue')
 
 function OverpassLayer (options) {
   var template
@@ -389,6 +390,22 @@ OverpassLayer.prototype._processObject = function (data) {
         data.features[styleId].setStyle(objectData[k])
       } else {
         data.features[styleId] = ob.leafletFeature(objectData[k])
+      }
+
+      if ('text' in objectData[k] && 'setText' in data.features[styleId]) {
+        data.features[styleId].setText(null)
+        data.features[styleId].setText(objectData[k].text, {
+          repeat: 'textRepeat' in objectData[k] ? isTrue(objectData[k].textRepeat) : true,
+          offset: objectData[k].textOffset,
+          below: 'textBelow' in objectData[k] ? isTrue(objectData[k].textBelow) : false,
+          attributes: {
+            'fill': objectData[k].textFill,
+            'fill-opacity': objectData[k].textFillOpacity,
+            'font-weight': objectData[k].textFontWeight,
+            'font-size': objectData[k].textFontSize,
+            'letter-spacing': objectData[k].textLetterSpacing
+          }
+        })
       }
     }
   }

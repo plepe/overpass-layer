@@ -123,3 +123,14 @@ See `onAppear` for the description of parameters.
 Called every time, when the object is being re-calculated (also when zoom level changes).
 
 See `onAppear` for the description of parameters.
+
+# Optional features
+## Text along lines
+```sh
+npm install --save https://github.com/makinacorpus/Leaflet.TextPath#leaflet0.8-dev
+```
+
+Include script:
+```html
+<script src="node_modules/leaflet-textpath/leaflet.textpath.js"></script>
+```
