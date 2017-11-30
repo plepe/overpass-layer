@@ -408,6 +408,10 @@ OverpassLayer.prototype._processObject = function (data) {
           }
         })
       }
+
+      if ('offset' in objectData[k] && 'setOffset' in data.features[styleId]) {
+        data.features[styleId].setOffset(objectData[k].offset)
+      }
     }
   }
 

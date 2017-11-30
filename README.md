@@ -134,3 +134,13 @@ Include script:
 ```html
 <script src="node_modules/leaflet-textpath/leaflet.textpath.js"></script>
 ```
+
+## Line offset
+```sh
+npm install --save leaflet-polylineoffset
+```
+
+Include script:
+```html
+<script src="node_modules/leaflet-polylineoffset/leaflet.polylineoffset.js"></script>
+```
