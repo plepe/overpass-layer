@@ -1,4 +1,5 @@
 /* global overpassFrontend:false, L */
+require('./overpass-layer.css')
 
 var BoundingBox = require('boundingbox')
 var twig = require('twig')

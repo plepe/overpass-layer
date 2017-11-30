@@ -1,0 +1,14 @@
+.leaflet-popup-content {
+  max-height: 250px;
+  overflow: auto;
+}
+.leaflet-popup-content pre {
+  font-size: 8px;
+}
+.overpass-layer-icon div {
+  position: relative;
+  top: -37px;
+  font-size: 12px;
+  width: 25px;
+  text-align: center;
+}

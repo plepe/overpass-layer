@@ -1,3 +1,5 @@
+require('./overpass-layer-list.css')
+
 function OverpassLayerList (parentDom, layer) {
   this.layer = layer
   this.layer.layerList = this

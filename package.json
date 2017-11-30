@@ -4,6 +4,7 @@
   "description": "Show a Leaflet layer using OpenStreetMap data from Overpass API via OverpassFrontend.",
   "dependencies": {
     "boundingbox": "*",
+    "browserify-css": "^0.14.0",
     "html-escape": "^2.0.0",
     "overpass-frontend": "*",
     "twig": "*"
@@ -17,8 +18,8 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "browserify index.js -o dist/overpass-layer.js",
-    "watch": "watchify --debug index.js -o dist/overpass-layer.js -v",
+    "build": "browserify -g browserify-css index.js -o dist/overpass-layer.js",
+    "watch": "watchify --debug -g browserify-css index.js -o dist/overpass-layer.js -v",
     "prepublish": "npm run build && npm run lint",
     "lint": "standard src/*.js form.js"
   },
