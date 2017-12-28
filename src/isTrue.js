@@ -13,7 +13,7 @@ function isTrue (value) {
     }
   }
 
-  if (value == 0) {
+  if (value === 0 || value.toString() === '0' || value.toString() === '') {
     return false
   }
 
