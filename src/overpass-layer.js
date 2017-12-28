@@ -356,9 +356,9 @@ OverpassLayer.prototype.evaluate = function (data) {
   }
 
   objectData.styles =
-    'styles' in objectData ? objectData.styles :
-    'styles' in this.options ? this.options.styles :
-    [ 'default' ]
+    'styles' in objectData ? objectData.styles
+    : 'styles' in this.options ? this.options.styles
+    : [ 'default' ]
   if (typeof objectData.styles === 'string' || 'twig_markup' in objectData.styles) {
     var styles = objectData.styles.trim()
     if (styles === '') {
@@ -380,7 +380,7 @@ OverpassLayer.prototype._processObject = function (data) {
   var ob = data.object
   var showOptions = ob.id in this.shownFeatureOptions ? this.shownFeatureOptions[ob.id] : {}
 
-  objectData = this.evaluate(data)
+  var objectData = this.evaluate(data)
 
   for (k in objectData) {
     var m = k.match(/^style(|:(.*))$/)
@@ -415,7 +415,6 @@ OverpassLayer.prototype._processObject = function (data) {
     }
   }
 
-
   if ('styles' in showOptions) {
     objectData.styles = objectData.styles.concat(showOptions.styles)
   }
@@ -435,7 +434,6 @@ OverpassLayer.prototype._processObject = function (data) {
           objectData.marker.iconAnchor = [ c.getAttribute('anchorx'), c.getAttribute('anchory') ]
         }
       }
-
     } else {
       markerHtml = '<img src="' + objectData.marker.iconUrl + '">'
     }
@@ -481,7 +479,7 @@ OverpassLayer.prototype._processObject = function (data) {
     data.popup = L.popup().setContent(popupContent)
     data.popup.object = data
 
-    for (var k in data.features) {
+    for (k in data.features) {
       if (this._shallBindPopupToStyle(k)) {
         data.features[k].bindPopup(data.popup)
       }
