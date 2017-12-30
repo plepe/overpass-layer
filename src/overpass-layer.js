@@ -313,18 +313,23 @@ OverpassLayer.prototype._hide = function (data) {
 }
 
 OverpassLayer.prototype.twigData = function (ob) {
-  return {
+  var result = {
     id: ob.id,
     layer_id: this.options.id,
     osm_id: ob.osm_id,
     type: ob.type,
     tags: ob.tags,
     meta: ob.meta,
-    map: {
-      zoom: this.map.getZoom()
-    },
     'const': this.options.const
   }
+
+  if (this.map) {
+    result.map = {
+      zoom: this.map.getZoom()
+    }
+  }
+
+  return result
 }
 
 OverpassLayer.prototype.evaluate = function (data) {
