@@ -39,6 +39,7 @@ function OverpassLayer (options) {
     this.options.queryOptions.properties = OverpassFrontend.ALL
   }
   this.options.styleNoBindPopup = this.options.styleNoBindPopup || []
+  this.options.stylesNoAutoShow = this.options.stylesNoAutoShow || []
 
   for (var k in this.options.feature) {
     if (typeof this.options.feature[k] === 'string' && this.options.feature[k].search('{') !== -1) {
@@ -349,11 +350,19 @@ OverpassLayer.prototype.evaluate = function (data) {
     }
   }
 
+  var styleIds = []
   for (k in objectData) {
-    if (k.match(/^style(:.*|)$/)) {
+    var m = k.match(/^style(|:(.*))$/)
+    if (m) {
       var style = objectData[k]
+      var styleId = typeof m[2] === 'undefined' ? 'default' : m[2]
+
       if (typeof style === 'string' || 'twig_markup' in style) {
         objectData[k] = strToStyle(style)
+      }
+
+      if (this.options.stylesNoAutoShow.indexOf(styleId) === -1) {
+        styleIds.push(styleId)
       }
     }
   }
@@ -365,7 +374,7 @@ OverpassLayer.prototype.evaluate = function (data) {
   objectData.styles =
     'styles' in objectData ? objectData.styles
     : 'styles' in this.options ? this.options.styles
-    : [ 'default' ]
+    : styleIds
   if (typeof objectData.styles === 'string' || 'twig_markup' in objectData.styles) {
     var styles = objectData.styles.trim()
     if (styles === '') {
