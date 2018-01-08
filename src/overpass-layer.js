@@ -285,6 +285,10 @@ OverpassLayer.prototype.recalc = function () {
 }
 
 OverpassLayer.prototype._show = function (data) {
+  if (!this.map) {
+    return
+  }
+
   for (var i = 0; i < data.styles.length; i++) {
     var k = data.styles[i]
     if (k in data.features) {
