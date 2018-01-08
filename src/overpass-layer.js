@@ -391,31 +391,32 @@ OverpassLayer.prototype._processObject = function (data) {
     var m = k.match(/^style(|:(.*))$/)
     if (m) {
       var styleId = typeof m[2] === 'undefined' ? 'default' : m[2]
+      var style = objectData[k]
 
       if (data.features[styleId]) {
-        data.features[styleId].setStyle(objectData[k])
+        data.features[styleId].setStyle(style)
       } else {
-        data.features[styleId] = ob.leafletFeature(objectData[k])
+        data.features[styleId] = ob.leafletFeature(style)
       }
 
-      if ('text' in objectData[k] && 'setText' in data.features[styleId]) {
+      if ('text' in style && 'setText' in data.features[styleId]) {
         data.features[styleId].setText(null)
-        data.features[styleId].setText(objectData[k].text, {
-          repeat: 'textRepeat' in objectData[k] ? isTrue(objectData[k].textRepeat) : true,
-          offset: objectData[k].textOffset,
-          below: 'textBelow' in objectData[k] ? isTrue(objectData[k].textBelow) : false,
+        data.features[styleId].setText(style.text, {
+          repeat: 'textRepeat' in style ? isTrue(style.textRepeat) : true,
+          offset: style.textOffset,
+          below: 'textBelow' in style ? isTrue(style.textBelow) : false,
           attributes: {
-            'fill': objectData[k].textFill,
-            'fill-opacity': objectData[k].textFillOpacity,
-            'font-weight': objectData[k].textFontWeight,
-            'font-size': objectData[k].textFontSize,
-            'letter-spacing': objectData[k].textLetterSpacing
+            'fill': style.textFill,
+            'fill-opacity': style.textFillOpacity,
+            'font-weight': style.textFontWeight,
+            'font-size': style.textFontSize,
+            'letter-spacing': style.textLetterSpacing
           }
         })
       }
 
-      if ('offset' in objectData[k] && 'setOffset' in data.features[styleId]) {
-        data.features[styleId].setOffset(objectData[k].offset)
+      if ('offset' in style && 'setOffset' in data.features[styleId]) {
+        data.features[styleId].setOffset(style.offset)
       }
     }
   }
