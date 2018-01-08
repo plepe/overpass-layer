@@ -7,6 +7,8 @@ var OverpassFrontend = require('overpass-frontend')
 var escapeHtml = require('html-escape')
 var isTrue = require('./isTrue')
 
+var booleanValues = [ 'stroke', 'fill', 'textRepeat', 'textBelow', 'noClip' ]
+
 function OverpassLayer (options) {
   var template
 
@@ -380,6 +382,16 @@ OverpassLayer.prototype._shallBindPopupToStyle = function (styleId) {
   return this.options.styleNoBindPopup.indexOf(styleId) === -1
 }
 
+OverpassLayer.prototype._styleUpdateVars = function (style) {
+  for (var i in booleanValues) {
+    var k = booleanValues[i]
+
+    if (k in style) {
+      style[k] = isTrue(style[k])
+    }
+  }
+}
+
 OverpassLayer.prototype._processObject = function (data) {
   var k
   var ob = data.object
@@ -393,6 +405,8 @@ OverpassLayer.prototype._processObject = function (data) {
       var styleId = typeof m[2] === 'undefined' ? 'default' : m[2]
       var style = objectData[k]
 
+      this._styleUpdateVars(style)
+
       if (data.features[styleId]) {
         data.features[styleId].setStyle(style)
       } else {
@@ -402,9 +416,9 @@ OverpassLayer.prototype._processObject = function (data) {
       if ('text' in style && 'setText' in data.features[styleId]) {
         data.features[styleId].setText(null)
         data.features[styleId].setText(style.text, {
-          repeat: 'textRepeat' in style ? isTrue(style.textRepeat) : true,
+          repeat: style.textRepeat,
           offset: style.textOffset,
-          below: 'textBelow' in style ? isTrue(style.textBelow) : false,
+          below: style.textBelow,
           attributes: {
             'fill': style.textFill,
             'fill-opacity': style.textFillOpacity,
