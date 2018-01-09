@@ -8,6 +8,7 @@ var escapeHtml = require('html-escape')
 var isTrue = require('./isTrue')
 
 var styleLeafletBooleanValues = [ 'stroke', 'fill', 'textRepeat', 'textBelow', 'noClip' ]
+var styleLeafletRenameValues = { 'width': 'weight' }
 
 function OverpassLayer (options) {
   var template
@@ -406,9 +407,9 @@ OverpassLayer.prototype.styleToLeaflet = function (style) {
     }
   }
 
-  for (var from in styleRenameValues) {
+  for (var from in styleLeafletRenameValues) {
     if (from in ret) {
-      var to = styleRenameValues[from]
+      var to = styleLeafletRenameValues[from]
       ret[to] = ret[from]
     }
   }
