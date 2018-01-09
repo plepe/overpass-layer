@@ -7,7 +7,7 @@ var OverpassFrontend = require('overpass-frontend')
 var escapeHtml = require('html-escape')
 var isTrue = require('./isTrue')
 
-var booleanValues = [ 'stroke', 'fill', 'textRepeat', 'textBelow', 'noClip' ]
+var styleLeafletBooleanValues = [ 'stroke', 'fill', 'textRepeat', 'textBelow', 'noClip' ]
 
 function OverpassLayer (options) {
   var template
@@ -395,14 +395,25 @@ OverpassLayer.prototype._shallBindPopupToStyle = function (styleId) {
   return this.options.styleNoBindPopup.indexOf(styleId) === -1
 }
 
-OverpassLayer.prototype._styleUpdateVars = function (style) {
-  for (var i in booleanValues) {
-    var k = booleanValues[i]
+OverpassLayer.prototype.styleToLeaflet = function (style) {
+  var ret = JSON.parse(JSON.stringify(style))
+
+  for (var i in styleLeafletBooleanValues) {
+    var k = styleLeafletBooleanValues[i]
 
     if (k in style) {
-      style[k] = isTrue(style[k])
+      ret[k] = isTrue(style[k])
     }
   }
+
+  for (var from in styleRenameValues) {
+    if (from in ret) {
+      var to = styleRenameValues[from]
+      ret[to] = ret[from]
+    }
+  }
+
+  return ret
 }
 
 OverpassLayer.prototype._processObject = function (data) {
@@ -416,9 +427,7 @@ OverpassLayer.prototype._processObject = function (data) {
     var m = k.match(/^style(|:(.*))$/)
     if (m) {
       var styleId = typeof m[2] === 'undefined' ? 'default' : m[2]
-      var style = objectData[k]
-
-      this._styleUpdateVars(style)
+      var style = this.styleToLeaflet(objectData[k])
 
       if (data.features[styleId]) {
         data.features[styleId].setStyle(style)
