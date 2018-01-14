@@ -420,7 +420,17 @@ OverpassLayer.prototype.styleToLeaflet = function (style) {
 OverpassLayer.prototype._processObject = function (data) {
   var k
   var ob = data.object
-  var showOptions = ob.id in this.shownFeatureOptions ? this.shownFeatureOptions[ob.id] : {}
+  var showOptions = {
+    styles: []
+  }
+
+  if (ob.id in this.shownFeatureOptions) {
+    this.shownFeatureOptions[ob.id].forEach(function (opt) {
+      if ('styles' in opt) {
+        showOptions.styles = showOptions.styles.concat(opt.styles)
+      }
+    })
+  }
 
   var objectData = this.evaluate(data)
 
@@ -598,12 +608,24 @@ OverpassLayer.prototype.show = function (id, options, callback) {
     options: options,
     hide: function () {
       instantHide = true
-      this.hide(id)
+
+      if (id in this.shownFeatures) {
+        var i = this.shownFeatureOptions[id].indexOf(options)
+        if (i !== -1) {
+          this.shownFeatureOptions[id].splice(i, 1)
+        }
+
+        if (this.shownFeatureOptions[id].length === 0) {
+          this.hide(id)
+        } else {
+          this._processObject(this.shownFeatures[id])
+        }
+      }
     }.bind(this)
   }
 
   if (id in this.shownFeatures) {
-    this.shownFeatureOptions[id] = options
+    this.shownFeatureOptions[id].push(options)
     this._processObject(this.shownFeatures[id])
     callback(null, this.shownFeatures[id])
     return result
@@ -611,7 +633,10 @@ OverpassLayer.prototype.show = function (id, options, callback) {
 
   if (id in this.visibleFeatures) {
     this.shownFeatures[id] = this.visibleFeatures[id]
-    this.shownFeatureOptions[id] = options
+    if (!this.shownFeatureOptions[id]) {
+      this.shownFeatureOptions[id] = []
+    }
+    this.shownFeatureOptions[id].push(options)
     this._processObject(this.shownFeatures[id])
     callback(null, this.shownFeatures[id])
     return result
@@ -628,7 +653,10 @@ OverpassLayer.prototype.show = function (id, options, callback) {
       }
 
       this.shownFeatures[id] = data
-      this.shownFeatureOptions[id] = options
+      if (!this.shownFeatureOptions[id]) {
+        this.shownFeatureOptions[id] = []
+      }
+      this.shownFeatureOptions[id].push(options)
       this._processObject(this.shownFeatures[id])
 
       if (!(id in this.visibleFeatures)) {
