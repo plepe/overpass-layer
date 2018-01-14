@@ -591,11 +591,22 @@ OverpassLayer.prototype.get = function (id, callback) {
 }
 
 OverpassLayer.prototype.show = function (id, options, callback) {
+  var instantHide = false // called hide before loading finished
+
+  var result = {
+    id: id,
+    options: options,
+    hide: function () {
+      instantHide = true
+      this.hide(id)
+    }.bind(this)
+  }
+
   if (id in this.shownFeatures) {
     this.shownFeatureOptions[id] = options
     this._processObject(this.shownFeatures[id])
     callback(null, this.shownFeatures[id])
-    return
+    return result
   }
 
   if (id in this.visibleFeatures) {
@@ -603,13 +614,17 @@ OverpassLayer.prototype.show = function (id, options, callback) {
     this.shownFeatureOptions[id] = options
     this._processObject(this.shownFeatures[id])
     callback(null, this.shownFeatures[id])
-    return
+    return result
   }
 
   this.get(id,
     function (err, data) {
       if (err) {
         return callback(err, data)
+      }
+
+      if (instantHide) {
+        return callback(null, data)
       }
 
       this.shownFeatures[id] = data
@@ -623,6 +638,8 @@ OverpassLayer.prototype.show = function (id, options, callback) {
       callback(err, data)
     }.bind(this)
   )
+
+  return result
 }
 
 OverpassLayer.prototype.hide = function (id) {
