@@ -141,6 +141,11 @@ OverpassLayerList.prototype.updateObject = function (ob) {
       p.innerHTML = ob.data.title
     }
 
+    // TITLE
+    if (p.className === 'description') {
+      p.innerHTML = ob.data.description
+    }
+
     p = p.nextSibling
   }
 }
