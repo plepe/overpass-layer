@@ -527,7 +527,11 @@ OverpassLayer.prototype._processObject = function (data) {
   popupContent += objectData.body
 
   if (data.popup) {
-    data.popup = data.popup.setContent(popupContent)
+    if (data.popup._contentNode) {
+      data.popup._contentNode.innerHTML = popupContent
+    } else {
+      data.popup = data.popup.setContent(popupContent)
+    }
   } else {
     data.popup = L.popup().setContent(popupContent)
     data.popup.object = data
