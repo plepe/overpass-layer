@@ -1,5 +1,7 @@
 require('./overpass-layer-list.css')
 
+var isTrue = require('./isTrue')
+
 function OverpassLayerList (parentDom, layer) {
   this.layer = layer
   this.layer.layerList = this
@@ -30,6 +32,14 @@ OverpassLayerList.prototype._getMarker = function (ob) {
 }
 
 OverpassLayerList.prototype.addObject = function (ob) {
+  if (isTrue(ob.data.listExclude)) {
+    return
+  }
+
+  if (ob.id in this.items) { // already added
+    return
+  }
+
   var div = document.createElement('li')
   var a
 
@@ -90,8 +100,14 @@ OverpassLayerList.prototype.addObject = function (ob) {
 }
 
 OverpassLayerList.prototype.updateObject = function (ob) {
-  if (!(ob.id in this.items)) {
-    return
+  var listExclude = isTrue(ob.data.listExclude)
+
+  if (!(ob.id in this.items) && !listExclude) {
+    return this.addObject(ob)
+  }
+
+  if (listExclude) {
+    return this.delObject(ob)
   }
 
   var div = this.items[ob.id]
@@ -132,7 +148,10 @@ OverpassLayerList.prototype.updateObject = function (ob) {
 OverpassLayerList.prototype.delObject = function (ob) {
   var div = this.items[ob.id]
 
-  this.dom.removeChild(div)
+  if (div) {
+    this.dom.removeChild(div)
+  }
+
   delete this.items[ob.id]
   delete ob.listItem
 }

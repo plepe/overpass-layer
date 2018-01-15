@@ -31,6 +31,7 @@ Options:
   * markerSign: a HTML string which will be shown within the icon.
   * priority: a numeric value by which the elements in the list will be sorted (lower values first)
   * appUrl: an url for the link of an item in the list, default: '#'.
+  * listExclude: (boolean) If true, object will not be shown in the list.
 * const: an object variable which is available as prefix in twig functions. See below.
 * queryOptions: options for OverpassFrontend.BBoxQuery.
 * styleNoBindPopup: array, list of styles where popup should not bind to. Default: []
