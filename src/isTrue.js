@@ -1,4 +1,8 @@
 function isTrue (value) {
+  if (typeof value === 'undefined') {
+    return false
+  }
+
   if (typeof value === 'boolean') {
     return value
   }
