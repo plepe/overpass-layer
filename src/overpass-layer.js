@@ -41,6 +41,7 @@ function OverpassLayer (options) {
   }
   this.options.styleNoBindPopup = this.options.styleNoBindPopup || []
   this.options.stylesNoAutoShow = this.options.stylesNoAutoShow || []
+  this.options.assetPrefix = this.options.assetPrefix || ''
 
   for (var k in this.options.feature) {
     if (typeof this.options.feature[k] === 'string' && this.options.feature[k].search('{') !== -1) {
