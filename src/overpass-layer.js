@@ -492,7 +492,10 @@ OverpassLayer.prototype._processObject = function (data) {
       markerHtml = '<img src="' + objectData.marker.iconUrl + '">'
     }
 
-    if (objectData.markerSign) {
+    if (objectData.markerSign.match(/\.(jpg|gif|png|svg)$/i)) {
+      let url = this.options.assetPrefix + objectData.markerSign
+      markerHtml += '<div><img src="' + url + '"/></div>'
+    } else {
       markerHtml += '<div>' + objectData.markerSign + '</div>'
     }
 
