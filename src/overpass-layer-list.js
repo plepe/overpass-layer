@@ -65,7 +65,11 @@ OverpassLayerList.prototype.addObject = function (ob) {
   // ICON
   a = document.createElement('div')
   a.className = 'icon'
-  a.innerHTML = ob.data.markerSign
+  if (ob.data.markerSign.match(/\.(jpg|gif|png|svg)$/i)) {
+    a.innerHTML = '<img src="' + encodeURI(this.layer.options.assetPrefix + ob.data.markerSign) + '"/>'
+  } else {
+    a.innerHTML = ob.data.markerSign
+  }
   p.appendChild(a)
 
   // TITLE
@@ -129,7 +133,11 @@ OverpassLayerList.prototype.updateObject = function (ob) {
         // ICON
         a = document.createElement('div')
         a.className = 'icon'
-        a.innerHTML = ob.data.markerSign
+        if (ob.data.markerSign.match(/\.(jpg|gif|png|svg)$/i)) {
+          a.innerHTML = '<img src="' + encodeURI(this.layer.options.assetPrefix + ob.data.markerSign) + '"/>'
+        } else {
+          a.innerHTML = ob.data.markerSign
+        }
         p.appendChild(a)
 
         a = a.nextSibling

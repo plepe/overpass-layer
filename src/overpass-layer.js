@@ -41,6 +41,7 @@ function OverpassLayer (options) {
   }
   this.options.styleNoBindPopup = this.options.styleNoBindPopup || []
   this.options.stylesNoAutoShow = this.options.stylesNoAutoShow || []
+  this.options.assetPrefix = this.options.assetPrefix || ''
 
   for (var k in this.options.feature) {
     if (typeof this.options.feature[k] === 'string' && this.options.feature[k].search('{') !== -1) {
@@ -491,7 +492,10 @@ OverpassLayer.prototype._processObject = function (data) {
       markerHtml = '<img src="' + objectData.marker.iconUrl + '">'
     }
 
-    if (objectData.markerSign) {
+    if (objectData.markerSign.match(/\.(jpg|gif|png|svg)$/i)) {
+      let url = this.options.assetPrefix + objectData.markerSign
+      markerHtml += '<div><img src="' + url + '"/></div>'
+    } else {
       markerHtml += '<div>' + objectData.markerSign + '</div>'
     }
 

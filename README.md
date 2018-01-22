@@ -12,6 +12,7 @@ Options:
 * minZoom: Show layer only from the given zoom level (default: 16)
 * maxZoom: Show layer only up to the given zoom level (default: no limit)
 * styles: Array of style-id which should be shown. Default: `['default']`. May be overridden by a feature dependant styles array. Can be a comma-separated string.
+* assetPrefix: an absolute or relative URI which will be prefixed to assets (e.g. when markerSign is an image)
 * feature: an object describing how the feature will be formated resp. styled. Each of the values may be either a function which will be passed an OverpassObject or a string which will be processed with the templating language TwigJS:
   * styles: Array of style-id which should be shown. If not set, the value of the parent 'styles' values will be used. Can be a comma-separated string.
   * style: An object or a function or a TwigJS template (string), styling the resulting map feature. Style-Id: "default".
@@ -28,7 +29,7 @@ Options:
     * anchor: either [ x, y ] or "x,y".
     * popupAnchor: either [ x, y ] or "x,y".
   * markerSymbol: a HTML string which will be shown as marker. The first dom node may contain an 'anchorX' and 'anchorY' property to override the default marker.anchor property.
-  * markerSign: a HTML string which will be shown within the icon.
+  * markerSign: a HTML string which will be shown within the icon OR path to an image.
   * priority: a numeric value by which the elements in the list will be sorted (lower values first)
   * appUrl: an url for the link of an item in the list, default: '#'.
   * listExclude: (boolean) If true, object will not be shown in the list.
