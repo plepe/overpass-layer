@@ -99,6 +99,8 @@ OverpassLayerList.prototype.addObject = function (ob) {
   } else {
     this.dom.appendChild(div)
   }
+
+  this.layer.updateAssets(this.dom, ob.data)
 }
 
 OverpassLayerList.prototype.updateObject = function (ob) {
@@ -152,6 +154,8 @@ OverpassLayerList.prototype.updateObject = function (ob) {
 
     p = p.nextSibling
   }
+
+  this.layer.updateAssets(div, ob.data)
 }
 
 OverpassLayerList.prototype.delObject = function (ob) {

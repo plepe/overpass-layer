@@ -417,6 +417,14 @@ OverpassLayer.prototype.styleToLeaflet = function (style) {
   return ret
 }
 
+OverpassLayer.prototype.updateAssets = function (div, objectData) {
+  if (!this.options.updateAssets) {
+    return div
+  }
+
+  this.options.updateAssets(div, objectData, this)
+}
+
 OverpassLayer.prototype._processObject = function (data) {
   var k
   var ob = data.object
@@ -495,6 +503,13 @@ OverpassLayer.prototype._processObject = function (data) {
       markerHtml += '<div>' + objectData.markerSign + '</div>'
     }
 
+    if ('updateAssets' in this.options) {
+      let div = document.createElement('div')
+      div.innerHTML = markerHtml
+      this.updateAssets(div, objectData)
+      markerHtml = div.innerHTML
+    }
+
     objectData.marker.html = markerHtml
     objectData.marker.className = 'overpass-layer-icon'
     var icon = L.divIcon(objectData.marker)
@@ -525,6 +540,13 @@ OverpassLayer.prototype._processObject = function (data) {
   var popupContent = ''
   popupContent += '<h1>' + objectData.title + '</h1>'
   popupContent += objectData.body
+
+  if ('updateAssets' in this.options) {
+    let div = document.createElement('div')
+    div.innerHTML = popupContent
+    this.updateAssets(div, objectData)
+    popupContent = div.innerHTML
+  }
 
   if (data.popup) {
     if (data.popup._contentNode) {
