@@ -65,9 +65,7 @@ OverpassLayerList.prototype.addObject = function (ob) {
   // ICON
   a = document.createElement('div')
   a.className = 'icon'
-  if (ob.data.markerSign && ob.data.markerSign.match && ob.data.markerSign.match(/\.(jpg|gif|png|svg)$/i)) {
-    a.innerHTML = '<img src="' + encodeURI(this.layer.options.assetPrefix + ob.data.markerSign) + '"/>'
-  } else {
+  if (ob.data.markerSign) {
     a.innerHTML = ob.data.markerSign
   }
   p.appendChild(a)
@@ -133,9 +131,7 @@ OverpassLayerList.prototype.updateObject = function (ob) {
         // ICON
         a = document.createElement('div')
         a.className = 'icon'
-        if (ob.data.markerSign && ob.data.markerSign.match && ob.data.markerSign.match(/\.(jpg|gif|png|svg)$/i)) {
-          a.innerHTML = '<img src="' + encodeURI(this.layer.options.assetPrefix + ob.data.markerSign) + '"/>'
-        } else {
+        if (ob.data.markerSign) {
           a.innerHTML = ob.data.markerSign
         }
         p.appendChild(a)
