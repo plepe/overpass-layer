@@ -303,6 +303,7 @@ OverpassLayer.prototype._show = function (data) {
 
   if (data.featureMarker) {
     data.featureMarker.addTo(this.map)
+    this.updateAssets(data.featureMarker._icon)
   }
 
   data.isShown = true
@@ -503,19 +504,13 @@ OverpassLayer.prototype._processObject = function (data) {
       markerHtml += '<div>' + objectData.markerSign + '</div>'
     }
 
-    if ('updateAssets' in this.options) {
-      let div = document.createElement('div')
-      div.innerHTML = markerHtml
-      this.updateAssets(div, objectData)
-      markerHtml = div.innerHTML
-    }
-
     objectData.marker.html = markerHtml
     objectData.marker.className = 'overpass-layer-icon'
     var icon = L.divIcon(objectData.marker)
 
     if (data.featureMarker) {
       data.featureMarker.setIcon(icon)
+      this.updateAssets(data.featureMarker._icon)
     } else {
       data.featureMarker = L.marker(ob.center, { icon: icon })
     }
