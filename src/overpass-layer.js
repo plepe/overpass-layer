@@ -510,7 +510,9 @@ OverpassLayer.prototype._processObject = function (data) {
 
     if (data.featureMarker) {
       data.featureMarker.setIcon(icon)
-      this.updateAssets(data.featureMarker._icon)
+      if (data.featureMarker._icon) {
+        this.updateAssets(data.featureMarker._icon)
+      }
     } else {
       data.featureMarker = L.marker(ob.center, { icon: icon })
     }
