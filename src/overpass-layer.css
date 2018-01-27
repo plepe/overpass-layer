@@ -5,10 +5,16 @@
 .leaflet-popup-content pre {
   font-size: 8px;
 }
-.overpass-layer-icon div {
-  position: relative;
-  top: -37px;
-  font-size: 12px;
-  width: 25px;
-  text-align: center;
+.overpass-layer-icon > img,
+.overpass-layer-icon > svg {
+  display: block;
 }
+.overpass-layer-icon div.sign {
+  position: relative;
+  font-size: 12px;
+  text-align: center;
+  transform: translate(-50%, -50%);
+  display: flex;
+  justify-content: center;
+}
+/*  top: -37px; */

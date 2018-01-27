@@ -65,7 +65,9 @@ OverpassLayerList.prototype.addObject = function (ob) {
   // ICON
   a = document.createElement('div')
   a.className = 'icon'
-  if (ob.data.markerSign) {
+  if (ob.data.listMarkerSign) {
+    a.innerHTML = ob.data.listMarkerSign
+  } else if (ob.data.markerSign) {
     a.innerHTML = ob.data.markerSign
   }
   p.appendChild(a)
@@ -133,7 +135,9 @@ OverpassLayerList.prototype.updateObject = function (ob) {
         // ICON
         a = document.createElement('div')
         a.className = 'icon'
-        if (ob.data.markerSign) {
+        if (ob.data.listMarkerSign) {
+          a.innerHTML = ob.data.listMarkerSign
+        } else if (ob.data.markerSign) {
           a.innerHTML = ob.data.markerSign
         }
         p.appendChild(a)
