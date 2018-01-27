@@ -30,6 +30,7 @@ Options:
     * popupAnchor: either [ x, y ] or "x,y".
   * markerSymbol: a HTML string which will be shown as marker. The first dom node may contain an 'anchorX' and 'anchorY' property to override the default marker.anchor property.
   * markerSign: a HTML string which will be shown within the icon.
+  * listMarkerSign: a HTML string which will be shown within the icon in the list (default: value of 'markerSign').
   * priority: a numeric value by which the elements in the list will be sorted (lower values first)
   * appUrl: an url for the link of an item in the list, default: '#'.
   * listExclude: (boolean) If true, object will not be shown in the list.
