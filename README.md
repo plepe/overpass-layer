@@ -23,12 +23,7 @@ Options:
   * title: the title of the feature popup and the object in the list.
   * body: the body of the feature popup.
   * description: a short description shown in the list.
-  * marker: an icon definition for L.icon (if boolean true or iconSign defined use standard map marker)
-    * url: url of an icon.
-    * size: either [ x, y ] or "x,y".
-    * anchor: either [ x, y ] or "x,y".
-    * popupAnchor: either [ x, y ] or "x,y".
-  * markerSymbol: a HTML string which will be shown as marker. The first dom node may contain an 'anchorX' and 'anchorY' property to override the default marker.anchor property.
+  * markerSymbol: a HTML string which will be shown as marker. The first dom node may contain 'width', 'height' (iconSize), 'anchorX', 'anchorY' (iconAnchor), 'signAnchorX', 'signAnchorY' (anchor for markerSign) properties to override the default marker.anchor property.
   * markerSign: a HTML string which will be shown within the icon.
   * listMarkerSign: a HTML string which will be shown within the icon in the list (default: value of 'markerSign').
   * priority: a numeric value by which the elements in the list will be sorted (lower values first)

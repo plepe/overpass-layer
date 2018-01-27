@@ -26,15 +26,8 @@ function OverpassLayer (options) {
   this.options.feature.style = 'style' in this.options.feature ? this.options.feature.style : {}
   this.options.feature.title = 'title' in this.options.feature ? this.options.feature.title : function (ob) { return escapeHtml(ob.tags.name || ob.tags.operator || ob.tags.ref || ob.id) }
   this.options.feature.body = 'body' in this.options.feature ? this.options.feature.body : ''
-  this.options.feature.marker = 'marker' in this.options.feature ? this.options.feature.marker : null
+  this.options.feature.markerSymbol = 'markerSymbol' in this.options.feature ? this.options.feature.markerSymbol : '<img anchorX="13" anchorY="42" width="25" height="42" signAnchorX="0" signAnchorY="-30" src="img/map_pointer.png">'
   this.options.feature.markerSign = 'markerSign' in this.options.feature ? this.options.feature.markerSign : null
-  if (this.options.feature.marker === null && this.options.feature.markerSign !== null) {
-    this.options.feature.marker = {
-      iconUrl: 'img/map_pointer.png',
-      iconSize: [ 25, 42 ],
-      iconAnchor: [ 13, 42 ]
-    }
-  }
   this.options.queryOptions = 'queryOptions' in this.options ? this.options.queryOptions : {}
   if (!('properties' in this.options.queryOptions)) {
     this.options.queryOptions.properties = OverpassFrontend.ALL
@@ -481,32 +474,54 @@ OverpassLayer.prototype._processObject = function (data) {
     objectData.styles = objectData.styles.concat(showOptions.styles)
   }
 
-  var markerHtml = ''
-  if (objectData.marker) {
-    if ('markerSymbol' in objectData) {
-      if (objectData.markerSymbol) {
-        markerHtml = objectData.markerSymbol
+  objectData.marker = {
+    html: '',
+    iconAnchor: [ 0, 0 ],
+    iconSize: [ 0, 0 ],
+    signAnchor: [ 0, 0 ],
+    popupAnchor: [ 0, 0 ]
+  }
+  if (objectData.markerSymbol) {
+    objectData.marker.html += objectData.markerSymbol
 
-        var div = document.createElement('div')
-        div.innerHTML = objectData.markerSymbol
+    var div = document.createElement('div')
+    div.innerHTML = objectData.markerSymbol
 
-        if (div.firstChild) {
-          var c = div.firstChild
+    if (div.firstChild) {
+      var c = div.firstChild
 
-          if (c.hasAttribute('anchorx') && c.hasAttribute('anchory')) {
-            objectData.marker.iconAnchor = [ c.getAttribute('anchorx'), c.getAttribute('anchory') ]
-          }
-        }
+      objectData.marker.iconSize = [ c.offsetWidth, c.offsetHeight ]
+      if (c.hasAttribute('width')) {
+        objectData.marker.iconSize[0] = parseFloat(c.getAttribute('width'))
       }
-    } else {
-      markerHtml = '<img src="' + objectData.marker.iconUrl + '">'
-    }
+      if (c.hasAttribute('height')) {
+        objectData.marker.iconSize[1] = parseFloat(c.getAttribute('height'))
+      }
 
-    if (objectData.markerSign) {
-      markerHtml += '<div>' + objectData.markerSign + '</div>'
-    }
+      objectData.marker.iconAnchor = [ objectData.marker.iconSize[0] / 2, objectData.marker.iconSize[1] / 2 ]
+      if (c.hasAttribute('anchorx')) {
+        objectData.marker.iconAnchor[0] = parseFloat(c.getAttribute('anchorx'))
+      }
+      if (c.hasAttribute('anchory')) {
+        objectData.marker.iconAnchor[1] = parseFloat(c.getAttribute('anchory'))
+      }
 
-    objectData.marker.html = markerHtml
+      if (c.hasAttribute('signanchorx')) {
+        objectData.marker.signAnchor[0] = parseFloat(c.getAttribute('signanchorx'))
+      }
+      if (c.hasAttribute('signanchory')) {
+        objectData.marker.signAnchor[1] = parseFloat(c.getAttribute('signanchory'))
+      }
+    }
+  }
+
+  if (objectData.markerSign) {
+    let x = objectData.marker.iconAnchor[0] + objectData.marker.signAnchor[0]
+    let y = - objectData.marker.iconSize[1] + objectData.marker.iconAnchor[1] + objectData.marker.signAnchor[1]
+    objectData.marker.html += '<div class="sign" style="margin-left: ' + x + 'px; margin-top: ' + y + 'px;">' + objectData.markerSign + '</div>'
+  }
+
+  if (objectData.marker.html) {
     objectData.marker.className = 'overpass-layer-icon'
     var icon = L.divIcon(objectData.marker)
 
