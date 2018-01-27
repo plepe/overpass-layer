@@ -512,6 +512,13 @@ OverpassLayer.prototype._processObject = function (data) {
       if (c.hasAttribute('signanchory')) {
         objectData.marker.signAnchor[1] = parseFloat(c.getAttribute('signanchory'))
       }
+
+      if (c.hasAttribute('popupanchory')) {
+        objectData.marker.popupAnchor[0] = parseFloat(c.getAttribute('popupanchorx'))
+      }
+      if (c.hasAttribute('popupanchory')) {
+        objectData.marker.popupAnchor[1] = parseFloat(c.getAttribute('popupanchory'))
+      }
     }
   }
 

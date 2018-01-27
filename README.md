@@ -23,7 +23,7 @@ Options:
   * title: the title of the feature popup and the object in the list.
   * body: the body of the feature popup.
   * description: a short description shown in the list.
-  * markerSymbol: a HTML string which will be shown as marker. The first dom node may contain 'width', 'height' (iconSize), 'anchorX', 'anchorY' (iconAnchor), 'signAnchorX', 'signAnchorY' (anchor for markerSign) properties to override the default marker.anchor property.
+  * markerSymbol: a HTML string which will be shown as marker. The first dom node may contain 'width', 'height' (iconSize), 'anchorX', 'anchorY' (iconAnchor), 'popupAnchorX', 'popupAnchorY' (popupAnchor), 'signAnchorX', 'signAnchorY' (anchor for markerSign) properties to override the default marker.anchor property.
   * markerSign: a HTML string which will be shown within the icon.
   * listMarkerSign: a HTML string which will be shown within the icon in the list (default: value of 'markerSign').
   * priority: a numeric value by which the elements in the list will be sorted (lower values first)
