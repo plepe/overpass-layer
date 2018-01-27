@@ -5,6 +5,10 @@
 .leaflet-popup-content pre {
   font-size: 8px;
 }
+.overpass-layer-icon > img,
+.overpass-layer-icon > svg {
+  display: block;
+}
 .overpass-layer-icon div.sign {
   position: relative;
   font-size: 12px;
