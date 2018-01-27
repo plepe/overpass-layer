@@ -481,19 +481,21 @@ OverpassLayer.prototype._processObject = function (data) {
     objectData.styles = objectData.styles.concat(showOptions.styles)
   }
 
-  var markerHtml
+  var markerHtml = ''
   if (objectData.marker) {
     if ('markerSymbol' in objectData) {
-      markerHtml = objectData.markerSymbol
+      if (objectData.markerSymbol) {
+        markerHtml = objectData.markerSymbol
 
-      var div = document.createElement('div')
-      div.innerHTML = objectData.markerSymbol
+        var div = document.createElement('div')
+        div.innerHTML = objectData.markerSymbol
 
-      if (div.firstChild) {
-        var c = div.firstChild
+        if (div.firstChild) {
+          var c = div.firstChild
 
-        if (c.hasAttribute('anchorx') && c.hasAttribute('anchory')) {
-          objectData.marker.iconAnchor = [ c.getAttribute('anchorx'), c.getAttribute('anchory') ]
+          if (c.hasAttribute('anchorx') && c.hasAttribute('anchory')) {
+            objectData.marker.iconAnchor = [ c.getAttribute('anchorx'), c.getAttribute('anchory') ]
+          }
         }
       }
     } else {
