@@ -120,13 +120,6 @@ OverpassLayer.prototype.check_update_map = function () {
     for (k in this.visibleFeatures) {
       ob = this.visibleFeatures[k]
 
-      if (this.layerList) {
-        this.layerList.delObject(ob)
-      }
-      if (this.onDisappear) {
-        this.onDisappear(ob)
-      }
-
       if (!(ob.id in this.shownFeatures)) {
         this._hide(ob)
       }
@@ -148,13 +141,6 @@ OverpassLayer.prototype.check_update_map = function () {
     ob = this.visibleFeatures[k]
 
     if (!ob.object.intersects(bounds)) {
-      if (this.layerList) {
-        this.layerList.delObject(ob)
-      }
-      if (this.onDisappear) {
-        this.onDisappear(ob)
-      }
-
       if (!(ob.id in this.shownFeatures)) {
         this._hide(ob)
       }
@@ -223,13 +209,6 @@ OverpassLayer.prototype.check_update_map = function () {
         }
 
         this.visibleFeatures[ob.id] = data
-
-        if (this.layerList) {
-          this.layerList.addObject(data)
-        }
-        if (this.onAppear) {
-          this.onAppear(data)
-        }
       }
     }.bind(this),
     function (err) {
@@ -249,15 +228,6 @@ OverpassLayer.prototype.check_update_map = function () {
           if (!(k in this.shownFeatures)) {
             this._hide(this.visibleFeatures[k])
           }
-
-          if (this.layerList) {
-            this.layerList.delObject(this.visibleFeatures[k])
-          }
-          if (this.onDisappear) {
-            this.onDisappear(this.visibleFeatures[k])
-          }
-
-          delete this.visibleFeatures[k]
         }
       }
 
@@ -300,9 +270,23 @@ OverpassLayer.prototype._show = function (data) {
   }
 
   data.isShown = true
+
+  if (this.layerList) {
+    this.layerList.addObject(data)
+  }
+  if (this.onAppear) {
+    this.onAppear(data)
+  }
 }
 
 OverpassLayer.prototype._hide = function (data) {
+  if (this.layerList) {
+    this.layerList.delObject(data.object)
+  }
+  if (this.onDisappear) {
+    this.onDisappear(data.object)
+  }
+
   for (var k in data.features) {
     this.map.removeLayer(data.features[k])
   }
