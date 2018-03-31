@@ -78,6 +78,7 @@ function OverpassLayer (options) {
   }
 
   this.visibleFeatures = {}
+  this.bboxFeatures = {}
   this.shownFeatures = {} // features which are forcibly shown
   this.shownFeatureOptions = {}
   this.currentRequest = null
@@ -193,6 +194,7 @@ OverpassLayer.prototype.check_update_map = function () {
       }
 
       thisRequestFeatures[ob.id] = true
+      this.bboxFeatures[ob.id] = ob
 
       if (!(ob.id in this.visibleFeatures)) {
         var data = {
@@ -238,6 +240,12 @@ OverpassLayer.prototype.check_update_map = function () {
             this._hide(this.visibleFeatures[k])
           }
           delete this.visibleFeatures[ob.id]
+        }
+      }
+
+      for (var k in this.bboxFeatures) {
+        if (!(k in thisRequestFeatures)) {
+          delete this.bboxFeatures[k]
         }
       }
 
