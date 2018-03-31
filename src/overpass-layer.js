@@ -578,11 +578,13 @@ OverpassLayer.prototype._processObject = function (data) {
   data.layer_id = this.options.id
   data.data = objectData
 
-  if (this.layerList) {
-    this.layerList.updateObject(data)
-  }
-  if (this.onUpdate) {
-    this.onUpdate(data)
+  if (data.isShown) {
+    if (this.layerList) {
+      this.layerList.updateObject(data)
+    }
+    if (this.onUpdate) {
+      this.onUpdate(data)
+    }
   }
 }
 
