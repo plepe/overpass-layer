@@ -237,6 +237,7 @@ OverpassLayer.prototype.check_update_map = function () {
           if (!(k in this.shownFeatures)) {
             this._hide(this.visibleFeatures[k])
           }
+          delete this.visibleFeatures[ob.id]
         }
       }
 
