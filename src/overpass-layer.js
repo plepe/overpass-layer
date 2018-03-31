@@ -202,13 +202,22 @@ OverpassLayer.prototype.check_update_map = function () {
 
         if (ob.id in this.shownFeatures) {
           data = this.shownFeatures[ob.id]
-        } else {
-          this._processObject(data)
-
-          this._show(data)
         }
 
-        this.visibleFeatures[ob.id] = data
+        this._processObject(data)
+
+        if (!this.options.includeFeature || this.options.includeFeature(data.object, data)) {
+          this._show(data)
+          this.visibleFeatures[ob.id] = data
+        }
+      } else {
+        var data = this.visibleFeatures[ob.id]
+        this._processObject(data)
+
+        if (this.options.includeFeature && !this.options.includeFeature(data.object, data)) {
+          this._hide(data)
+          delete this.visibleFeatures[ob.id]
+        }
       }
     }.bind(this),
     function (err) {

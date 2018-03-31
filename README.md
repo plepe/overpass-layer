@@ -33,6 +33,7 @@ Options:
 * queryOptions: options for OverpassFrontend.BBoxQuery.
 * styleNoBindPopup: array, list of styles where popup should not bind to. Default: []
 * stylesNoAutoShow: array, list of styles which should not automatically be shown.
+* includeFeature: a function which will be called with (object, processed data). If the function returns a non-true value, this object will be excluded from showing on the map resp. the list.
 
 ### TwigJS templates
 The data of an object is available as patterns. Tags and Meta information is only available, if these properties have been downloaded (see option 'properties'). Variables will automatically be HTML escaped, if not the filter `raw` is used, e.g.: `{{ tags.name|raw }}`.
