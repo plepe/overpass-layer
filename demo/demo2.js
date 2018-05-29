@@ -1,3 +1,5 @@
+document.body.classList.add('hasInfo')
+
 var overpass_layer2 = new OverpassLayer({
   query: '(way[leisure=park];relation[leisure=park];);',
   minZoom: 14,

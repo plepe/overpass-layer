@@ -1,11 +1,18 @@
 #map {
   position: absolute;
-  left: 201px;
   top: 0;
   bottom: 0;
   right: 0;
+  left: 0;
+}
+body.hasInfo #map {
+  left: 201px;
 }
 #info {
+  display: none;
+}
+body.hasInfo #info {
+  display: block;
   position: absolute;
   z-index: 10000;
   top: 0;

@@ -1,3 +1,5 @@
+document.body.classList.add('hasInfo')
+
 var overpass_layer4 = new OverpassLayer({
   query: {
     13: '(relation[type=route][route=bicycle][network=rcn];)',

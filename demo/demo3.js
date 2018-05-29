@@ -1,3 +1,5 @@
+document.body.classList.add('hasInfo')
+
 var overpass_layer3 = new OverpassLayer({
   query: '(node[amenity~"^(restaurant|cafe)$"];way[amenity~"^(restaurant|cafe)$"];relation[amenity~"^(restaurant|cafe)$"];);',
   minZoom: 16,
