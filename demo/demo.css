@@ -1,0 +1,30 @@
+#map {
+  position: absolute;
+  left: 201px;
+  top: 0;
+  bottom: 0;
+  right: 0;
+}
+#info {
+  position: absolute;
+  z-index: 10000;
+  top: 0;
+  left: 0;
+  width: 200px;
+  bottom: 0;
+  background: white;
+  border-right: 1px solid black;
+  overflow: auto;
+}
+body #loadingIndicator {
+  display: none;
+  position: absolute;
+  z-index: 10000;
+  right: 0;
+  top: 0;
+  padding: 2;
+}
+body.loading #loadingIndicator {
+  display: block;
+  background: rgba(255, 255, 255, 0.5);
+}

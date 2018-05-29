@@ -4,38 +4,7 @@
   <title>OverpassFrontend example</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="node_modules/leaflet/dist/leaflet.css" />
-  <style>
-#map {
-  position: absolute;
-  left: 201px;
-  top: 0;
-  bottom: 0;
-  right: 0;
-}
-#info {
-  position: absolute;
-  z-index: 10000;
-  top: 0;
-  left: 0;
-  width: 200px;
-  bottom: 0;
-  background: white;
-  border-right: 1px solid black;
-  overflow: auto;
-}
-body #loadingIndicator {
-  display: none;
-  position: absolute;
-  z-index: 10000;
-  right: 0;
-  top: 0;
-  padding: 2;
-}
-body.loading #loadingIndicator {
-  display: block;
-  background: rgba(255, 255, 255, 0.5);
-}
-  </style>
+  <link rel="stylesheet" href="demo/demo.css" />
   <script src="node_modules/leaflet/dist/leaflet.js"></script>
   <script src="dist/overpass-layer.js"></script>
   <script type='text/javascript'>
@@ -44,7 +13,7 @@ var overpassFrontend
 
 window.onload = function() {
   map = L.map('map').setView([48.2, 16.4], 18)
-  overpassFrontend = new OverpassFrontend('http://localhost/~skunk/overpass/query.php', {
+  overpassFrontend = new OverpassFrontend('//overpass-api.de/api/interpreter', {
     timeGap: 10,
     effortPerRequest: 100
   })
@@ -57,122 +26,21 @@ window.onload = function() {
   )
   osm_mapnik.addTo(map)
 
-  var overpass_layer = new OverpassLayer({
-    query: 'node[natural=tree];',
-    minZoom: 17,
-    feature: {
-      style: {
-            nodeFeature: 'CircleMarker',
-            color: 'red',
-            fillColor: 'red',
-            fillOpacity: 0.1,
-            weight: 1,
-            radius: 6
-      },
-      markerSymbol: "<img src='img/map_pointer.png' width='25' height='42' anchorX='13' anchorY='42' signAnchorX='0' signAnchorY='-30'>",
-      title: '{{ tags.species|default("Tree") }}',
-      markerSymbol: "<div style='background: red; border: 1px solid black; height: 50px;' width='10' height='50' anchorX='5' anchorY='25' signAnchorX='0' signAnchorY='0'></div>",
-      markerSign: '<span style="font-size: 20px;">🌳</span>',
-      body: function(ob) {
-        return '<pre>' + JSON.stringify(ob.tags, null, '  ') + '</pre>'
-      }
-    }
-  })
-  overpass_layer.addTo(map)
+  if (!location.search) {
+    var list = [ 'demo1', 'demo2', 'demo3', 'demo4' ]
+    var ul = document.createElement('ul')
+    document.getElementById('info').appendChild(ul)
 
-/*
-  var overpass_layer2 = new OverpassLayer({
-    query: '(way[leisure=park];relation[leisure=park];);',
-    minZoom: 14,
-    feature: {
-      style: function(ob) {
-        return {
-            nodeFeature: 'CircleMarker',
-            color: 'green',
-            fillColor: 'green',
-            fillOpacity: 0.2,
-            weight: 1,
-            radius: 6
-        }
-      },
-      body: function(ob) {
-        return '<pre>' + JSON.stringify(ob.tags, null, '  ') + '</pre>'
-      }
+    for (var i in list) {
+      var li = document.createElement('li')
+      li.innerHTML = '<a href="?' + list[i] + '">' + list[i] + '</a>'
+      ul.appendChild(li)
     }
-  })
-  overpass_layer2.onLoadStart = function (ev) {
-    document.body.classList.add('loading')
+  } else {
+    var script = document.createElement('script')
+    script.src = 'demo/' + location.search.substr(1) + '.js'
+    document.body.appendChild(script)
   }
-  overpass_layer2.onLoadEnd = function (ev) {
-    document.body.classList.remove('loading')
-  }
-  overpass_layer2.addTo(map)
-  new OverpassLayerList(document.getElementById('info'), overpass_layer2);
-
-  var overpass_layer3 = new OverpassLayer({
-    query: '(node[amenity~"^(restaurant|cafe)$"];way[amenity~"^(restaurant|cafe)$"];relation[amenity~"^(restaurant|cafe)$"];);',
-    minZoom: 16,
-    feature: {
-      body: "{{ tags.amenity }}<br/>Cuisine: {{ tags.cuisine|default('unknown') }}",
-      'style:highlight': {
-        "color": "black",
-        "opacity": 1,
-        "radius": 15,
-        "weight": 5,
-        "fill": false
-      },
-      style:
-        "{% if tags.cuisine == 'italian' %}\n" +
-        "  color: #003f7f\n" +
-        "  fillColor: #003f7f\n" +
-        "{% else %}\n" +
-        "  color: blue\n" +
-        "  fillColor: blue  \n" +
-        "{% endif %}\n" +
-        "fillOpacity: 0.2\n" +
-        "weight: 2\n" +
-        "radius: 9\n",
-      markerSign: '{% if tags.amenity=="restaurant" %}&#127860;{% elseif tags.amenity=="cafe" %}&#9749;{% endif %}'
-    }
-  })
-  overpass_layer3.addTo(map)
-  overpass_layer3.show(
-    'w82770794',
-    {
-      'styles': [ 'highlight' ]
-    },
-    function (err, ob) {
-      console.log(ob)
-    })
-  overpass_layer3.show(
-    'n597342965',
-    {
-      'styles': [ 'highlight' ]
-    },
-    function (err, ob) {
-      console.log(ob)
-    })
-  window.setTimeout(function () {
-    overpass_layer3.hide('w82770794')
-    overpass_layer3.hide('n597342965')
-  }, 5000)
-  new OverpassLayerList(document.getElementById('info'), overpass_layer3);
-
-  var overpass_layer4 = new OverpassLayer({
-    query: {
-      13: '(relation[type=route][route=bicycle][network=rcn];)',
-      16: '(relation[type=route][route=bicycle][network=rcn];relation[type=route][route=bicycle][network=lcn];)'
-    },
-    feature: {
-      style:
-        "color: {% if tags.network=='rcn' %}red{% else %}green{% endif %} \n" +
-        "weight: {% if map.zoom>=15 %}5{% else %}3{% endif %}"
-    },
-    minZoom: 13
-  })
-  overpass_layer4.addTo(map)
-  new OverpassLayerList(document.getElementById('info'), overpass_layer4);
-  */
 }
   </script>
 </head>
