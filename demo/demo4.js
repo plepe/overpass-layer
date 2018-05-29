@@ -6,7 +6,7 @@ var overpass_layer4 = new OverpassLayer({
   feature: {
     style:
       "color: {% if tags.network=='rcn' %}red{% else %}green{% endif %} \n" +
-      "weight: {% if map.zoom>=15 %}5{% else %}3{% endif %}"
+      "width: {% if map.zoom>=15 %}5{% else %}3{% endif %}"
   },
   minZoom: 13
 })

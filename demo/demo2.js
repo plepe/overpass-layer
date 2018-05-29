@@ -8,7 +8,7 @@ var overpass_layer2 = new OverpassLayer({
           color: 'green',
           fillColor: 'green',
           fillOpacity: 0.2,
-          weight: 1,
+          width: 1,
           radius: 6
       }
     },

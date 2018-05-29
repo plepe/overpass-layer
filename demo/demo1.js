@@ -7,7 +7,7 @@ var overpass_layer = new OverpassLayer({
           color: 'red',
           fillColor: 'red',
           fillOpacity: 0.1,
-          weight: 1,
+          width: 1,
           radius: 6
     },
     markerSymbol: "<img src='img/map_pointer.png' width='25' height='42' anchorX='13' anchorY='42' signAnchorX='0' signAnchorY='-30'>",

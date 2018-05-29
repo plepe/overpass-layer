@@ -7,7 +7,7 @@ var overpass_layer3 = new OverpassLayer({
       "color": "black",
       "opacity": 1,
       "radius": 15,
-      "weight": 5,
+      "width": 5,
       "fill": false
     },
     style:
@@ -19,7 +19,7 @@ var overpass_layer3 = new OverpassLayer({
       "  fillColor: blue  \n" +
       "{% endif %}\n" +
       "fillOpacity: 0.2\n" +
-      "weight: 2\n" +
+      "width: 2\n" +
       "radius: 9\n",
     markerSign: '{% if tags.amenity=="restaurant" %}&#127860;{% elseif tags.amenity=="cafe" %}&#9749;{% endif %}'
   }
