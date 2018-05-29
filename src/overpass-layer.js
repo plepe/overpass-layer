@@ -524,7 +524,7 @@ OverpassLayer.prototype._processObject = function (data) {
 
   if (objectData.markerSign) {
     let x = objectData.marker.iconAnchor[0] + objectData.marker.signAnchor[0]
-    let y = - objectData.marker.iconSize[1] + objectData.marker.iconAnchor[1] + objectData.marker.signAnchor[1]
+    let y = -objectData.marker.iconSize[1] + objectData.marker.iconAnchor[1] + objectData.marker.signAnchor[1]
     objectData.marker.html += '<div class="sign" style="margin-left: ' + x + 'px; margin-top: ' + y + 'px;">' + objectData.markerSign + '</div>'
   }
 
