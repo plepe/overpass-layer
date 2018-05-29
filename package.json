@@ -7,13 +7,13 @@
     "browserify-css": "^0.14.0",
     "html-escape": "^2.0.0",
     "overpass-frontend": "*",
-    "twig": "*"
+    "twig": "1.11.1"
   },
   "devDependencies": {
-    "browserify": "*",
-    "leaflet": "^0.7.0",
-    "standard": "^10.0.2",
-    "watchify": "^3.9.0"
+    "browserify": "16.2.2",
+    "leaflet": "^1.3.1",
+    "standard": "^11.0.1",
+    "watchify": "^3.11.0"
   },
   "main": "index.js",
   "scripts": {
