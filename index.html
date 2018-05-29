@@ -44,9 +44,10 @@ var overpassFrontend
 
 window.onload = function() {
   map = L.map('map').setView([48.2, 16.4], 18)
-  overpassFrontend = new OverpassFrontend('http://localhost/~skunk/overpass/query.php', {
+  overpassFrontend = new OverpassFrontend('https://overpass-api.de/api/interpreter', {
     timeGap: 10,
-    effortPerRequest: 100
+    effortPerRequest: 100,
+    split: 100
   })
 
   var osm_mapnik = L.tileLayer('//{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
@@ -57,22 +58,27 @@ window.onload = function() {
   )
   osm_mapnik.addTo(map)
 
+  map.createPane('casing');
+  map.getPane('casing').style.zIndex = 399;
+
   var overpass_layer = new OverpassLayer({
-    query: 'node[natural=tree];',
-    minZoom: 17,
+    query: 'way[highway];',
+    minZoom: 15,
     feature: {
-      style: {
-            nodeFeature: 'CircleMarker',
-            color: 'red',
-            fillColor: 'red',
-            fillOpacity: 0.1,
-            weight: 1,
-            radius: 6
+      "style:casing": {
+            pane: "casing",
+            color: 'black',
+            width: 12,
+            opacity: 1
       },
-      markerSymbol: "<img src='img/map_pointer.png' width='25' height='42' anchorX='13' anchorY='42' signAnchorX='0' signAnchorY='-30'>",
+      style: {
+            color: 'white',
+            width: 8,
+            opacity: 1
+      },
+      marker: false,
+      styles: [ 'casing', 'default' ],
       title: '{{ tags.species|default("Tree") }}',
-      markerSymbol: "<div style='background: red; border: 1px solid black; height: 50px;' width='10' height='50' anchorX='5' anchorY='25' signAnchorX='0' signAnchorY='0'></div>",
-      markerSign: '<span style="font-size: 20px;">🌳</span>',
       body: function(ob) {
         return '<pre>' + JSON.stringify(ob.tags, null, '  ') + '</pre>'
       }
