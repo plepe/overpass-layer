@@ -11,6 +11,7 @@
   },
   "devDependencies": {
     "browserify": "16.2.2",
+    "http-server": "^0.11.1",
     "leaflet": "^1.3.1",
     "standard": "^11.0.1",
     "watchify": "^3.11.0"
@@ -21,7 +22,8 @@
     "build": "browserify -g browserify-css index.js -o dist/overpass-layer.js",
     "watch": "watchify --debug -g browserify-css index.js -o dist/overpass-layer.js -v",
     "prepublish": "npm run build && npm run lint",
-    "lint": "standard src/*.js form.js"
+    "lint": "standard src/*.js form.js",
+    "server": "http-server ./ -p 3000"
   },
   "repository": {
     "type": "git",
