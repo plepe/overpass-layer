@@ -14,7 +14,7 @@ Clone code and prepare testing web server:
 git clone https://github.com/plepe/overpass-layer.git
 cd overpass-layer
 npm install
-npm run server
+npm run start
 ```
 
 Now open a web browser and browse to http://localhost:3000/
