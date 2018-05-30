@@ -28,4 +28,5 @@ overpassLayer.onLoadEnd = function (ev) {
 }
 overpassLayer.addTo(map)
 
-var overpassLayerList = new OverpassLayerList(document.getElementById('info'), overpassLayer)
+var overpassLayerList = new OverpassLayerList(overpassLayer)
+overpassLayerList.addTo(document.getElementById('info'))
