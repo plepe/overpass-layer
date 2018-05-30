@@ -291,8 +291,8 @@ OverpassLayer.prototype._show = function (data) {
   }
 
   data.feature = data.styles.length
-      ? data.features[data.styles[0]]
-      : null
+    ? data.features[data.styles[0]]
+    : null
 
   if (data.featureMarker) {
     data.featureMarker.addTo(this.map)
@@ -372,8 +372,8 @@ OverpassLayer.prototype.evaluate = function (data) {
 
   objectData.styles =
     'styles' in objectData ? objectData.styles
-    : 'styles' in this.options ? this.options.styles
-    : styleIds
+      : 'styles' in this.options ? this.options.styles
+        : styleIds
   if (typeof objectData.styles === 'string' || 'twig_markup' in objectData.styles) {
     var styles = objectData.styles.trim()
     if (styles === '') {
@@ -524,7 +524,7 @@ OverpassLayer.prototype._processObject = function (data) {
 
   if (objectData.markerSign) {
     let x = objectData.marker.iconAnchor[0] + objectData.marker.signAnchor[0]
-    let y = - objectData.marker.iconSize[1] + objectData.marker.iconAnchor[1] + objectData.marker.signAnchor[1]
+    let y = -objectData.marker.iconSize[1] + objectData.marker.iconAnchor[1] + objectData.marker.signAnchor[1]
     objectData.marker.html += '<div class="sign" style="margin-left: ' + x + 'px; margin-top: ' + y + 'px;">' + objectData.markerSign + '</div>'
   }
 
@@ -555,8 +555,8 @@ OverpassLayer.prototype._processObject = function (data) {
   data.styles = objectData.styles
 
   data.feature = data.styles.length
-      ? data.features[data.styles[0]]
-      : null
+    ? data.features[data.styles[0]]
+    : null
 
   var popupContent = ''
   popupContent += '<h1>' + objectData.title + '</h1>'
