@@ -12,7 +12,7 @@ var map
 var overpassFrontend
 
 window.onload = function() {
-  map = L.map('map').setView([48.2, 16.4], 18)
+  map = L.map('map').setView([ 51.503, -0.093 ], 17)
   overpassFrontend = new OverpassFrontend('//overpass-api.de/api/interpreter', {
     timeGap: 10,
     effortPerRequest: 100
@@ -28,7 +28,7 @@ window.onload = function() {
 
   if (!location.search) {
     document.body.classList.add('hasInfo')
-    var list = [ 'demo1', 'demo2', 'demo3', 'demo4', 'demo5' ]
+    var list = [ 'demo1', 'demo2', 'demo3', 'demo4', 'demo5', 'demo6' ]
     var ul = document.createElement('ul')
     document.getElementById('info').appendChild(ul)
 

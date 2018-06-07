@@ -2,13 +2,29 @@ require('./overpass-layer-list.css')
 
 var isTrue = require('./isTrue')
 
-function OverpassLayerList (parentDom, layer) {
-  this.layer = layer
-  this.layer.layerList = this
+function OverpassLayerList (layer) {
+  // compatibility <1.0
+  let parentDom
+  if (arguments.length > 1 && arguments[1].constructor.name === 'OverpassLayer') {
+    parentDom = arguments[0]
+    layer = arguments[1]
+    console.error('overpass-layer: class OverpassLayerList() accepts only one parameter, "layer"')
+  }
+  // end
+
   this.dom = document.createElement('ul')
   this.dom.className = 'overpass-layer-list'
-  parentDom.appendChild(this.dom)
+  this.layer = layer
+  this.layer.layerList = this
   this.items = {}
+
+  if (parentDom) {
+    this.addTo(parentDom)
+  }
+}
+
+OverpassLayerList.prototype.addTo = function (parentDom) {
+  parentDom.appendChild(this.dom)
 }
 
 OverpassLayerList.prototype._getMarker = function (ob) {
