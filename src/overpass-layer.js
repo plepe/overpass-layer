@@ -105,6 +105,13 @@ OverpassLayer.prototype.remove = function () {
   this.shownFeatures = {}
   this.shownFeatureOptions = {}
 
+  this.abortRequest()
+
+  this.map.off('moveend', this.check_update_map, this)
+  this.map = null
+}
+
+OverpassLayer.prototype.abortRequest = function () {
   if (this.currentRequest) {
     if (this.onLoadEnd) {
       this.onLoadEnd({
@@ -116,9 +123,6 @@ OverpassLayer.prototype.remove = function () {
     this.currentRequest.abort()
     this.currentRequest = null
   }
-
-  this.map.off('moveend', this.check_update_map, this)
-  this.map = null
 }
 
 OverpassLayer.prototype.check_update_map = function () {
@@ -147,17 +151,7 @@ OverpassLayer.prototype.check_update_map = function () {
     this.visibleFeatures = {}
 
     // abort remaining request
-    if (this.currentRequest) {
-      if (this.onLoadEnd) {
-        this.onLoadEnd({
-          request: this.currentRequest,
-          error: 'abort'
-        })
-      }
-
-      this.currentRequest.abort()
-      this.currentRequest = null
-    }
+    this.abortRequest()
 
     return
   }
@@ -197,17 +191,7 @@ OverpassLayer.prototype.check_update_map = function () {
 
   // Abort current requests (in case they are long-lasting - we don't need them
   // anyway). Data which is being submitted will still be loaded to the cache.
-  if (this.currentRequest) {
-    if (this.onLoadEnd) {
-      this.onLoadEnd({
-        request: this.currentRequest,
-        error: 'abort'
-      })
-    }
-
-    this.currentRequest.abort()
-    this.currentRequest = null
-  }
+  this.abortRequest()
 
   var query = this.options.query
   if (typeof query === 'object') {
