@@ -148,6 +148,13 @@ OverpassLayer.prototype.check_update_map = function () {
 
     // abort remaining request
     if (this.currentRequest) {
+      if (this.onLoadEnd) {
+        this.onLoadEnd({
+          request: this.currentRequest,
+          error: 'abort'
+        })
+      }
+
       this.currentRequest.abort()
       this.currentRequest = null
     }
