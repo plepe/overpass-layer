@@ -105,6 +105,18 @@ OverpassLayer.prototype.remove = function () {
   this.shownFeatures = {}
   this.shownFeatureOptions = {}
 
+  if (this.currentRequest) {
+    if (this.onLoadEnd) {
+      this.onLoadEnd({
+        request: this.currentRequest,
+        error: 'abort'
+      })
+    }
+
+    this.currentRequest.abort()
+    this.currentRequest = null
+  }
+
   this.map.off('moveend', this.check_update_map, this)
   this.map = null
 }
