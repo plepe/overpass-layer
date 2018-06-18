@@ -1,5 +1,6 @@
 /* global overpassFrontend:false, L */
 require('./overpass-layer.css')
+var memberize = require('./member')
 
 var BoundingBox = require('boundingbox')
 var twig = require('twig')
@@ -34,6 +35,10 @@ function OverpassLayer (options) {
   }
   this.options.styleNoBindPopup = this.options.styleNoBindPopup || []
   this.options.stylesNoAutoShow = this.options.stylesNoAutoShow || []
+
+  if (this.options.members) {
+    memberize.init.call(this)
+  }
 
   for (var k in this.options.feature) {
     if (typeof this.options.feature[k] === 'string' && this.options.feature[k].search('{') !== -1) {
@@ -200,6 +205,10 @@ OverpassLayer.prototype.check_update_map = function () {
 
   if (!query) {
     return
+  }
+
+  if (this.options.members) {
+    memberize.prepare.call(this, bounds)
   }
 
   this.currentRequest = this.overpassFrontend.BBoxQuery(query, bounds,

@@ -51,6 +51,19 @@ The templates will be rendered when the object becomes visible and when the zoom
 * `meta.uid` (UID of the user, who changed the object last)
 * `map.zoom` (Current zoom level)
 * `const.*` (Values from the 'const' option)
+* `masters`: Array of links to current master objects:
+* `masters[].id`: id of relation
+* `masters[].tags`: tags of relation
+* `masters[].sequence`: current object is nth member
+* `masters[].role`: current object has role
+* `masters[].dir`: current object has direction (forward | backward | null)
+* `members`: Array of member objects (if loaded) - an entry may be null if not loaded (yet)
+* `members[].id`: id of member
+* `members[].tags`: tags of member
+* `members[].sequence`: member is nth element
+* `members[].role`: member has role
+* `members[].dir`: member has direction (forward | backward | null)
+* `members[].visible`: member is currently visible
 
 Examples:
 `Amenity: {{ tags.amenity }}`: might render as "Amenity: restaurant"
