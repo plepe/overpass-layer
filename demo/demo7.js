@@ -7,12 +7,15 @@ var overpassLayer = new OverpassLayer({
   },
   members: true,
   feature: {
-    styles: []
+    styles: [],
+    'body': '{% for member in members %}{{ member.id }} ({{ member.visible }}) {{ member.tags.highway }}<br/>{% endfor %}'
   },
   memberFeature: {
     style:
       'color: {% if tags.network=="rcn" %}red{% else %}green{% endif %} \n' +
-      'width: {% if map.zoom>=15 %}5{% else %}3{% endif %}'
+      'width: {% if map.zoom>=15 %}5{% else %}3{% endif %}',
+      'title': '{{ id }}',
+      'body': '{% for master in masters %}{{ master.id }}: {{ master.tags.name }}<br/>{% endfor %}'
   },
   minZoom: 13
 })
