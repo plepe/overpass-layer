@@ -337,6 +337,10 @@ OverpassLayer.prototype.twigData = function (ob) {
     'const': this.options.const
   }
 
+  if (this.options.members) {
+    memberize.twigData.call(this, ob, result)
+  }
+
   if (this.map) {
     result.map = {
       zoom: this.map.getZoom()

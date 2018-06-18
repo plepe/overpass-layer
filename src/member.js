@@ -90,7 +90,53 @@ function prepare (bounds) {
   }.bind(this)
 }
 
+function twigData (ob, result) {
+  for (var k in this.visibleFeatures) {
+    let feature = this.visibleFeatures[k]
+    if (feature.object.members) {
+      feature.object.members.forEach((member, sequence) => {
+        if (member.id === ob.id) {
+          if (!('masters' in result)) {
+            result.masters = []
+          }
+
+          result.masters.push({
+            id: feature.id,
+            type: feature.object.type,
+            osm_id: feature.object.osm_id,
+            tags: feature.object.tags,
+            role: member.role,
+            sequence
+          })
+        }
+      })
+    }
+  }
+
+  result.members = []
+  if (ob.members) {
+    ob.members.forEach((member, sequence) => {
+      let r = {
+        id: member.id,
+        sequence,
+        type: member.type,
+        osm_id: member.ref,
+        role: member.role,
+        visible: false
+      }
+
+      if (member.id in this.visibleMemberFeatures) {
+        r.visible = true
+        r.tags = this.visibleMemberFeatures[member.id].object.tags
+      }
+
+      result.members.push(r)
+    })
+  }
+}
+
 module.exports = {
   init,
-  prepare
+  prepare,
+  twigData
 }
