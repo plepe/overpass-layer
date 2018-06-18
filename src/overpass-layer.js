@@ -220,7 +220,7 @@ OverpassLayer.prototype.check_update_map = function () {
         if (ob.id in this.shownFeatures) {
           data = this.shownFeatures[ob.id]
         } else {
-          this._processObject(data)
+          this._processObject(data, this.options.feature)
 
           this._show(data)
         }
@@ -277,7 +277,7 @@ OverpassLayer.prototype.check_update_map = function () {
 
 OverpassLayer.prototype.recalc = function () {
   for (var k in this.visibleFeatures) {
-    this._processObject(this.visibleFeatures[k])
+    this._processObject(this.visibleFeatures[k], this.options.feature)
   }
 }
 
@@ -337,18 +337,18 @@ OverpassLayer.prototype.twigData = function (ob) {
   return result
 }
 
-OverpassLayer.prototype.evaluate = function (data) {
+OverpassLayer.prototype.evaluate = function (data, featureOptions) {
   var k
   var ob = data.object
 
   var twigData = this.twigData(ob)
 
   var objectData = {}
-  for (k in this.options.feature) {
-    if (typeof this.options.feature[k] === 'function') {
-      objectData[k] = this.options.feature[k](twigData)
+  for (k in featureOptions) {
+    if (typeof featureOptions[k] === 'function') {
+      objectData[k] = featureOptions[k](twigData)
     } else {
-      objectData[k] = this.options.feature[k]
+      objectData[k] = featureOptions[k]
     }
   }
 
@@ -422,7 +422,7 @@ OverpassLayer.prototype.updateAssets = function (div, objectData) {
   this.options.updateAssets(div, objectData, this)
 }
 
-OverpassLayer.prototype._processObject = function (data) {
+OverpassLayer.prototype._processObject = function (data, featureOptions) {
   var k
   var ob = data.object
   var showOptions = {
@@ -437,7 +437,7 @@ OverpassLayer.prototype._processObject = function (data) {
     })
   }
 
-  var objectData = this.evaluate(data)
+  var objectData = this.evaluate(data, featureOptions)
 
   for (k in objectData) {
     var m = k.match(/^style(|:(.*))$/)
@@ -634,7 +634,7 @@ OverpassLayer.prototype.get = function (id, callback) {
         } else if (id in this.visibleFeatures) {
           data = this.visibleFeatures[id]
         } else {
-          this._processObject(data)
+          this._processObject(data, this.options.feature)
         }
 
         callback(err, data)
@@ -668,7 +668,7 @@ OverpassLayer.prototype.show = function (id, options, callback) {
         if (this.shownFeatureOptions[id].length === 0) {
           this.hide(id)
         } else {
-          this._processObject(this.shownFeatures[id])
+          this._processObject(this.shownFeatures[id], this.options.feature)
         }
       }
     }.bind(this)
@@ -676,7 +676,7 @@ OverpassLayer.prototype.show = function (id, options, callback) {
 
   if (id in this.shownFeatures) {
     this.shownFeatureOptions[id].push(options)
-    this._processObject(this.shownFeatures[id])
+    this._processObject(this.shownFeatures[id], this.options.feature)
     callback(null, this.shownFeatures[id])
     return result
   }
@@ -687,7 +687,7 @@ OverpassLayer.prototype.show = function (id, options, callback) {
       this.shownFeatureOptions[id] = []
     }
     this.shownFeatureOptions[id].push(options)
-    this._processObject(this.shownFeatures[id])
+    this._processObject(this.shownFeatures[id], this.options.feature)
     callback(null, this.shownFeatures[id])
     return result
   }
@@ -707,7 +707,7 @@ OverpassLayer.prototype.show = function (id, options, callback) {
         this.shownFeatureOptions[id] = []
       }
       this.shownFeatureOptions[id].push(options)
-      this._processObject(this.shownFeatures[id])
+      this._processObject(this.shownFeatures[id], this.options.feature)
 
       if (!(id in this.visibleFeatures)) {
         this._show(data)
@@ -725,7 +725,7 @@ OverpassLayer.prototype.hide = function (id) {
     var ob = this.shownFeatures[id]
     delete this.shownFeatures[id]
     delete this.shownFeatureOptions[id]
-    this._processObject(ob)
+    this._processObject(ob, this.options.feature)
 
     if (!(id in this.visibleFeatures)) {
       this._hide(ob)
