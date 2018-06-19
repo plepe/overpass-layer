@@ -83,6 +83,7 @@ function prepare (bounds) {
       ob.memberOf.forEach(master => {
         this.scheduleReprocess(master.relation.id)
       })
+      console.log(ob.memberOf)
 
 //        if (this.layerList) {
 //          this.layerList.addObject(data)
@@ -120,11 +121,18 @@ function twigData (ob, result) {
   result.members = []
   if (ob.members) {
     ob.members.forEach((member, sequence) => {
+      if (!ob.memberFeatures) {
+        console.log('why?')
+        return
+      }
+
+      let memberFeature = ob.memberFeatures[sequence]
       let r = {
         id: member.id,
         sequence,
         type: member.type,
         osm_id: member.ref,
+        tags: memberFeature.tags,
         role: member.role,
         visible: false
       }
