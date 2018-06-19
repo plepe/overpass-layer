@@ -82,6 +82,7 @@ function OverpassLayer (options) {
   this.shownFeatureOptions = {}
   this.currentRequest = null
   this.lastZoom = null
+  this._scheduledReprocesses = {}
 }
 
 OverpassLayer.prototype.addTo = function (map) {
@@ -389,6 +390,12 @@ OverpassLayer.prototype.evaluate = function (data) {
   return objectData
 }
 
+OverpassLayer.prototype.scheduleReprocess = function (id) {
+  if (!(id in this._scheduledReprocesses)) {
+    this._scheduledReprocesses[id] = window.setTimeout(this._processObject.bind(this, this.visibleFeatures[id], this.options.feature), 0)
+  }
+}
+
 OverpassLayer.prototype._shallBindPopupToStyle = function (styleId) {
   return this.options.styleNoBindPopup.indexOf(styleId) === -1
 }
@@ -428,6 +435,8 @@ OverpassLayer.prototype._processObject = function (data) {
   var showOptions = {
     styles: []
   }
+
+  delete this._scheduledReprocesses[data.id]
 
   if (ob.id in this.shownFeatureOptions) {
     this.shownFeatureOptions[ob.id].forEach(function (opt) {
