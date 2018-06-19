@@ -80,6 +80,10 @@ function prepare (bounds) {
 
       this.visibleMemberFeatures[ob.id] = data
 
+      ob.memberOf.forEach(master => {
+        this.scheduleReprocess(master.relation.id)
+      })
+
 //        if (this.layerList) {
 //          this.layerList.addObject(data)
 //        }
