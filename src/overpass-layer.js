@@ -197,11 +197,17 @@ OverpassLayer.prototype.recalc = function () {
 }
 
 OverpassLayer.prototype.scheduleReprocess = function (id) {
-  this.mainlayer.scheduleReprocess(id)
+  if (!(id in this._scheduledReprocesses)) {
+    this._scheduledReprocesses[id] = window.setTimeout(this._processObject.bind(this, this.visibleFeatures[id], this.options.feature), 0)
+  }
 }
 
 OverpassLayer.prototype.updateAssets = function (div, objectData) {
-  this.mainlayer.updateAssets(div, objectData)
+  if (!this.options.updateAssets) {
+    return div
+  }
+
+  this.options.updateAssets(div, objectData, this)
 }
 
 OverpassLayer.prototype.get = function (id, callback) {
