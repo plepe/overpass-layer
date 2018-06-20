@@ -66,7 +66,7 @@ class Sublayer {
     }
   }
 
-  hideAll () {
+  hideAll (force) {
     for (let k in this.visibleFeatures) {
       ob = this.visibleFeatures[k]
 
@@ -77,7 +77,7 @@ class Sublayer {
         this.onDisappear(ob)
       }
 
-      if (!(ob.id in this.shownFeatures)) {
+      if (force || !(ob.id in this.shownFeatures)) {
         this._hide(ob)
       }
     }
@@ -104,6 +104,16 @@ class Sublayer {
 
         delete this.visibleFeatures[k]
       }
+    }
+  }
+
+  get () {
+    if (id in this.visibleFeatures) {
+      return this.visibleFeatures[id]
+    }
+
+    if (id in this.shownFeatures) {
+      return this.shownFeatures[id]
     }
   }
 
@@ -420,6 +430,12 @@ class Sublayer {
     }
 
     data.isShown = false
+  }
+
+  scheduleReprocess (id) {
+    if (!(id in this._scheduledReprocesses)) {
+      this._scheduledReprocesses[id] = window.setTimeout(this._processObject.bind(this, this.visibleFeatures[id]), 0)
+    }
   }
 
 }

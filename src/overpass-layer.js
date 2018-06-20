@@ -93,17 +93,7 @@ OverpassLayer.prototype.addTo = function (map) {
 OverpassLayer.prototype.remove = function () {
   var k
 
-  for (k in this.visibleFeatures) {
-    this._hide(this.visibleFeatures[k])
-  }
-
-  for (k in this.shownFeatures) {
-    this._hide(this.shownFeatures[k])
-  }
-
-  this.visibleFeatures = {}
-  this.shownFeatures = {}
-  this.shownFeatureOptions = {}
+  this.mainlayer.hideAll(true)
 
   this.abortRequest()
 
@@ -203,9 +193,7 @@ OverpassLayer.prototype.recalc = function () {
 }
 
 OverpassLayer.prototype.scheduleReprocess = function (id) {
-  if (!(id in this._scheduledReprocesses)) {
-    this._scheduledReprocesses[id] = window.setTimeout(this._processObject.bind(this, this.visibleFeatures[id], this.options.feature), 0)
-  }
+  this.mainlayer.scheduleReprocess(id)
 }
 
 OverpassLayer.prototype.updateAssets = function (div, objectData) {
@@ -219,14 +207,9 @@ OverpassLayer.prototype.updateAssets = function (div, objectData) {
 OverpassLayer.prototype.get = function (id, callback) {
   var done = false
 
-  if (id in this.visibleFeatures) {
-    callback(this.visibleFeatures[id])
-    return
-  }
-
-  if (id in this.shownFeatures) {
-    callback(this.shownFeatures[id])
-    return
+  let ob = this.mainlayer.get(id)
+  if (ob) {
+    return callback(ob)
   }
 
   this.overpassFrontend.get(id,
@@ -240,6 +223,7 @@ OverpassLayer.prototype.get = function (id, callback) {
           isShown: false
         }
 
+        /*
         if (id in this.shownFeatures) {
           data = this.shownFeatures[id]
         } else if (id in this.visibleFeatures) {
@@ -247,6 +231,7 @@ OverpassLayer.prototype.get = function (id, callback) {
         } else {
           this._processObject(data)
         }
+        */
 
         callback(err, data)
       }
