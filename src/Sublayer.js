@@ -117,6 +117,53 @@ class Sublayer {
     }
   }
 
+  show (ob, options) {
+    let id = ob.id
+
+    if (id in this.visibleFeatures) {
+      this.shownFeatures[id] = this.visibleFeatures[id]
+      if ('shownFeatureOptions' in this.shownFeatureOptions) {
+        this.shownFeatureOptions = []
+      }
+    }
+
+    if (id in this.shownFeatures) {
+      this.shownFeatureOptions[id].push(options)
+    } else {
+      this.shownFeatures[id] = {
+        object: ob,
+        isShown: true
+      }
+    }
+
+    this._processObject(this.shownFeatures[id])
+
+    return {
+      id: id,
+      options: options,
+      hide: () => {
+        console.log('instantHide')
+        instantHide = true
+
+        if (id in this.shownFeatures) {
+          var i = this.shownFeatureOptions[id].indexOf(options)
+          if (i !== -1) {
+            this.shownFeatureOptions[id].splice(i, 1)
+          }
+
+          if (this.shownFeatureOptions[id].length === 0) {
+            this.hide(ob)
+          } else {
+            this._processObject(this.shownFeatures[id])
+          }
+        }
+      }
+    }
+  }
+
+  hide (ob) {
+  }
+
   zoomChange () {
     this.recalc()
 
@@ -438,6 +485,13 @@ class Sublayer {
     }
   }
 
+  updateAssets (div, objectData) {
+    if (!this.options.updateAssets) {
+      return div
+    }
+
+    this.options.updateAssets(div, objectData, this)
+  }
 }
 
 module.exports = Sublayer

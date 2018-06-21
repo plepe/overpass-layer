@@ -196,14 +196,11 @@ OverpassLayer.prototype.scheduleReprocess = function (id) {
 }
 
 OverpassLayer.prototype.updateAssets = function (div, objectData) {
-  if (!this.options.updateAssets) {
-    return div
-  }
-
-  this.options.updateAssets(div, objectData, this)
+  this.mainlayer.updateAssets(div, objectData)
 }
 
 OverpassLayer.prototype.get = function (id, callback) {
+  console.log('get', id)
   var done = false
 
   let ob = this.mainlayer.get(id)
