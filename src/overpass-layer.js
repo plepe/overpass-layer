@@ -201,13 +201,7 @@ OverpassLayer.prototype.updateAssets = function (div, objectData) {
 }
 
 OverpassLayer.prototype.get = function (id, callback) {
-  console.log('get', id)
   var done = false
-
-  let ob = this.mainlayer.get(id)
-  if (ob) {
-    return callback(ob)
-  }
 
   this.overpassFrontend.get(id,
     {
@@ -215,22 +209,7 @@ OverpassLayer.prototype.get = function (id, callback) {
     },
     function (err, ob) {
       if (err === null) {
-        var data = {
-          object: ob,
-          isShown: false
-        }
-
-        /*
-        if (id in this.shownFeatures) {
-          data = this.shownFeatures[id]
-        } else if (id in this.visibleFeatures) {
-          data = this.visibleFeatures[id]
-        } else {
-          this._processObject(data)
-        }
-        */
-
-        callback(err, data)
+        callback(err, ob)
       }
 
       done = true
@@ -244,7 +223,8 @@ OverpassLayer.prototype.get = function (id, callback) {
 }
 
 OverpassLayer.prototype.show = function (id, options, callback) {
-  var instantHide = false // called hide before loading finished
+  let instantHide = false // called hide before loading finished
+  let sublayerData
 
   var result = {
     id: id,
@@ -252,61 +232,26 @@ OverpassLayer.prototype.show = function (id, options, callback) {
     hide: function () {
       instantHide = true
 
-      if (id in this.shownFeatures) {
-        var i = this.shownFeatureOptions[id].indexOf(options)
-        if (i !== -1) {
-          this.shownFeatureOptions[id].splice(i, 1)
-        }
-
-        if (this.shownFeatureOptions[id].length === 0) {
-          this.hide(id)
-        } else {
-          this._processObject(this.shownFeatures[id])
-        }
+      if (sublayerData) {
+        sublayerData.hide()
       }
+
     }.bind(this)
   }
 
-  if (id in this.shownFeatures) {
-    this.shownFeatureOptions[id].push(options)
-    this._processObject(this.shownFeatures[id])
-    callback(null, this.shownFeatures[id])
-    return result
-  }
-
-  if (id in this.visibleFeatures) {
-    this.shownFeatures[id] = this.visibleFeatures[id]
-    if (!this.shownFeatureOptions[id]) {
-      this.shownFeatureOptions[id] = []
-    }
-    this.shownFeatureOptions[id].push(options)
-    this._processObject(this.shownFeatures[id])
-    callback(null, this.shownFeatures[id])
-    return result
-  }
-
   this.get(id,
-    function (err, data) {
+    function (err, ob) {
       if (err) {
-        return callback(err, data)
+        return callback(err, ob)
       }
 
       if (instantHide) {
-        return callback(null, data)
+        return callback(null, ob)
       }
 
-      this.shownFeatures[id] = data
-      if (!this.shownFeatureOptions[id]) {
-        this.shownFeatureOptions[id] = []
-      }
-      this.shownFeatureOptions[id].push(options)
-      this._processObject(this.shownFeatures[id])
+      sublayerData = this.mainlayer.show(ob, options)
 
-      if (!(id in this.visibleFeatures)) {
-        this.mainlayer._show(data)
-      }
-
-      callback(err, data)
+      callback(err, sublayerData.data)
     }.bind(this)
   )
 
@@ -314,16 +259,7 @@ OverpassLayer.prototype.show = function (id, options, callback) {
 }
 
 OverpassLayer.prototype.hide = function (id) {
-  if (id in this.shownFeatures) {
-    var ob = this.shownFeatures[id]
-    delete this.shownFeatures[id]
-    delete this.shownFeatureOptions[id]
-    this._processObject(ob)
-
-    if (!(id in this.visibleFeatures)) {
-      this.mainlayer._hide(ob)
-    }
-  }
+  this.mainlayer.hide(id)
 }
 
 OverpassLayer.prototype.openPopupOnObject = function (ob) {

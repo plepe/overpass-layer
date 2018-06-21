@@ -68,13 +68,13 @@ class Sublayer {
 
   hideAll (force) {
     for (let k in this.visibleFeatures) {
-      ob = this.visibleFeatures[k]
+      let ob = this.visibleFeatures[k]
 
-      if (this.layerList) {
-        this.layerList.delObject(ob)
+      if (this.master.layerList) {
+        this.master.layerList.delObject(ob)
       }
-      if (this.onDisappear) {
-        this.onDisappear(ob)
+      if (this.master.onDisappear) {
+        this.master.onDisappear(ob)
       }
 
       if (force || !(ob.id in this.shownFeatures)) {
@@ -91,11 +91,11 @@ class Sublayer {
       let ob = this.visibleFeatures[k]
 
       if (!ob.object.intersects(bounds)) {
-        if (this.layerList) {
-          this.layerList.delObject(ob)
+        if (this.master.layerList) {
+          this.master.layerList.delObject(ob)
         }
-        if (this.onDisappear) {
-          this.onDisappear(ob)
+        if (this.master.onDisappear) {
+          this.master.onDisappear(ob)
         }
 
         if (!(ob.id in this.shownFeatures)) {
@@ -107,7 +107,7 @@ class Sublayer {
     }
   }
 
-  get () {
+  get (id) {
     if (id in this.visibleFeatures) {
       return this.visibleFeatures[id]
     }
@@ -118,33 +118,42 @@ class Sublayer {
   }
 
   show (ob, options) {
+    if (typeof ob === 'string') {
+      return this.master.get(ob, (err, ob) => this.show.bind(this, ob, options))
+    }
+
     let id = ob.id
+    let data
 
     if (id in this.visibleFeatures) {
-      this.shownFeatures[id] = this.visibleFeatures[id]
-      if ('shownFeatureOptions' in this.shownFeatureOptions) {
-        this.shownFeatureOptions = []
+      data = this.shownFeatures[id] = this.visibleFeatures[id]
+      if (!(id in this.shownFeatureOptions)) {
+        this.shownFeatureOptions[id] = []
       }
     }
 
     if (id in this.shownFeatures) {
+      data = this.shownFeatures[id]
       this.shownFeatureOptions[id].push(options)
     } else {
-      this.shownFeatures[id] = {
+      data = {
         object: ob,
         isShown: true
       }
+      this.shownFeatures[id] = data
+
+      this.shownFeatureOptions[id] = [ options ]
     }
 
     this._processObject(this.shownFeatures[id])
 
-    return {
-      id: id,
-      options: options,
-      hide: () => {
-        console.log('instantHide')
-        instantHide = true
+    this._show(this.shownFeatures[id])
 
+    return {
+      id,
+      options,
+      data,
+      hide: () => {
         if (id in this.shownFeatures) {
           var i = this.shownFeatureOptions[id].indexOf(options)
           if (i !== -1) {
@@ -152,7 +161,7 @@ class Sublayer {
           }
 
           if (this.shownFeatureOptions[id].length === 0) {
-            this.hide(ob)
+            this.hide(data)
           } else {
             this._processObject(this.shownFeatures[id])
           }
@@ -161,7 +170,22 @@ class Sublayer {
     }
   }
 
-  hide (ob) {
+  hide (id) {
+    if (typeof id === 'object') {
+      id = id.id
+    }
+
+    if (id in this.shownFeatures) {
+      let data = this.shownFeatures[id]
+      delete this.shownFeatures[id]
+      delete this.shownFeatureOptions[id]
+
+      if (id in this.visibleFeatures) {
+        this._processObject(data)
+      } else {
+        this._hide(data)
+      }
+    }
   }
 
   zoomChange () {
@@ -309,10 +333,10 @@ class Sublayer {
 
     if (data.isShown) {
       for (k in data.features) {
-        if (objectData.styles.indexOf(k) !== -1 && data.styles.indexOf(k) === -1) {
+        if (objectData.styles && objectData.styles.indexOf(k) !== -1 && data.styles && data.styles.indexOf(k) === -1) {
           data.features[k].addTo(this.map)
         }
-        if (objectData.styles.indexOf(k) === -1 && data.styles.indexOf(k) !== -1) {
+        if (objectData.styles && objectData.styles.indexOf(k) === -1 && data.styles && data.styles.indexOf(k) !== -1) {
           this.map.removeLayer(data.features[k])
         }
       }
@@ -359,11 +383,11 @@ class Sublayer {
     data.layer_id = this.options.id
     data.data = objectData
 
-    if (this.layerList) {
-      this.layerList.updateObject(data)
+    if (this.master.layerList) {
+      this.master.layerList.updateObject(data)
     }
-    if (this.onUpdate) {
-      this.onUpdate(data)
+    if (this.master.onUpdate) {
+      this.master.onUpdate(data)
     }
   }
 
