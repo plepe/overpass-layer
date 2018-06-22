@@ -395,12 +395,12 @@ class Sublayer {
     var k
     var ob = data.object
 
-    var twigData = this.twigData(ob)
+    data.twigData = this.twigData(ob)
 
     var objectData = {}
     for (k in this.options.feature) {
       if (typeof this.options.feature[k] === 'function') {
-        objectData[k] = this.options.feature[k](twigData)
+        objectData[k] = this.options.feature[k](data.twigData)
       } else {
         objectData[k] = this.options.feature[k]
       }
