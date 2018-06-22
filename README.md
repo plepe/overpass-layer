@@ -49,6 +49,12 @@ The templates will be rendered when the object becomes visible and when the zoom
 * `meta.changeset` (ID of the changeset, the object was last modified in)
 * `meta.user` (Username of the user, who changed the object last)
 * `meta.uid` (UID of the user, who changed the object last)
+* `members`: Array of member objects (if loaded)
+* `members[].id`: id of member
+* `members[].tags`: tags of member (if loaded)
+* `members[].meta`: meta of member (if loaded)
+* `members[].sequence`: member is nth element
+* `members[].role`: member has role
 * `map.zoom` (Current zoom level)
 * `const.*` (Values from the 'const' option)
 

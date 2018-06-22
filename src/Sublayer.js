@@ -452,7 +452,24 @@ class Sublayer {
       type: ob.type,
       tags: ob.tags,
       meta: ob.meta,
+      members: [],
       'const': this.options.const
+    }
+
+    if (ob.memberFeatures) {
+      ob.memberFeatures.forEach((member, sequence) => {
+        let r = {
+          id: member.id,
+          sequence,
+          type: member.type,
+          osm_id: member.osm_id,
+          role: ob.members[sequence].role,
+          tags: member.tags,
+          meta: member.meta
+        }
+
+        result.members.push(r)
+      })
     }
 
     if (this.map) {
