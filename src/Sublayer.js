@@ -1,4 +1,5 @@
 const styleToLeaflet = require('./styleToLeaflet')
+const strToStyle = require('./strToStyle')
 
 class Sublayer {
   constructor (master, options) {
