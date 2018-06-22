@@ -7,6 +7,7 @@ var OverpassFrontend = require('overpass-frontend')
 var escapeHtml = require('html-escape')
 var isTrue = require('./isTrue')
 var Sublayer = require('./Sublayer')
+var compileFeature = require('./compileFeature')
 
 function OverpassLayer (options) {
   var template
@@ -33,47 +34,7 @@ function OverpassLayer (options) {
   this.options.styleNoBindPopup = this.options.styleNoBindPopup || []
   this.options.stylesNoAutoShow = this.options.stylesNoAutoShow || []
 
-  for (var k in this.options.feature) {
-    if (typeof this.options.feature[k] === 'string' && this.options.feature[k].search('{') !== -1) {
-      try {
-        template = twig.twig({ data: this.options.feature[k], autoescape: true })
-      } catch (err) {
-        console.log('Error compiling twig template ' + this.id + '/' + k + ':', err)
-        break
-      }
-
-      this.options.feature[k] = function (template, k, ob) {
-        try {
-          return template.render(ob)
-        } catch (err) {
-          console.log('Error rendering twig template ' + this.id + '/' + k + ': ', err)
-        }
-
-        return null
-      }.bind(this, template, k)
-    } else if (typeof this.options.feature[k] === 'object' && (['style'].indexOf(k) !== -1 || k.match(/^style:/))) {
-      var templates = {}
-      for (var k1 in this.options.feature[k]) {
-        if (typeof this.options.feature[k][k1] === 'string' && this.options.feature[k][k1].search('{') !== -1) {
-          templates[k1] = twig.twig({ data: this.options.feature[k][k1], autoescape: true })
-        } else {
-          templates[k1] = this.options.feature[k][k1]
-        }
-      }
-
-      this.options.feature[k] = function (templates, ob) {
-        var ret = {}
-        for (var k1 in templates) {
-          if (typeof templates[k1] === 'object' && templates[k1] !== null && 'render' in templates[k1]) {
-            ret[k1] = templates[k1].render(ob)
-          } else {
-            ret[k1] = templates[k1]
-          }
-        }
-        return ret
-      }.bind(this, templates)
-    }
-  }
+  compileFeature(this.options.feature, twig)
 
   this.currentRequest = null
   this.lastZoom = null
