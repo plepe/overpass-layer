@@ -80,19 +80,21 @@ function OverpassLayer (options) {
   this._scheduledReprocesses = {}
 
   this.mainlayer = new Sublayer(this, options)
+
+  this.subLayers = [ this.mainlayer ]
 }
 
 OverpassLayer.prototype.addTo = function (map) {
   this.map = map
   this.map.on('moveend', this.check_update_map, this)
-  this.mainlayer.addTo(map)
+  this.subLayers.forEach(layer => layer.addTo(map))
   this.check_update_map()
 }
 
 OverpassLayer.prototype.remove = function () {
   var k
 
-  this.mainlayer.hideAll(true)
+  this.subLayers.forEach(layer => layer.hideAll(true))
 
   this.abortRequest()
 
@@ -121,7 +123,7 @@ OverpassLayer.prototype.check_update_map = function () {
 
   if (this.map.getZoom() < this.options.minZoom ||
      (this.options.maxZoom !== null && this.map.getZoom() > this.options.maxZoom)) {
-    this.mainlayer.hideAll()
+    this.subLayers.forEach(layer => layer.hideAll())
 
     // abort remaining request
     this.abortRequest()
@@ -129,11 +131,11 @@ OverpassLayer.prototype.check_update_map = function () {
     return
   }
 
-  this.mainlayer.hideNonVisible(bounds)
+  this.subLayers.forEach(layer => layer.hideNonVisible(bounds))
 
   // When zoom level changed, update visible objects
   if (this.lastZoom !== this.map.getZoom()) {
-    this.mainlayer.zoomChange()
+    this.subLayers.forEach(layer => layer.zoomChange())
     this.lastZoom = this.map.getZoom()
   }
 
@@ -150,7 +152,7 @@ OverpassLayer.prototype.check_update_map = function () {
     return
   }
 
-  this.mainlayer.startAdding()
+  this.subLayers.forEach(layer => layer.startAdding())
 
   this.currentRequest = this.overpassFrontend.BBoxQuery(query, bounds,
     this.options.queryOptions,
@@ -174,7 +176,7 @@ OverpassLayer.prototype.check_update_map = function () {
         })
       }
 
-      this.mainlayer.finishAdding()
+      this.subLayers.forEach(layer => layer.finishAdding())
 
       this.currentRequest = null
     }.bind(this)
@@ -188,15 +190,15 @@ OverpassLayer.prototype.check_update_map = function () {
 }
 
 OverpassLayer.prototype.recalc = function () {
-  this.mainlayer.recalc()
+  this.subLayers.forEach(layer => layer.recalc())
 }
 
 OverpassLayer.prototype.scheduleReprocess = function (id) {
-  this.mainlayer.scheduleReprocess(id)
+  this.subLayers.forEach(layer => layer.scheduleReprocess(id))
 }
 
 OverpassLayer.prototype.updateAssets = function (div, objectData) {
-  this.mainlayer.updateAssets(div, objectData)
+  this.subLayers.forEach(layer => layer.updateAssets(div, objectData))
 }
 
 OverpassLayer.prototype.get = function (id, callback) {
