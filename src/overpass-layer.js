@@ -43,6 +43,24 @@ function OverpassLayer (options) {
   this.mainlayer = new Sublayer(this, options)
 
   this.subLayers = [ this.mainlayer ]
+
+  if (this.options.members) {
+    this.options.queryOptions.properties = OverpassFrontend.TAGS | OverpassFrontend.META | OverpassFrontend.MEMBERS | OverpassFrontend.BBOX
+    this.options.queryOptions.memberProperties = OverpassFrontend.ALL
+    this.options.queryOptions.members = true
+
+    let memberOptions = {
+      minZoom: this.options.minZoom,
+      maxZoom: this.options.maxZoom,
+      feature: this.options.memberFeature,
+      styleNoBindPopup: this.options.styleNoBindPopup || [],
+      stylesNoAutoShow: this.options.stylesNoAutoShow || []
+    }
+    compileFeature(memberOptions.feature, twig)
+
+    this.memberlayer = new Sublayer(this, memberOptions)
+    this.subLayers.push(this.memberlayer)
+  }
 }
 
 OverpassLayer.prototype.addTo = function (map) {
@@ -114,6 +132,17 @@ OverpassLayer.prototype.check_update_map = function () {
   }
 
   this.subLayers.forEach(layer => layer.startAdding())
+
+  if (this.options.members) {
+    this.options.queryOptions.memberBounds = bounds
+    this.options.queryOptions.memberCallback = (err, ob) => {
+      if (err) {
+        return console.error('unexpected error', err)
+      }
+
+      this.memberlayer.add(ob)
+    }
+  }
 
   this.currentRequest = this.overpassFrontend.BBoxQuery(query, bounds,
     this.options.queryOptions,
