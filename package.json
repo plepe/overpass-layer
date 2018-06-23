@@ -5,6 +5,7 @@
   "dependencies": {
     "boundingbox": "*",
     "browserify-css": "^0.14.0",
+    "event-emitter": "^0.3.5",
     "html-escape": "^2.0.0",
     "overpass-frontend": "*",
     "twig": "1.11.1"
