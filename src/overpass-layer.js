@@ -40,7 +40,6 @@ function OverpassLayer (options) {
 
   this.currentRequest = null
   this.lastZoom = null
-  this._scheduledReprocesses = {}
 
   this.mainlayer = new Sublayer(this, options)
 
