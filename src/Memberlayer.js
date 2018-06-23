@@ -1,6 +1,25 @@
 const Sublayer = require('./Sublayer')
 
 class Memberlayer extends Sublayer {
+  constructor (master, options) {
+    super(master, options)
+
+    this.master.mainlayer.on('add', this.featureOnMainModified.bind(this))
+    this.master.mainlayer.on('remove', this.featureOnMainModified.bind(this))
+  }
+
+  featureOnMainModified (feature) {
+    if (!feature.members) {
+      return
+    }
+
+    feature.members.forEach(member => {
+      if (member.id in this.visibleFeatures) {
+        this.scheduleReprocess(member.id)
+      }
+    })
+  }
+
   twigData (ob) {
     let result = super.twigData(ob)
 
