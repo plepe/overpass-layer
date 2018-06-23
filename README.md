@@ -55,6 +55,12 @@ The templates will be rendered when the object becomes visible and when the zoom
 * `members[].meta`: meta of member (if loaded)
 * `members[].sequence`: member is nth element
 * `members[].role`: member has role
+* `masters`: Array of links to current master objects:
+* `masters[].id`: id of relation
+* `masters[].tags`: tags of relation
+* `masters[].meta`: meta of relation
+* `masters[].sequence`: current object is nth member
+* `masters[].role`: current object has role
 * `map.zoom` (Current zoom level)
 * `const.*` (Values from the 'const' option)
 
