@@ -10,6 +10,7 @@ class Sublayer {
     this.shownFeatures = {} // features which are forcibly shown
     this.shownFeatureOptions = {}
     this.lastZoom = null
+    this._scheduledReprocesses = {}
   }
 
   addTo (map) {
@@ -214,7 +215,7 @@ class Sublayer {
       styles: []
     }
 
-    delete this.master._scheduledReprocesses[data.id]
+    delete this._scheduledReprocesses[data.id]
 
     if (ob.id in this.shownFeatureOptions) {
       this.shownFeatureOptions[ob.id].forEach(function (opt) {
