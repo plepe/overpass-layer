@@ -1,3 +1,5 @@
+const ee = require('event-emitter')
+
 const styleToLeaflet = require('./styleToLeaflet')
 const strToStyle = require('./strToStyle')
 const SublayerFeature = require('./SublayerFeature')
@@ -69,6 +71,8 @@ class Sublayer {
       if (this.master.onAppear) {
         this.master.onAppear(data)
       }
+
+      this.emit('add', ob, data)
     }
   }
 
@@ -586,6 +590,8 @@ class Sublayer {
       this.master.onDisappear(data)
     }
 
+    this.emit('remove', data.object, data)
+
     data.isShown = false
   }
 
@@ -603,5 +609,7 @@ class Sublayer {
     this.options.updateAssets(div, objectData, this)
   }
 }
+
+ee(Sublayer.prototype)
 
 module.exports = Sublayer
