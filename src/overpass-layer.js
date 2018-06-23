@@ -7,6 +7,7 @@ var OverpassFrontend = require('overpass-frontend')
 var escapeHtml = require('html-escape')
 var isTrue = require('./isTrue')
 var Sublayer = require('./Sublayer')
+var Memberlayer = require('./Memberlayer')
 var compileFeature = require('./compileFeature')
 
 function OverpassLayer (options) {
@@ -58,7 +59,7 @@ function OverpassLayer (options) {
     }
     compileFeature(memberOptions.feature, twig)
 
-    this.memberlayer = new Sublayer(this, memberOptions)
+    this.memberlayer = new Memberlayer(this, memberOptions)
     this.subLayers.push(this.memberlayer)
   }
 }
