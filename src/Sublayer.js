@@ -276,8 +276,6 @@ class Sublayer {
       styles: []
     }
 
-    delete this._scheduledReprocesses[data.id]
-
     if (ob.id in this.shownFeatureOptions) {
       this.shownFeatureOptions[ob.id].forEach(function (opt) {
         if ('styles' in opt) {
@@ -597,7 +595,13 @@ class Sublayer {
 
   scheduleReprocess (id) {
     if (!(id in this._scheduledReprocesses)) {
-      this._scheduledReprocesses[id] = window.setTimeout(this._processObject.bind(this, this.visibleFeatures[id]), 0)
+      this._scheduledReprocesses[id] = window.setTimeout(() => {
+        delete this._scheduledReprocesses[id]
+
+        if (id in this.visibleFeatures) {
+          this._processObject(this.visibleFeatures[id])
+        }
+      }, 0)
     }
   }
 
