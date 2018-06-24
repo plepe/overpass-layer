@@ -93,6 +93,7 @@ OverpassLayerList.prototype.addObject = function (ob) {
   a.className = 'title'
   a.href = 'appUrl' in ob.data ? ob.data.appUrl : '#'
   a.onclick = function (ob) {
+    console.log(ob.object.closestPointTo(map.getCenter()))
     ob.feature.openPopup()
     return false
   }.bind(this, ob)
