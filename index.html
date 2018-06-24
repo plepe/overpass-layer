@@ -28,6 +28,7 @@ window.onload = function() {
 
   if (!location.search) {
     document.body.classList.add('hasInfo')
+    map.invalidateSize()
     var list = [ 'demo1', 'demo2', 'demo3', 'demo4', 'demo5', 'demo6' ]
     var ul = document.createElement('ul')
     document.getElementById('info').appendChild(ul)
@@ -41,6 +42,9 @@ window.onload = function() {
     var script = document.createElement('script')
     script.src = 'demo/' + location.search.substr(1) + '.js'
     document.body.appendChild(script)
+    script.onload = () => {
+      map.invalidateSize()
+    }
   }
 }
   </script>
