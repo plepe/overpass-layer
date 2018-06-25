@@ -5,6 +5,7 @@ var BoundingBox = require('boundingbox')
 var twig = require('twig')
 var OverpassFrontend = require('overpass-frontend')
 var escapeHtml = require('html-escape')
+const nearestPointOnGeometry = require('nearest-point-on-geometry')
 var isTrue = require('./isTrue')
 
 var styleLeafletBooleanValues = [ 'stroke', 'fill', 'textRepeat', 'textBelow', 'noClip' ]
@@ -730,6 +731,19 @@ OverpassLayer.prototype.hide = function (id) {
     if (!(id in this.visibleFeatures)) {
       this._hide(ob)
     }
+  }
+}
+
+OverpassLayer.prototype.openPopupNearCenter = function (ob) {
+  let pt = map.getCenter()
+  let geom = ob.object.GeoJSON()
+  let pos = nearestPointOnGeometry(geom, { type: 'Feature', geometry: { type: 'Point', coordinates: [ pt.lng, pt.lat ] }})
+  if (pos) {
+    pos = pos.geometry.coordinates
+    ob.popup.setLatLng(pos[1], pos[0])
+    ob.feature.openPopup([pos[1], pos[0]])
+  } else {
+    ob.feature.openPopup()
   }
 }
 
