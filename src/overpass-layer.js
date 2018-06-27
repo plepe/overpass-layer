@@ -5,6 +5,7 @@ var BoundingBox = require('boundingbox')
 var twig = require('twig')
 var OverpassFrontend = require('overpass-frontend')
 var escapeHtml = require('html-escape')
+const nearestPointOnGeometry = require('nearest-point-on-geometry')
 var isTrue = require('./isTrue')
 
 var styleLeafletBooleanValues = [ 'stroke', 'fill', 'textRepeat', 'textBelow', 'noClip' ]
@@ -731,6 +732,27 @@ OverpassLayer.prototype.hide = function (id) {
       this._hide(ob)
     }
   }
+}
+
+OverpassLayer.prototype.openPopupOnObject = function (ob) {
+  // When object is quite smaller than current view, show popup on feature
+  let viewBounds = new BoundingBox(this.map.getBounds())
+  let obBounds = new BoundingBox(ob.object.bounds)
+  if (obBounds.diagonalLength() * 0.75 < viewBounds.diagonalLength()) {
+    return ob.feature.openPopup()
+  }
+
+  // otherwise, try to find point on geometry closest to center of view
+  let pt = this.map.getCenter()
+  let geom = ob.object.GeoJSON()
+  let pos = nearestPointOnGeometry(geom, { type: 'Feature', geometry: { type: 'Point', coordinates: [ pt.lng, pt.lat ] }})
+  if (pos) {
+    pos = pos.geometry.coordinates
+    return ob.feature.openPopup([pos[1], pos[0]])
+  }
+
+  // no point found? use normal object popup open then ...
+  ob.feature.openPopup()
 }
 
 function strToStyle (style) {

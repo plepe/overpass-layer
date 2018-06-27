@@ -67,7 +67,7 @@ OverpassLayerList.prototype.addObject = function (ob) {
   p.className = 'markerParent'
   p.href = 'appUrl' in ob.data ? ob.data.appUrl : '#'
   p.onclick = function (ob) {
-    ob.feature.openPopup()
+    this.layer.openPopupOnObject(ob)
     return false
   }.bind(this, ob)
   div.appendChild(p)
@@ -93,7 +93,7 @@ OverpassLayerList.prototype.addObject = function (ob) {
   a.className = 'title'
   a.href = 'appUrl' in ob.data ? ob.data.appUrl : '#'
   a.onclick = function (ob) {
-    ob.feature.openPopup()
+    this.layer.openPopupOnObject(ob)
     return false
   }.bind(this, ob)
   a.innerHTML = ob.data.title
