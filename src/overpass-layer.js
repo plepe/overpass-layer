@@ -745,7 +745,7 @@ OverpassLayer.prototype.openPopupOnObject = function (ob) {
   // otherwise, try to find point on geometry closest to center of view
   let pt = this.map.getCenter()
   let geom = ob.object.GeoJSON()
-  let pos = nearestPointOnGeometry(geom, { type: 'Feature', geometry: { type: 'Point', coordinates: [ pt.lng, pt.lat ] }})
+  let pos = nearestPointOnGeometry(geom, { type: 'Feature', geometry: { type: 'Point', coordinates: [ pt.lng, pt.lat ] } })
   if (pos) {
     pos = pos.geometry.coordinates
     return ob.feature.openPopup([pos[1], pos[0]])
