@@ -222,6 +222,14 @@ class Sublayer {
 
     var objectData = this.evaluate(data)
 
+    if (!data.feature) {
+      data.feature = ob.leafletFeature({
+        weight: 0,
+        opacity: 0,
+        fillOpacity: 0
+      })
+    }
+
     for (k in objectData) {
       var m = k.match(/^style(|:(.*))$/)
       if (m) {
@@ -330,6 +338,7 @@ class Sublayer {
 
     if (data.isShown) {
       for (k in data.features) {
+        data.feature.addTo(this.map)
         if (objectData.styles && objectData.styles.indexOf(k) !== -1 && data.styles && data.styles.indexOf(k) === -1) {
           data.features[k].addTo(this.map)
         }
@@ -339,10 +348,6 @@ class Sublayer {
       }
     }
     data.styles = objectData.styles
-
-    data.feature = data.styles.length
-      ? data.features[data.styles[0]]
-      : null
 
     var popupContent = ''
     popupContent += '<h1>' + objectData.title + '</h1>'
@@ -365,6 +370,7 @@ class Sublayer {
       data.popup = L.popup().setContent(popupContent)
       data.popup.object = data
 
+      data.feature.bindPopup(data.popup)
       for (k in data.features) {
         if (this._shallBindPopupToStyle(k)) {
           data.features[k].bindPopup(data.popup)
@@ -469,16 +475,13 @@ class Sublayer {
       return
     }
 
+    data.feature.addTo(this.map)
     for (var i = 0; i < data.styles.length; i++) {
       var k = data.styles[i]
       if (k in data.features) {
         data.features[k].addTo(this.map)
       }
     }
-
-    data.feature = data.styles.length
-      ? data.features[data.styles[0]]
-      : null
 
     if (data.featureMarker) {
       data.featureMarker.addTo(this.map)
