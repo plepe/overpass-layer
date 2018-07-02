@@ -1,5 +1,6 @@
 const styleToLeaflet = require('./styleToLeaflet')
 const strToStyle = require('./strToStyle')
+const SublayerFeature = require('./SublayerFeature')
 
 class Sublayer {
   constructor (master, options) {
@@ -24,10 +25,7 @@ class Sublayer {
     this.currentRequestFeatures[ob.id] = true
 
     if (!(ob.id in this.visibleFeatures)) {
-      var data = {
-        object: ob,
-        isShown: false
-      }
+      var data = new SublayerFeature(ob, this)
 
       if (ob.id in this.shownFeatures) {
         data = this.shownFeatures[ob.id]
@@ -137,10 +135,8 @@ class Sublayer {
       data = this.shownFeatures[id]
       this.shownFeatureOptions[id].push(options)
     } else {
-      data = {
-        object: ob,
-        isShown: true
-      }
+      data = new SublayerFeature(ob, this)
+      data.isShown = true
       this.shownFeatures[id] = data
 
       this.shownFeatureOptions[id] = [ options ]
