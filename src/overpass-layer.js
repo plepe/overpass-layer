@@ -227,37 +227,12 @@ OverpassLayer.prototype.get = function (id, callback) {
 }
 
 OverpassLayer.prototype.show = function (id, options, callback) {
-  let instantHide = false // called hide before loading finished
-  let sublayerData
-
-  var result = {
+  let request = this.mainlayer.show(id, options)
+  let result = {
     id: id,
     options: options,
-    hide: function () {
-      instantHide = true
-
-      if (sublayerData) {
-        sublayerData.hide()
-      }
-
-    }.bind(this)
+    hide: request.hide
   }
-
-  this.get(id,
-    function (err, ob) {
-      if (err) {
-        return callback(err, ob)
-      }
-
-      if (instantHide) {
-        return callback(null, ob)
-      }
-
-      sublayerData = this.mainlayer.show(ob, options)
-
-      callback(err, sublayerData.data)
-    }.bind(this)
-  )
 
   return result
 }

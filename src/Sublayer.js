@@ -188,41 +188,13 @@ class Sublayer {
     return result
   }
 
-  show (ob, options) {
-    if (typeof ob === 'string') {
-      return this.master.get(ob, (err, ob) => this.show.bind(this, ob, options))
-    }
-
-    let id = ob.id
-    let data
-
-    if (id in this.visibleFeatures) {
-      data = this.shownFeatures[id] = this.visibleFeatures[id]
-      if (!(id in this.shownFeatureOptions)) {
-        this.shownFeatureOptions[id] = []
-      }
-    }
-
-    if (id in this.shownFeatures) {
-      data = this.shownFeatures[id]
-      this.shownFeatureOptions[id].push(options)
-    } else {
-      data = new SublayerFeature(ob, this)
-      data.isShown = true
-      this.shownFeatures[id] = data
-
-      this.shownFeatureOptions[id] = [ options ]
-    }
-
-    this._processObject(this.shownFeatures[id])
-
-    this._show(this.shownFeatures[id])
-
-    return {
-      id,
+  show (data, options) {
+    let isHidden = false
+    let result = {
       options,
-      data,
       hide: () => {
+        isHidden = true
+
         if (id in this.shownFeatures) {
           var i = this.shownFeatureOptions[id].indexOf(options)
           if (i !== -1) {
@@ -237,6 +209,44 @@ class Sublayer {
         }
       }
     }
+
+    if (typeof data === 'string') {
+      let request = this.get(data, options, (err, data) => {
+        if (isHidden) {
+          return
+        }
+
+        if (err) {
+          return
+        }
+
+        let r = this.show(data, options)
+        result.hide = r.hide
+      })
+
+      result.id = data
+      result.hide = () => {
+        request.abort()
+      }
+
+      return result
+    }
+
+    let id = data.id
+    result.id = id
+    this.shownFeatures[id] = data
+    if (!(id in this.shownFeatureOptions)) {
+      this.shownFeatureOptions[id] = []
+    }
+
+    this.shownFeatureOptions[id].push(options)
+    data.isShown = true
+
+    this._processObject(data)
+
+    this._show(data)
+
+    return result
   }
 
   hide (id) {
