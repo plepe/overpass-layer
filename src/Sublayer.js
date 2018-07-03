@@ -78,13 +78,6 @@ class Sublayer {
           this._hide(this.visibleFeatures[k])
         }
 
-        if (this.master.layerList) {
-          this.master.layerList.delObject(this.visibleFeatures[k])
-        }
-        if (this.master.onDisappear) {
-          this.master.onDisappear(this.visibleFeatures[k])
-        }
-
         delete this.visibleFeatures[k]
       }
     }
@@ -93,13 +86,6 @@ class Sublayer {
   hideAll (force) {
     for (let k in this.visibleFeatures) {
       let ob = this.visibleFeatures[k]
-
-      if (this.master.layerList) {
-        this.master.layerList.delObject(ob)
-      }
-      if (this.master.onDisappear) {
-        this.master.onDisappear(ob)
-      }
 
       if (force || !(ob.id in this.shownFeatures)) {
         this._hide(ob)
@@ -115,13 +101,6 @@ class Sublayer {
       let ob = this.visibleFeatures[k]
 
       if (!ob.object.intersects(bounds)) {
-        if (this.master.layerList) {
-          this.master.layerList.delObject(ob)
-        }
-        if (this.master.onDisappear) {
-          this.master.onDisappear(ob)
-        }
-
         if (!(ob.id in this.shownFeatures)) {
           this._hide(ob)
         }
@@ -580,6 +559,13 @@ class Sublayer {
 
     if (data.featureMarker) {
       this.map.removeLayer(data.featureMarker)
+    }
+
+    if (this.master.layerList) {
+      this.master.layerList.delObject(data)
+    }
+    if (this.master.onDisappear) {
+      this.master.onDisappear(data)
     }
 
     data.isShown = false
