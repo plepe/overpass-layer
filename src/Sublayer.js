@@ -131,14 +131,61 @@ class Sublayer {
     }
   }
 
-  get (id) {
+  get (id, options, callback) {
+    let isAborted = false
+    let isDone = false
+
+    let result = {
+      id, options,
+      abort: () => {
+        if (isDone) {
+          console.log('abort called, although done')
+          return
+        }
+
+        isAborted = true
+        isDone = true
+        result.request.abort()
+        callback('abort', null)
+      }
+    }
+
     if (id in this.visibleFeatures) {
-      return this.visibleFeatures[id]
+      isDone = true
+      callback(null, this.visibleFeatures[id])
+      return result
     }
 
     if (id in this.shownFeatures) {
-      return this.shownFeatures[id]
+      isDone = true
+      callback(null, this.shownFeatures[id])
+      return result
     }
+
+    result.request = this.master.get(id, (err, ob) => {
+      isDone = true
+
+      if (err) {
+        return callback(err)
+      }
+
+      if (isAborted) {
+        return
+      }
+
+      let data
+      if (id in this.visibleFeatures) {
+        data = this.visibleFeatures[id]
+      } else if (id in this.shownFeatures) {
+        data = this.shownFeatures[id]
+      } else {
+        data = new SublayerFeature(ob, this)
+      }
+
+      callback(null, data)
+    })
+
+    return result
   }
 
   show (ob, options) {
