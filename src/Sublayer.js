@@ -3,6 +3,7 @@ const ee = require('event-emitter')
 const styleToLeaflet = require('./styleToLeaflet')
 const strToStyle = require('./strToStyle')
 const SublayerFeature = require('./SublayerFeature')
+const nearestPointOnGeometry = require('nearest-point-on-geometry')
 
 class Sublayer {
   constructor (master, options) {
@@ -655,6 +656,31 @@ class Sublayer {
     }
 
     this.options.updateAssets(div, objectData, this)
+  }
+
+  openPopupOnObject (ob, options) {
+    if (typeof ob === 'string') {
+      return this.get(ob, options, (err, ob) => this.openPopupOnObject(ob, options))
+    }
+
+    // When object is quite smaller than current view, show popup on feature
+    let viewBounds = new BoundingBox(this.map.getBounds())
+    let obBounds = new BoundingBox(ob.object.bounds)
+    if (obBounds.diagonalLength() * 0.75 < viewBounds.diagonalLength()) {
+      return ob.feature.openPopup()
+    }
+
+    // otherwise, try to find point on geometry closest to center of view
+    let pt = this.map.getCenter()
+    let geom = ob.object.GeoJSON()
+    let pos = nearestPointOnGeometry(geom, { type: 'Feature', geometry: { type: 'Point', coordinates: [ pt.lng, pt.lat ] } })
+    if (pos) {
+      pos = pos.geometry.coordinates
+      return ob.feature.openPopup([pos[1], pos[0]])
+    }
+
+    // no point found? use normal object popup open then ...
+    ob.feature.openPopup()
   }
 }
 
