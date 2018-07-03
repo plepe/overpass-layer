@@ -172,6 +172,7 @@ class Sublayer {
     return result
   }
 
+
   show (data, options) {
     let isHidden = false
     let result = {
