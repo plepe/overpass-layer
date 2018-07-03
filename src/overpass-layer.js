@@ -97,6 +97,7 @@ OverpassLayer.prototype.remove = function () {
   var k
 
   this.mainlayer.hideAll(true)
+  this.mainlayer.remove()
 
   this.abortRequest()
 

@@ -38,6 +38,10 @@ class Sublayer {
     this.map = map
   }
 
+  remove () {
+    this.map = null
+  }
+
   startAdding () {
     this.currentRequestFeatures = {}
   }
