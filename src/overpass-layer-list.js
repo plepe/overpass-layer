@@ -119,6 +119,22 @@ OverpassLayerList.prototype.addObject = function (ob) {
   }
 
   this.layer.updateAssets(this.dom, ob.data)
+
+  ob.listItem.onmouseover = function (id) {
+    if (this.currentHover) {
+      this.currentHover.hide()
+    }
+
+    this.currentHover = this.layer.show(id, { styles: [ 'hover' ] }, function () {})
+  }.bind(this, ob.id)
+
+  ob.listItem.onmouseout = function (id) {
+    if (this.currentHover) {
+      this.currentHover.hide()
+    }
+
+    this.currentHover = null
+  }.bind(this, ob.id)
 }
 
 OverpassLayerList.prototype.updateObject = function (ob) {

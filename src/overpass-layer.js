@@ -88,6 +88,9 @@ OverpassLayer.prototype.addTo = function (map) {
   this.map.on('moveend', this.check_update_map, this)
   this.mainlayer.addTo(map)
   this.check_update_map()
+
+  this.map.createPane('hover')
+  this.map.getPane('hover').style.zIndex = 499
 }
 
 OverpassLayer.prototype.remove = function () {

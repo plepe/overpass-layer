@@ -11,6 +11,27 @@ class Sublayer {
     this.shownFeatures = {} // features which are forcibly shown
     this.shownFeatureOptions = {}
     this.lastZoom = null
+
+    if (!options.feature['style:hover']) {
+      options.feature['style:hover'] = {
+        color: 'black',
+        width: 3,
+        opacity: 1,
+        radius: 12,
+        pane: 'hover'
+      }
+    }
+
+    if (options.styleNoBindPopup) {
+      options.styleNoBindPopup.push('hover')
+    } else {
+      options.styleNoBindPopup = [ 'hover' ]
+    }
+    if (options.stylesNoAutoShow) {
+      options.stylesNoAutoShow.push('hover')
+    } else {
+      options.stylesNoAutoShow = [ 'hover' ]
+    }
   }
 
   addTo (map) {
