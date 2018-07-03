@@ -216,11 +216,22 @@ class Sublayer {
 
 
   show (data, options) {
+    let id = typeof data === 'string' ? data : data.id
     let isHidden = false
     let result = {
       options,
       hide: () => {
+        if (isHidden) {
+          console.log('already hidden')
+        }
+
         isHidden = true
+
+        if (result.request) {
+          result.request.abort()
+          delete result.request
+          return
+        }
 
         if (id in this.shownFeatures) {
           var i = this.shownFeatureOptions[id].indexOf(options)
@@ -238,7 +249,9 @@ class Sublayer {
     }
 
     if (typeof data === 'string') {
-      let request = this.get(data, options, (err, data) => {
+      result.request = this.get(data, options, (err, _data) => {
+        delete result.request
+
         if (isHidden) {
           return
         }
@@ -247,31 +260,30 @@ class Sublayer {
           return
         }
 
-        let r = this.show(data, options)
-        result.hide = r.hide
-      })
+        data = _data
 
-      result.id = data
-      result.hide = () => {
-        request.abort()
+        show1()
+      })
+    } else {
+      show1()
+    }
+
+    let show1 = () => {
+      id = data.id
+      result.id = id
+
+      this.shownFeatures[id] = data
+      if (!(id in this.shownFeatureOptions)) {
+        this.shownFeatureOptions[id] = []
       }
 
-      return result
+      this.shownFeatureOptions[id].push(options)
+      data.isShown = true
+
+      this._processObject(data)
+
+      this._show(data)
     }
-
-    let id = data.id
-    result.id = id
-    this.shownFeatures[id] = data
-    if (!(id in this.shownFeatureOptions)) {
-      this.shownFeatureOptions[id] = []
-    }
-
-    this.shownFeatureOptions[id].push(options)
-    data.isShown = true
-
-    this._processObject(data)
-
-    this._show(data)
 
     return result
   }
