@@ -43,7 +43,9 @@ function OverpassLayer (options) {
 
   this.mainlayer = new Sublayer(this, options)
 
-  this.subLayers = [ this.mainlayer ]
+  this.subLayers = {
+    main: this.mainlayer
+  }
 
   if (this.options.members) {
     this.options.queryOptions.properties = OverpassFrontend.TAGS | OverpassFrontend.META | OverpassFrontend.MEMBERS | OverpassFrontend.BBOX
@@ -61,14 +63,16 @@ function OverpassLayer (options) {
     compileFeature(memberOptions.feature, twig)
 
     this.memberlayer = new Memberlayer(this, memberOptions)
-    this.subLayers.push(this.memberlayer)
+    this.subLayers.member = this.memberlayer
   }
 }
 
 OverpassLayer.prototype.addTo = function (map) {
   this.map = map
   this.map.on('moveend', this.check_update_map, this)
-  this.subLayers.forEach(layer => layer.addTo(map))
+  for (let k in this.subLayers) {
+    this.subLayers[k].addTo(map)
+  }
   this.check_update_map()
 
   this.map.createPane('hover')
@@ -78,8 +82,10 @@ OverpassLayer.prototype.addTo = function (map) {
 OverpassLayer.prototype.remove = function () {
   var k
 
-  this.subLayers.forEach(layer => layer.hideAll(true))
-  this.subLayers.forEach(layer => layer.remove())
+  for (let k in this.subLayers) {
+    this.subLayers[k].hideAll(true)
+    this.subLayers[k].remove()
+  }
 
   this.abortRequest()
 
@@ -108,7 +114,9 @@ OverpassLayer.prototype.check_update_map = function () {
 
   if (this.map.getZoom() < this.options.minZoom ||
      (this.options.maxZoom !== null && this.map.getZoom() > this.options.maxZoom)) {
-    this.subLayers.forEach(layer => layer.hideAll())
+    for (let k in this.subLayers) {
+      this.subLayers[k].hideAll()
+    }
 
     // abort remaining request
     this.abortRequest()
@@ -116,11 +124,15 @@ OverpassLayer.prototype.check_update_map = function () {
     return
   }
 
-  this.subLayers.forEach(layer => layer.hideNonVisible(bounds))
+  for (let k in this.subLayers) {
+    this.subLayers[k].hideNonVisible(bounds)
+  }
 
   // When zoom level changed, update visible objects
   if (this.lastZoom !== this.map.getZoom()) {
-    this.subLayers.forEach(layer => layer.zoomChange())
+    for (let k in this.subLayers) {
+      this.subLayers[k].zoomChange()
+    }
     this.lastZoom = this.map.getZoom()
   }
 
@@ -137,7 +149,9 @@ OverpassLayer.prototype.check_update_map = function () {
     return
   }
 
-  this.subLayers.forEach(layer => layer.startAdding())
+  for (let k in this.subLayers) {
+    this.subLayers[k].startAdding()
+  }
 
   if (this.options.members) {
     this.options.queryOptions.memberBounds = bounds
@@ -172,7 +186,9 @@ OverpassLayer.prototype.check_update_map = function () {
         })
       }
 
-      this.subLayers.forEach(layer => layer.finishAdding())
+      for (let k in this.subLayers) {
+        this.subLayers[k].finishAdding()
+      }
 
       this.currentRequest = null
     }.bind(this)
@@ -186,15 +202,21 @@ OverpassLayer.prototype.check_update_map = function () {
 }
 
 OverpassLayer.prototype.recalc = function () {
-  this.subLayers.forEach(layer => layer.recalc())
+  for (let k in this.subLayers) {
+    this.subLayers[k].recalc()
+  }
 }
 
 OverpassLayer.prototype.scheduleReprocess = function (id) {
-  this.subLayers.forEach(layer => layer.scheduleReprocess(id))
+  for (let k in this.subLayers) {
+    this.subLayers[k].scheduleReprocess(id)
+  }
 }
 
 OverpassLayer.prototype.updateAssets = function (div, objectData) {
-  this.subLayers.forEach(layer => layer.updateAssets(div, objectData))
+  for (let k in this.subLayers) {
+    this.subLayers[k].updateAssets(div, objectData)
+  }
 }
 
 OverpassLayer.prototype.get = function (id, callback) {
