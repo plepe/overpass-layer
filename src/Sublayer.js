@@ -152,13 +152,13 @@ class Sublayer {
 
     if (id in this.visibleFeatures) {
       isDone = true
-      callback(null, this.visibleFeatures[id])
+      window.setTimeout(() => callback(null, this.visibleFeatures[id]), 0)
       return result
     }
 
     if (id in this.shownFeatures) {
       isDone = true
-      callback(null, this.shownFeatures[id])
+      window.setTimeout(() => callback(null, this.shownFeatures[id]), 0)
       return result
     }
 
