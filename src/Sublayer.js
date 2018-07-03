@@ -160,20 +160,30 @@ class Sublayer {
 
         isAborted = true
         isDone = true
-        result.request.abort()
+        if (result.request) {
+          result.request.abort()
+        }
         callback('abort', null)
       }
     }
 
     if (id in this.visibleFeatures) {
-      isDone = true
-      window.setTimeout(() => callback(null, this.visibleFeatures[id]), 0)
+      window.setTimeout(() => {
+        isDone = true
+        if (!isAborted) {
+          callback(null, this.visibleFeatures[id])
+        }
+      }, 0)
       return result
     }
 
     if (id in this.shownFeatures) {
-      isDone = true
-      window.setTimeout(() => callback(null, this.shownFeatures[id]), 0)
+      window.setTimeout(() => {
+        isDone = true
+        if (!isAborted) {
+          callback(null, this.shownFeatures[id])
+        }
+      }, 0)
       return result
     }
 
