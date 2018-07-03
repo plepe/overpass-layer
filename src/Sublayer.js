@@ -39,6 +39,37 @@ class Sublayer {
 
   addTo (map) {
     this.map = map
+
+    this.map.on('popupopen', e => {
+      if (e.popup.sublayer === this) {
+        this.domUpdateHooks(e.popup._contentNode)
+      }
+    })
+  }
+
+  domUpdateHooks (node) {
+    if (node.getAttribute) {
+      let id = node.getAttribute('object')
+      let sublayerId = node.getAttribute('sublayer') || 'main'
+
+      if (id) {
+        node.onmouseover = () => {
+          this.master.subLayers[sublayerId].show(id, { styles: [ 'hover'] }, function () {})
+        }
+        node.onmouseout = () => {
+          this.master.subLayers[sublayerId].hide(id)
+        }
+        node.onclick = () => {
+          this.master.subLayers[sublayerId].openPopupOnObject(id)
+        }
+      }
+    }
+
+    let child = node.firstChild
+    while (child) {
+      this.domUpdateHooks(child)
+      child = child.nextSibling
+    }
   }
 
   remove () {
@@ -428,12 +459,14 @@ class Sublayer {
     if (data.popup) {
       if (data.popup._contentNode) {
         data.popup._contentNode.innerHTML = popupContent
+        this.domUpdateHooks(data.popup._contentNode)
       } else {
         data.popup = data.popup.setContent(popupContent)
       }
     } else {
       data.popup = L.popup().setContent(popupContent)
       data.popup.object = data
+      data.popup.sublayer = this
 
       data.feature.bindPopup(data.popup)
       for (k in data.features) {

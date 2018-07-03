@@ -10,7 +10,7 @@ var overpassLayer = new OverpassLayer({
   feature: {
     pre: '{% set prio = {"icn":4,"ncn":3,"rcn":2,"lcn":1}[tags.network] %}',
     styles: [],
-    'body': '{% for member in members %}{{ member.id }} ({{ member.visible }}) {{ member.tags.highway }}<br/>{% endfor %}',
+    'body': '{% for member in members %}<div object="{{ member.id }}" sublayer="member">{{ member.id }} ({{ member.visible }}) {{ member.tags.highway }}</div>{% endfor %}',
     title: '{{ tags.name }} ({{ tags.network }})',
     priority: '{{ 5 - prio }}'
   },
@@ -21,7 +21,7 @@ var overpassLayer = new OverpassLayer({
       width: '{% if map.zoom>=15 %}5{% else %}3{% endif %}'
     },
     title: '{{ id }} {{ prio }}',
-    body: '{% for master in masters %}{{ master.id }}: {{ master.tags.name }}<br/>{% endfor %}',
+    body: '{% for master in masters %}<div object="{{ master.id }}">{{ master.id }}: {{ master.tags.name }}</div>{% endfor %}',
     listExclude: true
   },
   minZoom: 13
