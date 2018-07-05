@@ -52,7 +52,7 @@ function OverpassLayer (options) {
     this.options.queryOptions.members = true
 
     let memberOptions = {
-      id: 'member:' + this.options.id,
+      id: 'member',
       minZoom: this.options.minZoom,
       maxZoom: this.options.maxZoom,
       feature: this.options.memberFeature,

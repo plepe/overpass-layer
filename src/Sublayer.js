@@ -8,6 +8,8 @@ const nearestPointOnGeometry = require('nearest-point-on-geometry')
 class Sublayer {
   constructor (master, options) {
     this.master = master
+
+    options.sublayer_id = options.sublayer_id || 'main'
     this.options = options
 
     this.visibleFeatures = {}
@@ -508,7 +510,7 @@ class Sublayer {
     }
 
     data.id = ob.id
-    data.layer_id = this.options.id
+    data.sublayer_id = this.options.id
     data.data = objectData
 
     if (this.master.layerList) {
@@ -574,7 +576,7 @@ class Sublayer {
   twigData (ob) {
     var result = {
       id: ob.id,
-      layer_id: this.options.id,
+      sublayer_id: this.options.id,
       osm_id: ob.osm_id,
       type: ob.type,
       tags: ob.tags,

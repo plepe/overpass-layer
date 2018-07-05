@@ -6,7 +6,7 @@ Show a Leaflet layer using OpenStreetMap data from Overpass API via overpass-fro
 Create a Layer with an Overpass query and optional options.
 
 Options:
-* id: an optional id, which will be passed as `layer_id` to twig templates (see below).
+* id: an optional id, which will be passed as `sublayer_id` to twig templates (see below).
 * query: e.g. `node[natural=tree];`. Combine queries with: `(way[building];relation[building];);`. Optionally zoom-dependend queries can be given by using an object with the minimum zoom level as index, e.g. `{ 13: 'way[landuse=forest]', 15: '(way[landuse=forest];node[natural=tree];)' }`: zoom levels 13 and 14 all forests will be shown, from zoom level 15 all forests and trees.
 * overpassFrontend: An OverpassFrontend object (defaults to the global variable `overpassFrontend`)
 * minZoom: Show layer only from the given zoom level (default: 16)
@@ -41,7 +41,7 @@ The templates will be rendered when the object becomes visible and when the zoom
 
 * `id` (the id of the object is always available, prefixed 'n' for nodes, 'w' for ways and 'r' for relations; e.g. 'n1234')
 * `osm_id` (the numerical id of the object)
-* `layer_id` (the id of the layer)
+* `sublayer_id` (the id of the sub layer)
 * `type` ('node', 'way' or 'relation')
 * `tags.*` (all tags are available with the prefix `tags.`, e.g. `tags.amenity`)
 * `meta.timestamp` (timestamp of last modification)
