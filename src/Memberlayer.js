@@ -6,6 +6,14 @@ class Memberlayer extends Sublayer {
 
     this.master.mainlayer.on('add', this.featureOnMainModified.bind(this))
     this.master.mainlayer.on('remove', this.featureOnMainModified.bind(this))
+    this.on('add', this.featureMemberModified.bind(this))
+    this.on('remove', this.featureMemberModified.bind(this))
+  }
+
+  featureMemberModified (feature, data) {
+    feature.memberOf.forEach(master => {
+      this.master.mainlayer.scheduleReprocess(master.relation.id)
+    })
   }
 
   featureOnMainModified (feature) {
