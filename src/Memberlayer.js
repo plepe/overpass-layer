@@ -4,15 +4,17 @@ class Memberlayer extends Sublayer {
   constructor (master, options) {
     super(master, options)
 
-    this.master.mainlayer.on('add', this.featureOnMainModified.bind(this))
-    this.master.mainlayer.on('remove', this.featureOnMainModified.bind(this))
+    this.masterlayer = this.master.mainlayer
+
+    this.masterlayer.on('add', this.featureOnMainModified.bind(this))
+    this.masterlayer.on('remove', this.featureOnMainModified.bind(this))
     this.on('add', this.featureMemberModified.bind(this))
     this.on('remove', this.featureMemberModified.bind(this))
   }
 
   featureMemberModified (feature, data) {
     feature.memberOf.forEach(master => {
-      this.master.mainlayer.scheduleReprocess(master.relation.id)
+      this.masterlayer.scheduleReprocess(master.relation.id)
     })
   }
 
@@ -31,8 +33,8 @@ class Memberlayer extends Sublayer {
   twigData (ob) {
     let result = super.twigData(ob)
 
-    for (var k in this.master.mainlayer.visibleFeatures) {
-      let feature = this.master.mainlayer.visibleFeatures[k]
+    for (var k in this.masterlayer.visibleFeatures) {
+      let feature = this.masterlayer.visibleFeatures[k]
       if (feature.object.members) {
         feature.object.members.forEach((member, sequence) => {
           if (member.id === ob.id) {
