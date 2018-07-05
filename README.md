@@ -21,6 +21,7 @@ Options:
     * If a TwigJS template is used, the template should create lines with "key: value" (E.g. `color: red\nweight: 2`). See below for possible patterns.
   * "style:*": Additional styles with the style-id as suffix (e.g. "style:casing").
   * title: the title of the feature popup and the object in the list.
+  * listTitle: the title of the object in the list (override 'title')
   * body: the body of the feature popup.
   * description: a short description shown in the list.
   * markerSymbol: a HTML string which will be shown as marker. The first dom node may contain 'width', 'height' (iconSize), 'anchorX', 'anchorY' (iconAnchor), 'popupAnchorX', 'popupAnchorY' (popupAnchor), 'signAnchorX', 'signAnchorY' (anchor for markerSign) properties to override the default marker.anchor property.

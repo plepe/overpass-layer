@@ -96,7 +96,7 @@ OverpassLayerList.prototype.addObject = function (ob) {
     this.layer.openPopupOnObject(ob)
     return false
   }.bind(this, ob)
-  a.innerHTML = ob.data.title
+  a.innerHTML = ob.data.listTitle || ob.data.title
   div.appendChild(a)
 
   // DESCRIPTION
@@ -180,7 +180,7 @@ OverpassLayerList.prototype.updateObject = function (ob) {
 
     // TITLE
     if (p.className === 'title') {
-      p.innerHTML = ob.data.title || ''
+      p.innerHTML = ob.data.listTitle || ob.data.title || ''
     }
 
     // TITLE
