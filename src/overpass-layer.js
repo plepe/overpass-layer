@@ -241,9 +241,15 @@ OverpassLayer.prototype.get = function (id, callback) {
 }
 
 OverpassLayer.prototype.show = function (id, options, callback) {
-  let request = this.mainlayer.show(id, options)
+  let sublayer = this.mainlayer
+  if (options.sublayer_id) {
+    sublayer = this.subLayers[options.sublayer_id]
+  }
+
+  let request = sublayer.show(id, options)
   let result = {
     id: id,
+    sublayer_id: options.sublayer_id,
     options: options,
     hide: request.hide
   }

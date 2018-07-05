@@ -120,21 +120,21 @@ OverpassLayerList.prototype.addObject = function (ob) {
 
   this.layer.updateAssets(this.dom, ob.data)
 
-  ob.listItem.onmouseover = function (id) {
+  ob.listItem.onmouseover = function (id, sublayer_id) {
     if (this.currentHover) {
       this.currentHover.hide()
     }
 
-    this.currentHover = this.layer.show(id, { styles: [ 'hover' ] }, function () {})
-  }.bind(this, ob.id)
+    this.currentHover = this.layer.show(id, { styles: [ 'hover' ], sublayer_id }, function () {})
+  }.bind(this, ob.id, ob.sublayer_id)
 
-  ob.listItem.onmouseout = function (id) {
+  ob.listItem.onmouseout = function (id, sublayer_id) {
     if (this.currentHover) {
       this.currentHover.hide()
     }
 
     this.currentHover = null
-  }.bind(this, ob.id)
+  }.bind(this, ob.id, ob.sublayer_id)
 }
 
 OverpassLayerList.prototype.updateObject = function (ob) {
