@@ -199,6 +199,10 @@ class Sublayer {
         return
       }
 
+      if (ob === null) {
+        return console.log('object does not exist', id)
+      }
+
       let data
       if (id in this.visibleFeatures) {
         data = this.visibleFeatures[id]
