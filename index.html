@@ -12,8 +12,12 @@ var map
 var overpassFrontend
 
 window.onload = function() {
-  map = L.map('map').setView([ 51.503, -0.093 ], 17)
-  overpassFrontend = new OverpassFrontend('//overpass-api.de/api/interpreter', {
+  map = L.map('map').setView([ 48.198, 16.340 ], 17)
+  // map = L.map('map').setView([ 47.504, 9.735 ], 17)
+  overpassFrontend = new OverpassFrontend(
+// '//overpass-api.de/api/interpreter'  
+  'http://localhost/~skunk/overpass-frontend/test/query.php'
+, {
     timeGap: 10,
     effortPerRequest: 100
   })
