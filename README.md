@@ -21,19 +21,22 @@ Options:
     * If a TwigJS template is used, the template should create lines with "key: value" (E.g. `color: red\nweight: 2`). See below for possible patterns.
   * "style:*": Additional styles with the style-id as suffix (e.g. "style:casing").
   * title: the title of the feature popup and the object in the list.
-  * listTitle: the title of the object in the list (override 'title')
   * body: the body of the feature popup.
   * description: a short description shown in the list.
   * markerSymbol: a HTML string which will be shown as marker. The first dom node may contain 'width', 'height' (iconSize), 'anchorX', 'anchorY' (iconAnchor), 'popupAnchorX', 'popupAnchorY' (popupAnchor), 'signAnchorX', 'signAnchorY' (anchor for markerSign) properties to override the default marker.anchor property.
   * markerSign: a HTML string which will be shown within the icon.
-  * listMarkerSign: a HTML string which will be shown within the icon in the list (default: value of 'markerSign').
   * priority: a numeric value by which the elements in the list will be sorted (lower values first)
   * appUrl: an url for the link of an item in the list, default: '#'.
-  * listExclude: (boolean) If true, object will not be shown in the list.
-* const: an object variable which is available as prefix in twig functions. See below.
 * queryOptions: options for OverpassFrontend.BBoxQuery.
 * styleNoBindPopup: array, list of styles where popup should not bind to. Default: []
 * stylesNoAutoShow: array, list of styles which should not automatically be shown.
+
+* The following feature properties define behaviour in lists. Default prefix is 'list':
+  * <prefix>Exclude: (boolean) If true, object will not be shown in the list.
+* const: an object variable which is available as prefix in twig functions. See below.
+  * <prefix>Title: the title of the object in the list (override 'title')
+  * <prefix>MarkerSign: a HTML string which will be shown within the icon in the list (default: value of 'markerSign').
+  * <prefix>MarkerSign: a HTML string which will be shown within the icon in the list (default: value of 'markerSign').
 
 ### TwigJS templates
 The data of an object is available as patterns. Tags and Meta information is only available, if these properties have been downloaded (see option 'properties'). Variables will automatically be HTML escaped, if not the filter `raw` is used, e.g.: `{{ tags.name|raw }}`.

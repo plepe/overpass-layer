@@ -513,7 +513,8 @@ class Sublayer {
     }
 
     data.id = ob.id
-    data.sublayer_id = this.options.id
+    data.layer_id = this.options.id
+    data.sublayer_id = this.options.sublayer_id
     data.data = objectData
 
     if (this.master.onUpdate) {
@@ -579,7 +580,7 @@ class Sublayer {
   twigData (ob) {
     var result = {
       id: ob.id,
-      sublayer_id: this.options.id,
+      sublayer_id: this.options.sublayer_id,
       osm_id: ob.osm_id,
       type: ob.type,
       tags: ob.tags,

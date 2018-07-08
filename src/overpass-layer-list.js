@@ -2,7 +2,7 @@ require('./overpass-layer-list.css')
 
 var isTrue = require('./isTrue')
 
-function OverpassLayerList (layer) {
+function OverpassLayerList (layer, options) {
   // compatibility <1.0
   let parentDom
   if (arguments.length > 1 && arguments[1].constructor.name === 'OverpassLayer') {
@@ -36,10 +36,10 @@ OverpassLayerList.prototype.addTo = function (parentDom) {
 OverpassLayerList.prototype._getMarker = function (ob) {
   var a
 
-  if (ob.data.listMarkerSymbol) {
+  if (ob.data[this.options.prefix + 'MarkerSymbol']) {
     a = document.createElement('div')
     a.className = 'marker'
-    a.innerHTML = ob.data.listMarkerSymbol
+    a.innerHTML = ob.data[this.options.prefix + 'MarkerSymbol']
   } else if (ob.data.markerSymbol) {
     a = document.createElement('div')
     a.className = 'marker'
@@ -54,7 +54,7 @@ OverpassLayerList.prototype._getMarker = function (ob) {
 }
 
 OverpassLayerList.prototype.addObject = function (ob) {
-  if (isTrue(ob.data.listExclude)) {
+  if (isTrue(ob.data[this.options.prefix + 'Exclude'])) {
     return
   }
 
@@ -66,7 +66,7 @@ OverpassLayerList.prototype.addObject = function (ob) {
   var a
 
   this.items[ob.id] = div
-  ob.listItem = div
+  ob[this.options.prefix + 'Item'] = div
 
   // MARKER&ICON PARENT
   var p = document.createElement('a')
@@ -87,8 +87,8 @@ OverpassLayerList.prototype.addObject = function (ob) {
   // ICON
   a = document.createElement('div')
   a.className = 'icon'
-  if (ob.data.listMarkerSign) {
-    a.innerHTML = ob.data.listMarkerSign
+  if (ob.data[this.options.prefix + 'MarkerSign']) {
+    a.innerHTML = ob.data[this.options.prefix + 'MarkerSign']
   } else if (ob.data.markerSign) {
     a.innerHTML = ob.data.markerSign
   }
@@ -102,7 +102,7 @@ OverpassLayerList.prototype.addObject = function (ob) {
     this.layer.openPopupOnObject(ob)
     return false
   }.bind(this, ob)
-  a.innerHTML = ob.data.listTitle || ob.data.title
+  a.innerHTML = ob.data[this.options.prefix + 'Title'] || ob.data.title
   div.appendChild(a)
 
   // DESCRIPTION
@@ -126,7 +126,7 @@ OverpassLayerList.prototype.addObject = function (ob) {
 
   this.layer.updateAssets(this.dom, ob.data)
 
-  ob.listItem.onmouseover = function (id, sublayer_id) {
+  ob[this.options.prefix + 'Item'].onmouseover = function (id, sublayer_id) {
     if (this.currentHover) {
       this.currentHover.hide()
     }
@@ -134,7 +134,7 @@ OverpassLayerList.prototype.addObject = function (ob) {
     this.currentHover = this.layer.show(id, { styles: [ 'hover' ], sublayer_id }, function () {})
   }.bind(this, ob.id, ob.sublayer_id)
 
-  ob.listItem.onmouseout = function (id, sublayer_id) {
+  ob[this.options.prefix + 'Item'].onmouseout = function (id, sublayer_id) {
     if (this.currentHover) {
       this.currentHover.hide()
     }
@@ -144,7 +144,7 @@ OverpassLayerList.prototype.addObject = function (ob) {
 }
 
 OverpassLayerList.prototype.updateObject = function (ob) {
-  var listExclude = isTrue(ob.data.listExclude)
+  var listExclude = isTrue(ob.data[this.options.prefix + 'Exclude'])
 
   if (!(ob.id in this.items) && !listExclude) {
     return this.addObject(ob)
@@ -173,8 +173,8 @@ OverpassLayerList.prototype.updateObject = function (ob) {
         // ICON
         a = document.createElement('div')
         a.className = 'icon'
-        if (ob.data.listMarkerSign) {
-          a.innerHTML = ob.data.listMarkerSign
+        if (ob.data[this.options.prefix + 'MarkerSign']) {
+          a.innerHTML = ob.data[this.options.prefix + 'MarkerSign']
         } else if (ob.data.markerSign) {
           a.innerHTML = ob.data.markerSign
         }
@@ -186,7 +186,7 @@ OverpassLayerList.prototype.updateObject = function (ob) {
 
     // TITLE
     if (p.className === 'title') {
-      p.innerHTML = ob.data.listTitle || ob.data.title || ''
+      p.innerHTML = ob.data[this.options.prefix + 'Title'] || ob.data.title || ''
     }
 
     // TITLE
@@ -208,7 +208,7 @@ OverpassLayerList.prototype.delObject = function (ob) {
   }
 
   delete this.items[ob.id]
-  delete ob.listItem
+  delete ob[this.options.prefix + 'Item']
 }
 
 OverpassLayerList.prototype.remove = function () {
@@ -217,7 +217,7 @@ OverpassLayerList.prototype.remove = function () {
   }
 
   for (var k in this.items) {
-    delete this.items[k].listItem
+    delete this.items[k][this.options.prefix + 'Item']
   }
 
   this.items = {}
