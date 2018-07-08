@@ -131,7 +131,11 @@ OverpassLayerList.prototype.addObject = function (ob) {
       this.currentHover.hide()
     }
 
-    this.currentHover = this.layer.show(id, { styles: [ 'hover' ], sublayer_id }, function () {})
+    this.currentHover = this.layer.show(id, { styles: [ 'hover' ], sublayer_id },
+      (err, ob, data) => {
+        console.log(err, ob, data)
+      }
+    )
   }.bind(this, ob.id, ob.sublayer_id)
 
   ob[this.options.prefix + 'Item'].onmouseout = function (id, sublayer_id) {

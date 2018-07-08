@@ -219,7 +219,7 @@ class Sublayer {
   }
 
 
-  show (data, options) {
+  show (data, options, callback) {
     let id = typeof data === 'string' ? data : data.id
     let isHidden = false
     let result = {
@@ -261,6 +261,7 @@ class Sublayer {
         }
 
         if (err) {
+          callback(err)
           return
         }
 
@@ -287,6 +288,8 @@ class Sublayer {
       this._processObject(data)
 
       this._show(data)
+
+      callback(null, data.object, data)
     }
 
     return result
