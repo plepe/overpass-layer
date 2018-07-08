@@ -106,6 +106,7 @@ class Sublayer {
         this.master.onAppear(data)
       }
 
+      this.master.emit('add', ob, data)
       this.emit('add', ob, data)
     }
   }
@@ -316,8 +317,13 @@ class Sublayer {
     this.recalc()
 
     for (let k in this.visibleFeatures) {
+      let data = this.visibleFeatures[k]
+
+      this.master.emit('zoomChange', data.object, data)
+      this.emit('zoomChange', data.object, data)
+
       if (this.master.onZoomChange) {
-        this.master.onZoomChange(this.visibleFeatures[k])
+        this.master.onZoomChange(data)
       }
     }
 
@@ -519,6 +525,9 @@ class Sublayer {
     if (this.master.onUpdate) {
       this.master.onUpdate(data)
     }
+
+    this.master.emit('update', data.object, data)
+    this.emit('update', data.object, data)
   }
 
   evaluate (data) {
@@ -651,6 +660,7 @@ class Sublayer {
       this.master.onDisappear(data)
     }
 
+    this.master.emit('remove', data.object, data)
     this.emit('remove', data.object, data)
 
     data.isShown = false

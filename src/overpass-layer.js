@@ -1,6 +1,7 @@
 /* global overpassFrontend:false, L */
 require('./overpass-layer.css')
 
+const ee = require('event-emitter')
 var BoundingBox = require('boundingbox')
 var twig = require('twig')
 var OverpassFrontend = require('overpass-frontend')
@@ -264,6 +265,8 @@ OverpassLayer.prototype.hide = function (id) {
 OverpassLayer.prototype.openPopupOnObject = function (ob, sublayer='main') {
   this.subLayers[sublayer].openPopupOnObject(ob)
 }
+
+ee(OverpassLayer.prototype)
 
 // to enable extending twig
 OverpassLayer.twig = twig

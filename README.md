@@ -106,35 +106,36 @@ Hide the given object, resp. remove show options. If it is shown due to layer de
 Return twig data for object (for rendering).
 
 
-## event onAppear(ob)
+## event 'add', Paramters: ob, data
 Will be called when an object appears on the map (e.g. load from server, zoom in, viewport moves in)
 
 Parameter:
-* `ob.id`: Unique ID of the object (e.g. 'w1234')
-* `ob.object` is an instance of OSMObject (see OverpassFrontend for details)
-* `ob.data` are the parsed options for the current object.
-* `ob.features`: an object with all leaflet feature which show the object. Index is the id of the style (e.g. 'highlight' for 'style:highlight'. 'default' for 'style').
-* `ob.feature`: the first leaflet feature (of the styles array). it will be used for binding popups to.
-* `ob.featureMarker`: the leaflet marker, if a marker is shown on the object
-* `ob.popup`: the popup, which is attached to the object (even if it is not shown)
-* `ob.styles`: array of style-ids which are currently active
-* `ob.isShown`: whether the object is currently shown on the map (boolean)
-* `ob.listItem`: DOM node of the list item which shows this object (if item is shown and a list has been added for this layer)
+* `ob`: an OverpassObject object
+* `data.id`: Unique ID of the object (e.g. 'w1234')
+* `data.object` is an instance of OSMObject (see OverpassFrontend for details)
+* `data.data` are the parsed options for the current object.
+* `data.features`: an object with all leaflet feature which show the object. Index is the id of the style (e.g. 'highlight' for 'style:highlight'. 'default' for 'style').
+* `data.feature`: the first leaflet feature (of the styles array). it will be used for binding popups to.
+* `data.featureMarker`: the leaflet marker, if a marker is shown on the object
+* `data.popup`: the popup, which is attached to the object (even if it is not shown)
+* `data.styles`: array of style-ids which are currently active
+* `data.isShown`: whether the object is currently shown on the map (boolean)
+* `data.listItem`: DOM node of the list item which shows this object (if item is shown and a list has been added for this layer)
 
-## event onDisappear(ob)
+## event 'remove', Parameters: ob, data
 Will be called when an object disappears from the map (e.g. zoom out, pan out, ...)
 
-See `onAppear` for the description of parameters.
+See `appear` for the description of parameters.
 
-## event onZoomChange(ob)
+## event 'zoomChange', Parameters: ob, data
 Will be called every time when the zoom level changes. Occurs instantly after zoom level change for each object, before assessing if the object is visible at the current zoom level.
 
-See `onAppear` for the description of parameters.
+See `appear` for the description of parameters.
 
-## event onUpdate(ob)
+## event 'update', Parameters: ob, data
 Called every time, when the object is being re-calculated (also when zoom level changes).
 
-See `onAppear` for the description of parameters.
+See `appear` for the description of parameters.
 
 # Optional features
 ## Text along lines
