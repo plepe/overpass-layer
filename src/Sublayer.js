@@ -57,10 +57,18 @@ class Sublayer {
 
       if (id) {
         node.onmouseover = () => {
-          this.master.subLayers[sublayerId].show(id, { styles: [ 'hover'] }, function () {})
+          if (this.currentHover) {
+            this.currentHover.hide()
+          }
+
+          this.currentHover = this.master.subLayers[sublayerId].show(id, { styles: [ 'hover'] }, function () {})
         }
         node.onmouseout = () => {
-          this.master.subLayers[sublayerId].hide(id)
+          if (this.currentHover) {
+            this.currentHover.hide()
+          }
+
+          this.currentHover = null
         }
         node.onclick = () => {
           this.master.subLayers[sublayerId].openPopupOnObject(id)
