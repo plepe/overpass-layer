@@ -1,5 +1,5 @@
 function isTrue (value) {
-  if (typeof value === 'undefined') {
+  if (value === null || typeof value === 'undefined') {
     return false
   }
 
