@@ -99,9 +99,6 @@ class Sublayer {
 
       this.visibleFeatures[ob.id] = data
 
-      if (this.master.layerList) {
-        this.master.layerList.addObject(data)
-      }
       if (this.master.onAppear) {
         this.master.onAppear(data)
       }
@@ -519,9 +516,6 @@ class Sublayer {
     data.sublayer_id = this.options.id
     data.data = objectData
 
-    if (this.master.layerList) {
-      this.master.layerList.updateObject(data)
-    }
     if (this.master.onUpdate) {
       this.master.onUpdate(data)
     }
@@ -653,9 +647,6 @@ class Sublayer {
       this.map.removeLayer(data.featureMarker)
     }
 
-    if (this.master.layerList) {
-      this.master.layerList.delObject(data)
-    }
     if (this.master.onDisappear) {
       this.master.onDisappear(data)
     }

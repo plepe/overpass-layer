@@ -15,7 +15,13 @@ function OverpassLayerList (layer) {
   this.dom = document.createElement('ul')
   this.dom.className = 'overpass-layer-list'
   this.layer = layer
-  this.layer.layerList = this
+  this.options = options
+  this.options.prefix = this.options.prefix || 'list'
+
+  this.layer.on('add', (ob, data) => this.addObject(data))
+  this.layer.on('update', (ob, data) => this.updateObject(data))
+  this.layer.on('remove', (ob, data) => this.delObject(data))
+
   this.items = {}
 
   if (parentDom) {
