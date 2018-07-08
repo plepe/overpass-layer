@@ -49,3 +49,7 @@ ul.overpass-layer-list > li:after {
   display: table;
   clear: both;
 }
+
+.hoverable {
+  cursor: pointer;
+}

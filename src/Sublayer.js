@@ -54,6 +54,7 @@ class Sublayer {
     if (node.getAttribute) {
       let id = node.getAttribute('object')
       let sublayerId = node.getAttribute('sublayer') || 'main'
+      node.classList.add('hoverable')
 
       if (id) {
         node.onmouseover = () => {
