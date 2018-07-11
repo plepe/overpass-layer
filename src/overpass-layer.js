@@ -59,7 +59,8 @@ function OverpassLayer (options) {
       maxZoom: this.options.maxZoom,
       feature: this.options.memberFeature,
       styleNoBindPopup: this.options.styleNoBindPopup || [],
-      stylesNoAutoShow: this.options.stylesNoAutoShow || []
+      stylesNoAutoShow: this.options.stylesNoAutoShow || [],
+      const: this.options.const
     }
     compileFeature(memberOptions.feature, twig)
 
