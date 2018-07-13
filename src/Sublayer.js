@@ -48,7 +48,7 @@ class Sublayer {
 
   _popupOpen (e) {
     if (e.popup.sublayer === this) {
-      this.domUpdateHooks(e.popup._contentNode)
+      this.updateAssets(e.popup._contentNode)
     }
   }
 
@@ -458,6 +458,8 @@ class Sublayer {
           objectData.marker.popupAnchor[1] = parseFloat(c.getAttribute('popupanchory'))
         }
       }
+
+      this.updateAssets(div, objectData)
     }
 
     if (objectData.markerSign) {
@@ -497,17 +499,10 @@ class Sublayer {
     popupContent += '<h1>' + objectData.title + '</h1>'
     popupContent += objectData.body
 
-    if ('updateAssets' in this.options) {
-      let div = document.createElement('div')
-      div.innerHTML = popupContent
-      this.updateAssets(div, objectData)
-      popupContent = div.innerHTML
-    }
-
     if (data.popup) {
       if (data.popup._contentNode) {
         data.popup._contentNode.innerHTML = popupContent
-        this.domUpdateHooks(data.popup._contentNode)
+        this.updateAssets(data.popup._contentNode, objectData)
       } else {
         data.popup = data.popup.setContent(popupContent)
       }
@@ -691,11 +686,11 @@ class Sublayer {
   }
 
   updateAssets (div, objectData) {
-    if (!this.options.updateAssets) {
-      return div
-    }
+    this.domUpdateHooks(div)
 
-    this.options.updateAssets(div, objectData, this)
+    if (this.options.updateAssets) {
+      this.options.updateAssets(div, objectData, this)
+    }
   }
 
   openPopupOnObject (ob, options) {

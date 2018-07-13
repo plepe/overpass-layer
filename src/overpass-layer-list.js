@@ -124,7 +124,7 @@ OverpassLayerList.prototype.addObject = function (ob) {
     this.dom.appendChild(div)
   }
 
-  this.layer.updateAssets(this.dom, ob.data)
+  ob.sublayer.updateAssets(div, ob.data)
 
   ob[this.options.prefix + 'Item'].onmouseover = function (id, sublayer_id) {
     if (this.currentHover) {
@@ -201,7 +201,7 @@ OverpassLayerList.prototype.updateObject = function (ob) {
     p = p.nextSibling
   }
 
-  this.layer.updateAssets(div, ob.data)
+  ob.sublayer.updateAssets(div, ob.data)
 }
 
 OverpassLayerList.prototype.delObject = function (ob) {
