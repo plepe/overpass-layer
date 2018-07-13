@@ -43,11 +43,13 @@ class Sublayer {
   addTo (map) {
     this.map = map
 
-    this.map.on('popupopen', e => {
-      if (e.popup.sublayer === this) {
-        this.domUpdateHooks(e.popup._contentNode)
-      }
-    })
+    this.map.on('popupopen', this._popupOpen.bind(this))
+  }
+
+  _popupOpen (e) {
+    if (e.popup.sublayer === this) {
+      this.domUpdateHooks(e.popup._contentNode)
+    }
   }
 
   domUpdateHooks (node) {
@@ -85,6 +87,8 @@ class Sublayer {
   }
 
   remove () {
+    this.map.off('popupopen', this._popupOpen.bind(this))
+
     this.map = null
   }
 
