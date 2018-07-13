@@ -648,6 +648,8 @@ class Sublayer {
       this.updateAssets(data.featureMarker._icon)
     }
 
+    data.object.on('update', this.scheduleReprocess.bind(this, data.id))
+
     data.isShown = true
   }
 
@@ -666,6 +668,8 @@ class Sublayer {
 
     this.master.emit('remove', data.object, data)
     this.emit('remove', data.object, data)
+
+    data.object.off('update', this.scheduleReprocess.bind(this, data.id))
 
     data.isShown = false
   }
