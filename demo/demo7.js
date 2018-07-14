@@ -9,7 +9,7 @@ var def = {
     styles: [],
     'body': '{% for member in members %}' +
             '{% if member.role|slice(-4) == "stop" %}' +
-            '<div object="{{ member.id }}" sublayer="member"><b>{{ member.tags.name }}</b> ({{ member.id }} as {{ member.role }})</div>' +
+            '<div data-object="{{ member.id }}" data-sublayer="member"><b>{{ member.tags.name }}</b> ({{ member.id }} as {{ member.role }})</div>' +
             '{% endif %}' +
             '{% endfor %}',
     title: '{{ tags.name }} ({{ tags.network }})',
@@ -25,7 +25,7 @@ var def = {
     title: '{% if tags.public_transport == "stop_position" %}{{ tags.name }}{% endif %}',
     listStopsTitle: '{{ tags.name }}: {% for master in masters %}{{ master.tags.ref }} {% endfor %}',
     body: '{% for master in masters %}' +
-          '<div object="{{ master.id }}"><b>{{ master.tags.name|default(master.tags.ref) }}</b> ({{ master.id }})</div>' +
+          '<div data-object="{{ master.id }}"><b>{{ master.tags.name|default(master.tags.ref) }}</b> ({{ master.id }})</div>' +
           '{% endfor %}',
     listRoutesExclude: true,
     listStopsExclude: '{% set isStop = 0 %}{% for master in masters %}{% if master.role|slice(-4) == "stop" %}{% set isStop = 1 %}{% endif %}{% endfor %}{{ not isStop }}'

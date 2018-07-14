@@ -54,11 +54,12 @@ class Sublayer {
 
   domUpdateHooks (node) {
     if (node.getAttribute) {
-      let id = node.getAttribute('object')
-      let sublayerId = node.getAttribute('sublayer') || 'main'
-      node.classList.add('hoverable')
+      let id = node.getAttribute('data-object')
 
       if (id) {
+        let sublayerId = node.getAttribute('data-sublayer') || 'main'
+        node.classList.add('hoverable')
+
         node.onmouseover = () => {
           if (this.currentHover) {
             this.currentHover.hide()
