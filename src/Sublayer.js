@@ -60,6 +60,21 @@ class Sublayer {
         let sublayerId = node.getAttribute('data-sublayer') || 'main'
         node.classList.add('hoverable')
 
+        // check if referenced object is loaded - if not, request load
+        let ofOptions = {
+          properties: OverpassFrontend.ALL
+        }
+        let subObject = this.master.overpassFrontend.getCached(id, ofOptions)
+
+        if (!subObject) {
+          this.master.overpassFrontend.get(id, ofOptions,
+            (err, ob) => {
+            },
+            (err) => {
+            }
+          )
+        }
+
         node.onmouseover = () => {
           if (this.currentHover) {
             this.currentHover.hide()
