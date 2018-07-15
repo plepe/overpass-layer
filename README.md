@@ -22,7 +22,8 @@ Options:
   * "style:*": Additional styles with the style-id as suffix (e.g. "style:casing").
   * title: the title of the feature popup and the object in the list.
   * body: the body of the feature popup.
-  * description: a short description shown in the list.
+  * description: a short description shown in the list (or in the popup).
+  * popupDescription: a short description shown in the popup (when undefined, use 'description').
   * markerSymbol: a HTML string which will be shown as marker. The first dom node may contain 'width', 'height' (iconSize), 'anchorX', 'anchorY' (iconAnchor), 'popupAnchorX', 'popupAnchorY' (popupAnchor), 'signAnchorX', 'signAnchorY' (anchor for markerSign) properties to override the default marker.anchor property.
   * markerSign: a HTML string which will be shown within the icon.
   * priority: a numeric value by which the elements in the list will be sorted (lower values first)

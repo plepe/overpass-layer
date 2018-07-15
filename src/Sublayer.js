@@ -513,7 +513,13 @@ class Sublayer {
 
     var popupContent = ''
     popupContent += '<h1>' + objectData.title + '</h1>'
-    popupContent += objectData.body
+    var popupDescription = objectData.popupDescription || objectData.description
+    if (popupDescription) {
+      popupContent += '<div class="description">' + popupDescription + '</div>'
+    }
+    if (objectData.body) {
+      popupContent += '<div class="body">' + objectData.body + '</div>'
+    }
 
     if (data.popup) {
       if (data.popup._contentNode) {
