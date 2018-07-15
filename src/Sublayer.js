@@ -90,6 +90,10 @@ class Sublayer {
           this.currentHover = null
         }
         node.onclick = () => {
+          if (this.currentHover) {
+            this.currentHover.hide()
+          }
+
           this.master.subLayers[sublayerId].openPopupOnObject(id)
         }
       }
