@@ -523,11 +523,15 @@ class Sublayer {
 
     if (data.popup) {
       if (data.popup._contentNode) {
-        data.popup._contentNode.innerHTML = popupContent
-        this.updateAssets(data.popup._contentNode, objectData)
+        if (data.popup.currentHTML !== popupContent) {
+          data.popup._contentNode.innerHTML = popupContent
+          this.updateAssets(data.popup._contentNode, objectData)
+        }
       } else {
         data.popup = data.popup.setContent(popupContent)
       }
+
+      data.popup.currentHTML = popupContent
     } else {
       data.popup = L.popup().setContent(popupContent)
       data.popup.object = data
