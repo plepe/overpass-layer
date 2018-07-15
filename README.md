@@ -37,6 +37,7 @@ Options:
   * <prefix>Title: the title of the object in the list (override 'title')
   * <prefix>MarkerSign: a HTML string which will be shown within the icon in the list (default: value of 'markerSign').
   * <prefix>MarkerSign: a HTML string which will be shown within the icon in the list (default: value of 'markerSign').
+  * <prefix>Description: a HTML string which will be shown as description shown in the list (default: value of 'description').
 
 ### TwigJS templates
 The data of an object is available as patterns. Tags and Meta information is only available, if these properties have been downloaded (see option 'properties'). Variables will automatically be HTML escaped, if not the filter `raw` is used, e.g.: `{{ tags.name|raw }}`.

@@ -108,7 +108,7 @@ OverpassLayerList.prototype.addObject = function (ob) {
   // DESCRIPTION
   a = document.createElement('div')
   a.className = 'description'
-  a.innerHTML = 'description' in ob.data ? ob.data.description : ''
+  a.innerHTML = ob.data[this.options.prefix + 'Description'] || ob.data.description || ''
   div.appendChild(a)
 
   div.priority = 'priority' in ob.data ? parseFloat(ob.data.priority) : 0
@@ -195,7 +195,7 @@ OverpassLayerList.prototype.updateObject = function (ob) {
 
     // TITLE
     if (p.className === 'description') {
-      p.innerHTML = ob.data.description || ''
+      p.innerHTML = ob.data[this.options.prefix + 'Description'] || ob.data.description || ''
     }
 
     p = p.nextSibling
