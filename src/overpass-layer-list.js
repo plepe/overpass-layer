@@ -87,11 +87,9 @@ OverpassLayerList.prototype.addObject = function (ob) {
   // ICON
   a = document.createElement('div')
   a.className = 'icon'
-  if (ob.data[this.options.prefix + 'MarkerSign']) {
-    a.innerHTML = ob.data[this.options.prefix + 'MarkerSign']
-  } else if (ob.data.markerSign) {
-    a.innerHTML = ob.data.markerSign
-  }
+  let html = ob.data[this.options.prefix + 'MarkerSign'] || ob.data.markerSign || ''
+  a.innerHTML = html
+  a.currentHTML = html
   p.appendChild(a)
 
   // TITLE
@@ -102,13 +100,18 @@ OverpassLayerList.prototype.addObject = function (ob) {
     this.layer.openPopupOnObject(ob)
     return false
   }.bind(this, ob)
-  a.innerHTML = ob.data[this.options.prefix + 'Title'] || ob.data.title
+  html = ob.data[this.options.prefix + 'Title'] || ob.data.title
+  a.innerHTML = html
+  a.currentHTML = html
   div.appendChild(a)
+  let title = a
 
   // DESCRIPTION
   a = document.createElement('div')
   a.className = 'description'
-  a.innerHTML = ob.data[this.options.prefix + 'Description'] || ob.data.description || ''
+  html = ob.data[this.options.prefix + 'Description'] || ob.data.description || ''
+  a.innerHTML = html
+  a.currentHTML = html
   div.appendChild(a)
 
   div.priority = 'priority' in ob.data ? parseFloat(ob.data.priority) : 0
@@ -126,19 +129,19 @@ OverpassLayerList.prototype.addObject = function (ob) {
 
   ob.sublayer.updateAssets(div, ob.data)
 
-  ob[this.options.prefix + 'Item'].onmouseover = function (id, sublayer_id) {
+  //ob[this.options.prefix + 'Item']
+  title.onmouseover = function (id, sublayer_id) {
     if (this.currentHover) {
       this.currentHover.hide()
     }
 
     this.currentHover = this.layer.show(id, { styles: [ 'hover' ], sublayer_id },
-      (err, ob, data) => {
-        console.log(err, ob, data)
-      }
+      () => {}
     )
   }.bind(this, ob.id, ob.sublayer_id)
 
-  ob[this.options.prefix + 'Item'].onmouseout = function (id, sublayer_id) {
+  //ob[this.options.prefix + 'Item']
+  title.onmouseout = function (id, sublayer_id) {
     if (this.currentHover) {
       this.currentHover.hide()
     }
@@ -177,11 +180,7 @@ OverpassLayerList.prototype.updateObject = function (ob) {
         // ICON
         a = document.createElement('div')
         a.className = 'icon'
-        if (ob.data[this.options.prefix + 'MarkerSign']) {
-          a.innerHTML = ob.data[this.options.prefix + 'MarkerSign']
-        } else if (ob.data.markerSign) {
-          a.innerHTML = ob.data.markerSign
-        }
+        a.innerHTML = ob.data[this.options.prefix + 'MarkerSign'] || ob.data.markerSign || ''
         p.appendChild(a)
 
         a = a.nextSibling
@@ -190,18 +189,25 @@ OverpassLayerList.prototype.updateObject = function (ob) {
 
     // TITLE
     if (p.className === 'title') {
-      p.innerHTML = ob.data[this.options.prefix + 'Title'] || ob.data.title || ''
+      let html = ob.data[this.options.prefix + 'Title'] || ob.data.title || ''
+      if (p.currentHTML !== html) {
+        p.innerHTML = html
+        ob.sublayer.updateAssets(div, ob.data)
+      }
     }
 
     // TITLE
     if (p.className === 'description') {
-      p.innerHTML = ob.data[this.options.prefix + 'Description'] || ob.data.description || ''
+      let html = ob.data[this.options.prefix + 'Description'] || ob.data.description || ''
+      if (p.currentHTML !== html) {
+        p.innerHTML = html
+        ob.sublayer.updateAssets(div, ob.data)
+      }
     }
 
     p = p.nextSibling
   }
 
-  ob.sublayer.updateAssets(div, ob.data)
 }
 
 OverpassLayerList.prototype.delObject = function (ob) {
