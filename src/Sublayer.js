@@ -390,7 +390,8 @@ class Sublayer {
       data.feature = ob.leafletFeature({
         weight: 0,
         opacity: 0,
-        fillOpacity: 0
+        fillOpacity: 0,
+        radius: 0
       })
     }
 
