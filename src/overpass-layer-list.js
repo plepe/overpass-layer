@@ -151,7 +151,7 @@ OverpassLayerList.prototype.updateObject = function (ob) {
   var listExclude = isTrue(ob.data[this.options.prefix + 'Exclude'])
 
   if (!(ob.id in this.items) && !listExclude) {
-    return this.addObject(ob)
+    return
   }
 
   if (listExclude) {
