@@ -725,7 +725,15 @@ class Sublayer {
 
   openPopupOnObject (ob, options) {
     if (typeof ob === 'string') {
-      return this.get(ob, options, (err, ob) => this.openPopupOnObject(ob, options))
+      return this.get(ob, options, (err, ob) => {
+        if (err) {
+          return console.log(err)
+        }
+
+        this._processObject(ob)
+        this._show(ob)
+        this.openPopupOnObject(ob, options)
+      })
     }
 
     // When object is quite smaller than current view, show popup on feature
