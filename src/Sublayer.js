@@ -285,6 +285,9 @@ class Sublayer {
       }
     }
 
+    options.priority = -1
+    options.properties = OverpassFrontend.ALL
+
     if (typeof data === 'string') {
       result.request = this.get(data, options, (err, _data) => {
         delete result.request
