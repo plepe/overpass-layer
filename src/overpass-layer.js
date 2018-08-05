@@ -62,6 +62,9 @@ function OverpassLayer (options) {
       stylesNoAutoShow: this.options.stylesNoAutoShow || [],
       const: this.options.const
     }
+    if (this.options.updateAssets) {
+      memberOptions.updateAssets = this.options.updateAssets
+    }
     compileFeature(memberOptions.feature, twig)
 
     this.memberlayer = new Memberlayer(this, memberOptions)
