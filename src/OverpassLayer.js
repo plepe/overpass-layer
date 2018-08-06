@@ -101,7 +101,7 @@ class OverpassLayer {
       if (this.onLoadEnd) {
         this.onLoadEnd({
           request: this.currentRequest,
-          error: 'abort'
+          error: null
         })
       }
 
