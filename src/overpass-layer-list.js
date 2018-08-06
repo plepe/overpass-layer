@@ -1,3 +1,5 @@
+/* eslint camelcase: 0 */
+
 require('./overpass-layer-list.css')
 
 var isTrue = require('./isTrue')
