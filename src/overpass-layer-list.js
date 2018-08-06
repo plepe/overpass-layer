@@ -17,7 +17,7 @@ function OverpassLayerList (layer, options) {
   this.dom = document.createElement('ul')
   this.dom.className = 'overpass-layer-list'
   this.layer = layer
-  this.options = options
+  this.options = options || {}
   this.options.prefix = this.options.prefix || 'list'
 
   this.layer.on('add', (ob, data) => this.addObject(data))
