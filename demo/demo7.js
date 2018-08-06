@@ -2,7 +2,7 @@ document.body.classList.add('hasInfo')
 
 var def = {
   query: {
-    11: '(relation[type=route][route~"^(subway|trolley|tram|bus)$"];)',
+    11: '(relation[type=route][route~"^(subway|trolley|tram|bus)$"];)'
   },
   members: true,
   feature: {
