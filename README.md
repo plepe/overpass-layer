@@ -6,7 +6,7 @@ Show a Leaflet layer using OpenStreetMap data from Overpass API via overpass-fro
 Create a Layer with an Overpass query and optional options.
 
 Options:
-* id: an optional id, which will be passed as `layer_id` to twig templates (see below).
+* id: an optional id, which will be passed as `sublayer_id` to twig templates (see below).
 * query: e.g. `node[natural=tree];`. Combine queries with: `(way[building];relation[building];);`. Optionally zoom-dependend queries can be given by using an object with the minimum zoom level as index, e.g. `{ 13: 'way[landuse=forest]', 15: '(way[landuse=forest];node[natural=tree];)' }`: zoom levels 13 and 14 all forests will be shown, from zoom level 15 all forests and trees.
 * overpassFrontend: An OverpassFrontend object (defaults to the global variable `overpassFrontend`)
 * minZoom: Show layer only from the given zoom level (default: 16)
@@ -22,17 +22,23 @@ Options:
   * "style:*": Additional styles with the style-id as suffix (e.g. "style:casing").
   * title: the title of the feature popup and the object in the list.
   * body: the body of the feature popup.
-  * description: a short description shown in the list.
+  * description: a short description shown in the list (or in the popup).
+  * popupDescription: a short description shown in the popup (when undefined, use 'description').
   * markerSymbol: a HTML string which will be shown as marker. The first dom node may contain 'width', 'height' (iconSize), 'anchorX', 'anchorY' (iconAnchor), 'popupAnchorX', 'popupAnchorY' (popupAnchor), 'signAnchorX', 'signAnchorY' (anchor for markerSign) properties to override the default marker.anchor property.
   * markerSign: a HTML string which will be shown within the icon.
-  * listMarkerSign: a HTML string which will be shown within the icon in the list (default: value of 'markerSign').
   * priority: a numeric value by which the elements in the list will be sorted (lower values first)
   * appUrl: an url for the link of an item in the list, default: '#'.
-  * listExclude: (boolean) If true, object will not be shown in the list.
-* const: an object variable which is available as prefix in twig functions. See below.
 * queryOptions: options for OverpassFrontend.BBoxQuery.
 * styleNoBindPopup: array, list of styles where popup should not bind to. Default: []
 * stylesNoAutoShow: array, list of styles which should not automatically be shown.
+
+* The following feature properties define behaviour in lists. Default prefix is 'list':
+  * <prefix>Exclude: (boolean) If true, object will not be shown in the list.
+* const: an object variable which is available as prefix in twig functions. See below.
+  * <prefix>Title: the title of the object in the list (override 'title')
+  * <prefix>MarkerSign: a HTML string which will be shown within the icon in the list (default: value of 'markerSign').
+  * <prefix>MarkerSign: a HTML string which will be shown within the icon in the list (default: value of 'markerSign').
+  * <prefix>Description: a HTML string which will be shown as description shown in the list (default: value of 'description').
 
 ### TwigJS templates
 The data of an object is available as patterns. Tags and Meta information is only available, if these properties have been downloaded (see option 'properties'). Variables will automatically be HTML escaped, if not the filter `raw` is used, e.g.: `{{ tags.name|raw }}`.
@@ -41,7 +47,7 @@ The templates will be rendered when the object becomes visible and when the zoom
 
 * `id` (the id of the object is always available, prefixed 'n' for nodes, 'w' for ways and 'r' for relations; e.g. 'n1234')
 * `osm_id` (the numerical id of the object)
-* `layer_id` (the id of the layer)
+* `sublayer_id` (the id of the sub layer)
 * `type` ('node', 'way' or 'relation')
 * `tags.*` (all tags are available with the prefix `tags.`, e.g. `tags.amenity`)
 * `meta.timestamp` (timestamp of last modification)
@@ -49,6 +55,18 @@ The templates will be rendered when the object becomes visible and when the zoom
 * `meta.changeset` (ID of the changeset, the object was last modified in)
 * `meta.user` (Username of the user, who changed the object last)
 * `meta.uid` (UID of the user, who changed the object last)
+* `members`: Array of member objects (if loaded)
+* `members[].id`: id of member
+* `members[].tags`: tags of member (if loaded)
+* `members[].meta`: meta of member (if loaded)
+* `members[].sequence`: member is nth element
+* `members[].role`: member has role
+* `masters`: Array of links to current master objects:
+* `masters[].id`: id of relation
+* `masters[].tags`: tags of relation
+* `masters[].meta`: meta of relation
+* `masters[].sequence`: current object is nth member
+* `masters[].role`: current object has role
 * `map.zoom` (Current zoom level)
 * `const.*` (Values from the 'const' option)
 
@@ -84,7 +102,7 @@ The options parameter influences how the object should be shown. (Consecutive ca
 Available options:
 * styles: Aside from the styles which are shown from the general options, show additional styles. (Array)
 
-The callback will be called with the following parameters: err, ob (see event onAppear).
+The callback will be called with the following parameters: err, ob, data (see event 'appear').
 
 ## method hide(id)
 Hide the given object, resp. remove show options. If it is shown due to layer definition, it will still be visible.
@@ -93,35 +111,36 @@ Hide the given object, resp. remove show options. If it is shown due to layer de
 Return twig data for object (for rendering).
 
 
-## event onAppear(ob)
+## event 'add', Paramters: ob, data
 Will be called when an object appears on the map (e.g. load from server, zoom in, viewport moves in)
 
 Parameter:
-* `ob.id`: Unique ID of the object (e.g. 'w1234')
-* `ob.object` is an instance of OSMObject (see OverpassFrontend for details)
-* `ob.data` are the parsed options for the current object.
-* `ob.features`: an object with all leaflet feature which show the object. Index is the id of the style (e.g. 'highlight' for 'style:highlight'. 'default' for 'style').
-* `ob.feature`: the first leaflet feature (of the styles array). it will be used for binding popups to.
-* `ob.featureMarker`: the leaflet marker, if a marker is shown on the object
-* `ob.popup`: the popup, which is attached to the object (even if it is not shown)
-* `ob.styles`: array of style-ids which are currently active
-* `ob.isShown`: whether the object is currently shown on the map (boolean)
-* `ob.listItem`: DOM node of the list item which shows this object (if item is shown and a list has been added for this layer)
+* `ob`: an OverpassObject object
+* `data.id`: Unique ID of the object (e.g. 'w1234')
+* `data.object` is an instance of OSMObject (see OverpassFrontend for details)
+* `data.data` are the parsed options for the current object.
+* `data.features`: an object with all leaflet feature which show the object. Index is the id of the style (e.g. 'highlight' for 'style:highlight'. 'default' for 'style').
+* `data.feature`: the first leaflet feature (of the styles array). it will be used for binding popups to.
+* `data.featureMarker`: the leaflet marker, if a marker is shown on the object
+* `data.popup`: the popup, which is attached to the object (even if it is not shown)
+* `data.styles`: array of style-ids which are currently active
+* `data.isShown`: whether the object is currently shown on the map (boolean)
+* `data.listItem`: DOM node of the list item which shows this object (if item is shown and a list has been added for this layer)
 
-## event onDisappear(ob)
+## event 'remove', Parameters: ob, data
 Will be called when an object disappears from the map (e.g. zoom out, pan out, ...)
 
-See `onAppear` for the description of parameters.
+See `appear` for the description of parameters.
 
-## event onZoomChange(ob)
+## event 'zoomChange', Parameters: ob, data
 Will be called every time when the zoom level changes. Occurs instantly after zoom level change for each object, before assessing if the object is visible at the current zoom level.
 
-See `onAppear` for the description of parameters.
+See `appear` for the description of parameters.
 
-## event onUpdate(ob)
+## event 'update', Parameters: ob, data
 Called every time, when the object is being re-calculated (also when zoom level changes).
 
-See `onAppear` for the description of parameters.
+See `appear` for the description of parameters.
 
 # Optional features
 ## Text along lines
