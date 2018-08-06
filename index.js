@@ -1,6 +1,7 @@
-var OverpassLayer = require('./src/overpass-layer.js')
-var OverpassLayerList = require('./src/overpass-layer-list.js')
-var OverpassFrontend = require('overpass-frontend')
+const OverpassFrontend = require('overpass-frontend')
+
+const OverpassLayer = require('./src/OverpassLayer')
+const OverpassLayerList = require('./src/OverpassLayerList')
 
 if (typeof window !== 'undefined') {
   window.OverpassLayer = OverpassLayer
