@@ -1,3 +1,5 @@
+const isTrue = require('./isTrue')
+
 var styleLeafletBooleanValues = [ 'stroke', 'fill', 'textRepeat', 'textBelow', 'noClip' ]
 var styleLeafletRenameValues = { 'width': 'weight' }
 

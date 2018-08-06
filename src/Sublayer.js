@@ -1,9 +1,13 @@
+/* global L */
+
 const ee = require('event-emitter')
+const OverpassFrontend = require('overpass-frontend')
+const nearestPointOnGeometry = require('nearest-point-on-geometry')
+const BoundingBox = require('boundingbox')
 
 const styleToLeaflet = require('./styleToLeaflet')
 const strToStyle = require('./strToStyle')
 const SublayerFeature = require('./SublayerFeature')
-const nearestPointOnGeometry = require('nearest-point-on-geometry')
 
 class Sublayer {
   constructor (master, options) {
@@ -68,10 +72,8 @@ class Sublayer {
 
         if (!subObject) {
           this.master.overpassFrontend.get(id, ofOptions,
-            (err, ob) => {
-            },
-            (err) => {
-            }
+            () => {},
+            () => {}
           )
         }
 
@@ -80,7 +82,7 @@ class Sublayer {
             this.currentHover.hide()
           }
 
-          this.currentHover = this.master.subLayers[sublayerId].show(id, { styles: [ 'hover'] }, function () {})
+          this.currentHover = this.master.subLayers[sublayerId].show(id, { styles: [ 'hover' ] }, function () {})
         }
         node.onmouseout = () => {
           if (this.currentHover) {
@@ -185,7 +187,8 @@ class Sublayer {
     let isDone = false
 
     let result = {
-      id, options,
+      id,
+      options,
       abort: () => {
         if (isDone) {
           console.log('abort called, although done')
@@ -251,8 +254,26 @@ class Sublayer {
     return result
   }
 
-
   show (data, options, callback) {
+    let show1 = () => {
+      id = data.id
+      result.id = id
+
+      this.shownFeatures[id] = data
+      if (!(id in this.shownFeatureOptions)) {
+        this.shownFeatureOptions[id] = []
+      }
+
+      this.shownFeatureOptions[id].push(options)
+      data.isShown = true
+
+      this._processObject(data)
+
+      this._show(data)
+
+      callback(null, data.object, data)
+    }
+
     let id = typeof data === 'string' ? data : data.id
     let isHidden = false
     let result = {
@@ -307,25 +328,6 @@ class Sublayer {
       })
     } else {
       show1()
-    }
-
-    let show1 = () => {
-      id = data.id
-      result.id = id
-
-      this.shownFeatures[id] = data
-      if (!(id in this.shownFeatureOptions)) {
-        this.shownFeatureOptions[id] = []
-      }
-
-      this.shownFeatureOptions[id].push(options)
-      data.isShown = true
-
-      this._processObject(data)
-
-      this._show(data)
-
-      callback(null, data.object, data)
     }
 
     return result

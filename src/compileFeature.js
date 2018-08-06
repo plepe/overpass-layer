@@ -1,6 +1,8 @@
 function compileFeature (feature, twig) {
   for (var k in feature) {
     if (typeof feature[k] === 'string' && feature[k].search('{') !== -1) {
+      let template
+
       try {
         template = twig.twig({ data: feature[k], autoescape: true })
       } catch (err) {

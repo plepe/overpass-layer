@@ -1,4 +1,4 @@
-/* global overpassFrontend:false, L */
+/* global overpassFrontend:false */
 require('./overpass-layer.css')
 
 const ee = require('event-emitter')
@@ -6,14 +6,11 @@ var BoundingBox = require('boundingbox')
 var twig = require('twig')
 var OverpassFrontend = require('overpass-frontend')
 var escapeHtml = require('html-escape')
-var isTrue = require('./isTrue')
 var Sublayer = require('./Sublayer')
 var Memberlayer = require('./Memberlayer')
 var compileFeature = require('./compileFeature')
 
 function OverpassLayer (options) {
-  var template
-
   if (!options) {
     options = {}
   }
@@ -85,8 +82,6 @@ OverpassLayer.prototype.addTo = function (map) {
 }
 
 OverpassLayer.prototype.remove = function () {
-  var k
-
   for (let k in this.subLayers) {
     this.subLayers[k].hideAll(true)
     this.subLayers[k].remove()
@@ -114,8 +109,6 @@ OverpassLayer.prototype.abortRequest = function () {
 
 OverpassLayer.prototype.check_update_map = function () {
   var bounds = new BoundingBox(this.map.getBounds())
-  var k
-  var ob
 
   if (this.map.getZoom() < this.options.minZoom ||
      (this.options.maxZoom !== null && this.map.getZoom() > this.options.maxZoom)) {
@@ -171,14 +164,13 @@ OverpassLayer.prototype.check_update_map = function () {
 
   this.currentRequest = this.overpassFrontend.BBoxQuery(query, bounds,
     this.options.queryOptions,
-    function (err, ob) {
+    (err, ob) => {
       if (err) {
         console.log('unexpected error', err)
       }
 
       this.mainlayer.add(ob)
-
-    }.bind(this),
+    },
     function (err) {
       if (err === 'abort') {
         return
@@ -231,14 +223,14 @@ OverpassLayer.prototype.get = function (id, callback) {
     {
       properties: OverpassFrontend.ALL
     },
-    function (err, ob) {
+    (err, ob) => {
       if (err === null) {
         callback(err, ob)
       }
 
       done = true
-    }.bind(this),
-    function (err) {
+    },
+    (err) => {
       if (!done) {
         callback(err, null)
       }
@@ -267,7 +259,7 @@ OverpassLayer.prototype.hide = function (id) {
   this.mainlayer.hide(id)
 }
 
-OverpassLayer.prototype.openPopupOnObject = function (ob, sublayer='main') {
+OverpassLayer.prototype.openPopupOnObject = function (ob, sublayer = 'main') {
   this.subLayers[sublayer].openPopupOnObject(ob)
 }
 
