@@ -172,10 +172,6 @@ OverpassLayer.prototype.check_update_map = function () {
       this.mainlayer.add(ob)
     },
     function (err) {
-      if (err === 'abort') {
-        return
-      }
-
       if (this.onLoadEnd) {
         this.onLoadEnd({
           request: this.currentRequest,

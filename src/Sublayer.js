@@ -200,7 +200,6 @@ class Sublayer {
         if (result.request) {
           result.request.abort()
         }
-        callback('abort', null)
       }
     }
 
