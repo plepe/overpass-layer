@@ -520,19 +520,28 @@ class Sublayer {
     }
     data.styles = objectData.styles
 
-    var popupContent = ''
-    popupContent += '<h1>' + objectData.title + '</h1>'
-    var popupDescription = objectData.popupDescription || objectData.description
-    if (popupDescription) {
-      popupContent += '<div class="description">' + popupDescription + '</div>'
-    }
-    if (objectData.body) {
-      popupContent += '<div class="body">' + objectData.body + '</div>'
+    let popupContent = this.popupContent(objectData)
+
+    if (objectData.popupReplace) {
+      let popupReplaceLayer
+      let popupReplaceId
+
+      let m = objectData.popupReplace.split(/:/)
+      if (m.length === 2) {
+        popupReplaceLayer = m[0]
+        popupReplaceId = m[1]
+      } else {
+        popupReplaceLayer = 'main'
+        popupReplaceId = objectData.popupReplace.toString()
+      }
+
+      popupContent = this.master.subLayers[popupReplaceLayer].popupContent(this.master.subLayers[popupReplaceLayer].visibleFeatures[popupReplaceId].data)
     }
 
     if (data.popup) {
       if (data.popup._contentNode) {
         if (data.popup.currentHTML !== popupContent) {
+          data.popup.setContent(popupContent)
           data.popup._contentNode.innerHTML = popupContent
           this.updateAssets(data.popup._contentNode, objectData)
         }
@@ -556,6 +565,8 @@ class Sublayer {
       if (data.featureMarker) {
         data.featureMarker.bindPopup(data.popup)
       }
+
+      data.popup.currentHTML = popupContent
     }
 
     data.id = ob.id
@@ -569,6 +580,20 @@ class Sublayer {
 
     this.master.emit('update', data.object, data)
     this.emit('update', data.object, data)
+  }
+
+  popupContent (objectData) {
+    let popupContent = ''
+    popupContent += '<h1>' + objectData.title + '</h1>'
+    let popupDescription = objectData.popupDescription || objectData.description
+    if (popupDescription) {
+      popupContent += '<div class="description">' + popupDescription + '</div>'
+    }
+    if (objectData.body) {
+      popupContent += '<div class="body">' + objectData.body + '</div>'
+    }
+
+    return popupContent
   }
 
   evaluate (data) {

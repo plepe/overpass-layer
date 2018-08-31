@@ -28,6 +28,7 @@ Options:
   * markerSign: a HTML string which will be shown within the icon.
   * priority: a numeric value by which the elements in the list will be sorted (lower values first)
   * appUrl: an url for the link of an item in the list, default: '#'.
+  * popupReplace: for the popup use content of alternate object. Can be prefixed by sublayer_id (Examples: 'r1234', 'member:w1234')
 * queryOptions: options for OverpassFrontend.BBoxQuery.
 * styleNoBindPopup: array, list of styles where popup should not bind to. Default: []
 * stylesNoAutoShow: array, list of styles which should not automatically be shown.
