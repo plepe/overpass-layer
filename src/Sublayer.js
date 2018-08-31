@@ -537,7 +537,7 @@ class Sublayer {
           this.updateAssets(data.popup._contentNode, objectData)
         }
       } else {
-        data.popup = data.popup.setContent(popupContent)
+        data.popup.setContent(popupContent)
       }
 
       data.popup.currentHTML = popupContent
