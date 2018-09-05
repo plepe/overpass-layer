@@ -389,6 +389,7 @@ class Sublayer {
     }
 
     var objectData = this.evaluate(data)
+    data.data = objectData
 
     if (!data.feature) {
       data.feature = ob.leafletFeature({
@@ -523,17 +524,7 @@ class Sublayer {
     let popupContent = this.popupContent(objectData)
 
     if (objectData.popupReplace) {
-      let popupReplaceLayer
-      let popupReplaceId
-
-      let m = objectData.popupReplace.split(/:/)
-      if (m.length === 2) {
-        popupReplaceLayer = m[0]
-        popupReplaceId = m[1]
-      } else {
-        popupReplaceLayer = 'main'
-        popupReplaceId = objectData.popupReplace.toString()
-      }
+      let [ popupReplaceLayer, popupReplaceId ] = data.popupId()
 
       popupContent = this.master.subLayers[popupReplaceLayer].popupContent(this.master.subLayers[popupReplaceLayer].visibleFeatures[popupReplaceId].data)
     }
@@ -572,7 +563,6 @@ class Sublayer {
     data.id = ob.id
     data.layer_id = this.options.id
     data.sublayer_id = this.options.sublayer_id
-    data.data = objectData
 
     if (this.master.onUpdate) {
       this.master.onUpdate(data)
