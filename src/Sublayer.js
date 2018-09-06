@@ -522,11 +522,15 @@ class Sublayer {
     data.styles = objectData.styles
 
     let popupContent = this.popupContent(objectData)
+    let popupOb = data
+    let popupSublayer = this
 
     if (objectData.popupReplace) {
       let [ popupReplaceLayer, popupReplaceId ] = data.popupId()
+      popupSublayer = this.master.subLayers[popupReplaceLayer]
+      popupOb = popupSublayer.visibleFeatures[popupReplaceId]
 
-      popupContent = this.master.subLayers[popupReplaceLayer].popupContent(this.master.subLayers[popupReplaceLayer].visibleFeatures[popupReplaceId].data)
+      popupContent = popupSublayer.popupContent(popupOb.data)
     }
 
     if (data.popup) {
@@ -543,8 +547,6 @@ class Sublayer {
       data.popup.currentHTML = popupContent
     } else {
       data.popup = L.popup().setContent(popupContent)
-      data.popup.object = data
-      data.popup.sublayer = this
 
       data.feature.bindPopup(data.popup)
       for (k in data.features) {
@@ -559,6 +561,9 @@ class Sublayer {
 
       data.popup.currentHTML = popupContent
     }
+
+    data.popup.object = popupOb
+    data.popup.sublayer = popupSublayer
 
     data.id = ob.id
     data.layer_id = this.options.id
