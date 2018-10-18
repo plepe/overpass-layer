@@ -14,7 +14,7 @@ class Memberlayer extends Sublayer {
 
   featureMemberModified (feature, data) {
     feature.memberOf.forEach(master => {
-      this.masterlayer.scheduleReprocess(master.relation.id)
+      this.masterlayer.scheduleReprocess(master.id)
     })
   }
 
