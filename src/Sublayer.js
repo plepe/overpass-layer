@@ -42,12 +42,18 @@ class Sublayer {
     } else {
       options.stylesNoAutoShow = [ 'hover' ]
     }
+
+    this.extensions = []
   }
 
   addTo (map) {
     this.map = map
 
     this.map.on('popupopen', this._popupOpen.bind(this))
+  }
+
+  addExtension (extension) {
+    this.extensions.push(extension)
   }
 
   _popupOpen (e) {
@@ -557,6 +563,11 @@ class Sublayer {
         data.featureMarker.bindPopup(data.popup)
       }
     }
+
+    data.popup.object = popupOb
+    data.popup.sublayer = popupSublayer
+
+    this.extensions.map(ext => ext.process(data))
 
     data.id = ob.id
     data.layer_id = this.options.id
