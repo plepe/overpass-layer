@@ -4,6 +4,9 @@ const ee = require('event-emitter')
 const OverpassFrontend = require('overpass-frontend')
 const nearestPointOnGeometry = require('nearest-point-on-geometry')
 const BoundingBox = require('boundingbox')
+const turf = {
+  pointOnFeature: require('@turf/point-on-feature')
+}
 
 const styleToLeaflet = require('./styleToLeaflet')
 const strToStyle = require('./strToStyle')
@@ -498,12 +501,14 @@ class Sublayer {
       var icon = L.divIcon(objectData.marker)
 
       if (data.featureMarker) {
+        data.featureMarker.setLatLng(this.centralPositionOnObject(ob))
         data.featureMarker.setIcon(icon)
+
         if (data.featureMarker._icon) {
           this.updateAssets(data.featureMarker._icon)
         }
       } else {
-        data.featureMarker = L.marker(ob.center, { icon: icon })
+        data.featureMarker = L.marker(this.centralPositionOnObject(ob), { icon: icon })
       }
     }
 
@@ -759,6 +764,37 @@ class Sublayer {
 
     // no point found? use normal object popup open then ...
     ob.feature.openPopup()
+  }
+
+  centralPositionOnObject (ob) {
+    let geom = ob.GeoJSON()
+    let r = turf.pointOnFeature(geom)
+    let pointOnFeature = { lat: r.geometry.coordinates[1], lon: r.geometry.coordinates[0] }
+
+    let obBounds = new BoundingBox(ob.bounds)
+    let viewBounds = new BoundingBox(this.map.getBounds())
+
+    // When object is very small (compared to current view), return pointOnFeature
+    if (obBounds.diagonalLength() / 0.40 < viewBounds.diagonalLength()) {
+      return pointOnFeature
+    }
+
+    // When object is quite smaller than current view, return pointOnFeature when inside bounding box
+    if (obBounds.diagonalLength() / 0.60 < viewBounds.diagonalLength()) {
+      if (viewBounds.intersects(pointOnFeature)) {
+        return pointOnFeature
+      }
+    }
+
+    // otherwise, try to find point on geometry closest to center of view
+    let pt = this.map.getCenter()
+    let pos = nearestPointOnGeometry(geom, { type: 'Feature', geometry: { type: 'Point', coordinates: [ pt.lng, pt.lat ] } })
+    if (pos) {
+      return { lat: pos.geometry.coordinates[1], lon: pos.geometry.coordinates[0] }
+    }
+
+    // no better point found? use pointOnFeature
+    return pointOnFeature
   }
 }
 
