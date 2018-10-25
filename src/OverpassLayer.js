@@ -135,6 +135,10 @@ class OverpassLayer {
         this.subLayers[k].zoomChange()
       }
       this.lastZoom = this.map.getZoom()
+    } else {
+      for (let k in this.subLayers) {
+        this.subLayers[k].moved()
+      }
     }
 
     // Abort current requests (in case they are long-lasting - we don't need them

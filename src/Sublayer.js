@@ -371,6 +371,16 @@ class Sublayer {
     this.lastZoom = this.map.getZoom()
   }
 
+  moved () {
+    for (let k in this.visibleFeatures) {
+      let data = this.visibleFeatures[k]
+
+      if (data.featureMarker) {
+        data.featureMarker.setLatLng(this.centralPositionOnObject(data.object))
+      }
+    }
+  }
+
   recalc () {
     for (var k in this.visibleFeatures) {
       this._processObject(this.visibleFeatures[k])
