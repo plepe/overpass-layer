@@ -4,8 +4,8 @@ const ee = require('event-emitter')
 const OverpassFrontend = require('overpass-frontend')
 const nearestPointOnGeometry = require('nearest-point-on-geometry')
 const BoundingBox = require('boundingbox')
+const bboxClip = require('bbox-clip')
 const turf = {
-  bboxClip: require('@turf/bbox-clip').default,
   pointOnFeature: require('@turf/point-on-feature')
 }
 
@@ -798,7 +798,7 @@ class Sublayer {
     }
 
     // otherwise, try to find point on geometry closest to center of view
-    let clippedGeom = turf.bboxClip(geom, [ viewBounds.minlon, viewBounds.minlat, viewBounds.maxlon, viewBounds.maxlat ])
+    let clippedGeom = bboxClip(geom, [ viewBounds.minlon, viewBounds.minlat, viewBounds.maxlon, viewBounds.maxlat ])
     if (clippedGeom) {
       let r = turf.pointOnFeature(clippedGeom)
       return { lat: r.geometry.coordinates[1], lon: r.geometry.coordinates[0] }
