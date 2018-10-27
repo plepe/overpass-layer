@@ -688,6 +688,7 @@ class Sublayer {
   }
 
   _hide (data) {
+    this.map.removeLayer(data.feature)
     for (var k in data.features) {
       this.map.removeLayer(data.features[k])
     }
