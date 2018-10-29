@@ -7,6 +7,7 @@ class OverpassLayerPattern {
     this.layer = layer
 
     this.layer.on('update', this.processObject.bind(this))
+    this.layer.on('remove', this.removeObject.bind(this))
   }
 
   processObject (object, data) {
@@ -55,6 +56,19 @@ class OverpassLayerPattern {
           this.layer.map.removeLayer(data.patternFeatures[k])
           delete data.patternFeatures[k]
         }
+      }
+    }
+  }
+
+  removeObject (object, data) {
+    if (!data.patternFeatures) {
+      return
+    }
+
+    for (var k in data.features) {
+      if (data.patternFeatures[k]) {
+        this.layer.map.removeLayer(data.patternFeatures[k])
+        delete data.patternFeatures[k]
       }
     }
   }
