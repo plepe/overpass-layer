@@ -35,9 +35,17 @@ class OverpassLayerPattern {
         }
 
         switch (def.pattern.toString()) {
+          case 'dash':
+            options.pathOptions = pathOptions
+            symbol = L.Symbol.dash(options)
+            break
           case 'arrowHead':
             options.pathOptions = pathOptions
             symbol = L.Symbol.arrowHead(options)
+            break
+          case 'marker':
+            options.markerOptions = pathOptions
+            symbol = L.Symbol.marker(options)
             break
           default:
             // TODO
