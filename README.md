@@ -162,3 +162,23 @@ Include script:
 ```html
 <script src="node_modules/leaflet-polylineoffset/leaflet.polylineoffset.js"></script>
 ```
+## Pattern
+Each style can have these additional values:
+
+* pattern: false/empty: no pattern, 'arrowHead', 'dash', 'marker'
+* pattern-offset: Offset of the first pattern symbol, from the start point of the line. Default: 0.
+* pattern-endOffset: Minimum offset of the last pattern symbol, from the end point of the line. Default: 0.
+* pattern-repeat: Repetition interval of the pattern symbols. Defines the distance between each consecutive symbol's anchor point.
+
+Depending on the type of pattern, the following options are available:
+* arrowHead:
+ * pattern-polygon: true/false
+ * pattern-pixelSize: size of pattern
+ * pattern-angleCorrection: degrees ([see #88](https://github.com/bbecquet/Leaflet.PolylineDecorator/pull/88))
+
+* dash:
+ * pattern-pixelSize: size of pattern
+
+* marker:
+ * pattern-rotate: false
+ * pattern-angleCorrection: degrees
