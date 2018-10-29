@@ -10,10 +10,14 @@ class OverpassLayerPattern {
   }
 
   processObject (object, data) {
+    if (!data.patternFeatures) {
+      data.patternFeatures = {}
+    }
+
     for (var k in data.features) {
       let def = k === 'default' ? data.data.style : data.data['style:' + k]
 
-      if ('pattern' in def) {
+      if (def.pattern) {
         let symbol
         let pathOptions = {}
         let options = {}
@@ -39,10 +43,18 @@ class OverpassLayerPattern {
         }
 
         options.symbol = symbol
-        let pattern = L.polylineDecorator(data.features[k])
-        pattern.addTo(this.layer.map)
 
-        pattern.setPatterns([ options ])
+        if (!data.patternFeatures[k]) {
+          data.patternFeatures[k] = L.polylineDecorator(data.features[k])
+          data.patternFeatures[k].addTo(this.layer.map)
+        }
+
+        data.patternFeatures[k].setPatterns([ options ])
+      } else {
+        if (data.patternFeatures[k]) {
+          this.layer.map.removeLayer(data.patternFeatures[k])
+          delete data.patternFeatures[k]
+        }
       }
     }
   }
