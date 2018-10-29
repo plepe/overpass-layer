@@ -20,7 +20,7 @@ class OverpassLayerPattern {
 
       if (def.pattern) {
         let symbol
-        let pathOptions = {}
+        let symbolOptions = {}
         let options = {}
 
         for (let k in def) {
@@ -28,7 +28,7 @@ class OverpassLayerPattern {
           let m2 = k.match(/^pattern-(.*)$/)
 
           if (m1) {
-            pathOptions[m1[1]] = def[k]
+            symbolOptions[m1[1]] = def[k]
           } else if (m2) {
             options[m2[1]] = def[k]
           }
@@ -36,15 +36,15 @@ class OverpassLayerPattern {
 
         switch (def.pattern.toString()) {
           case 'dash':
-            options.pathOptions = pathOptions
+            options.pathOptions = symbolOptions
             symbol = L.Symbol.dash(options)
             break
           case 'arrowHead':
-            options.pathOptions = pathOptions
+            options.pathOptions = symbolOptions
             symbol = L.Symbol.arrowHead(options)
             break
           case 'marker':
-            options.markerOptions = pathOptions
+            options.markerOptions = symbolOptions
             symbol = L.Symbol.marker(options)
             break
           default:
