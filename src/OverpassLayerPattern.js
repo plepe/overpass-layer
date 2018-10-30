@@ -18,7 +18,7 @@ class OverpassLayerPattern {
     for (var k in data.features) {
       let def = k === 'default' ? data.data.style : data.data['style:' + k]
 
-      if (def.pattern) {
+      if (def.pattern && data.styles.includes(k)) {
         let symbol
         let symbolOptions = {}
         let options = {}
