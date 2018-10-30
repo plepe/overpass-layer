@@ -163,6 +163,15 @@ Include script:
 <script src="node_modules/leaflet-polylineoffset/leaflet.polylineoffset.js"></script>
 ```
 ## Pattern
+```sh
+npm install --save leaflet-polylinedecorator
+```
+
+Include script:
+```html
+<script src="node_modules/leaflet-polylinedecorator/dist/leaflet.polylineDecorator.js"></script>
+```
+
 Each style can have these additional values:
 
 * pattern: false/empty: no pattern, 'arrowHead', 'dash', 'marker'
@@ -174,6 +183,7 @@ Depending on the type of pattern, the following options are available:
 * arrowHead:
  * pattern-polygon: true/false
  * pattern-pixelSize: size of pattern
+ * pattern-headAngle: Angle of the digits
  * pattern-angleCorrection: degrees ([see #88](https://github.com/bbecquet/Leaflet.PolylineDecorator/pull/88))
 
 * dash:
