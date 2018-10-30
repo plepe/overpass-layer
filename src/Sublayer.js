@@ -9,6 +9,11 @@ const styleToLeaflet = require('./styleToLeaflet')
 const strToStyle = require('./strToStyle')
 const SublayerFeature = require('./SublayerFeature')
 
+// Extensions:
+const decorators = [
+  require('./DecoratorPattern')
+]
+
 class Sublayer {
   constructor (master, options) {
     this.master = master
@@ -42,6 +47,8 @@ class Sublayer {
     } else {
       options.stylesNoAutoShow = [ 'hover' ]
     }
+
+    decorators.forEach(ext => new ext(this))
   }
 
   addTo (map) {

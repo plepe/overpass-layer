@@ -1,9 +1,5 @@
-class OverpassLayerPattern {
-  constructor (def) {
-    this.def = def
-  }
-
-  connect (layer) {
+class DecoratorPattern {
+  constructor (layer) {
     this.layer = layer
 
     this.layer.on('update', this.processObject.bind(this))
@@ -82,4 +78,4 @@ class OverpassLayerPattern {
   }
 }
 
-module.exports = OverpassLayerPattern
+module.exports = DecoratorPattern
