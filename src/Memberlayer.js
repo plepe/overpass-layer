@@ -50,6 +50,9 @@ class Memberlayer extends Sublayer {
               tags: feature.object.tags,
               meta: feature.object.meta,
               role: member.role,
+              dir: member.dir,
+              connectedPrev: member.connectedPrev,
+              connectedNext: member.connectedNext,
               flags: feature.flags,
               sequence
             })

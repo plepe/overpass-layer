@@ -656,7 +656,10 @@ class Sublayer {
           osm_id: member.osm_id,
           role: ob.members[sequence].role,
           tags: member.tags,
-          meta: member.meta
+          meta: member.meta,
+          dir: member.dir,
+          connectedPrev: member.connectedPrev,
+          connectedNext: member.connectedNext
         }
 
         result.members.push(r)
