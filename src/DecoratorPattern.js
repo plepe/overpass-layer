@@ -78,6 +78,10 @@ class DecoratorPattern {
         }
 
         data.patternFeatures[k].setPatterns([ options ])
+
+        if (this.layer._shallBindPopupToStyle(k)) {
+          data.patternFeatures[k].bindPopup(data.popup)
+        }
       } else {
         if (data.patternFeatures[k]) {
           this.layer.map.removeLayer(data.patternFeatures[k])
