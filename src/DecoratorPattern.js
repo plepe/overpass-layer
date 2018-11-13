@@ -1,4 +1,5 @@
 const isTrue = require('./isTrue')
+const styleToLeaflet = require('./styleToLeaflet')
 
 class DecoratorPattern {
   constructor (layer) {
@@ -6,13 +7,6 @@ class DecoratorPattern {
 
     this.layer.on('update', this.processObject.bind(this))
     this.layer.on('remove', this.removeObject.bind(this))
-  }
-
-  parseSymbolType (key, value) {
-    switch (key) {
-      default:
-        return value
-    }
   }
 
   parseType (key, value) {
@@ -47,11 +41,13 @@ class DecoratorPattern {
           let m2 = k.match(/^pattern-(.*)$/)
 
           if (m1) {
-            symbolOptions[m1[1]] = this.parseSymbolType(m1[1], def[k])
+            symbolOptions[m1[1]] = def[k]
           } else if (m2) {
             options[m2[1]] = this.parseType(m2[1], def[k])
           }
         }
+
+        symbolOptions = styleToLeaflet(symbolOptions)
 
         switch (def.pattern.toString()) {
           case 'dash':
