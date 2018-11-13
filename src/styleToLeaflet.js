@@ -17,7 +17,14 @@ const transforms = {
     type: 'boolean'
   },
   width: {
-    rename: 'weight'
+    rename: 'weight',
+    type: 'float'
+  },
+  opacity: {
+    type: 'float'
+  },
+  fillOpacity: {
+    type: 'float'
   }
 }
 
@@ -33,6 +40,10 @@ function styleToLeaflet (style) {
       switch (transform.type) {
         case 'boolean':
           value = isTrue(ret[k])
+          break
+        case 'float':
+          value = parseFloat(ret[k])
+          break
       }
 
       if (transform.rename) {
