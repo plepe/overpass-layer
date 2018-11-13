@@ -192,3 +192,5 @@ Depending on the type of pattern, the following options are available:
 * marker:
  * pattern-rotate: false
  * pattern-angleCorrection: degrees
+
+To set path options use the prefix `pattern-path-`, e.g. `pattern-path-width` or `pattern-path-color`.
