@@ -8,6 +8,7 @@ class Memberlayer extends Sublayer {
 
     this.masterlayer.on('add', this.featureOnMainModified.bind(this))
     this.masterlayer.on('remove', this.featureOnMainModified.bind(this))
+    this.masterlayer.on('update', this.featureOnMainModified.bind(this))
     this.on('add', this.featureMemberModified.bind(this))
     this.on('remove', this.featureMemberModified.bind(this))
   }
@@ -30,8 +31,8 @@ class Memberlayer extends Sublayer {
     })
   }
 
-  twigData (ob) {
-    let result = super.twigData(ob)
+  twigData (ob, data) {
+    let result = super.twigData(ob, data)
 
     for (var k in this.masterlayer.visibleFeatures) {
       let feature = this.masterlayer.visibleFeatures[k]
@@ -49,6 +50,10 @@ class Memberlayer extends Sublayer {
               tags: feature.object.tags,
               meta: feature.object.meta,
               role: member.role,
+              dir: member.dir,
+              connectedPrev: member.connectedPrev,
+              connectedNext: member.connectedNext,
+              flags: feature.flags,
               sequence
             })
           }

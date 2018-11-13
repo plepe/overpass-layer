@@ -137,7 +137,12 @@ class OverpassLayerList {
         this.currentHover.hide()
       }
 
-      this.currentHover = this.layer.show(id, { styles: [ 'hover' ], sublayer_id },
+      this.currentHover = this.layer.show(id,
+        {
+          styles: [ 'hover' ],
+          flags: [ 'hover' ],
+          sublayer_id
+        },
         () => {}
       )
     }.bind(this, ob.id, ob.sublayer_id)

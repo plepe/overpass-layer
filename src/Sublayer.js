@@ -9,6 +9,11 @@ const styleToLeaflet = require('./styleToLeaflet')
 const strToStyle = require('./strToStyle')
 const SublayerFeature = require('./SublayerFeature')
 
+// Extensions:
+const decorators = [
+  require('./DecoratorPattern')
+]
+
 class Sublayer {
   constructor (master, options) {
     this.master = master
@@ -42,6 +47,8 @@ class Sublayer {
     } else {
       options.stylesNoAutoShow = [ 'hover' ]
     }
+
+    decorators.forEach(ext => new ext(this))
   }
 
   addTo (map) {
@@ -266,6 +273,8 @@ class Sublayer {
       this.shownFeatureOptions[id].push(options)
       data.isShown = true
 
+      data.updateFlags()
+
       this._processObject(data)
 
       this._show(data)
@@ -295,6 +304,8 @@ class Sublayer {
           if (i !== -1) {
             this.shownFeatureOptions[id].splice(i, 1)
           }
+
+          data.updateFlags()
 
           if (this.shownFeatureOptions[id].length === 0) {
             this.hide(data)
@@ -575,7 +586,7 @@ class Sublayer {
     var k
     var ob = data.object
 
-    data.twigData = this.twigData(ob)
+    data.twigData = this.twigData(ob, data)
 
     var objectData = {}
     for (k in this.options.feature) {
@@ -623,7 +634,7 @@ class Sublayer {
     return objectData
   }
 
-  twigData (ob) {
+  twigData (ob, data) {
     var result = {
       id: ob.id,
       sublayer_id: this.options.sublayer_id,
@@ -631,6 +642,7 @@ class Sublayer {
       type: ob.type,
       tags: ob.tags,
       meta: ob.meta,
+      flags: data.flags,
       members: [],
       'const': this.options.const
     }
@@ -644,7 +656,10 @@ class Sublayer {
           osm_id: member.osm_id,
           role: ob.members[sequence].role,
           tags: member.tags,
-          meta: member.meta
+          meta: member.meta,
+          dir: member.dir,
+          connectedPrev: member.connectedPrev,
+          connectedNext: member.connectedNext
         }
 
         result.members.push(r)

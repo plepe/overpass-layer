@@ -1,24 +1,58 @@
 const isTrue = require('./isTrue')
 
-var styleLeafletBooleanValues = [ 'stroke', 'fill', 'textRepeat', 'textBelow', 'noClip' ]
-var styleLeafletRenameValues = { 'width': 'weight' }
+const transforms = {
+  stroke: {
+    type: 'boolean'
+  },
+  fill: {
+    type: 'boolean'
+  },
+  textRepeat: {
+    type: 'boolean'
+  },
+  textBelow: {
+    type: 'boolean'
+  },
+  noClip: {
+    type: 'boolean'
+  },
+  width: {
+    rename: 'weight',
+    type: 'float'
+  },
+  opacity: {
+    type: 'float'
+  },
+  fillOpacity: {
+    type: 'float'
+  }
+}
 
 function styleToLeaflet (style) {
-  var ret = JSON.parse(JSON.stringify(style))
+  let ret = JSON.parse(JSON.stringify(style))
 
-  for (var i in styleLeafletBooleanValues) {
-    var k = styleLeafletBooleanValues[i]
+  for (let k in ret) {
+    let value =  ret[k]
 
-    if (k in style) {
-      ret[k] = isTrue(style[k])
+    if (k in transforms) {
+      let transform = transforms[k]
+
+      switch (transform.type) {
+        case 'boolean':
+          value = isTrue(ret[k])
+          break
+        case 'float':
+          value = parseFloat(ret[k])
+          break
+      }
+
+      if (transform.rename) {
+        delete ret[k]
+        k = transform.rename
+      }
     }
-  }
 
-  for (var from in styleLeafletRenameValues) {
-    if (from in ret) {
-      var to = styleLeafletRenameValues[from]
-      ret[to] = ret[from]
-    }
+    ret[k] = value
   }
 
   return ret
