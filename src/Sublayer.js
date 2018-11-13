@@ -48,7 +48,7 @@ class Sublayer {
       options.stylesNoAutoShow = [ 'hover' ]
     }
 
-    decorators.forEach(ext => new ext(this))
+    decorators.forEach(Ext => new Ext(this))
   }
 
   addTo (map) {

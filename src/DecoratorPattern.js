@@ -1,3 +1,5 @@
+/* global L */
+
 const isTrue = require('./isTrue')
 const styleToLeaflet = require('./styleToLeaflet')
 

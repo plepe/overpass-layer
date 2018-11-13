@@ -25,7 +25,7 @@
     "build": "browserify -g browserify-css index.js -o dist/overpass-layer.js",
     "watch": "watchify --debug -g browserify-css index.js -o dist/overpass-layer.js -v",
     "prepublish": "npm run build && npm run lint",
-    "lint": "standard src/*.js form.js && standard --global OverpassLayer --global OverpassLayerList --global map demo/*.js",
+    "lint": "standard --fix src/*.js form.js && standard --global OverpassLayer --global OverpassLayerList --global map demo/*.js",
     "start": "http-server ./ -p 3000"
   },
   "repository": {

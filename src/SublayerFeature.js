@@ -13,7 +13,9 @@ class SublayerFeature {
     this.flags = {}
     shownFeatureOptions.forEach(options => {
       if (options.flags) {
-        options.flags.forEach(flag => this.flags[flag] = true)
+        options.flags.forEach(flag => {
+          this.flags[flag] = true
+        })
       }
     })
   }
