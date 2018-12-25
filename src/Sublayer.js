@@ -48,7 +48,40 @@ class Sublayer {
       options.stylesNoAutoShow = [ 'hover' ]
     }
 
-    decorators.forEach(Ext => new Ext(this))
+    this.styleTransforms = {
+      stroke: {
+        type: 'boolean'
+      },
+      fill: {
+        type: 'boolean'
+      },
+      textRepeat: {
+        type: 'boolean'
+      },
+      textBelow: {
+        type: 'boolean'
+      },
+      noClip: {
+        type: 'boolean'
+      },
+      width: {
+        rename: 'weight',
+        type: 'float'
+      },
+      opacity: {
+        type: 'float'
+      },
+      fillOpacity: {
+        type: 'float'
+      }
+    }
+
+    decorators.forEach(Ext => {
+      let ext = new Ext(this)
+      if ('getTransforms' in ext) {
+        ext.getTransforms(this.styleTransforms)
+      }
+    })
   }
 
   addTo (map) {
@@ -414,7 +447,7 @@ class Sublayer {
       var m = k.match(/^style(|:(.*))$/)
       if (m) {
         var styleId = typeof m[2] === 'undefined' ? 'default' : m[2]
-        var style = styleToLeaflet(objectData[k])
+        var style = styleToLeaflet(objectData[k], this.styleTransforms)
 
         if (data.features[styleId]) {
           data.features[styleId].setStyle(style)

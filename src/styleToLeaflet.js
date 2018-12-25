@@ -1,34 +1,6 @@
 const isTrue = require('./isTrue')
 
-const transforms = {
-  stroke: {
-    type: 'boolean'
-  },
-  fill: {
-    type: 'boolean'
-  },
-  textRepeat: {
-    type: 'boolean'
-  },
-  textBelow: {
-    type: 'boolean'
-  },
-  noClip: {
-    type: 'boolean'
-  },
-  width: {
-    rename: 'weight',
-    type: 'float'
-  },
-  opacity: {
-    type: 'float'
-  },
-  fillOpacity: {
-    type: 'float'
-  }
-}
-
-function styleToLeaflet (style) {
+function styleToLeaflet (style, transforms) {
   let ret = JSON.parse(JSON.stringify(style))
 
   for (let k in ret) {

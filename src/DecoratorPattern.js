@@ -49,7 +49,7 @@ class DecoratorPattern {
           }
         }
 
-        symbolOptions = styleToLeaflet(symbolOptions)
+        symbolOptions = styleToLeaflet(symbolOptions, this.layer.styleTransforms)
 
         switch (def.pattern.toString()) {
           case 'dash':
