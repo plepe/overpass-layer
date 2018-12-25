@@ -142,6 +142,11 @@ Called every time, when the object is being re-calculated (also when zoom level 
 
 See `appear` for the description of parameters.
 
+## event 'update-style', Parameters: ob, data, styleId, style
+Called every time, when the object is being re-calculated (also when zoom level changes) for each style.
+
+See `appear` for the description of parameters.
+
 # Optional features
 ## Text along lines
 ```sh

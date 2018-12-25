@@ -441,6 +441,9 @@ class Sublayer {
         if ('offset' in style && 'setOffset' in data.features[styleId]) {
           data.features[styleId].setOffset(style.offset)
         }
+
+        this.emit('update-style', data.object, data, styleId, style)
+        this.master.emit('update-style', data.object, data, styleId, style)
       }
     }
 
