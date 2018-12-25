@@ -14,7 +14,8 @@ var overpassLayer = new OverpassLayer({
     style: {
       color: 'white',
       width: 8,
-      opacity: 1
+      opacity: 1,
+      text: '{{ tags.name }}'
     },
     markerSymbol: null,
     styles: [ 'casing', 'default' ],
