@@ -158,6 +158,19 @@ Include script:
 <script src="node_modules/leaflet-textpath/leaflet.textpath.js"></script>
 ```
 
+Additional style parameter:
+* textRepeat:
+* textOffset:
+* textBelow:
+* textOrientation:
+* textCenter:
+* textFill:
+* textFillOpacity:
+* textFontWeight:
+* textFontSize:
+* textLetterSpacing:
+* textFontFamily:
+
 ## Line offset
 ```sh
 npm install --save leaflet-polylineoffset

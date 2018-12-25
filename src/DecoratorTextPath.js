@@ -6,9 +6,6 @@ class DecoratorTextPath {
   }
 
   getTransforms (transforms) {
-    transforms.textRepeat = {
-      type: 'boolean'
-    }
     transforms.textBelow = {
       type: 'boolean'
     }
@@ -21,12 +18,17 @@ class DecoratorTextPath {
         repeat: style.textRepeat,
         offset: style.textOffset,
         below: style.textBelow,
+        orientation: style.textOrientation,
+        allowCrop: false,
+        center: style.textCenter,
         attributes: {
           'fill': style.textFill,
           'fill-opacity': style.textFillOpacity,
           'font-weight': style.textFontWeight,
+          'font-family': style.textFontFamily,
           'font-size': style.textFontSize,
-          'letter-spacing': style.textLetterSpacing
+          'letter-spacing': style.textLetterSpacing,
+          'dominant-baseline': 'middle'
         }
       })
     }

@@ -16,6 +16,9 @@ var overpassLayer = new OverpassLayer({
       width: 11,
       opacity: 1,
       text: '{{ tags.name }}',
+      textOrientation: 'auto',
+      textRepeat: 200,
+      textCenter: true,
       textFontSize: 10,
       textOffset: 0
     },
