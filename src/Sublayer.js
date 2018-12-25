@@ -11,7 +11,8 @@ const SublayerFeature = require('./SublayerFeature')
 
 // Extensions:
 const decorators = [
-  require('./DecoratorPattern')
+  require('./DecoratorPattern'),
+  require('./DecoratorTextPath')
 ]
 
 class Sublayer {
@@ -53,12 +54,6 @@ class Sublayer {
         type: 'boolean'
       },
       fill: {
-        type: 'boolean'
-      },
-      textRepeat: {
-        type: 'boolean'
-      },
-      textBelow: {
         type: 'boolean'
       },
       noClip: {
@@ -453,22 +448,6 @@ class Sublayer {
           data.features[styleId].setStyle(style)
         } else {
           data.features[styleId] = ob.leafletFeature(style)
-        }
-
-        if ('text' in style && 'setText' in data.features[styleId]) {
-          data.features[styleId].setText(null)
-          data.features[styleId].setText(style.text, {
-            repeat: style.textRepeat,
-            offset: style.textOffset,
-            below: style.textBelow,
-            attributes: {
-              'fill': style.textFill,
-              'fill-opacity': style.textFillOpacity,
-              'font-weight': style.textFontWeight,
-              'font-size': style.textFontSize,
-              'letter-spacing': style.textLetterSpacing
-            }
-          })
         }
 
         if ('offset' in style && 'setOffset' in data.features[styleId]) {
