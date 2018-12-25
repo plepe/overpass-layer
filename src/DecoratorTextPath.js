@@ -25,7 +25,9 @@ class DecoratorTextPath {
           'fill': style.textFill,
           'fill-opacity': style.textFillOpacity,
           'font-weight': style.textFontWeight,
-          'font-family': style.textFontFamily,
+          // Browser support for non-monospace fonts on rotated texts is bad.
+          // see https://xover.mud.at/~skunk/svg-rotate-glyph/ for a comparison.
+          'font-family': style.textFontFamily || (style.textOrientation === 'auto' ? 'monospace' : 'sans'),
           'font-size': style.textFontSize,
           'letter-spacing': style.textLetterSpacing,
           'dominant-baseline': 'middle'
