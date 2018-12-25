@@ -8,14 +8,16 @@ var overpassLayer = new OverpassLayer({
     'style:casing': {
       pane: 'casing',
       color: 'black',
-      width: 12,
+      width: 13,
       opacity: 1
     },
     style: {
       color: 'white',
-      width: 8,
+      width: 11,
       opacity: 1,
-      text: '{{ tags.name }}'
+      text: '{{ tags.name }}',
+      textFontSize: 10,
+      textOffset: 0
     },
     markerSymbol: null,
     styles: [ 'casing', 'default' ],
