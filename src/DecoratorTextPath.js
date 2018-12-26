@@ -21,6 +21,7 @@ class DecoratorTextPath {
         orientation: style.textOrientation,
         allowCrop: false,
         center: style.textCenter,
+        turnedText: style.textTurned,
         attributes: {
           'fill': style.textFill,
           'fill-opacity': style.textFillOpacity,

@@ -159,6 +159,8 @@ Include script:
 ```
 
 Additional style parameter:
+* text:
+* textTurned:
 * textRepeat:
 * textOffset:
 * textBelow:
