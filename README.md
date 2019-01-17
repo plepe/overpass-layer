@@ -142,6 +142,11 @@ Called every time, when the object is being re-calculated (also when zoom level 
 
 See `appear` for the description of parameters.
 
+## event 'twigData', Parameters: ob, data, result
+Called for every object on re-calculation. Result is the twigData which will used for evaluating each object. Any listeners may modify this result object.
+
+See `appear` for the description of other parameters.
+
 # Optional features
 ## Text along lines
 ```sh

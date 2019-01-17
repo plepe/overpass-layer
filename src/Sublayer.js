@@ -672,6 +672,9 @@ class Sublayer {
       }
     }
 
+    this.emit('twigData', ob, data, result)
+    this.master.emit('twigData', ob, data, result)
+
     return result
   }
 
