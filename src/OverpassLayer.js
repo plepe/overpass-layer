@@ -129,6 +129,17 @@ class OverpassLayer {
       this.subLayers[k].hideNonVisible(bounds)
     }
 
+    let query = this.options.query
+    if (typeof query === 'object') {
+      query = query[Object.keys(query).filter(function (x) { return x <= this.map.getZoom() }.bind(this)).reverse()[0]]
+    }
+
+    if (query !== this.lastQuery) {
+      let filter = new OverpassFrontend.Filter(query)
+      this.mainlayer.hideNonVisibleFilter(filter)
+      this.lastQuery = query
+    }
+
     // When zoom level changed, update visible objects
     if (this.lastZoom !== this.map.getZoom()) {
       for (let k in this.subLayers) {
@@ -140,11 +151,6 @@ class OverpassLayer {
     // Abort current requests (in case they are long-lasting - we don't need them
     // anyway). Data which is being submitted will still be loaded to the cache.
     this.abortRequest()
-
-    var query = this.options.query
-    if (typeof query === 'object') {
-      query = query[Object.keys(query).filter(function (x) { return x <= this.map.getZoom() }.bind(this)).reverse()[0]]
-    }
 
     if (!query) {
       return

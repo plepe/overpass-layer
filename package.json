@@ -7,7 +7,7 @@
     "browserify-css": "^0.14.0",
     "event-emitter": "^0.3.5",
     "html-escape": "^2.0.0",
-    "overpass-frontend": "^2.0.1",
+    "overpass-frontend": "^2.2.2",
     "twig": "1.11.1",
     "nearest-point-on-geometry": "^1.0.0"
   },

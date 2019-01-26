@@ -189,6 +189,24 @@ class Sublayer {
     }
   }
 
+  /**
+   * Hide all objects which do not satisfy the filter
+   * @param {OverpassFrontend.Filter} filter A filter, e.g. new OverpassFrontend.Filter('nwr[amenity=restaurant]')
+   */
+  hideNonVisibleFilter (filter) {
+    for (let k in this.visibleFeatures) {
+      let ob = this.visibleFeatures[k]
+
+      if (!filter.match(ob.object)) {
+        if (!(ob.id in this.shownFeatures)) {
+          this._hide(ob)
+        }
+
+        delete this.visibleFeatures[k]
+      }
+    }
+  }
+
   get (id, options, callback) {
     let isAborted = false
     let isDone = false
