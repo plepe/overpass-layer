@@ -724,6 +724,9 @@ class Sublayer {
   }
 
   _hide (data) {
+    this.master.emit('remove', data.object, data)
+    this.emit('remove', data.object, data)
+
     this.map.removeLayer(data.feature)
     for (var k in data.features) {
       this.map.removeLayer(data.features[k])
@@ -736,9 +739,6 @@ class Sublayer {
     if (this.master.onDisappear) {
       this.master.onDisappear(data)
     }
-
-    this.master.emit('remove', data.object, data)
-    this.emit('remove', data.object, data)
 
     data.object.off('update', this.scheduleReprocess.bind(this, data.id))
 
