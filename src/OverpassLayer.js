@@ -10,6 +10,7 @@ const escapeHtml = require('html-escape')
 
 const Sublayer = require('./Sublayer')
 const Memberlayer = require('./Memberlayer')
+const Grouplayer = require('./Grouplayer')
 const compileFeature = require('./compileFeature')
 
 class OverpassLayer {
@@ -69,6 +70,21 @@ class OverpassLayer {
 
       this.memberlayer = new Memberlayer(this, memberOptions)
       this.subLayers.member = this.memberlayer
+    }
+
+    if (this.options.groupFeature) {
+      let groupOptions = {
+        id: this.options.id,
+        sublayer_id: 'group',
+        minZoom: this.options.minZoom,
+        maxZoom: this.options.maxZoom,
+        feature: this.options.groupFeature,
+        styleNoBindPopup: this.options.styleNoBindPopup || [],
+        stylesNoAutoShow: this.options.stylesNoAutoShow || [],
+        const: this.options.const
+      }
+
+      this.subLayers.group = new Grouplayer(this, groupOptions)
     }
   }
 
