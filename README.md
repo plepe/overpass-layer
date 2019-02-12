@@ -14,6 +14,7 @@ Options:
 * styles: Array of style-id which should be shown. Default: `['default']`. May be overridden by a feature dependant styles array. Can be a comma-separated string.
 * updateAssets: a function which will be called for all map feature specific HTML contexts. It can be used to update URLs of imgs. It will be passed the following parameters: domNode (the node which should be updated), objectData (data of the map feature), layer (the layer object).
 * feature: an object describing how the feature will be formated resp. styled. Each of the values may be either a function which will be passed an OverpassObject or a string which will be processed with the templating language TwigJS:
+  * exclude: don't show this feature (as if it does not appear in the query)
   * styles: Array of style-id which should be shown. If not set, the value of the parent 'styles' values will be used. Can be a comma-separated string.
   * style: An object or a function or a TwigJS template (string), styling the resulting map feature. Style-Id: "default".
     * If an object is used, e.g.: { weight: 2, fillColor: 'red' }

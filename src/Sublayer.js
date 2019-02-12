@@ -7,6 +7,7 @@ const BoundingBox = require('boundingbox')
 
 const styleToLeaflet = require('./styleToLeaflet')
 const strToStyle = require('./strToStyle')
+const isTrue = require('./isTrue')
 const SublayerFeature = require('./SublayerFeature')
 
 // Extensions:
@@ -140,13 +141,6 @@ class Sublayer {
       }
 
       this.visibleFeatures[ob.id] = data
-
-      if (this.master.onAppear) {
-        this.master.onAppear(data)
-      }
-
-      this.master.emit('add', ob, data)
-      this.emit('add', ob, data)
     }
   }
 
@@ -419,6 +413,13 @@ class Sublayer {
 
     var objectData = this.evaluate(data)
 
+    if (isTrue(objectData.exclude)) {
+      if (data.isShown) {
+        this._hide(data)
+      }
+      return
+    }
+
     if (!data.feature) {
       data.feature = ob.leafletFeature({
         weight: 0,
@@ -598,6 +599,10 @@ class Sublayer {
     data.sublayer_id = this.options.sublayer_id
     data.data = objectData
 
+    if (!data.isShown) {
+      this._show(data)
+    }
+
     if (this.master.onUpdate) {
       this.master.onUpdate(data)
     }
@@ -729,6 +734,13 @@ class Sublayer {
     data.object.on('update', this.scheduleReprocess.bind(this, data.id))
 
     data.isShown = true
+
+    if (this.master.onAppear) {
+      this.master.onAppear(data)
+    }
+
+    this.master.emit('add', data.object, data)
+    this.emit('add', data.object, data)
   }
 
   _hide (data) {
