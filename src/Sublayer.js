@@ -437,7 +437,11 @@ class Sublayer {
         if (data.features[styleId]) {
           data.features[styleId].setStyle(style)
         } else {
-          data.features[styleId] = ob.leafletFeature(style)
+          let feature = ob.leafletFeature(style)
+          if (!feature) {
+            continue
+          }
+          data.features[styleId] = feature
         }
 
         if ('text' in style && 'setText' in data.features[styleId]) {
@@ -575,7 +579,9 @@ class Sublayer {
       data.popup.object = data
       data.popup.sublayer = this
 
-      data.feature.bindPopup(data.popup)
+      if (data.feature) {
+        data.feature.bindPopup(data.popup)
+      }
       for (k in data.features) {
         if (this._shallBindPopupToStyle(k)) {
           data.features[k].bindPopup(data.popup)
@@ -705,7 +711,9 @@ class Sublayer {
       return
     }
 
-    data.feature.addTo(this.map)
+    if (data.feature) {
+      data.feature.addTo(this.map)
+    }
     for (var i = 0; i < data.styles.length; i++) {
       var k = data.styles[i]
       if (k in data.features) {
