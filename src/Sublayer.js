@@ -408,6 +408,9 @@ class Sublayer {
     var showOptions = {
       styles: []
     }
+    let leafletFeatureOptions = {
+      shiftWesternWorld: Math.floor((this.map.getCenter().lng + 270) / 360) * 360
+    }
 
     if (ob.id in this.shownFeatureOptions) {
       this.shownFeatureOptions[ob.id].forEach(function (opt) {
@@ -425,7 +428,7 @@ class Sublayer {
         opacity: 0,
         fillOpacity: 0,
         radius: 0
-      })
+      }, leafletFeatureOptions)
     }
 
     for (k in objectData) {
@@ -437,7 +440,7 @@ class Sublayer {
         if (data.features[styleId]) {
           data.features[styleId].setStyle(style)
         } else {
-          data.features[styleId] = ob.leafletFeature(style)
+          data.features[styleId] = ob.leafletFeature(style, leafletFeatureOptions)
         }
 
         if ('text' in style && 'setText' in data.features[styleId]) {
