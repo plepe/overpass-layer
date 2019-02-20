@@ -409,7 +409,10 @@ class Sublayer {
       styles: []
     }
     let leafletFeatureOptions = {
-      shiftWesternWorld: Math.floor((this.map.getCenter().lng + 270) / 360) * 360
+      shiftWorld: [
+        Math.floor((this.map.getCenter().lng + 270) / 360) * 360,
+        Math.floor((this.map.getCenter().lng + 90) / 360) * 360
+      ]
     }
 
     if (ob.id in this.shownFeatureOptions) {
@@ -423,12 +426,12 @@ class Sublayer {
     var objectData = this.evaluate(data)
 
     if (!data.feature) {
-      data.feature = ob.leafletFeature({
+      data.feature = ob.leafletFeature(Object.assign({
         weight: 0,
         opacity: 0,
         fillOpacity: 0,
         radius: 0
-      }, leafletFeatureOptions)
+      }, leafletFeatureOptions))
     }
 
     for (k in objectData) {
@@ -440,7 +443,7 @@ class Sublayer {
         if (data.features[styleId]) {
           data.features[styleId].setStyle(style)
         } else {
-          data.features[styleId] = ob.leafletFeature(style, leafletFeatureOptions)
+          data.features[styleId] = ob.leafletFeature(Object.assign(style, leafletFeatureOptions))
         }
 
         if ('text' in style && 'setText' in data.features[styleId]) {
@@ -535,7 +538,8 @@ class Sublayer {
           this.updateAssets(data.featureMarker._icon)
         }
       } else {
-        data.featureMarker = L.marker(ob.center, { icon: icon })
+        let center = { lat: ob.center.lat, lon: ob.center.lon + leafletFeatureOptions.shiftWorld[ob.center.lon < 0 ? 0 : 1] }
+        data.featureMarker = L.marker(center, { icon: icon })
       }
     }
 
