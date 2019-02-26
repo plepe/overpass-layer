@@ -140,6 +140,12 @@ class OverpassLayer {
       this.lastQuery = query
     }
 
+    if (this.options.queryOptions.filter !== this.lastFilter) {
+      let filter = new OverpassFrontend.Filter(this.options.queryOptions.filter)
+      this.mainlayer.hideNonVisibleFilter(filter)
+      this.lastFilter = this.options.queryOptions.filter
+    }
+
     // When zoom level changed, update visible objects
     if (this.lastZoom !== this.map.getZoom()) {
       for (let k in this.subLayers) {
