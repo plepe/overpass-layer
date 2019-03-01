@@ -111,6 +111,10 @@ class OverpassLayer {
   }
 
   check_update_map () {
+    if (!this.map) {
+      return
+    }
+
     var bounds = new BoundingBox(this.map.getBounds())
 
     if (this.map.getZoom() < this.options.minZoom ||
