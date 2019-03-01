@@ -115,6 +115,7 @@ class OverpassLayer {
       return
     }
 
+    let queryOptions = JSON.parse(JSON.stringify(this.options.queryOptions))
     var bounds = new BoundingBox(this.map.getBounds())
 
     if (this.map.getZoom() < this.options.minZoom ||
@@ -165,8 +166,8 @@ class OverpassLayer {
     }
 
     if (this.options.members) {
-      this.options.queryOptions.memberBounds = bounds
-      this.options.queryOptions.memberCallback = (err, ob) => {
+      queryOptions.memberBounds = bounds
+      queryOptions.memberCallback = (err, ob) => {
         if (err) {
           return console.error('unexpected error', err)
         }
@@ -176,7 +177,7 @@ class OverpassLayer {
     }
 
     this.currentRequest = this.overpassFrontend.BBoxQuery(query, bounds,
-      this.options.queryOptions,
+      queryOptions,
       (err, ob) => {
         if (err) {
           console.log('unexpected error', err)
