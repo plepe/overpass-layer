@@ -408,6 +408,9 @@ class Sublayer {
     var showOptions = {
       styles: []
     }
+    let leafletFeatureOptions = {
+      shiftWorld: this.master.getShiftWorld()
+    }
 
     if (ob.id in this.shownFeatureOptions) {
       this.shownFeatureOptions[ob.id].forEach(function (opt) {
@@ -420,12 +423,12 @@ class Sublayer {
     var objectData = this.evaluate(data)
 
     if (!data.feature) {
-      data.feature = ob.leafletFeature({
+      data.feature = ob.leafletFeature(Object.assign({
         weight: 0,
         opacity: 0,
         fillOpacity: 0,
         radius: 0
-      })
+      }, leafletFeatureOptions))
     }
 
     for (k in objectData) {
@@ -437,7 +440,7 @@ class Sublayer {
         if (data.features[styleId]) {
           data.features[styleId].setStyle(style)
         } else {
-          data.features[styleId] = ob.leafletFeature(style)
+          data.features[styleId] = ob.leafletFeature(Object.assign(style, leafletFeatureOptions))
         }
 
         if ('text' in style && 'setText' in data.features[styleId]) {
@@ -532,7 +535,8 @@ class Sublayer {
           this.updateAssets(data.featureMarker._icon)
         }
       } else {
-        data.featureMarker = L.marker(ob.center, { icon: icon })
+        let center = { lat: ob.center.lat, lon: ob.center.lon + leafletFeatureOptions.shiftWorld[ob.center.lon < 0 ? 0 : 1] }
+        data.featureMarker = L.marker(center, { icon: icon })
       }
     }
 

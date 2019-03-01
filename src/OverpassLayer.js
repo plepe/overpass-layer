@@ -267,6 +267,17 @@ class OverpassLayer {
   openPopupOnObject (ob, sublayer = 'main') {
     this.subLayers[sublayer].openPopupOnObject(ob)
   }
+
+  /**
+   * get the degrees by which the world should be shifted, to show map features at the current view port (e.g. when you wrap over -180 or 180 longitude). E.g. near lon 180, the Eastern hemisphere (lon 0 .. 180) does not have to be shifted, the Western hemisphere (lon -180 .. 0) has to be shifted by 360 degrees.
+   * @return {number[]} An array with two elements: degrees to shift the Western hemisphere, degrees to shift the Eastern hemisphere. Each value is a multiple of 360.
+   */
+  getShiftWorld () {
+    return [
+      Math.floor((this.map.getCenter().lng + 270) / 360) * 360,
+      Math.floor((this.map.getCenter().lng + 90) / 360) * 360
+    ]
+  }
 }
 
 ee(OverpassLayer.prototype)
