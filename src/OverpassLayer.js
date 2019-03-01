@@ -110,6 +110,15 @@ class OverpassLayer {
     }
   }
 
+  /**
+   * set an additional filter. Will intiate a check_update_map()
+   * @param {OverpassFrontend.Filter|object|null} filter A filter. See OverpassFrontend.Filter for details.
+   */
+  setFilter (filter) {
+    this.filter = filter
+    this.check_update_map()
+  }
+
   check_update_map () {
     if (!this.map) {
       return
@@ -143,6 +152,13 @@ class OverpassLayer {
       let filter = new OverpassFrontend.Filter(query)
       this.mainlayer.hideNonVisibleFilter(filter)
       this.lastQuery = query
+    }
+
+    queryOptions.filter = this.filter
+    if (this.filter !== this.lastFilter) {
+      let filter = new OverpassFrontend.Filter(this.filter)
+      this.mainlayer.hideNonVisibleFilter(filter)
+      this.lastFilter = this.filter
     }
 
     // When zoom level changed, update visible objects

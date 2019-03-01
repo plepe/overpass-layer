@@ -110,6 +110,8 @@ Hide the given object, resp. remove show options. If it is shown due to layer de
 ## method twigData(object)
 Return twig data for object (for rendering).
 
+## method setFilter(filter)
+Set an additional filter. Will intiate a check_update_map(). See OverpassFrontend.Filter for details.
 
 ## event 'add', Paramters: ob, data
 Will be called when an object appears on the map (e.g. load from server, zoom in, viewport moves in)
