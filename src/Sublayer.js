@@ -409,10 +409,7 @@ class Sublayer {
       styles: []
     }
     let leafletFeatureOptions = {
-      shiftWorld: [
-        Math.floor((this.map.getCenter().lng + 270) / 360) * 360,
-        Math.floor((this.map.getCenter().lng + 90) / 360) * 360
-      ]
+      shiftWorld: this.master.getShiftWorld()
     }
 
     if (ob.id in this.shownFeatureOptions) {
