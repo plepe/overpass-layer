@@ -110,6 +110,9 @@ Hide the given object, resp. remove show options. If it is shown due to layer de
 ## method twigData(object)
 Return twig data for object (for rendering).
 
+## method setFilter(filter)
+Set an additional filter. Will intiate a check_update_map(). See OverpassFrontend.Filter for details.
+
 ## method getShiftWorld()
 get the degrees by which the world should be shifted, to show map features at the current view port (e.g. when you wrap over -180 or 180 longitude). E.g. near lon 180, the Eastern hemisphere (lon 0 .. 180) does not have to be shifted, the Western hemisphere (lon -180 .. 0) has to be shifted by 360 degrees.
 

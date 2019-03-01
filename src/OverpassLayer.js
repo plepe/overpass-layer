@@ -110,7 +110,21 @@ class OverpassLayer {
     }
   }
 
+  /**
+   * set an additional filter. Will intiate a check_update_map()
+   * @param {OverpassFrontend.Filter|object|null} filter A filter. See OverpassFrontend.Filter for details.
+   */
+  setFilter (filter) {
+    this.filter = filter
+    this.check_update_map()
+  }
+
   check_update_map () {
+    if (!this.map) {
+      return
+    }
+
+    let queryOptions = JSON.parse(JSON.stringify(this.options.queryOptions))
     var bounds = new BoundingBox(this.map.getBounds())
 
     if (this.map.getZoom() < this.options.minZoom ||
@@ -140,6 +154,13 @@ class OverpassLayer {
       this.lastQuery = query
     }
 
+    queryOptions.filter = this.filter
+    if (this.filter !== this.lastFilter) {
+      let filter = new OverpassFrontend.Filter(this.filter)
+      this.mainlayer.hideNonVisibleFilter(filter)
+      this.lastFilter = this.filter
+    }
+
     // When zoom level changed, update visible objects
     if (this.lastZoom !== this.map.getZoom()) {
       for (let k in this.subLayers) {
@@ -161,8 +182,8 @@ class OverpassLayer {
     }
 
     if (this.options.members) {
-      this.options.queryOptions.memberBounds = bounds
-      this.options.queryOptions.memberCallback = (err, ob) => {
+      queryOptions.memberBounds = bounds
+      queryOptions.memberCallback = (err, ob) => {
         if (err) {
           return console.error('unexpected error', err)
         }
@@ -172,7 +193,7 @@ class OverpassLayer {
     }
 
     this.currentRequest = this.overpassFrontend.BBoxQuery(query, bounds,
-      this.options.queryOptions,
+      queryOptions,
       (err, ob) => {
         if (err) {
           console.log('unexpected error', err)
