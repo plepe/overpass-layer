@@ -1,4 +1,5 @@
 /* eslint camelcase: 0 */
+const ee = require('event-emitter')
 
 require('./OverpassLayerList.css')
 
@@ -154,6 +155,13 @@ class OverpassLayerList {
 
       this.currentHover = null
     }.bind(this, ob.id, ob.sublayer_id)
+
+    this.emit('add', {
+      object: ob.object,
+      sublayerFeature: ob,
+      list: this,
+      dom: div
+    })
   }
 
   updateObject (ob) {
@@ -213,6 +221,13 @@ class OverpassLayerList {
 
       p = p.nextSibling
     }
+
+    this.emit('update', {
+      object: ob.object,
+      sublayerFeature: ob,
+      list: this,
+      dom: div
+    })
   }
 
   delObject (ob) {
@@ -224,6 +239,8 @@ class OverpassLayerList {
 
     delete this.items[ob.id]
     delete ob[this.options.prefix + 'Item']
+
+    this.emit('remove', ob.object, ob)
   }
 
   remove () {
@@ -238,5 +255,7 @@ class OverpassLayerList {
     this.items = {}
   }
 }
+
+ee(OverpassLayerList.prototype)
 
 module.exports = OverpassLayerList
