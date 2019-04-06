@@ -1,6 +1,20 @@
 # overpass-layer
 Show a Leaflet layer using OpenStreetMap data from Overpass API via overpass-frontend.
 
+# Usage
+```js
+var overpassFrontend = new OverpassFrontend('//overpass-api.de/api/interpreter')
+
+var layer = new OverpassLayer({
+  query: 'nwr[building]'
+})
+
+var map = L.map('map')
+
+var layerControl = L.control({}, { 'Buildings': layer })
+layerControl.addTo(map)
+```
+
 # API
 ## constructor OverpassLayer(options)
 Create a Layer with an Overpass query and optional options.
