@@ -22,7 +22,7 @@ class OverpassLayer {
 
     this.overpassFrontend = 'overpassFrontend' in this.options ? this.options.overpassFrontend : overpassFrontend
     this.options.minZoom = 'minZoom' in this.options ? this.options.minZoom : 16
-    this.options.maxZoom = 'maxZoom' in this.options ? this.options.maxZoom : null
+    this.options.maxZoom = 'maxZoom' in this.options ? this.options.maxZoom : undefined
     this.options.feature = 'feature' in this.options ? this.options.feature : {}
     this.options.feature.style = 'style' in this.options.feature ? this.options.feature.style : {}
     this.options.feature.title = 'title' in this.options.feature ? this.options.feature.title : function (ob) { return escapeHtml(ob.tags.name || ob.tags.operator || ob.tags.ref || ob.id) }
@@ -128,7 +128,7 @@ class OverpassLayer {
     var bounds = new BoundingBox(this.map.getBounds())
 
     if (this.map.getZoom() < this.options.minZoom ||
-       (this.options.maxZoom !== null && this.map.getZoom() > this.options.maxZoom)) {
+       (this.options.maxZoom !== undefined && this.map.getZoom() > this.options.maxZoom)) {
       for (let k in this.subLayers) {
         this.subLayers[k].hideAll()
       }
