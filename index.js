@@ -10,4 +10,6 @@ if (typeof window !== 'undefined') {
 }
 
 OverpassLayer.List = OverpassLayerList
+OverpassLayer.BoundingObject = require('./src/BoundingObject')
+OverpassLayer.MapView = require('./src/MapView')
 module.exports = OverpassLayer

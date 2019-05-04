@@ -11,12 +11,15 @@ const escapeHtml = require('html-escape')
 const Sublayer = require('./Sublayer')
 const Memberlayer = require('./Memberlayer')
 const compileFeature = require('./compileFeature')
+const MapView = require('./MapView')
 
 class OverpassLayer {
   constructor (options) {
     if (!options) {
       options = {}
     }
+
+    this._boundCheckUpdateMapFun = this.check_update_map.bind(this)
 
     this.options = options
 
@@ -88,7 +91,10 @@ class OverpassLayer {
 
   addTo (map) {
     this.map = map
-    this.map.on('moveend', this.check_update_map, this)
+    this.mapView = new MapView(map)
+    if (!this.boundingObject) {
+      this.setBoundingObject(this.mapView)
+    }
     for (let k in this.subLayers) {
       this.subLayers[k].addTo(map)
     }
@@ -106,7 +112,10 @@ class OverpassLayer {
 
     this.abortRequest()
 
-    this.map.off('moveend', this.check_update_map, this)
+    this.boundingObject.off('update', this._boundCheckUpdateMapFun)
+    this.boundingObject.remove()
+    this.boundingObject = null
+
     this.map = null
   }
 
@@ -133,13 +142,32 @@ class OverpassLayer {
     this.check_update_map()
   }
 
+  /**
+   * set a different bounding object
+   * @param {null|BoundingObject} object connect to the specified bounding object and listen for updates. Will disconnect from the previous bounding object. If `null` is passed, connect to the current map view.
+   */
+  setBoundingObject (object) {
+    if (this.boundingObject) {
+      this.boundingObject.off('update', this._boundCheckUpdateMapFun)
+      this.boundingObject.remove()
+    }
+
+    if (object === null) {
+      this.boundingObject = this.mapView
+    } else {
+      this.boundingObject = object
+    }
+
+    this.boundingObject.on('update', this._boundCheckUpdateMapFun)
+  }
+
   check_update_map () {
     if (!this.map) {
       return
     }
 
     let queryOptions = JSON.parse(JSON.stringify(this.options.queryOptions))
-    var bounds = new BoundingBox(this.map.getBounds())
+    var bounds = this.boundingObject.get()
 
     if (this.map.getZoom() < this.options.minZoom ||
        (this.options.maxZoom !== undefined && this.map.getZoom() > this.options.maxZoom)) {
