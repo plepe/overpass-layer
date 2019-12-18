@@ -52,7 +52,7 @@ class OverpassLayer {
       this.options.queryOptions.memberProperties = OverpassFrontend.ALL
       this.options.queryOptions.members = true
 
-      let memberOptions = {
+      const memberOptions = {
         id: this.options.id,
         sublayer_id: 'member',
         minZoom: this.options.minZoom,
@@ -89,7 +89,7 @@ class OverpassLayer {
   addTo (map) {
     this.map = map
     this.map.on('moveend', this.check_update_map, this)
-    for (let k in this.subLayers) {
+    for (const k in this.subLayers) {
       this.subLayers[k].addTo(map)
     }
     this.check_update_map()
@@ -99,7 +99,7 @@ class OverpassLayer {
   }
 
   remove () {
-    for (let k in this.subLayers) {
+    for (const k in this.subLayers) {
       this.subLayers[k].hideAll(true)
       this.subLayers[k].remove()
     }
@@ -138,12 +138,12 @@ class OverpassLayer {
       return
     }
 
-    let queryOptions = JSON.parse(JSON.stringify(this.options.queryOptions))
+    const queryOptions = JSON.parse(JSON.stringify(this.options.queryOptions))
     var bounds = new BoundingBox(this.map.getBounds())
 
     if (this.map.getZoom() < this.options.minZoom ||
        (this.options.maxZoom !== undefined && this.map.getZoom() > this.options.maxZoom)) {
-      for (let k in this.subLayers) {
+      for (const k in this.subLayers) {
         this.subLayers[k].hideAll()
       }
 
@@ -153,7 +153,7 @@ class OverpassLayer {
       return
     }
 
-    for (let k in this.subLayers) {
+    for (const k in this.subLayers) {
       this.subLayers[k].hideNonVisible(bounds)
     }
 
@@ -163,21 +163,21 @@ class OverpassLayer {
     }
 
     if (query !== this.lastQuery) {
-      let filter = new OverpassFrontend.Filter(query)
+      const filter = new OverpassFrontend.Filter(query)
       this.mainlayer.hideNonVisibleFilter(filter)
       this.lastQuery = query
     }
 
     queryOptions.filter = this.filter
     if (this.filter !== this.lastFilter) {
-      let filter = new OverpassFrontend.Filter(this.filter)
+      const filter = new OverpassFrontend.Filter(this.filter)
       this.mainlayer.hideNonVisibleFilter(filter)
       this.lastFilter = this.filter
     }
 
     // When zoom level changed, update visible objects
     if (this.lastZoom !== this.map.getZoom()) {
-      for (let k in this.subLayers) {
+      for (const k in this.subLayers) {
         this.subLayers[k].zoomChange()
       }
       this.lastZoom = this.map.getZoom()
@@ -191,7 +191,7 @@ class OverpassLayer {
       return
     }
 
-    for (let k in this.subLayers) {
+    for (const k in this.subLayers) {
       this.subLayers[k].startAdding()
     }
 
@@ -223,7 +223,7 @@ class OverpassLayer {
           })
         }
 
-        for (let k in this.subLayers) {
+        for (const k in this.subLayers) {
           this.subLayers[k].finishAdding()
         }
 
@@ -239,19 +239,19 @@ class OverpassLayer {
   }
 
   recalc () {
-    for (let k in this.subLayers) {
+    for (const k in this.subLayers) {
       this.subLayers[k].recalc()
     }
   }
 
   scheduleReprocess (id) {
-    for (let k in this.subLayers) {
+    for (const k in this.subLayers) {
       this.subLayers[k].scheduleReprocess(id)
     }
   }
 
   updateAssets (div, objectData) {
-    for (let k in this.subLayers) {
+    for (const k in this.subLayers) {
       this.subLayers[k].updateAssets(div, objectData)
     }
   }
@@ -284,8 +284,8 @@ class OverpassLayer {
       sublayer = this.subLayers[options.sublayer_id]
     }
 
-    let request = sublayer.show(id, options, callback)
-    let result = {
+    const request = sublayer.show(id, options, callback)
+    const result = {
       id: id,
       sublayer_id: options.sublayer_id,
       options: options,

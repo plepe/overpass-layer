@@ -27,7 +27,7 @@
     "prepublish": "npm run build && npm run lint",
     "preversion": "npm run lint",
     "version": "npm run build; git add -A dist/",
-    "lint": "standard --fix src/*.js form.js && standard --global OverpassLayer --global OverpassLayerList --global map demo/*.js",
+    "lint": "standard --fix src/*.js form.js && standard --global OverpassLayer --global OverpassLayerList --global map --fix demo/*.js",
     "start": "http-server ./ -p 3000"
   },
   "repository": {

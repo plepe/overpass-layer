@@ -107,7 +107,7 @@ class OverpassLayerList {
     a.innerHTML = html
     a.currentHTML = html
     div.appendChild(a)
-    let title = a
+    const title = a
 
     // DESCRIPTION
     a = document.createElement('div')
@@ -139,8 +139,8 @@ class OverpassLayerList {
 
       this.currentHover = this.layer.show(id,
         {
-          styles: [ 'hover' ],
-          flags: [ 'hover' ],
+          styles: ['hover'],
+          flags: ['hover'],
           sublayer_id
         },
         () => {}
@@ -195,7 +195,7 @@ class OverpassLayerList {
 
       // TITLE
       if (p.className === 'title') {
-        let html = ob.data[this.options.prefix + 'Title'] || ob.data.title || ''
+        const html = ob.data[this.options.prefix + 'Title'] || ob.data.title || ''
         if (p.currentHTML !== html) {
           p.innerHTML = html
           ob.sublayer.updateAssets(div, ob.data)
@@ -204,7 +204,7 @@ class OverpassLayerList {
 
       // TITLE
       if (p.className === 'description') {
-        let html = ob.data[this.options.prefix + 'Description'] || ob.data.description || ''
+        const html = ob.data[this.options.prefix + 'Description'] || ob.data.description || ''
         if (p.currentHTML !== html) {
           p.innerHTML = html
           ob.sublayer.updateAssets(div, ob.data)

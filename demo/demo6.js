@@ -44,7 +44,7 @@ var overpassLayer = new OverpassLayer({
   feature: {
     // the 'pre' function will be called before other scripts
     // in this case, we assign 'current' a style from highwayStyles
-    'pre': function (v) {
+    pre: function (v) {
       var highwayStyles = v.map.zoom < 16 ? highwayStylesLow : highwayStylesHigh
 
       if (v.tags.highway in highwayStyles) {
@@ -68,7 +68,7 @@ var overpassLayer = new OverpassLayer({
       opacity: 1
     },
     markerSymbol: null,
-    styles: [ 'casing', 'default' ],
+    styles: ['casing', 'default'],
     title: '{{ tags.name }}',
     body: function (ob) {
       return '<pre>' + JSON.stringify(ob.tags, null, '  ') + '</pre>'

@@ -6,11 +6,11 @@ var overpassLayer = new OverpassLayer({
   feature: {
     body: "{{ tags.amenity }}<br/>Cuisine: {{ tags.cuisine|default('unknown') }}",
     'style:highlight': {
-      'color': 'black',
-      'opacity': 1,
-      'radius': 15,
-      'width': 5,
-      'fill': false
+      color: 'black',
+      opacity: 1,
+      radius: 15,
+      width: 5,
+      fill: false
     },
     style:
       '{% if tags.cuisine == "italian" %}\n' +
@@ -30,7 +30,7 @@ overpassLayer.addTo(map)
 overpassLayer.show(
   'w82770794',
   {
-    'styles': [ 'highlight' ]
+    styles: ['highlight']
   },
   function (err, ob) {
     console.log(err, ob)
@@ -38,7 +38,7 @@ overpassLayer.show(
 overpassLayer.show(
   'n597342965',
   {
-    'styles': [ 'highlight' ]
+    styles: ['highlight']
   },
   function (err, ob) {
     console.log(err, ob)

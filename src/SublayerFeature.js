@@ -8,7 +8,7 @@ class SublayerFeature {
   }
 
   updateFlags () {
-    let shownFeatureOptions = this.sublayer.shownFeatureOptions[this.id]
+    const shownFeatureOptions = this.sublayer.shownFeatureOptions[this.id]
 
     this.flags = {}
     shownFeatureOptions.forEach(options => {

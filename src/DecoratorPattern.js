@@ -31,16 +31,16 @@ class DecoratorPattern {
     }
 
     for (var k in data.features) {
-      let def = k === 'default' ? data.data.style : data.data['style:' + k]
+      const def = k === 'default' ? data.data.style : data.data['style:' + k]
 
       if (def.pattern && data.styles.includes(k)) {
         let symbol
         let symbolOptions = {}
-        let options = {}
+        const options = {}
 
-        for (let k in def) {
-          let m1 = k.match(/^pattern-path-(.*)$/)
-          let m2 = k.match(/^pattern-(.*)$/)
+        for (const k in def) {
+          const m1 = k.match(/^pattern-path-(.*)$/)
+          const m2 = k.match(/^pattern-(.*)$/)
 
           if (m1) {
             symbolOptions[m1[1]] = def[k]
@@ -75,7 +75,7 @@ class DecoratorPattern {
           data.patternFeatures[k].addTo(this.layer.map)
         }
 
-        data.patternFeatures[k].setPatterns([ options ])
+        data.patternFeatures[k].setPatterns([options])
 
         if (this.layer._shallBindPopupToStyle(k)) {
           data.patternFeatures[k].bindPopup(data.popup)

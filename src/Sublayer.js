@@ -40,12 +40,12 @@ class Sublayer {
     if (options.styleNoBindPopup) {
       options.styleNoBindPopup.push('hover')
     } else {
-      options.styleNoBindPopup = [ 'hover' ]
+      options.styleNoBindPopup = ['hover']
     }
     if (options.stylesNoAutoShow) {
       options.stylesNoAutoShow.push('hover')
     } else {
-      options.stylesNoAutoShow = [ 'hover' ]
+      options.stylesNoAutoShow = ['hover']
     }
 
     decorators.forEach(Ext => new Ext(this))
@@ -65,17 +65,17 @@ class Sublayer {
 
   domUpdateHooks (node) {
     if (node.getAttribute) {
-      let id = node.getAttribute('data-object')
+      const id = node.getAttribute('data-object')
 
       if (id) {
-        let sublayerId = node.getAttribute('data-sublayer') || 'main'
+        const sublayerId = node.getAttribute('data-sublayer') || 'main'
         node.classList.add('hoverable')
 
         // check if referenced object is loaded - if not, request load
-        let ofOptions = {
+        const ofOptions = {
           properties: OverpassFrontend.ALL
         }
-        let subObject = this.master.overpassFrontend.getCached(id, ofOptions)
+        const subObject = this.master.overpassFrontend.getCached(id, ofOptions)
 
         if (!subObject) {
           this.master.overpassFrontend.get(id, ofOptions,
@@ -89,7 +89,7 @@ class Sublayer {
             this.currentHover.hide()
           }
 
-          this.currentHover = this.master.subLayers[sublayerId].show(id, { styles: [ 'hover' ] }, function () {})
+          this.currentHover = this.master.subLayers[sublayerId].show(id, { styles: ['hover'] }, function () {})
         }
         node.onmouseout = () => {
           if (this.currentHover) {
@@ -163,8 +163,8 @@ class Sublayer {
   }
 
   hideAll (force) {
-    for (let k in this.visibleFeatures) {
-      let ob = this.visibleFeatures[k]
+    for (const k in this.visibleFeatures) {
+      const ob = this.visibleFeatures[k]
 
       if (force || !(ob.id in this.shownFeatures)) {
         this._hide(ob)
@@ -176,8 +176,8 @@ class Sublayer {
 
   // Hide loaded but non-visible objects
   hideNonVisible (bounds) {
-    for (let k in this.visibleFeatures) {
-      let ob = this.visibleFeatures[k]
+    for (const k in this.visibleFeatures) {
+      const ob = this.visibleFeatures[k]
 
       if (!ob.object.intersects(bounds)) {
         if (!(ob.id in this.shownFeatures)) {
@@ -194,8 +194,8 @@ class Sublayer {
    * @param {OverpassFrontend.Filter} filter A filter, e.g. new OverpassFrontend.Filter('nwr[amenity=restaurant]')
    */
   hideNonVisibleFilter (filter) {
-    for (let k in this.visibleFeatures) {
-      let ob = this.visibleFeatures[k]
+    for (const k in this.visibleFeatures) {
+      const ob = this.visibleFeatures[k]
 
       if (!filter.match(ob.object)) {
         if (!(ob.id in this.shownFeatures)) {
@@ -211,7 +211,7 @@ class Sublayer {
     let isAborted = false
     let isDone = false
 
-    let result = {
+    const result = {
       id,
       options,
       abort: () => {
@@ -279,7 +279,7 @@ class Sublayer {
   }
 
   show (data, options, callback) {
-    let show1 = () => {
+    const show1 = () => {
       id = data.id
       result.id = id
 
@@ -302,7 +302,7 @@ class Sublayer {
 
     let id = typeof data === 'string' ? data : data.id
     let isHidden = false
-    let result = {
+    const result = {
       options,
       hide: () => {
         if (isHidden) {
@@ -367,7 +367,7 @@ class Sublayer {
     }
 
     if (id in this.shownFeatures) {
-      let data = this.shownFeatures[id]
+      const data = this.shownFeatures[id]
       delete this.shownFeatures[id]
       delete this.shownFeatureOptions[id]
 
@@ -382,8 +382,8 @@ class Sublayer {
   zoomChange () {
     this.recalc()
 
-    for (let k in this.visibleFeatures) {
-      let data = this.visibleFeatures[k]
+    for (const k in this.visibleFeatures) {
+      const data = this.visibleFeatures[k]
 
       this.master.emit('zoomChange', data.object, data)
       this.emit('zoomChange', data.object, data)
@@ -408,7 +408,7 @@ class Sublayer {
     var showOptions = {
       styles: []
     }
-    let leafletFeatureOptions = {
+    const leafletFeatureOptions = {
       shiftWorld: this.master.getShiftWorld()
     }
 
@@ -450,7 +450,7 @@ class Sublayer {
             offset: style.textOffset,
             below: style.textBelow,
             attributes: {
-              'fill': style.textFill,
+              fill: style.textFill,
               'fill-opacity': style.textFillOpacity,
               'font-weight': style.textFontWeight,
               'font-size': style.textFontSize,
@@ -471,10 +471,10 @@ class Sublayer {
 
     objectData.marker = {
       html: '',
-      iconAnchor: [ 0, 0 ],
-      iconSize: [ 0, 0 ],
-      signAnchor: [ 0, 0 ],
-      popupAnchor: [ 0, 0 ]
+      iconAnchor: [0, 0],
+      iconSize: [0, 0],
+      signAnchor: [0, 0],
+      popupAnchor: [0, 0]
     }
     if (objectData.markerSymbol) {
       objectData.marker.html += objectData.markerSymbol
@@ -485,7 +485,7 @@ class Sublayer {
       if (div.firstChild) {
         var c = div.firstChild
 
-        objectData.marker.iconSize = [ c.offsetWidth, c.offsetHeight ]
+        objectData.marker.iconSize = [c.offsetWidth, c.offsetHeight]
         if (c.hasAttribute('width')) {
           objectData.marker.iconSize[0] = parseFloat(c.getAttribute('width'))
         }
@@ -493,7 +493,7 @@ class Sublayer {
           objectData.marker.iconSize[1] = parseFloat(c.getAttribute('height'))
         }
 
-        objectData.marker.iconAnchor = [ objectData.marker.iconSize[0] / 2, objectData.marker.iconSize[1] / 2 ]
+        objectData.marker.iconAnchor = [objectData.marker.iconSize[0] / 2, objectData.marker.iconSize[1] / 2]
         if (c.hasAttribute('anchorx')) {
           objectData.marker.iconAnchor[0] = parseFloat(c.getAttribute('anchorx'))
         }
@@ -520,8 +520,8 @@ class Sublayer {
     }
 
     if (objectData.markerSign) {
-      let x = objectData.marker.iconAnchor[0] + objectData.marker.signAnchor[0]
-      let y = -objectData.marker.iconSize[1] + objectData.marker.iconAnchor[1] + objectData.marker.signAnchor[1]
+      const x = objectData.marker.iconAnchor[0] + objectData.marker.signAnchor[0]
+      const y = -objectData.marker.iconSize[1] + objectData.marker.iconAnchor[1] + objectData.marker.signAnchor[1]
       objectData.marker.html += '<div class="sign" style="margin-left: ' + x + 'px; margin-top: ' + y + 'px;">' + objectData.markerSign + '</div>'
     }
 
@@ -535,7 +535,7 @@ class Sublayer {
           this.updateAssets(data.featureMarker._icon)
         }
       } else {
-        let center = { lat: ob.center.lat, lon: ob.center.lon + leafletFeatureOptions.shiftWorld[ob.center.lon < 0 ? 0 : 1] }
+        const center = { lat: ob.center.lat, lon: ob.center.lon + leafletFeatureOptions.shiftWorld[ob.center.lon < 0 ? 0 : 1] }
         data.featureMarker = L.marker(center, { icon: icon })
       }
     }
@@ -666,12 +666,12 @@ class Sublayer {
       meta: ob.meta,
       flags: data.flags,
       members: [],
-      'const': this.options.const
+      const: this.options.const
     }
 
     if (ob.memberFeatures) {
       ob.memberFeatures.forEach((member, sequence) => {
-        let r = {
+        const r = {
           id: member.id,
           sequence,
           type: member.type,
@@ -785,16 +785,16 @@ class Sublayer {
     }
 
     // When object is quite smaller than current view, show popup on feature
-    let viewBounds = new BoundingBox(this.map.getBounds())
-    let obBounds = new BoundingBox(ob.object.bounds)
+    const viewBounds = new BoundingBox(this.map.getBounds())
+    const obBounds = new BoundingBox(ob.object.bounds)
     if (obBounds.diagonalLength() * 0.75 < viewBounds.diagonalLength()) {
       return ob.feature.openPopup()
     }
 
     // otherwise, try to find point on geometry closest to center of view
-    let pt = this.map.getCenter()
-    let geom = ob.object.GeoJSON()
-    let pos = nearestPointOnGeometry(geom, { type: 'Feature', geometry: { type: 'Point', coordinates: [ pt.lng, pt.lat ] } })
+    const pt = this.map.getCenter()
+    const geom = ob.object.GeoJSON()
+    let pos = nearestPointOnGeometry(geom, { type: 'Feature', geometry: { type: 'Point', coordinates: [pt.lng, pt.lat] } })
     if (pos) {
       pos = pos.geometry.coordinates
       return ob.feature.openPopup([pos[1], pos[0]])

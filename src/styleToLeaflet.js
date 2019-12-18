@@ -29,13 +29,13 @@ const transforms = {
 }
 
 function styleToLeaflet (style) {
-  let ret = JSON.parse(JSON.stringify(style))
+  const ret = JSON.parse(JSON.stringify(style))
 
   for (let k in ret) {
     let value = ret[k]
 
     if (k in transforms) {
-      let transform = transforms[k]
+      const transform = transforms[k]
 
       switch (transform.type) {
         case 'boolean':

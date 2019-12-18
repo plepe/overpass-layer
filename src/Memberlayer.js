@@ -32,10 +32,10 @@ class Memberlayer extends Sublayer {
   }
 
   twigData (ob, data) {
-    let result = super.twigData(ob, data)
+    const result = super.twigData(ob, data)
 
     for (var k in this.masterlayer.visibleFeatures) {
-      let feature = this.masterlayer.visibleFeatures[k]
+      const feature = this.masterlayer.visibleFeatures[k]
       if (feature.object.members) {
         feature.object.members.forEach((member, sequence) => {
           if (member.id === ob.id) {

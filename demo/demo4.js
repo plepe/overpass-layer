@@ -10,7 +10,7 @@ var overpassLayer = new OverpassLayer({
   feature: {
     pre: '{% set prio = {"icn":4,"ncn":3,"rcn":2,"lcn":1}[tags.network] %}',
     styles: [],
-    'body': '{% for member in members %}<div object="{{ member.id }}" sublayer="member">{{ member.id }} ({{ member.visible }}) {{ member.tags.highway }}</div>{% endfor %}',
+    body: '{% for member in members %}<div object="{{ member.id }}" sublayer="member">{{ member.id }} ({{ member.visible }}) {{ member.tags.highway }}</div>{% endfor %}',
     title: '{{ tags.name }} ({{ tags.network }})',
     priority: '{{ 5 - prio }}'
   },

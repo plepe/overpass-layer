@@ -7,7 +7,7 @@ var def = {
   members: true,
   feature: {
     styles: [],
-    'body': '{% for member in members %}' +
+    body: '{% for member in members %}' +
             '{% if member.role|slice(-4) == "stop" %}' +
             '<div data-object="{{ member.id }}" data-sublayer="member"><b>{{ member.tags.name }}</b> ({{ member.id }} as {{ member.role }})</div>' +
             '{% endif %}' +

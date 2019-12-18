@@ -17,7 +17,7 @@ var overpassLayer = new OverpassLayer({
       opacity: 1
     },
     markerSymbol: null,
-    styles: [ 'casing', 'default' ],
+    styles: ['casing', 'default'],
     title: '{{ tags.name }}',
     body: function (ob) {
       return '<pre>' + JSON.stringify(ob.tags, null, '  ') + '</pre>'
