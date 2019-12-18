@@ -81,7 +81,8 @@ The templates will be rendered when the object becomes visible and when the zoom
 * `masters[].meta`: meta of relation
 * `masters[].sequence`: current object is nth member
 * `masters[].role`: current object has role
-* `map.zoom` (Current zoom level)
+* `map.zoom`: Current zoom level
+* `map.metersPerPixel`: size of a pixel at the map center
 * `const.*` (Values from the 'const' option)
 
 Examples:
