@@ -3,21 +3,21 @@
   "version": "2.4.1",
   "description": "Show a Leaflet layer using OpenStreetMap data from Overpass API via OverpassFrontend.",
   "dependencies": {
-    "boundingbox": "*",
-    "browserify-css": "^0.14.0",
+    "boundingbox": "^1.2.0",
+    "browserify-css": "^0.15.0",
     "event-emitter": "^0.3.5",
     "html-escape": "^2.0.0",
-    "overpass-frontend": "^2.2.2",
-    "twig": "1.11.1",
-    "nearest-point-on-geometry": "^1.0.0"
+    "nearest-point-on-geometry": "^1.0.1",
+    "overpass-frontend": "^2.4.7",
+    "twig": "^1.14.0"
   },
   "devDependencies": {
-    "browserify": "16.2.2",
-    "http-server": "^0.11.1",
-    "leaflet": "^1.3.1",
+    "browserify": "^16.5.0",
+    "http-server": "^0.12.0",
+    "leaflet": "^1.6.0",
     "leaflet-polylinedecorator": "^1.6.0",
-    "standard": "^11.0.1",
-    "watchify": "^3.11.0"
+    "standard": "^14.3.1",
+    "watchify": "^3.11.1"
   },
   "main": "index.js",
   "scripts": {
