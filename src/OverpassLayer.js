@@ -134,7 +134,7 @@ class OverpassLayer {
   }
 
   check_update_map () {
-    if (!this.map) {
+    if (!this.map || !this.map._loaded) {
       return
     }
 
