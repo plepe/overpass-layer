@@ -435,7 +435,7 @@ class Sublayer {
       var m = k.match(/^style(|:(.*))$/)
       if (m) {
         var styleId = typeof m[2] === 'undefined' ? 'default' : m[2]
-        var style = styleToLeaflet(objectData[k])
+        var style = styleToLeaflet(objectData[k], this.master.globalTwigData)
 
         if (data.features[styleId]) {
           data.features[styleId].setStyle(style)

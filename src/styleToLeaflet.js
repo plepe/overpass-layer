@@ -18,7 +18,7 @@ const transforms = {
   },
   width: {
     rename: 'weight',
-    type: 'float'
+    type: 'length'
   },
   opacity: {
     type: 'float'
@@ -28,7 +28,7 @@ const transforms = {
   }
 }
 
-function styleToLeaflet (style) {
+function styleToLeaflet (style, twigData) {
   const ret = JSON.parse(JSON.stringify(style))
 
   for (let k in ret) {
@@ -43,6 +43,21 @@ function styleToLeaflet (style) {
           break
         case 'float':
           value = parseFloat(ret[k])
+          break
+        case 'length':
+          let m = ('' + ret[k]).trim().match(/^([+\-]?[0-9]+(?:\.[0-9]+)?)\s*(px|m)$/)
+          if (m) {
+            switch (m[2]) {
+              case 'm':
+                value = parseFloat(m[1]) / twigData.map.metersPerPixel
+                break
+              case 'px':
+              default:
+                value = parseFloat(m[1])
+            }
+          } else {
+            value = parseFloat(ret[k])
+          }
           break
       }
 
