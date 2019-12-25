@@ -688,12 +688,8 @@ class Sublayer {
       })
     }
 
-    if (this.map) {
-      result.map = {
-        zoom: this.map.getZoom(),
-        // from: https://stackoverflow.com/a/31266377
-        metersPerPixel: 40075016.686 * Math.abs(Math.cos(this.map.getCenter().lat / 180 * Math.PI)) / Math.pow(2, this.map.getZoom() + 8)
-      }
+    for (let k in this.master.globalTwigData) {
+      result[k] = this.master.globalTwigData[k]
     }
 
     this.emit('twigData', ob, data, result)
