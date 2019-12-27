@@ -1,4 +1,5 @@
 const isTrue = require('./isTrue')
+const parseLength = require('./parseLength')
 
 const transforms = {
   stroke: {
@@ -48,19 +49,7 @@ function styleToLeaflet (style, twigData) {
           value = parseFloat(ret[k])
           break
         case 'length':
-          let m = ('' + ret[k]).trim().match(/^([+\-]?[0-9]+(?:\.[0-9]+)?)\s*(px|m)$/)
-          if (m) {
-            switch (m[2]) {
-              case 'm':
-                value = parseFloat(m[1]) / twigData.map.metersPerPixel
-                break
-              case 'px':
-              default:
-                value = parseFloat(m[1])
-            }
-          } else {
-            value = parseFloat(ret[k])
-          }
+          value = parseLength(ret[k], twigData.map.metersPerPixel)
           break
       }
 
