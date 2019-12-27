@@ -25,6 +25,9 @@ const transforms = {
   },
   fillOpacity: {
     type: 'float'
+  },
+  offset: {
+    type: 'length'
   }
 }
 

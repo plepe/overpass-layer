@@ -61,7 +61,7 @@ Parameter | Type | Default | Remarks
 ----------|------|---------|---------
 stroke    | boolean | true
 color     | color  | #3388ff
-width     | float  | 3
+width     | length | 3
 opacity   | float  | 1.0
 lineCap   | string | round
 lineJoin  | string | round
@@ -83,6 +83,7 @@ Types:
 * color: A CSS color value, e.g. "#f00", "#ff0000", "#ff0000ff", "rgb(255, 0, 0)", rgb(255, 0, 0, 1), "red", ...
 * float: a number, e.g. `1`, `0.5`.
 * string: an arbitrary text.
+* length: a number with an optional unit. Availble units: 'px' (default, a distance in display pixels), 'm' (meters in world coordinate system)
 
 ### TwigJS templates
 The data of an object is available as patterns. Tags and Meta information is only available, if these properties have been downloaded (see option 'properties'). Variables will automatically be HTML escaped, if not the filter `raw` is used, e.g.: `{{ tags.name|raw }}`.
@@ -219,6 +220,9 @@ Include script:
 ```html
 <script src="node_modules/leaflet-polylineoffset/leaflet.polylineoffset.js"></script>
 ```
+
+Each style can have an 'offset' parameter, which will offset the line. It's of type 'length', so you can use units.
+
 ## Pattern
 ```sh
 npm install --save leaflet-polylinedecorator
