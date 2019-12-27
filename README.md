@@ -243,12 +243,12 @@ Each style can have these additional values:
 Depending on the type of pattern, the following options are available:
 * arrowHead:
  * pattern-polygon: true/false
- * pattern-pixelSize: size of pattern
+ * pattern-pixelSize: size of pattern (type `length`, you may specify units)
  * pattern-headAngle: Angle of the digits
  * pattern-angleCorrection: degrees ([see #88](https://github.com/bbecquet/Leaflet.PolylineDecorator/pull/88))
 
 * dash:
- * pattern-pixelSize: size of pattern
+ * pattern-pixelSize: size of pattern (type `length`, you may specify units)
 
 * marker:
  * pattern-rotate: false

@@ -2,6 +2,7 @@
 
 const isTrue = require('./isTrue')
 const styleToLeaflet = require('./styleToLeaflet')
+const parseLength = require('./parseLength')
 
 class DecoratorPattern {
   constructor (layer) {
@@ -11,13 +12,14 @@ class DecoratorPattern {
     this.layer.on('remove', this.removeObject.bind(this))
   }
 
-  parseType (key, value) {
+  parseType (key, value, twigData) {
     switch (key) {
       case 'polygon':
       case 'rotate':
         return isTrue(value)
-      case 'angleCorrection':
       case 'pixelSize':
+        return parseLength(value, twigData.map.metersPerPixel)
+      case 'angleCorrection':
       case 'headAngle':
         return parseFloat(value)
       default:
@@ -45,11 +47,11 @@ class DecoratorPattern {
           if (m1) {
             symbolOptions[m1[1]] = def[k]
           } else if (m2) {
-            options[m2[1]] = this.parseType(m2[1], def[k])
+            options[m2[1]] = this.parseType(m2[1], def[k], data.twigData)
           }
         }
 
-        symbolOptions = styleToLeaflet(symbolOptions)
+        symbolOptions = styleToLeaflet(symbolOptions, data.twigData)
 
         switch (def.pattern.toString()) {
           case 'dash':
