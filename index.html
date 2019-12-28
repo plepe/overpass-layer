@@ -11,6 +11,29 @@
   <script type='text/javascript'>
 var map
 var overpassFrontend
+var demos = {
+  trees: {
+    title: "Trees"
+  },
+  parks: {
+    title: "Parks"
+  },
+  gastro: {
+    title: "Restaurants and Cafēs"
+  },
+  cycle_routes: {
+    title: "Bicycle route network"
+  },
+  roads1: {
+    title: "Roads with casing"
+  },
+  roads2: {
+    title: "Roads colored by level"
+  },
+  pt: {
+    title: "Public transport network"
+  }
+}
 
 window.onload = function() {
   map = L.map('map').setView([ 51.503, -0.093 ], 17)
@@ -30,13 +53,13 @@ window.onload = function() {
   if (!location.search) {
     document.body.classList.add('hasInfo')
     map.invalidateSize()
-    var list = [ 'demo1', 'demo2', 'demo3', 'demo4', 'demo5', 'demo6', 'demo7' ]
+    document.getElementById('info').appendChild(document.createTextNode('Demos:'))
     var ul = document.createElement('ul')
     document.getElementById('info').appendChild(ul)
 
-    for (var i in list) {
+    for (var i in demos) {
       var li = document.createElement('li')
-      li.innerHTML = '<a href="?' + list[i] + '">' + list[i] + '</a>'
+      li.innerHTML = '<a href="?' + i + '">' + (demos[i].title || i) + '</a>'
       ul.appendChild(li)
     }
   } else {
