@@ -37,10 +37,14 @@ var demos = {
     title: "Rails with offset by gauge"
   }
 }
+var overpassURL = '//overpass-api.de/api/interpreter'
+// var overpassURL = 'map.osm' // Download a .osm file to this directory and use this instead
+var mapCenter = [ 51.503, -0.093 ]
+
 
 window.onload = function() {
-  map = L.map('map').setView([ 51.503, -0.093 ], 17)
-  overpassFrontend = new OverpassFrontend('//overpass-api.de/api/interpreter', {
+  map = L.map('map').setView(mapCenter, 17)
+  overpassFrontend = new OverpassFrontend(overpassURL, {
     timeGap: 10,
     effortPerRequest: 100
   })
