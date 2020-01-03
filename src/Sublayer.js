@@ -688,7 +688,7 @@ class Sublayer {
       })
     }
 
-    for (let k in this.master.globalTwigData) {
+    for (const k in this.master.globalTwigData) {
       result[k] = this.master.globalTwigData[k]
     }
 
