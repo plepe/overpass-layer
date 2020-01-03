@@ -6,14 +6,45 @@
   <link rel="stylesheet" href="node_modules/leaflet/dist/leaflet.css" />
   <link rel="stylesheet" href="demo/demo.css" />
   <script src="node_modules/leaflet/dist/leaflet.js"></script>
+  <script src="node_modules/leaflet-polylineoffset/leaflet.polylineoffset.js"></script>
   <script src="dist/overpass-layer.js"></script>
   <script type='text/javascript'>
 var map
 var overpassFrontend
+var demos = {
+  trees: {
+    title: "Trees"
+  },
+  parks: {
+    title: "Parks"
+  },
+  gastro: {
+    title: "Restaurants and Cafēs"
+  },
+  cycle_routes: {
+    title: "Bicycle route network"
+  },
+  roads1: {
+    title: "Roads with casing"
+  },
+  roads2: {
+    title: "Roads colored by level"
+  },
+  pt: {
+    title: "Public transport network"
+  },
+  tracks: {
+    title: "Rails with offset by gauge"
+  }
+}
+var overpassURL = '//overpass-api.de/api/interpreter'
+// var overpassURL = 'map.osm' // Download a .osm file to this directory and use this instead
+var mapCenter = [ 51.503, -0.093 ]
+
 
 window.onload = function() {
-  map = L.map('map').setView([ 51.503, -0.093 ], 17)
-  overpassFrontend = new OverpassFrontend('//overpass-api.de/api/interpreter', {
+  map = L.map('map').setView(mapCenter, 17)
+  overpassFrontend = new OverpassFrontend(overpassURL, {
     timeGap: 10,
     effortPerRequest: 100
   })
@@ -29,13 +60,13 @@ window.onload = function() {
   if (!location.search) {
     document.body.classList.add('hasInfo')
     map.invalidateSize()
-    var list = [ 'demo1', 'demo2', 'demo3', 'demo4', 'demo5', 'demo6', 'demo7' ]
+    document.getElementById('info').appendChild(document.createTextNode('Demos:'))
     var ul = document.createElement('ul')
     document.getElementById('info').appendChild(ul)
 
-    for (var i in list) {
+    for (var i in demos) {
       var li = document.createElement('li')
-      li.innerHTML = '<a href="?' + list[i] + '">' + list[i] + '</a>'
+      li.innerHTML = '<a href="?' + i + '">' + (demos[i].title || i) + '</a>'
       ul.appendChild(li)
     }
   } else {

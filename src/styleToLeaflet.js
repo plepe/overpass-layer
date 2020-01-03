@@ -1,4 +1,5 @@
 const isTrue = require('./isTrue')
+const parseLength = require('./parseLength')
 
 const transforms = {
   stroke: {
@@ -18,17 +19,20 @@ const transforms = {
   },
   width: {
     rename: 'weight',
-    type: 'float'
+    type: 'length'
   },
   opacity: {
     type: 'float'
   },
   fillOpacity: {
     type: 'float'
+  },
+  offset: {
+    type: 'length'
   }
 }
 
-function styleToLeaflet (style) {
+function styleToLeaflet (style, twigData) {
   const ret = JSON.parse(JSON.stringify(style))
 
   for (let k in ret) {
@@ -43,6 +47,9 @@ function styleToLeaflet (style) {
           break
         case 'float':
           value = parseFloat(ret[k])
+          break
+        case 'length':
+          value = parseLength(ret[k], twigData.map.metersPerPixel)
           break
       }
 

@@ -29,11 +29,11 @@ Options:
 * updateAssets: a function which will be called for all map feature specific HTML contexts. It can be used to update URLs of imgs. It will be passed the following parameters: domNode (the node which should be updated), objectData (data of the map feature), layer (the layer object).
 * feature: an object describing how the feature will be formated resp. styled. Each of the values may be either a function which will be passed an OverpassObject or a string which will be processed with the templating language TwigJS:
   * styles: Array of style-id which should be shown. If not set, the value of the parent 'styles' values will be used. Can be a comma-separated string.
-  * style: An object or a function or a TwigJS template (string), styling the resulting map feature. Style-Id: "default".
-    * If an object is used, e.g.: { weight: 2, fillColor: 'red' }
+  * style: An object or a function or a TwigJS template (string), styling the resulting map feature (see below for a list of available parameters). Style-Id: "default".
+    * If an object is used, e.g.: { width: 2, fillColor: 'red' }
     * If a function is used, the function will be passed the OverpassObject object and should return the style as object.
-    * If a TwigJS template is used, the template should create lines with "key: value" (E.g. `color: red\nweight: 2`). See below for possible patterns.
-  * "style:*": Additional styles with the style-id as suffix (e.g. "style:casing").
+    * If a TwigJS template is used, the template should create lines with "key: value" (E.g. `color: red\nwidth: 2`). See below for possible patterns.
+  * "style:*": Additional styles with the style-id as suffix (e.g. "style:casing"). (see below for a list of available parameters)
   * title: the title of the feature popup and the object in the list.
   * body: the body of the feature popup.
   * description: a short description shown in the list (or in the popup).
@@ -53,6 +53,37 @@ Options:
   * <prefix>MarkerSign: a HTML string which will be shown within the icon in the list (default: value of 'markerSign').
   * <prefix>MarkerSign: a HTML string which will be shown within the icon in the list (default: value of 'markerSign').
   * <prefix>Description: a HTML string which will be shown as description shown in the list (default: value of 'description').
+
+### Style options
+Without extensions installed, the following style parameters are available:
+
+Parameter | Type | Default | Remarks
+----------|------|---------|---------
+stroke    | boolean | true
+color     | color  | #3388ff
+width     | length | 3
+opacity   | float  | 1.0
+lineCap   | string | round
+lineJoin  | string | round
+dashArray | string | ''
+dashOffset | string | ''
+fill      | boolean | depends
+fillColor | color  | depends
+fillOpacity | float | 0.2
+fillRule  | string | 'evenodd'
+radius       | float | depends | Circle and CircleMarker only
+bubblingMouseEvents | boolean | true
+interactive | boolean | true
+pane      | string | 'overlayPane'
+attribution | string | null
+smoothFactor | float | 1.0 | Polyline only
+
+Types:
+* boolean: true or false. The following values are false: `undefined`, `null`, `false`, "false", 0, "0", "".
+* color: A CSS color value, e.g. "#f00", "#ff0000", "#ff0000ff", "rgb(255, 0, 0)", rgb(255, 0, 0, 1), "red", ...
+* float: a number, e.g. `1`, `0.5`.
+* string: an arbitrary text.
+* length: a number with an optional unit. Availble units: 'px' (default, a distance in display pixels), 'm' (meters in world coordinate system)
 
 ### TwigJS templates
 The data of an object is available as patterns. Tags and Meta information is only available, if these properties have been downloaded (see option 'properties'). Variables will automatically be HTML escaped, if not the filter `raw` is used, e.g.: `{{ tags.name|raw }}`.
@@ -189,6 +220,9 @@ Include script:
 ```html
 <script src="node_modules/leaflet-polylineoffset/leaflet.polylineoffset.js"></script>
 ```
+
+Each style can have an 'offset' parameter, which will offset the line. It's of type 'length', so you can use units.
+
 ## Pattern
 ```sh
 npm install --save leaflet-polylinedecorator
@@ -209,12 +243,12 @@ Each style can have these additional values:
 Depending on the type of pattern, the following options are available:
 * arrowHead:
  * pattern-polygon: true/false
- * pattern-pixelSize: size of pattern
+ * pattern-pixelSize: size of pattern (type `length`, you may specify units)
  * pattern-headAngle: Angle of the digits
  * pattern-angleCorrection: degrees ([see #88](https://github.com/bbecquet/Leaflet.PolylineDecorator/pull/88))
 
 * dash:
- * pattern-pixelSize: size of pattern
+ * pattern-pixelSize: size of pattern (type `length`, you may specify units)
 
 * marker:
  * pattern-rotate: false

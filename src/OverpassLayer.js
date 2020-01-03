@@ -133,6 +133,16 @@ class OverpassLayer {
     this.check_update_map()
   }
 
+  calcGlobalTwigData () {
+    this.globalTwigData = {
+      map: {
+        zoom: this.map.getZoom(),
+        // from: https://stackoverflow.com/a/31266377
+        metersPerPixel: 40075016.686 * Math.abs(Math.cos(this.map.getCenter().lat / 180 * Math.PI)) / Math.pow(2, this.map.getZoom() + 8)
+      }
+    }
+  }
+
   check_update_map () {
     if (!this.map || !this.map._loaded) {
       return
@@ -177,6 +187,7 @@ class OverpassLayer {
 
     // When zoom level changed, update visible objects
     if (this.lastZoom !== this.map.getZoom()) {
+      this.calcGlobalTwigData()
       for (const k in this.subLayers) {
         this.subLayers[k].zoomChange()
       }
@@ -239,6 +250,7 @@ class OverpassLayer {
   }
 
   recalc () {
+    this.calcGlobalTwigData()
     for (const k in this.subLayers) {
       this.subLayers[k].recalc()
     }
