@@ -1,968 +1,554 @@
 (function(){function r(e,n,t){function o(i,f){if(!n[i]){if(!e[i]){var c="function"==typeof require&&require;if(!f&&c)return c(i,!0);if(u)return u(i,!0);var a=new Error("Cannot find module '"+i+"'");throw a.code="MODULE_NOT_FOUND",a}var p=n[i]={exports:{}};e[i][0].call(p.exports,function(r){var n=e[i][1][r];return o(n||r)},p,p.exports,r,e,n,t)}return n[i].exports}for(var u="function"==typeof require&&require,i=0;i<t.length;i++)o(t[i]);return o}return r})()({1:[function(require,module,exports){
-'use strict'
+var wgs84 = require('wgs84');
 
-var GeoJSONBounds = require('geojson-bounds')
-const haversine = require('haversine')
+module.exports.geometry = geometry;
+module.exports.ring = ringArea;
 
-/* global L:false */
-
-/**
- * create bounding box from input
- * @class
- * @param {object|Leaflet.latLngBounds|GeoJSON} bounds Input boundary. Can be an object with { minlat, minlon, maxlat, maxlon } or { lat, lon } or { lat, lng } or [ N (lat), N (lon) ] a GeoJSON object or a Leaflet object (latLng or latLngBounds). The boundary will automatically be wrapped at longitude -180 / 180.
- * @example
- * var bbox = new BoundingBox({ minlat: 48.123, minlon: 16.23, maxlat: 49.012, maxlon: 16.367 })
- */
-function BoundingBox (bounds) {
-  var k
-
-  if (bounds === null || typeof bounds === 'undefined') {
-    this.minlat = -90
-    this.minlon = -180
-    this.maxlat = +90
-    this.maxlon = +180
-    return
-  }
-
-  // Leaflet.latLngBounds detected!
-  if (typeof bounds.getSouthWest === 'function') {
-    var sw = bounds.getSouthWest().wrap()
-    var ne = bounds.getNorthEast().wrap()
-
-    bounds = {
-      minlat: sw.lat,
-      minlon: sw.lng,
-      maxlat: ne.lat,
-      maxlon: ne.lng
+function geometry(_) {
+    var area = 0, i;
+    switch (_.type) {
+        case 'Polygon':
+            return polygonArea(_.coordinates);
+        case 'MultiPolygon':
+            for (i = 0; i < _.coordinates.length; i++) {
+                area += polygonArea(_.coordinates[i]);
+            }
+            return area;
+        case 'Point':
+        case 'MultiPoint':
+        case 'LineString':
+        case 'MultiLineString':
+            return 0;
+        case 'GeometryCollection':
+            for (i = 0; i < _.geometries.length; i++) {
+                area += geometry(_.geometries[i]);
+            }
+            return area;
     }
-  }
+}
 
-  // GeoJSON detected
-  if (bounds.type === 'Feature') {
-    var b = GeoJSONBounds.extent(bounds)
-
-    bounds = {
-      minlat: b[1],
-      minlon: b[0],
-      maxlat: b[3],
-      maxlon: b[2]
+function polygonArea(coords) {
+    var area = 0;
+    if (coords && coords.length > 0) {
+        area += Math.abs(ringArea(coords[0]));
+        for (var i = 1; i < coords.length; i++) {
+            area -= Math.abs(ringArea(coords[i]));
+        }
     }
-  }
-
-  if ('bounds' in bounds) {
-    bounds = bounds.bounds
-  }
-
-  if (bounds.lat) {
-    this.minlat = bounds.lat
-    this.maxlat = bounds.lat
-  }
-
-  if (bounds.lon) {
-    this.minlon = bounds.lon
-    this.maxlon = bounds.lon
-  }
-
-  if (Array.isArray(bounds)) {
-    this.minlat = bounds[0]
-    this.maxlat = bounds[0]
-    this.minlon = bounds[1]
-    this.maxlon = bounds[1]
-  }
-
-  // e.g. L.latLng object
-  if (bounds.lng) {
-    this.minlon = bounds.lng
-    this.maxlon = bounds.lng
-  }
-
-  var props = ['minlon', 'minlat', 'maxlon', 'maxlat']
-  for (var i = 0; i < props.length; i++) {
-    k = props[i]
-    if (k in bounds) {
-      this[k] = bounds[k]
-    }
-  }
-
-  this._wrap()
-}
-
-BoundingBox.prototype.wrapMaxLon = function () {
-  return (this.minlon > this.maxlon) ? this.maxlon + 360 : this.maxlon
-}
-
-BoundingBox.prototype.wrapMinLon = function () {
-  return (this.minlon > this.maxlon) ? this.minlon - 360 : this.minlon
-}
-
-BoundingBox.prototype._wrap = function () {
-  if (this.minlon < -180 || this.minlon > 180) {
-    this.minlon = (this.minlon + 180) % 360 - 180
-  }
-  if (this.maxlon < -180 || this.maxlon > 180) {
-    this.maxlon = (this.maxlon + 180) % 360 - 180
-  }
-
-  return this
+    return area;
 }
 
 /**
-  * Checks whether the other bounding box intersects (shares any portion of space) the current object.
- * @param {BoundingBox} other Other boundingbox to check for
- * @return {boolean} true if the bounding boxes intersect
- * @example
- * var bbox = new BoundingBox({ minlat: 48.123, minlon: 16.23, maxlat: 49.012, maxlon: 16.367 })
- * var bbox2 = new BoundingBox({ lat: 48.5, lon: 16.267 })
- * console.log(bbox.intersects(bbox2)) // true
+ * Calculate the approximate area of the polygon were it projected onto
+ *     the earth.  Note that this area will be positive if ring is oriented
+ *     clockwise, otherwise it will be negative.
+ *
+ * Reference:
+ * Robert. G. Chamberlain and William H. Duquette, "Some Algorithms for
+ *     Polygons on a Sphere", JPL Publication 07-03, Jet Propulsion
+ *     Laboratory, Pasadena, CA, June 2007 http://trs-new.jpl.nasa.gov/dspace/handle/2014/40409
+ *
+ * Returns:
+ * {float} The approximate signed geodesic area of the polygon in square
+ *     meters.
  */
-BoundingBox.prototype.intersects = function (other) {
-  if (!(other instanceof BoundingBox)) {
-    other = new BoundingBox(other)
-  }
 
-  if (other.maxlat < this.minlat) {
-    return false
-  }
+function ringArea(coords) {
+    var p1, p2, p3, lowerIndex, middleIndex, upperIndex, i,
+    area = 0,
+    coordsLength = coords.length;
 
-  if (other.minlat > this.maxlat) {
-    return false
-  }
+    if (coordsLength > 2) {
+        for (i = 0; i < coordsLength; i++) {
+            if (i === coordsLength - 2) {// i = N-2
+                lowerIndex = coordsLength - 2;
+                middleIndex = coordsLength -1;
+                upperIndex = 0;
+            } else if (i === coordsLength - 1) {// i = N-1
+                lowerIndex = coordsLength - 1;
+                middleIndex = 0;
+                upperIndex = 1;
+            } else { // i = 0 to N-3
+                lowerIndex = i;
+                middleIndex = i+1;
+                upperIndex = i+2;
+            }
+            p1 = coords[lowerIndex];
+            p2 = coords[middleIndex];
+            p3 = coords[upperIndex];
+            area += ( rad(p3[0]) - rad(p1[0]) ) * Math.sin( rad(p2[1]));
+        }
 
-  if (other.wrapMaxLon() < this.wrapMinLon()) {
-    return false
-  }
-
-  if (other.wrapMinLon() > this.wrapMaxLon()) {
-    return false
-  }
-
-  return true
-}
-
-/**
- * Checks whether the current object is fully within the other bounding box.
- * @param {BoundingBox} other Other boundingbox to check for
- * @return {boolean} true if the bounding boxes is within other
- * @example
- * var bbox = new BoundingBox({ minlat: 48.123, minlon: 16.23, maxlat: 49.012, maxlon: 16.367 })
- * var bbox2 = new BoundingBox({ lat: 48.5, lon: 16.267 })
- * console.log(bbox2.within(bbox)) // true
- */
-BoundingBox.prototype.within = function (other) {
-  if (!(other instanceof BoundingBox)) {
-    other = new BoundingBox(other)
-  }
-
-  if (other.maxlat < this.maxlat) {
-    return false
-  }
-
-  if (other.minlat > this.minlat) {
-    return false
-  }
-
-  if (other.wrapMaxLon() < this.wrapMaxLon()) {
-    return false
-  }
-
-  if (other.wrapMinLon() > this.wrapMinLon()) {
-    return false
-  }
-
-  return true
-}
-
-BoundingBox.prototype.toTile = function () {
-  return new BoundingBox({
-    minlat: Math.floor(this.minlat * 10) / 10,
-    minlon: Math.floor(this.minlon * 10) / 10,
-    maxlat: Math.ceil(this.maxlat * 10) / 10,
-    maxlon: Math.ceil(this.maxlon * 10) / 10
-  })
-}
-
-/**
- * return the bounding box as lon-lat string, e.g. '179.5,55,-179.5,56'
- * @return {string}
- * @example
- * var bbox = new BoundingBox({ minlat: 48.123, minlon: 16.23, maxlat: 49.012, maxlon: 16.367 })
- * console.log(bbox.toLonLatString()) // '16.23,48.123,16.367,49.012'
- */
-BoundingBox.prototype.toLonLatString = function () {
-  return this.minlon + ',' +
-         this.minlat + ',' +
-         this.maxlon + ',' +
-         this.maxlat
-}
-
-/**
- * return the bounding box as lon-lat string, e.g. '179.5,55,-179.5,56'. Useful for sending requests to web services that return geo data.
- * @return {string}
- * @example
- * var bbox = new BoundingBox({ minlat: 48.123, minlon: 16.23, maxlat: 49.012, maxlon: 16.367 })
- * console.log(bbox.toBBoxString()) // '16.23,48.123,16.367,49.012'
- */
-BoundingBox.prototype.toBBoxString = BoundingBox.prototype.toLonLatString
-
-/**
- * return the bounding box as lon-lat string, e.g. '55,179.5,56,-179.5'. Useful e.g. for Overpass API requests.
- * @return {string}
- * @example
- * var bbox = new BoundingBox({ minlat: 48.123, minlon: 16.23, maxlat: 49.012, maxlon: 16.367 })
- * console.log(bbox.toLatLonString()) // '48.123,16.23,49.012,16.367'
- */
-BoundingBox.prototype.toLatLonString = function () {
-  return this.minlat + ',' +
-         this.minlon + ',' +
-         this.maxlat + ',' +
-         this.maxlon
-}
-
-/**
- * return the diagonal length (length of hypothenuse).
- * @return {number}
- * @example
- * var bbox = new BoundingBox({ minlat: 48.123, minlon: 16.23, maxlat: 49.012, maxlon: 16.367 })
- * console.log(bbox.diagonalLength()) // 0.8994943023721748
- */
-BoundingBox.prototype.diagonalLength = function () {
-  var dlat = this.maxlat - this.minlat
-  var dlon = this.wrapMaxLon() - this.minlon
-
-  return Math.sqrt(dlat * dlat + dlon * dlon)
-}
-
-/**
- * return the diagonal distance (using the haversine function). See https://github.com/njj/haversine for further details.
- * @param {object} [options] Options
- * @param {string} [options.unit=km] Unit of measurement applied to result ('km', 'mile', 'meter', 'nmi')
- * @param {number} [options.threshold] If passed, will result in library returning boolean value of whether or not the start and end points are within that supplied threshold.
- * @return {number}
- * @example
- * var bbox = new BoundingBox({ minlat: 48.123, minlon: 16.23, maxlat: 49.012, maxlon: 16.367 })
- * console.log(bbox.diagonalDistance({ unit: 'm' })) // 99.36491328576697
- */
-BoundingBox.prototype.diagonalDistance = function (options = {}) {
-  return haversine(
-    { latitude: this.minlat, longitude: this.minlon },
-    { latitude: this.maxlat, longitude: this.maxlon },
-    options
-  )
-}
-
-/**
- * Returns the center point of the bounding box as { lat, lon }
- * @return {object}
- * @example
- * var bbox = new BoundingBox({ minlat: 48.123, minlon: 16.23, maxlat: 49.012, maxlon: 16.367 })
- * console.log(bbox.getCenter()) // { lat: 48.567499999999995, lon: 16.2985 }
- */
-BoundingBox.prototype.getCenter = function () {
-  var dlat = this.maxlat - this.minlat
-  var dlon = this.wrapMaxLon() - this.minlon
-  let lon = this.minlon + dlon / 2
-  if (lon < -180 || lon > 180) {
-    lon = (lon + 180) % 360 - 180
-  }
-
-  return {
-    lat: this.minlat + dlat / 2,
-    lon
-  }
-}
-
-/**
- * get Northern boundary (latitude)
- * @param {number}
- */
-BoundingBox.prototype.getNorth = function () {
-  return this.maxlat
-}
-
-/**
- * get Southern boundary (latitude)
- * @param {number}
- */
-BoundingBox.prototype.getSouth = function () {
-  return this.minlat
-}
-
-/**
- * get Eastern boundary (longitude)
- * @param {number}
- */
-BoundingBox.prototype.getEast = function () {
-  return this.maxlon
-}
-
-/**
- * get Western boundary (longitude)
- * @param {number}
- */
-BoundingBox.prototype.getWest = function () {
-  return this.minlon
-}
-
-/**
- * extends current boundary by the other boundary
- * @param {BoundingBox} other
- * @example
- * var bbox1 = new BoundingBox({ minlat: 48.123, minlon: 16.23, maxlat: 49.012, maxlon: 16.367 })
- * var bbox2 = new BoundingBox({ minlat: 48.000, minlon: 16.23, maxlat: 49.012, maxlon: 16.789 })
- * bbox1.extend(bbox2)
- * console.log(bbox1.bounds) // { minlat: 48, minlon: 16.23, maxlat: 49.012, maxlon: 16.789 }
- */
-BoundingBox.prototype.extend = function (other) {
-  other = new BoundingBox(other)._wrap()
-
-  if (other.minlon < this.minlon) {
-    this.minlon = other.minlon
-  }
-
-  if (other.minlat < this.minlat) {
-    this.minlat = other.minlat
-  }
-
-  if (other.wrapMaxLon() > this.wrapMaxLon()) {
-    this.maxlon = other.wrapMaxLon()
-  }
-
-  if (other.maxlat > this.maxlat) {
-    this.maxlat = other.maxlat
-  }
-
-  this._wrap()
-}
-
-/**
- * Returns the bounding box as GeoJSON feature.
- * @return {object}
- * @example
- * var bbox = new BoundingBox({ minlat: 48.123, minlon: 16.23, maxlat: 49.012, maxlon: 16.367 })
- * bbox.toGeoJSON()
- * // {
- * //   "type": "Feature",
- * //   "properties": {},
- * //   "geometry": {
- * //     "type": "Polygon",
- * //     "coordinates": [
- * //       [
- * //         [ 16.23, 48.123 ],
- * //         [ 16.367, 48.123 ],
- * //         [ 16.367, 49.012 ],
- * //         [ 16.23, 49.012 ],
- * //         [ 16.23, 48.123 ]
- * //       ]
- * //     ]
- * //   }
- * // }
- */
-BoundingBox.prototype.toGeoJSON = function () {
-  return {
-    type: 'Feature',
-    properties: {},
-    geometry: {
-      'type': 'Polygon',
-      'coordinates': [[
-        [ this.minlon, this.minlat ],
-        [ this.maxlon, this.minlat ],
-        [ this.maxlon, this.maxlat ],
-        [ this.minlon, this.maxlat ],
-        [ this.minlon, this.minlat ]
-      ]]
-    }
-  }
-}
-
-/**
- * Returns the bounding box as L.latLngBounds object. Leaflet must be included separately!
- * @param {object} [options] Options.
- * @param {number[]} [options.shiftWorld=[0, 0]] Shift the world by the first value for the Western hemisphere (lon < 0) or the second value for the Eastern hemisphere (lon >= 0).
- */
-BoundingBox.prototype.toLeaflet = function (options = {}) {
-  if (!('shiftWorld' in options)) {
-    options.shiftWorld = [ 0, 0 ]
-  }
-
-  return L.latLngBounds(
-    L.latLng(this.minlat, this.minlon + (this.minlon < 0 ? options.shiftWorld[0] : options.shiftWorld[1])),
-    L.latLng(this.maxlat, this.maxlon + (this.maxlon < 0 ? options.shiftWorld[0] : options.shiftWorld[1]))
-  )
-}
-
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = BoundingBox
-}
-if (typeof window !== 'undefined') {
-  window.BoundingBox = BoundingBox
-}
-
-},{"geojson-bounds":2,"haversine":3}],2:[function(require,module,exports){
-(function (process){
-(function() {
-  /*
-   Modified version of underscore.js's flatten function
-   https://github.com/jashkenas/underscore/blob/master/underscore.js#L501
-  */
-  function flatten(input, output) {
-    output = output || [];
-    var idx = output.length;
-    for (var i = 0; i < input.length; i++) {
-      if (Array.isArray(input[i]) && Array.isArray(input[i][0])) {
-        flatten(input[i], output);
-        idx = output.length;
-      } else {
-        output[idx++] = input[i];
-      }
-    }
-    return (Array.isArray(output[0])) ? output : [output];
-  };
-
-  function maxLat(coords) {
-    return Math.max.apply(null, coords.map(function(d) { return d[1]; }));
-  }
-
-  function maxLng(coords) {
-    return Math.max.apply(null, coords.map(function(d) { return d[0]; }));
-  }
-
-  function minLat(coords) {
-    return Math.min.apply(null, coords.map(function(d) { return d[1]; }));
-  }
-
-  function minLng(coords) {
-    return Math.min.apply(null, coords.map(function(d) { return d[0]; }));
-  }
-
-  function fetchEnvelope(coords) {
-    var mmc = {
-      "minLng": minLng(coords),
-      "minLat": minLat(coords),
-      "maxLng": maxLng(coords),
-      "maxLat": maxLat(coords)
+        area = area * wgs84.RADIUS * wgs84.RADIUS / 2;
     }
 
-    return {
-      "type": "Feature",
-      "properties": {},
-      "geometry": {
-        "type": "Polygon",
-        "coordinates": [[
-          [mmc.minLng, mmc.minLat],
-          [mmc.minLng, mmc.maxLat],
-          [mmc.maxLng, mmc.maxLat],
-          [mmc.maxLng, mmc.minLat],
-          [mmc.minLng, mmc.minLat]
-        ]]
-      }
-    }
-  }
-
-  function fetchExtent(coords) {
-    return [
-      minLng(coords),
-      minLat(coords),
-      maxLng(coords),
-      maxLat(coords)
-    ]
-  }
-
-  // Adapted from http://stackoverflow.com/questions/2792443/finding-the-centroid-of-a-polygon
-  function fetchCentroid(vertices) {
-    var centroid = {
-      x: 0,
-      y: 0
-    }
-    
-    var signedArea = 0;
-    var x0 = 0;
-    var y0 = 0;
-    var x1 = 0;
-    var y1 = 0;
-    var a = 0;
-
-    for (var i = 0; i < vertices.length - 1; i++) {
-      x0 = vertices[i][0];
-      y0 = vertices[i][1];
-      x1 = vertices[i + 1][0];
-      y1 = vertices[i + 1][1];
-      a = (x0 * y1) - (x1 * y0);
-
-      signedArea += a;
-      centroid.x += (x0 + x1) * a;
-      centroid.y += (y0 + y1) * a;
-    }
-
-    x0 = vertices[vertices.length - 1][0];
-    y0 = vertices[vertices.length - 1][1];
-    x1 = vertices[0][0];
-    y1 = vertices[0][1];
-    a = (x0 * y1) - (x1 * y0);
-    signedArea += a;
-    centroid.x += (x0 + x1) * a;
-    centroid.y += (y0 + y1) * a;
-
-    signedArea = signedArea * 0.5;
-    centroid.x = centroid.x / (6.0*signedArea);
-    centroid.y = centroid.y / (6.0*signedArea);
-
-    return [centroid.x, centroid.y];
-  }
-
-  function feature(obj) {
-    return flatten(obj.geometry.coordinates);
-  }
-
-  function featureCollection(f) {
-    return flatten(f.features.map(feature));
-  }
-
-  function geometryCollection(g) {
-    return flatten(g.geometries.map(process));
-  }
-
-  function process(t) {
-    if (!t) {
-      return [];
-    }
-
-    switch (t.type) {
-      case "Feature":
-        return feature(t);
-      case "GeometryCollection":
-        return geometryCollection(t);
-      case "FeatureCollection":
-        return featureCollection(t);
-      case "Point":
-      case "LineString":
-      case "Polygon":
-      case "MultiPoint":
-      case "MultiPolygon":
-      case "MultiLineString":
-        return flatten(t.coordinates);
-      default:
-        return [];
-    }
-  }
-
-  function envelope(t) {
-    return fetchEnvelope(process(t));
-  }
-
-  function extent(t) {
-    return fetchExtent(process(t));
-  }
-
-  function centroid(t) {
-    return fetchCentroid(process(t));
-  }
-
-  function xMin(t) {
-    return minLng(process(t));
-  }
-  function xMax(t) {
-    return maxLng(process(t));
-  }
-  function yMin(t) {
-    return minLat(process(t));
-  }
-  function yMax(t) {
-    return maxLat(process(t));
-  }
-
-  module.exports = {
-    "envelope": envelope,
-    "extent": extent,
-    "centroid": centroid,
-    "xMin": xMin,
-    "xMax": xMax,
-    "yMin": yMin,
-    "yMax": yMax
-  }
-
-}());
-
-}).call(this,require('_process'))
-},{"_process":236}],3:[function(require,module,exports){
-var haversine = (function () {
-  var RADII = {
-    km:    6371,
-    mile:  3960,
-    meter: 6371000,
-    nmi:   3440
-  }
-
-  // convert to radians
-  var toRad = function (num) {
-    return num * Math.PI / 180
-  }
-
-  // convert coordinates to standard format based on the passed format option
-  var convertCoordinates = function (format, coordinates) {
-    switch (format) {
-    case '[lat,lon]':
-      return { latitude: coordinates[0], longitude: coordinates[1] }
-    case '[lon,lat]':
-      return { latitude: coordinates[1], longitude: coordinates[0] }
-    case '{lon,lat}':
-      return { latitude: coordinates.lat, longitude: coordinates.lon }
-    case '{lat,lng}':
-      return { latitude: coordinates.lat, longitude: coordinates.lng }
-    case 'geojson':
-      return { latitude: coordinates.geometry.coordinates[1], longitude: coordinates.geometry.coordinates[0] }
-    default:
-      return coordinates
-    }
-  }
-
-  return function haversine (startCoordinates, endCoordinates, options) {
-    options   = options || {}
-
-    var R = options.unit in RADII
-      ? RADII[options.unit]
-      : RADII.km
-
-    var start = convertCoordinates(options.format, startCoordinates)
-    var end = convertCoordinates(options.format, endCoordinates)
-
-    var dLat = toRad(end.latitude - start.latitude)
-    var dLon = toRad(end.longitude - start.longitude)
-    var lat1 = toRad(start.latitude)
-    var lat2 = toRad(end.latitude)
-
-    var a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-            Math.sin(dLon/2) * Math.sin(dLon/2) * Math.cos(lat1) * Math.cos(lat2)
-    var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
-
-    if (options.threshold) {
-      return options.threshold > (R * c)
-    }
-
-    return R * c
-  }
-
-})()
-
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = haversine
+    return area;
 }
 
-},{}],4:[function(require,module,exports){
+function rad(_) {
+    return _ * Math.PI / 180;
+}
+},{"wgs84":171}],2:[function(require,module,exports){
+var geojsonArea = require('@mapbox/geojson-area');
+
+module.exports = rewind;
+
+function rewind(gj, outer) {
+    switch ((gj && gj.type) || null) {
+        case 'FeatureCollection':
+            gj.features = gj.features.map(curryOuter(rewind, outer));
+            return gj;
+        case 'GeometryCollection':
+            gj.geometries = gj.geometries.map(curryOuter(rewind, outer));
+            return gj;
+        case 'Feature':
+            gj.geometry = rewind(gj.geometry, outer);
+            return gj;
+        case 'Polygon':
+        case 'MultiPolygon':
+            return correct(gj, outer);
+        default:
+            return gj;
+    }
+}
+
+function curryOuter(a, b) {
+    return function(_) { return a(_, b); };
+}
+
+function correct(_, outer) {
+    if (_.type === 'Polygon') {
+        _.coordinates = correctRings(_.coordinates, outer);
+    } else if (_.type === 'MultiPolygon') {
+        _.coordinates = _.coordinates.map(curryOuter(correctRings, outer));
+    }
+    return _;
+}
+
+function correctRings(_, outer) {
+    outer = !!outer;
+    _[0] = wind(_[0], outer);
+    for (var i = 1; i < _.length; i++) {
+        _[i] = wind(_[i], !outer);
+    }
+    return _;
+}
+
+function wind(_, dir) {
+    return cw(_) === dir ? _ : _.reverse();
+}
+
+function cw(_) {
+    return geojsonArea.ring(_) >= 0;
+}
+
+},{"@mapbox/geojson-area":1}],3:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 var meta_1 = require("@turf/meta");
+// Note: change RADIUS => earthRadius
+var RADIUS = 6378137;
 /**
- * Takes a set of features, calculates the bbox of all input features, and returns a bounding box.
+ * Takes one or more features and returns their area in square meters.
  *
- * @name bbox
- * @param {GeoJSON} geojson any GeoJSON object
- * @returns {BBox} bbox extent in [minX, minY, maxX, maxY] order
+ * @name area
+ * @param {GeoJSON} geojson input GeoJSON feature(s)
+ * @returns {number} area in square meters
  * @example
- * var line = turf.lineString([[-74, 40], [-78, 42], [-82, 35]]);
- * var bbox = turf.bbox(line);
- * var bboxPolygon = turf.bboxPolygon(bbox);
+ * var polygon = turf.polygon([[[125, -15], [113, -22], [154, -27], [144, -15], [125, -15]]]);
+ *
+ * var area = turf.area(polygon);
  *
  * //addToMap
- * var addToMap = [line, bboxPolygon]
+ * var addToMap = [polygon]
+ * polygon.properties.area = area
  */
-function bbox(geojson) {
-    var result = [Infinity, Infinity, -Infinity, -Infinity];
-    meta_1.coordEach(geojson, function (coord) {
-        if (result[0] > coord[0]) {
-            result[0] = coord[0];
+function area(geojson) {
+    return meta_1.geomReduce(geojson, function (value, geom) {
+        return value + calculateArea(geom);
+    }, 0);
+}
+exports.default = area;
+/**
+ * Calculate Area
+ *
+ * @private
+ * @param {Geometry} geom GeoJSON Geometries
+ * @returns {number} area
+ */
+function calculateArea(geom) {
+    var total = 0;
+    var i;
+    switch (geom.type) {
+        case "Polygon":
+            return polygonArea(geom.coordinates);
+        case "MultiPolygon":
+            for (i = 0; i < geom.coordinates.length; i++) {
+                total += polygonArea(geom.coordinates[i]);
+            }
+            return total;
+        case "Point":
+        case "MultiPoint":
+        case "LineString":
+        case "MultiLineString":
+            return 0;
+    }
+    return 0;
+}
+function polygonArea(coords) {
+    var total = 0;
+    if (coords && coords.length > 0) {
+        total += Math.abs(ringArea(coords[0]));
+        for (var i = 1; i < coords.length; i++) {
+            total -= Math.abs(ringArea(coords[i]));
         }
-        if (result[1] > coord[1]) {
-            result[1] = coord[1];
+    }
+    return total;
+}
+/**
+ * @private
+ * Calculate the approximate area of the polygon were it projected onto the earth.
+ * Note that this area will be positive if ring is oriented clockwise, otherwise it will be negative.
+ *
+ * Reference:
+ * Robert. G. Chamberlain and William H. Duquette, "Some Algorithms for Polygons on a Sphere",
+ * JPL Publication 07-03, Jet Propulsion
+ * Laboratory, Pasadena, CA, June 2007 http://trs-new.jpl.nasa.gov/dspace/handle/2014/40409
+ *
+ * @param {Array<Array<number>>} coords Ring Coordinates
+ * @returns {number} The approximate signed geodesic area of the polygon in square meters.
+ */
+function ringArea(coords) {
+    var p1;
+    var p2;
+    var p3;
+    var lowerIndex;
+    var middleIndex;
+    var upperIndex;
+    var i;
+    var total = 0;
+    var coordsLength = coords.length;
+    if (coordsLength > 2) {
+        for (i = 0; i < coordsLength; i++) {
+            if (i === coordsLength - 2) {
+                lowerIndex = coordsLength - 2;
+                middleIndex = coordsLength - 1;
+                upperIndex = 0;
+            }
+            else if (i === coordsLength - 1) {
+                lowerIndex = coordsLength - 1;
+                middleIndex = 0;
+                upperIndex = 1;
+            }
+            else {
+                lowerIndex = i;
+                middleIndex = i + 1;
+                upperIndex = i + 2;
+            }
+            p1 = coords[lowerIndex];
+            p2 = coords[middleIndex];
+            p3 = coords[upperIndex];
+            total += (rad(p3[0]) - rad(p1[0])) * Math.sin(rad(p2[1]));
         }
-        if (result[2] < coord[0]) {
-            result[2] = coord[0];
-        }
-        if (result[3] < coord[1]) {
-            result[3] = coord[1];
-        }
-    });
+        total = total * RADIUS * RADIUS / 2;
+    }
+    return total;
+}
+function rad(num) {
+    return num * Math.PI / 180;
+}
+
+},{"@turf/meta":10}],4:[function(require,module,exports){
+"use strict";
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (Object.hasOwnProperty.call(mod, k)) result[k] = mod[k];
+    result["default"] = mod;
     return result;
 }
-exports.default = bbox;
-
-},{"@turf/meta":13}],5:[function(require,module,exports){
-"use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 var helpers_1 = require("@turf/helpers");
 var invariant_1 = require("@turf/invariant");
-// http://en.wikipedia.org/wiki/Haversine_formula
-// http://www.movable-type.co.uk/scripts/latlong.html
+var lineclip = __importStar(require("./lib/lineclip"));
 /**
- * Takes two {@link Point|points} and finds the geographic bearing between them,
- * i.e. the angle measured in degrees from the north line (0 degrees)
+ * Takes a {@link Feature} and a bbox and clips the feature to the bbox using
+ * [lineclip](https://github.com/mapbox/lineclip).
+ * May result in degenerate edges when clipping Polygons.
  *
- * @name bearing
- * @param {Coord} start starting Point
- * @param {Coord} end ending Point
- * @param {Object} [options={}] Optional parameters
- * @param {boolean} [options.final=false] calculates the final bearing if true
- * @returns {number} bearing in decimal degrees, between -180 and 180 degrees (positive clockwise)
+ * @name bboxClip
+ * @param {Feature<LineString|MultiLineString|Polygon|MultiPolygon>} feature feature to clip to the bbox
+ * @param {BBox} bbox extent in [minX, minY, maxX, maxY] order
+ * @returns {Feature<LineString|MultiLineString|Polygon|MultiPolygon>} clipped Feature
  * @example
- * var point1 = turf.point([-75.343, 39.984]);
- * var point2 = turf.point([-75.534, 39.123]);
+ * var bbox = [0, 0, 10, 10];
+ * var poly = turf.polygon([[[2, 2], [8, 4], [12, 8], [3, 7], [2, 2]]]);
  *
- * var bearing = turf.bearing(point1, point2);
+ * var clipped = turf.bboxClip(poly, bbox);
  *
  * //addToMap
- * var addToMap = [point1, point2]
- * point1.properties['marker-color'] = '#f00'
- * point2.properties['marker-color'] = '#0f0'
- * point1.properties.bearing = bearing
+ * var addToMap = [bbox, poly, clipped]
  */
-function bearing(start, end, options) {
-    if (options === void 0) { options = {}; }
-    // Reverse calculation
-    if (options.final === true) {
-        return calculateFinalBearing(start, end);
-    }
-    var coordinates1 = invariant_1.getCoord(start);
-    var coordinates2 = invariant_1.getCoord(end);
-    var lon1 = helpers_1.degreesToRadians(coordinates1[0]);
-    var lon2 = helpers_1.degreesToRadians(coordinates2[0]);
-    var lat1 = helpers_1.degreesToRadians(coordinates1[1]);
-    var lat2 = helpers_1.degreesToRadians(coordinates2[1]);
-    var a = Math.sin(lon2 - lon1) * Math.cos(lat2);
-    var b = Math.cos(lat1) * Math.sin(lat2) -
-        Math.sin(lat1) * Math.cos(lat2) * Math.cos(lon2 - lon1);
-    return helpers_1.radiansToDegrees(Math.atan2(a, b));
-}
-/**
- * Calculates Final Bearing
- *
- * @private
- * @param {Coord} start starting Point
- * @param {Coord} end ending Point
- * @returns {number} bearing
- */
-function calculateFinalBearing(start, end) {
-    // Swap start & end
-    var bear = bearing(end, start);
-    bear = (bear + 180) % 360;
-    return bear;
-}
-exports.default = bearing;
-
-},{"@turf/helpers":9,"@turf/invariant":10}],6:[function(require,module,exports){
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-var invariant_1 = require("@turf/invariant");
-// http://en.wikipedia.org/wiki/Even%E2%80%93odd_rule
-// modified from: https://github.com/substack/point-in-polygon/blob/master/index.js
-// which was modified from http://www.ecse.rpi.edu/Homepages/wrf/Research/Short_Notes/pnpoly.html
-/**
- * Takes a {@link Point} and a {@link Polygon} or {@link MultiPolygon} and determines if the point
- * resides inside the polygon. The polygon can be convex or concave. The function accounts for holes.
- *
- * @name booleanPointInPolygon
- * @param {Coord} point input point
- * @param {Feature<Polygon|MultiPolygon>} polygon input polygon or multipolygon
- * @param {Object} [options={}] Optional parameters
- * @param {boolean} [options.ignoreBoundary=false] True if polygon boundary should be ignored when determining if
- * the point is inside the polygon otherwise false.
- * @returns {boolean} `true` if the Point is inside the Polygon; `false` if the Point is not inside the Polygon
- * @example
- * var pt = turf.point([-77, 44]);
- * var poly = turf.polygon([[
- *   [-81, 41],
- *   [-81, 47],
- *   [-72, 47],
- *   [-72, 41],
- *   [-81, 41]
- * ]]);
- *
- * turf.booleanPointInPolygon(pt, poly);
- * //= true
- */
-function booleanPointInPolygon(point, polygon, options) {
-    if (options === void 0) { options = {}; }
-    // validation
-    if (!point) {
-        throw new Error("point is required");
-    }
-    if (!polygon) {
-        throw new Error("polygon is required");
-    }
-    var pt = invariant_1.getCoord(point);
-    var geom = invariant_1.getGeom(polygon);
+function bboxClip(feature, bbox) {
+    var geom = invariant_1.getGeom(feature);
     var type = geom.type;
-    var bbox = polygon.bbox;
-    var polys = geom.coordinates;
-    // Quick elimination if point is not inside bbox
-    if (bbox && inBBox(pt, bbox) === false) {
-        return false;
+    var properties = feature.type === "Feature" ? feature.properties : {};
+    var coords = geom.coordinates;
+    switch (type) {
+        case "LineString":
+        case "MultiLineString":
+            var lines_1 = [];
+            if (type === "LineString") {
+                coords = [coords];
+            }
+            coords.forEach(function (line) {
+                lineclip.polyline(line, bbox, lines_1);
+            });
+            if (lines_1.length === 1) {
+                return helpers_1.lineString(lines_1[0], properties);
+            }
+            return helpers_1.multiLineString(lines_1, properties);
+        case "Polygon":
+            return helpers_1.polygon(clipPolygon(coords, bbox), properties);
+        case "MultiPolygon":
+            return helpers_1.multiPolygon(coords.map(function (poly) {
+                return clipPolygon(poly, bbox);
+            }), properties);
+        default:
+            throw new Error("geometry " + type + " not supported");
     }
-    // normalize to multipolygon
-    if (type === "Polygon") {
-        polys = [polys];
+}
+exports.default = bboxClip;
+function clipPolygon(rings, bbox) {
+    var outRings = [];
+    for (var _i = 0, rings_1 = rings; _i < rings_1.length; _i++) {
+        var ring = rings_1[_i];
+        var clipped = lineclip.polygon(ring, bbox);
+        if (clipped.length > 0) {
+            if (clipped[0][0] !== clipped[clipped.length - 1][0] || clipped[0][1] !== clipped[clipped.length - 1][1]) {
+                clipped.push(clipped[0]);
+            }
+            if (clipped.length >= 4) {
+                outRings.push(clipped);
+            }
+        }
     }
-    var insidePoly = false;
-    for (var i = 0; i < polys.length && !insidePoly; i++) {
-        // check if it is in the outer ring first
-        if (inRing(pt, polys[i][0], options.ignoreBoundary)) {
-            var inHole = false;
-            var k = 1;
-            // check for the point in any of the holes
-            while (k < polys[i].length && !inHole) {
-                if (inRing(pt, polys[i][k], !options.ignoreBoundary)) {
-                    inHole = true;
+    return outRings;
+}
+
+},{"./lib/lineclip":5,"@turf/helpers":7,"@turf/invariant":9}],5:[function(require,module,exports){
+'use strict';
+
+module.exports = lineclip;
+module.exports.default = lineclip;
+
+lineclip.polyline = lineclip;
+lineclip.polygon = polygonclip;
+
+
+// Cohen-Sutherland line clippign algorithm, adapted to efficiently
+// handle polylines rather than just segments
+
+function lineclip(points, bbox, result) {
+
+    var len = points.length,
+        codeA = bitCode(points[0], bbox),
+        part = [],
+        i, a, b, codeB, lastCode;
+
+    if (!result) result = [];
+
+    for (i = 1; i < len; i++) {
+        a = points[i - 1];
+        b = points[i];
+        codeB = lastCode = bitCode(b, bbox);
+
+        while (true) {
+
+            if (!(codeA | codeB)) { // accept
+                part.push(a);
+
+                if (codeB !== lastCode) { // segment went outside
+                    part.push(b);
+
+                    if (i < len - 1) { // start a new line
+                        result.push(part);
+                        part = [];
+                    }
+                } else if (i === len - 1) {
+                    part.push(b);
                 }
-                k++;
+                break;
+
+            } else if (codeA & codeB) { // trivial reject
+                break;
+
+            } else if (codeA) { // a outside, intersect with clip edge
+                a = intersect(a, b, codeA, bbox);
+                codeA = bitCode(a, bbox);
+
+            } else { // b outside
+                b = intersect(a, b, codeB, bbox);
+                codeB = bitCode(b, bbox);
             }
-            if (!inHole) {
-                insidePoly = true;
-            }
         }
+
+        codeA = lastCode;
     }
-    return insidePoly;
-}
-exports.default = booleanPointInPolygon;
-/**
- * inRing
- *
- * @private
- * @param {Array<number>} pt [x,y]
- * @param {Array<Array<number>>} ring [[x,y], [x,y],..]
- * @param {boolean} ignoreBoundary ignoreBoundary
- * @returns {boolean} inRing
- */
-function inRing(pt, ring, ignoreBoundary) {
-    var isInside = false;
-    if (ring[0][0] === ring[ring.length - 1][0] && ring[0][1] === ring[ring.length - 1][1]) {
-        ring = ring.slice(0, ring.length - 1);
-    }
-    for (var i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-        var xi = ring[i][0];
-        var yi = ring[i][1];
-        var xj = ring[j][0];
-        var yj = ring[j][1];
-        var onBoundary = (pt[1] * (xi - xj) + yi * (xj - pt[0]) + yj * (pt[0] - xi) === 0) &&
-            ((xi - pt[0]) * (xj - pt[0]) <= 0) && ((yi - pt[1]) * (yj - pt[1]) <= 0);
-        if (onBoundary) {
-            return !ignoreBoundary;
-        }
-        var intersect = ((yi > pt[1]) !== (yj > pt[1])) &&
-            (pt[0] < (xj - xi) * (pt[1] - yi) / (yj - yi) + xi);
-        if (intersect) {
-            isInside = !isInside;
-        }
-    }
-    return isInside;
-}
-/**
- * inBBox
- *
- * @private
- * @param {Position} pt point [x,y]
- * @param {BBox} bbox BBox [west, south, east, north]
- * @returns {boolean} true/false if point is inside BBox
- */
-function inBBox(pt, bbox) {
-    return bbox[0] <= pt[0] &&
-        bbox[1] <= pt[1] &&
-        bbox[2] >= pt[0] &&
-        bbox[3] >= pt[1];
+
+    if (part.length) result.push(part);
+
+    return result;
 }
 
-},{"@turf/invariant":10}],7:[function(require,module,exports){
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-// http://en.wikipedia.org/wiki/Haversine_formula
-// http://www.movable-type.co.uk/scripts/latlong.html
-var helpers_1 = require("@turf/helpers");
-var invariant_1 = require("@turf/invariant");
+// Sutherland-Hodgeman polygon clipping algorithm
+
+function polygonclip(points, bbox) {
+
+    var result, edge, prev, prevInside, i, p, inside;
+
+    // clip against each side of the clip rectangle
+    for (edge = 1; edge <= 8; edge *= 2) {
+        result = [];
+        prev = points[points.length - 1];
+        prevInside = !(bitCode(prev, bbox) & edge);
+
+        for (i = 0; i < points.length; i++) {
+            p = points[i];
+            inside = !(bitCode(p, bbox) & edge);
+
+            // if segment goes through the clip window, add an intersection
+            if (inside !== prevInside) result.push(intersect(prev, p, edge, bbox));
+
+            if (inside) result.push(p); // add a point if it's inside
+
+            prev = p;
+            prevInside = inside;
+        }
+
+        points = result;
+
+        if (!points.length) break;
+    }
+
+    return result;
+}
+
+// intersect a segment against one of the 4 lines that make up the bbox
+
+function intersect(a, b, edge, bbox) {
+    return edge & 8 ? [a[0] + (b[0] - a[0]) * (bbox[3] - a[1]) / (b[1] - a[1]), bbox[3]] : // top
+           edge & 4 ? [a[0] + (b[0] - a[0]) * (bbox[1] - a[1]) / (b[1] - a[1]), bbox[1]] : // bottom
+           edge & 2 ? [bbox[2], a[1] + (b[1] - a[1]) * (bbox[2] - a[0]) / (b[0] - a[0])] : // right
+           edge & 1 ? [bbox[0], a[1] + (b[1] - a[1]) * (bbox[0] - a[0]) / (b[0] - a[0])] : // left
+           null;
+}
+
+// bit code reflects the point position relative to the bbox:
+
+//         left  mid  right
+//    top  1001  1000  1010
+//    mid  0001  0000  0010
+// bottom  0101  0100  0110
+
+function bitCode(p, bbox) {
+    var code = 0;
+
+    if (p[0] < bbox[0]) code |= 1; // left
+    else if (p[0] > bbox[2]) code |= 2; // right
+
+    if (p[1] < bbox[1]) code |= 4; // bottom
+    else if (p[1] > bbox[3]) code |= 8; // top
+
+    return code;
+}
+
+},{}],6:[function(require,module,exports){
+'use strict';
+
+function _interopDefault (ex) { return (ex && (typeof ex === 'object') && 'default' in ex) ? ex['default'] : ex; }
+
+var martinez = require('martinez-polygon-clipping');
+var area = _interopDefault(require('@turf/area'));
+var helpers = require('@turf/helpers');
+var invariant = require('@turf/invariant');
+var meta = require('@turf/meta');
+
 /**
- * Takes a {@link Point} and calculates the location of a destination point given a distance in
- * degrees, radians, miles, or kilometers; and bearing in degrees.
- * This uses the [Haversine formula](http://en.wikipedia.org/wiki/Haversine_formula) to account for global curvature.
+ * Finds the difference between two {@link Polygon|polygons} by clipping the second polygon from the first.
  *
- * @name destination
- * @param {Coord} origin starting point
- * @param {number} distance distance from the origin point
- * @param {number} bearing ranging from -180 to 180
- * @param {Object} [options={}] Optional parameters
- * @param {string} [options.units='kilometers'] miles, kilometers, degrees, or radians
- * @param {Object} [options.properties={}] Translate properties to Point
- * @returns {Feature<Point>} destination point
+ * @name difference
+ * @param {Feature<Polygon|MultiPolygon>} polygon1 input Polygon feature
+ * @param {Feature<Polygon|MultiPolygon>} polygon2 Polygon feature to difference from polygon1
+ * @returns {Feature<Polygon|MultiPolygon>|null} a Polygon or MultiPolygon feature showing the area of `polygon1` excluding the area of `polygon2` (if empty returns `null`)
  * @example
- * var point = turf.point([-75.343, 39.984]);
- * var distance = 50;
- * var bearing = 90;
- * var options = {units: 'miles'};
+ * var polygon1 = turf.polygon([[
+ *   [128, -26],
+ *   [141, -26],
+ *   [141, -21],
+ *   [128, -21],
+ *   [128, -26]
+ * ]], {
+ *   "fill": "#F00",
+ *   "fill-opacity": 0.1
+ * });
+ * var polygon2 = turf.polygon([[
+ *   [126, -28],
+ *   [140, -28],
+ *   [140, -20],
+ *   [126, -20],
+ *   [126, -28]
+ * ]], {
+ *   "fill": "#00F",
+ *   "fill-opacity": 0.1
+ * });
  *
- * var destination = turf.destination(point, distance, bearing, options);
+ * var difference = turf.difference(polygon1, polygon2);
  *
  * //addToMap
- * var addToMap = [point, destination]
- * destination.properties['marker-color'] = '#f00';
- * point.properties['marker-color'] = '#0f0';
+ * var addToMap = [polygon1, polygon2, difference];
  */
-function destination(origin, distance, bearing, options) {
-    if (options === void 0) { options = {}; }
-    // Handle input
-    var coordinates1 = invariant_1.getCoord(origin);
-    var longitude1 = helpers_1.degreesToRadians(coordinates1[0]);
-    var latitude1 = helpers_1.degreesToRadians(coordinates1[1]);
-    var bearingRad = helpers_1.degreesToRadians(bearing);
-    var radians = helpers_1.lengthToRadians(distance, options.units);
-    // Main
-    var latitude2 = Math.asin(Math.sin(latitude1) * Math.cos(radians) +
-        Math.cos(latitude1) * Math.sin(radians) * Math.cos(bearingRad));
-    var longitude2 = longitude1 + Math.atan2(Math.sin(bearingRad) * Math.sin(radians) * Math.cos(latitude1), Math.cos(radians) - Math.sin(latitude1) * Math.sin(latitude2));
-    var lng = helpers_1.radiansToDegrees(longitude2);
-    var lat = helpers_1.radiansToDegrees(latitude2);
-    return helpers_1.point([lng, lat], options.properties);
-}
-exports.default = destination;
+function difference(polygon1, polygon2) {
+    var geom1 = invariant.getGeom(polygon1);
+    var geom2 = invariant.getGeom(polygon2);
+    var properties = polygon1.properties || {};
 
-},{"@turf/helpers":9,"@turf/invariant":10}],8:[function(require,module,exports){
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-var invariant_1 = require("@turf/invariant");
-var helpers_1 = require("@turf/helpers");
-//http://en.wikipedia.org/wiki/Haversine_formula
-//http://www.movable-type.co.uk/scripts/latlong.html
+    // Issue #721 - JSTS/Martinez can't handle empty polygons
+    geom1 = removeEmptyPolygon(geom1);
+    geom2 = removeEmptyPolygon(geom2);
+    if (!geom1) return null;
+    if (!geom2) return helpers.feature(geom1, properties);
+
+    var differenced = martinez.diff(geom1.coordinates, geom2.coordinates);
+    if (differenced.length === 0) return null;
+    if (differenced.length === 1) return helpers.polygon(differenced[0], properties);
+    return helpers.multiPolygon(differenced, properties);
+}
+
 /**
- * Calculates the distance between two {@link Point|points} in degrees, radians, miles, or kilometers.
- * This uses the [Haversine formula](http://en.wikipedia.org/wiki/Haversine_formula) to account for global curvature.
+ * Detect Empty Polygon
  *
- * @name distance
- * @param {Coord} from origin point
- * @param {Coord} to destination point
- * @param {Object} [options={}] Optional parameters
- * @param {string} [options.units='kilometers'] can be degrees, radians, miles, or kilometers
- * @returns {number} distance between the two points
- * @example
- * var from = turf.point([-75.343, 39.984]);
- * var to = turf.point([-75.534, 39.123]);
- * var options = {units: 'miles'};
- *
- * var distance = turf.distance(from, to, options);
- *
- * //addToMap
- * var addToMap = [from, to];
- * from.properties.distance = distance;
- * to.properties.distance = distance;
+ * @private
+ * @param {Geometry<Polygon|MultiPolygon>} geom Geometry Object
+ * @returns {Geometry<Polygon|MultiPolygon>|null} removed any polygons with no areas
  */
-function distance(from, to, options) {
-    if (options === void 0) { options = {}; }
-    var coordinates1 = invariant_1.getCoord(from);
-    var coordinates2 = invariant_1.getCoord(to);
-    var dLat = helpers_1.degreesToRadians((coordinates2[1] - coordinates1[1]));
-    var dLon = helpers_1.degreesToRadians((coordinates2[0] - coordinates1[0]));
-    var lat1 = helpers_1.degreesToRadians(coordinates1[1]);
-    var lat2 = helpers_1.degreesToRadians(coordinates2[1]);
-    var a = Math.pow(Math.sin(dLat / 2), 2) +
-        Math.pow(Math.sin(dLon / 2), 2) * Math.cos(lat1) * Math.cos(lat2);
-    return helpers_1.radiansToLength(2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)), options.units);
+function removeEmptyPolygon(geom) {
+    switch (geom.type) {
+    case 'Polygon':
+        if (area(geom) > 1) return geom;
+        return null;
+    case 'MultiPolygon':
+        var coordinates = [];
+        meta.flattenEach(geom, function (feature) {
+            if (area(feature) > 1) coordinates.push(feature.geometry.coordinates);
+        });
+        if (coordinates.length) return {type: 'MultiPolygon', coordinates: coordinates};
+    }
 }
-exports.default = distance;
 
-},{"@turf/helpers":9,"@turf/invariant":10}],9:[function(require,module,exports){
+module.exports = difference;
+
+},{"@turf/area":3,"@turf/helpers":7,"@turf/invariant":9,"@turf/meta":10,"martinez-polygon-clipping":159}],7:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 /**
@@ -1697,7 +1283,118 @@ function convertDistance() {
 }
 exports.convertDistance = convertDistance;
 
-},{}],10:[function(require,module,exports){
+},{}],8:[function(require,module,exports){
+"use strict";
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (Object.hasOwnProperty.call(mod, k)) result[k] = mod[k];
+    result["default"] = mod;
+    return result;
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+var helpers_1 = require("@turf/helpers");
+var invariant_1 = require("@turf/invariant");
+var martinez = __importStar(require("martinez-polygon-clipping"));
+/**
+ * Takes two {@link Polygon|polygon} or {@link MultiPolygon|multi-polygon} geometries and
+ * finds their polygonal intersection. If they don't intersect, returns null.
+ *
+ * @name intersect
+ * @param {Feature<Polygon | MultiPolygon>} poly1 the first polygon or multipolygon
+ * @param {Feature<Polygon | MultiPolygon>} poly2 the second polygon or multipolygon
+ * @param {Object} [options={}] Optional Parameters
+ * @param {Object} [options.properties={}] Translate GeoJSON Properties to Feature
+ * @returns {Feature|null} returns a feature representing the area they share (either a {@link Polygon} or
+ * {@link MultiPolygon}). If they do not share any area, returns `null`.
+ * @example
+ * var poly1 = turf.polygon([[
+ *   [-122.801742, 45.48565],
+ *   [-122.801742, 45.60491],
+ *   [-122.584762, 45.60491],
+ *   [-122.584762, 45.48565],
+ *   [-122.801742, 45.48565]
+ * ]]);
+ *
+ * var poly2 = turf.polygon([[
+ *   [-122.520217, 45.535693],
+ *   [-122.64038, 45.553967],
+ *   [-122.720031, 45.526554],
+ *   [-122.669906, 45.507309],
+ *   [-122.723464, 45.446643],
+ *   [-122.532577, 45.408574],
+ *   [-122.487258, 45.477466],
+ *   [-122.520217, 45.535693]
+ * ]]);
+ *
+ * var intersection = turf.intersect(poly1, poly2);
+ *
+ * //addToMap
+ * var addToMap = [poly1, poly2, intersection];
+ */
+function intersect(poly1, poly2, options) {
+    if (options === void 0) { options = {}; }
+    var geom1 = invariant_1.getGeom(poly1);
+    var geom2 = invariant_1.getGeom(poly2);
+    if (geom1.type === "Polygon" && geom2.type === "Polygon") {
+        var intersection = martinez.intersection(geom1.coordinates, geom2.coordinates);
+        if (intersection === null || intersection.length === 0) {
+            return null;
+        }
+        if (intersection.length === 1) {
+            var start = intersection[0][0][0];
+            var end = intersection[0][0][intersection[0][0].length - 1];
+            if (start[0] === end[0] && start[1] === end[1]) {
+                return helpers_1.polygon(intersection[0], options.properties);
+            }
+            return null;
+        }
+        return helpers_1.multiPolygon(intersection, options.properties);
+    }
+    else if (geom1.type === "MultiPolygon") {
+        var resultCoords = [];
+        // iterate through the polygon and run intersect with each part, adding to the resultCoords.
+        for (var _i = 0, _a = geom1.coordinates; _i < _a.length; _i++) {
+            var coords = _a[_i];
+            var subGeom = invariant_1.getGeom(helpers_1.polygon(coords));
+            var subIntersection = intersect(subGeom, geom2);
+            if (subIntersection) {
+                var subIntGeom = invariant_1.getGeom(subIntersection);
+                if (subIntGeom.type === "Polygon") {
+                    resultCoords.push(subIntGeom.coordinates);
+                }
+                else if (subIntGeom.type === "MultiPolygon") {
+                    resultCoords = resultCoords.concat(subIntGeom.coordinates);
+                }
+                else {
+                    throw new Error("intersection is invalid");
+                }
+            }
+        }
+        // Make a polygon with the result
+        if (resultCoords.length === 0) {
+            return null;
+        }
+        if (resultCoords.length === 1) {
+            return helpers_1.polygon(resultCoords[0], options.properties);
+        }
+        else {
+            return helpers_1.multiPolygon(resultCoords, options.properties);
+        }
+    }
+    else if (geom2.type === "MultiPolygon") {
+        // geom1 is a polygon and geom2 a multiPolygon,
+        // put the multiPolygon first and fallback to the previous case.
+        return intersect(geom2, geom1);
+    }
+    else {
+        // handle invalid geometry types
+        throw new Error("poly1 and poly2 must be either polygons or multiPolygons");
+    }
+}
+exports.default = intersect;
+
+},{"@turf/helpers":7,"@turf/invariant":9,"martinez-polygon-clipping":159}],9:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 var helpers_1 = require("@turf/helpers");
@@ -1910,218 +1607,7 @@ function getType(geojson, name) {
 }
 exports.getType = getType;
 
-},{"@turf/helpers":9}],11:[function(require,module,exports){
-"use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-}
-Object.defineProperty(exports, "__esModule", { value: true });
-var helpers_1 = require("@turf/helpers");
-var invariant_1 = require("@turf/invariant");
-var line_segment_1 = __importDefault(require("@turf/line-segment"));
-var meta_1 = require("@turf/meta");
-var geojson_rbush_1 = __importDefault(require("geojson-rbush"));
-/**
- * Takes any LineString or Polygon GeoJSON and returns the intersecting point(s).
- *
- * @name lineIntersect
- * @param {GeoJSON} line1 any LineString or Polygon
- * @param {GeoJSON} line2 any LineString or Polygon
- * @returns {FeatureCollection<Point>} point(s) that intersect both
- * @example
- * var line1 = turf.lineString([[126, -11], [129, -21]]);
- * var line2 = turf.lineString([[123, -18], [131, -14]]);
- * var intersects = turf.lineIntersect(line1, line2);
- *
- * //addToMap
- * var addToMap = [line1, line2, intersects]
- */
-function lineIntersect(line1, line2) {
-    var unique = {};
-    var results = [];
-    // First, normalize geometries to features
-    // Then, handle simple 2-vertex segments
-    if (line1.type === "LineString") {
-        line1 = helpers_1.feature(line1);
-    }
-    if (line2.type === "LineString") {
-        line2 = helpers_1.feature(line2);
-    }
-    if (line1.type === "Feature" &&
-        line2.type === "Feature" &&
-        line1.geometry !== null &&
-        line2.geometry !== null &&
-        line1.geometry.type === "LineString" &&
-        line2.geometry.type === "LineString" &&
-        line1.geometry.coordinates.length === 2 &&
-        line2.geometry.coordinates.length === 2) {
-        var intersect = intersects(line1, line2);
-        if (intersect) {
-            results.push(intersect);
-        }
-        return helpers_1.featureCollection(results);
-    }
-    // Handles complex GeoJSON Geometries
-    var tree = geojson_rbush_1.default();
-    tree.load(line_segment_1.default(line2));
-    meta_1.featureEach(line_segment_1.default(line1), function (segment) {
-        meta_1.featureEach(tree.search(segment), function (match) {
-            var intersect = intersects(segment, match);
-            if (intersect) {
-                // prevent duplicate points https://github.com/Turfjs/turf/issues/688
-                var key = invariant_1.getCoords(intersect).join(",");
-                if (!unique[key]) {
-                    unique[key] = true;
-                    results.push(intersect);
-                }
-            }
-        });
-    });
-    return helpers_1.featureCollection(results);
-}
-/**
- * Find a point that intersects LineStrings with two coordinates each
- *
- * @private
- * @param {Feature<LineString>} line1 GeoJSON LineString (Must only contain 2 coordinates)
- * @param {Feature<LineString>} line2 GeoJSON LineString (Must only contain 2 coordinates)
- * @returns {Feature<Point>} intersecting GeoJSON Point
- */
-function intersects(line1, line2) {
-    var coords1 = invariant_1.getCoords(line1);
-    var coords2 = invariant_1.getCoords(line2);
-    if (coords1.length !== 2) {
-        throw new Error("<intersects> line1 must only contain 2 coordinates");
-    }
-    if (coords2.length !== 2) {
-        throw new Error("<intersects> line2 must only contain 2 coordinates");
-    }
-    var x1 = coords1[0][0];
-    var y1 = coords1[0][1];
-    var x2 = coords1[1][0];
-    var y2 = coords1[1][1];
-    var x3 = coords2[0][0];
-    var y3 = coords2[0][1];
-    var x4 = coords2[1][0];
-    var y4 = coords2[1][1];
-    var denom = ((y4 - y3) * (x2 - x1)) - ((x4 - x3) * (y2 - y1));
-    var numeA = ((x4 - x3) * (y1 - y3)) - ((y4 - y3) * (x1 - x3));
-    var numeB = ((x2 - x1) * (y1 - y3)) - ((y2 - y1) * (x1 - x3));
-    if (denom === 0) {
-        if (numeA === 0 && numeB === 0) {
-            return null;
-        }
-        return null;
-    }
-    var uA = numeA / denom;
-    var uB = numeB / denom;
-    if (uA >= 0 && uA <= 1 && uB >= 0 && uB <= 1) {
-        var x = x1 + (uA * (x2 - x1));
-        var y = y1 + (uA * (y2 - y1));
-        return helpers_1.point([x, y]);
-    }
-    return null;
-}
-exports.default = lineIntersect;
-
-},{"@turf/helpers":9,"@turf/invariant":10,"@turf/line-segment":12,"@turf/meta":13,"geojson-rbush":15}],12:[function(require,module,exports){
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-var helpers_1 = require("@turf/helpers");
-var invariant_1 = require("@turf/invariant");
-var meta_1 = require("@turf/meta");
-/**
- * Creates a {@link FeatureCollection} of 2-vertex {@link LineString} segments from a
- * {@link LineString|(Multi)LineString} or {@link Polygon|(Multi)Polygon}.
- *
- * @name lineSegment
- * @param {GeoJSON} geojson GeoJSON Polygon or LineString
- * @returns {FeatureCollection<LineString>} 2-vertex line segments
- * @example
- * var polygon = turf.polygon([[[-50, 5], [-40, -10], [-50, -10], [-40, 5], [-50, 5]]]);
- * var segments = turf.lineSegment(polygon);
- *
- * //addToMap
- * var addToMap = [polygon, segments]
- */
-function lineSegment(geojson) {
-    if (!geojson) {
-        throw new Error("geojson is required");
-    }
-    var results = [];
-    meta_1.flattenEach(geojson, function (feature) {
-        lineSegmentFeature(feature, results);
-    });
-    return helpers_1.featureCollection(results);
-}
-/**
- * Line Segment
- *
- * @private
- * @param {Feature<LineString|Polygon>} geojson Line or polygon feature
- * @param {Array} results push to results
- * @returns {void}
- */
-function lineSegmentFeature(geojson, results) {
-    var coords = [];
-    var geometry = geojson.geometry;
-    if (geometry !== null) {
-        switch (geometry.type) {
-            case "Polygon":
-                coords = invariant_1.getCoords(geometry);
-                break;
-            case "LineString":
-                coords = [invariant_1.getCoords(geometry)];
-        }
-        coords.forEach(function (coord) {
-            var segments = createSegments(coord, geojson.properties);
-            segments.forEach(function (segment) {
-                segment.id = results.length;
-                results.push(segment);
-            });
-        });
-    }
-}
-/**
- * Create Segments from LineString coordinates
- *
- * @private
- * @param {Array<Array<number>>} coords LineString coordinates
- * @param {*} properties GeoJSON properties
- * @returns {Array<Feature<LineString>>} line segments
- */
-function createSegments(coords, properties) {
-    var segments = [];
-    coords.reduce(function (previousCoords, currentCoords) {
-        var segment = helpers_1.lineString([previousCoords, currentCoords], properties);
-        segment.bbox = bbox(previousCoords, currentCoords);
-        segments.push(segment);
-        return currentCoords;
-    });
-    return segments;
-}
-/**
- * Create BBox between two coordinates (faster than @turf/bbox)
- *
- * @private
- * @param {Array<number>} coords1 Point coordinate
- * @param {Array<number>} coords2 Point coordinate
- * @returns {BBox} [west, south, east, north]
- */
-function bbox(coords1, coords2) {
-    var x1 = coords1[0];
-    var y1 = coords1[1];
-    var x2 = coords2[0];
-    var y2 = coords2[1];
-    var west = (x1 < x2) ? x1 : x2;
-    var south = (y1 < y2) ? y1 : y2;
-    var east = (x1 > x2) ? x1 : x2;
-    var north = (y1 > y2) ? y1 : y2;
-    return [west, south, east, north];
-}
-exports.default = lineSegment;
-
-},{"@turf/helpers":9,"@turf/invariant":10,"@turf/meta":13}],13:[function(require,module,exports){
+},{"@turf/helpers":7}],10:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, '__esModule', { value: true });
@@ -3255,1546 +2741,7 @@ exports.lineReduce = lineReduce;
 exports.findSegment = findSegment;
 exports.findPoint = findPoint;
 
-},{"@turf/helpers":9}],14:[function(require,module,exports){
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-var bearing_1 = require("@turf/bearing");
-var distance_1 = require("@turf/distance");
-var destination_1 = require("@turf/destination");
-var line_intersect_1 = require("@turf/line-intersect");
-var meta_1 = require("@turf/meta");
-var helpers_1 = require("@turf/helpers");
-var invariant_1 = require("@turf/invariant");
-/**
- * Takes a {@link Point} and a {@link LineString} and calculates the closest Point on the (Multi)LineString.
- *
- * @name nearestPointOnLine
- * @param {Geometry|Feature<LineString|MultiLineString>} lines lines to snap to
- * @param {Geometry|Feature<Point>|number[]} pt point to snap from
- * @param {Object} [options={}] Optional parameters
- * @param {string} [options.units='kilometers'] can be degrees, radians, miles, or kilometers
- * @returns {Feature<Point>} closest point on the `line` to `point`. The properties object will contain three values: `index`: closest point was found on nth line part, `dist`: distance between pt and the closest point, `location`: distance along the line between start and the closest point.
- * @example
- * var line = turf.lineString([
- *     [-77.031669, 38.878605],
- *     [-77.029609, 38.881946],
- *     [-77.020339, 38.884084],
- *     [-77.025661, 38.885821],
- *     [-77.021884, 38.889563],
- *     [-77.019824, 38.892368]
- * ]);
- * var pt = turf.point([-77.037076, 38.884017]);
- *
- * var snapped = turf.nearestPointOnLine(line, pt, {units: 'miles'});
- *
- * //addToMap
- * var addToMap = [line, pt, snapped];
- * snapped.properties['marker-color'] = '#00f';
- */
-function nearestPointOnLine(lines, pt, options) {
-    if (options === void 0) { options = {}; }
-    var closestPt = helpers_1.point([Infinity, Infinity], {
-        dist: Infinity
-    });
-    var length = 0.0;
-    meta_1.flattenEach(lines, function (line) {
-        var coords = invariant_1.getCoords(line);
-        for (var i = 0; i < coords.length - 1; i++) {
-            //start
-            var start = helpers_1.point(coords[i]);
-            start.properties.dist = distance_1.default(pt, start, options);
-            //stop
-            var stop_1 = helpers_1.point(coords[i + 1]);
-            stop_1.properties.dist = distance_1.default(pt, stop_1, options);
-            // sectionLength
-            var sectionLength = distance_1.default(start, stop_1, options);
-            //perpendicular
-            var heightDistance = Math.max(start.properties.dist, stop_1.properties.dist);
-            var direction = bearing_1.default(start, stop_1);
-            var perpendicularPt1 = destination_1.default(pt, heightDistance, direction + 90, options);
-            var perpendicularPt2 = destination_1.default(pt, heightDistance, direction - 90, options);
-            var intersect = line_intersect_1.default(helpers_1.lineString([perpendicularPt1.geometry.coordinates, perpendicularPt2.geometry.coordinates]), helpers_1.lineString([start.geometry.coordinates, stop_1.geometry.coordinates]));
-            var intersectPt = null;
-            if (intersect.features.length > 0) {
-                intersectPt = intersect.features[0];
-                intersectPt.properties.dist = distance_1.default(pt, intersectPt, options);
-                intersectPt.properties.location = length + distance_1.default(start, intersectPt, options);
-            }
-            if (start.properties.dist < closestPt.properties.dist) {
-                closestPt = start;
-                closestPt.properties.index = i;
-                closestPt.properties.location = length;
-            }
-            if (stop_1.properties.dist < closestPt.properties.dist) {
-                closestPt = stop_1;
-                closestPt.properties.index = i + 1;
-                closestPt.properties.location = length + sectionLength;
-            }
-            if (intersectPt && intersectPt.properties.dist < closestPt.properties.dist) {
-                closestPt = intersectPt;
-                closestPt.properties.index = i;
-            }
-            // update length
-            length += sectionLength;
-        }
-    });
-    return closestPt;
-}
-exports.default = nearestPointOnLine;
-
-},{"@turf/bearing":5,"@turf/destination":7,"@turf/distance":8,"@turf/helpers":9,"@turf/invariant":10,"@turf/line-intersect":11,"@turf/meta":13}],15:[function(require,module,exports){
-var rbush = require('rbush');
-var helpers = require('@turf/helpers');
-var meta = require('@turf/meta');
-var turfBBox = require('@turf/bbox').default;
-var featureEach = meta.featureEach;
-var coordEach = meta.coordEach;
-var polygon = helpers.polygon;
-var featureCollection = helpers.featureCollection;
-
-/**
- * GeoJSON implementation of [RBush](https://github.com/mourner/rbush#rbush) spatial index.
- *
- * @name rbush
- * @param {number} [maxEntries=9] defines the maximum number of entries in a tree node. 9 (used by default) is a
- * reasonable choice for most applications. Higher value means faster insertion and slower search, and vice versa.
- * @returns {RBush} GeoJSON RBush
- * @example
- * var geojsonRbush = require('geojson-rbush').default;
- * var tree = geojsonRbush();
- */
-function geojsonRbush(maxEntries) {
-    var tree = rbush(maxEntries);
-    /**
-     * [insert](https://github.com/mourner/rbush#data-format)
-     *
-     * @param {Feature} feature insert single GeoJSON Feature
-     * @returns {RBush} GeoJSON RBush
-     * @example
-     * var poly = turf.polygon([[[-78, 41], [-67, 41], [-67, 48], [-78, 48], [-78, 41]]]);
-     * tree.insert(poly)
-     */
-    tree.insert = function (feature) {
-        if (feature.type !== 'Feature') throw new Error('invalid feature');
-        feature.bbox = feature.bbox ? feature.bbox : turfBBox(feature);
-        return rbush.prototype.insert.call(this, feature);
-    };
-
-    /**
-     * [load](https://github.com/mourner/rbush#bulk-inserting-data)
-     *
-     * @param {FeatureCollection|Array<Feature>} features load entire GeoJSON FeatureCollection
-     * @returns {RBush} GeoJSON RBush
-     * @example
-     * var polys = turf.polygons([
-     *     [[[-78, 41], [-67, 41], [-67, 48], [-78, 48], [-78, 41]]],
-     *     [[[-93, 32], [-83, 32], [-83, 39], [-93, 39], [-93, 32]]]
-     * ]);
-     * tree.load(polys);
-     */
-    tree.load = function (features) {
-        var load = [];
-        // Load an Array of Features
-        if (Array.isArray(features)) {
-            features.forEach(function (feature) {
-                if (feature.type !== 'Feature') throw new Error('invalid features');
-                feature.bbox = feature.bbox ? feature.bbox : turfBBox(feature);
-                load.push(feature);
-            });
-        } else {
-            // Load a FeatureCollection
-            featureEach(features, function (feature) {
-                if (feature.type !== 'Feature') throw new Error('invalid features');
-                feature.bbox = feature.bbox ? feature.bbox : turfBBox(feature);
-                load.push(feature);
-            });
-        }
-        return rbush.prototype.load.call(this, load);
-    };
-
-    /**
-     * [remove](https://github.com/mourner/rbush#removing-data)
-     *
-     * @param {Feature} feature remove single GeoJSON Feature
-     * @param {Function} equals Pass a custom equals function to compare by value for removal.
-     * @returns {RBush} GeoJSON RBush
-     * @example
-     * var poly = turf.polygon([[[-78, 41], [-67, 41], [-67, 48], [-78, 48], [-78, 41]]]);
-     *
-     * tree.remove(poly);
-     */
-    tree.remove = function (feature, equals) {
-        if (feature.type !== 'Feature') throw new Error('invalid feature');
-        feature.bbox = feature.bbox ? feature.bbox : turfBBox(feature);
-        return rbush.prototype.remove.call(this, feature, equals);
-    };
-
-    /**
-     * [clear](https://github.com/mourner/rbush#removing-data)
-     *
-     * @returns {RBush} GeoJSON Rbush
-     * @example
-     * tree.clear()
-     */
-    tree.clear = function () {
-        return rbush.prototype.clear.call(this);
-    };
-
-    /**
-     * [search](https://github.com/mourner/rbush#search)
-     *
-     * @param {BBox|FeatureCollection|Feature} geojson search with GeoJSON
-     * @returns {FeatureCollection} all features that intersects with the given GeoJSON.
-     * @example
-     * var poly = turf.polygon([[[-78, 41], [-67, 41], [-67, 48], [-78, 48], [-78, 41]]]);
-     *
-     * tree.search(poly);
-     */
-    tree.search = function (geojson) {
-        var features = rbush.prototype.search.call(this, this.toBBox(geojson));
-        return featureCollection(features);
-    };
-
-    /**
-     * [collides](https://github.com/mourner/rbush#collisions)
-     *
-     * @param {BBox|FeatureCollection|Feature} geojson collides with GeoJSON
-     * @returns {boolean} true if there are any items intersecting the given GeoJSON, otherwise false.
-     * @example
-     * var poly = turf.polygon([[[-78, 41], [-67, 41], [-67, 48], [-78, 48], [-78, 41]]]);
-     *
-     * tree.collides(poly);
-     */
-    tree.collides = function (geojson) {
-        return rbush.prototype.collides.call(this, this.toBBox(geojson));
-    };
-
-    /**
-     * [all](https://github.com/mourner/rbush#search)
-     *
-     * @returns {FeatureCollection} all the features in RBush
-     * @example
-     * tree.all()
-     */
-    tree.all = function () {
-        var features = rbush.prototype.all.call(this);
-        return featureCollection(features);
-    };
-
-    /**
-     * [toJSON](https://github.com/mourner/rbush#export-and-import)
-     *
-     * @returns {any} export data as JSON object
-     * @example
-     * var exported = tree.toJSON()
-     */
-    tree.toJSON = function () {
-        return rbush.prototype.toJSON.call(this);
-    };
-
-    /**
-     * [fromJSON](https://github.com/mourner/rbush#export-and-import)
-     *
-     * @param {any} json import previously exported data
-     * @returns {RBush} GeoJSON RBush
-     * @example
-     * var exported = {
-     *   "children": [
-     *     {
-     *       "type": "Feature",
-     *       "geometry": {
-     *         "type": "Point",
-     *         "coordinates": [110, 50]
-     *       },
-     *       "properties": {},
-     *       "bbox": [110, 50, 110, 50]
-     *     }
-     *   ],
-     *   "height": 1,
-     *   "leaf": true,
-     *   "minX": 110,
-     *   "minY": 50,
-     *   "maxX": 110,
-     *   "maxY": 50
-     * }
-     * tree.fromJSON(exported)
-     */
-    tree.fromJSON = function (json) {
-        return rbush.prototype.fromJSON.call(this, json);
-    };
-
-    /**
-     * Converts GeoJSON to {minX, minY, maxX, maxY} schema
-     *
-     * @private
-     * @param {BBox|FeatureCollection|Feature} geojson feature(s) to retrieve BBox from
-     * @returns {Object} converted to {minX, minY, maxX, maxY}
-     */
-    tree.toBBox = function (geojson) {
-        var bbox;
-        if (geojson.bbox) bbox = geojson.bbox;
-        else if (Array.isArray(geojson) && geojson.length === 4) bbox = geojson;
-        else if (Array.isArray(geojson) && geojson.length === 6) bbox = [geojson[0], geojson[1], geojson[3], geojson[4]];
-        else if (geojson.type === 'Feature') bbox = turfBBox(geojson);
-        else if (geojson.type === 'FeatureCollection') bbox = turfBBox(geojson);
-        else throw new Error('invalid geojson')
-
-        return {
-            minX: bbox[0],
-            minY: bbox[1],
-            maxX: bbox[2],
-            maxY: bbox[3]
-        };
-    };
-    return tree;
-}
-
-module.exports = geojsonRbush;
-module.exports.default = geojsonRbush;
-
-},{"@turf/bbox":4,"@turf/helpers":9,"@turf/meta":13,"rbush":17}],16:[function(require,module,exports){
-(function (global, factory) {
-	typeof exports === 'object' && typeof module !== 'undefined' ? module.exports = factory() :
-	typeof define === 'function' && define.amd ? define(factory) :
-	(global.quickselect = factory());
-}(this, (function () { 'use strict';
-
-function quickselect(arr, k, left, right, compare) {
-    quickselectStep(arr, k, left || 0, right || (arr.length - 1), compare || defaultCompare);
-}
-
-function quickselectStep(arr, k, left, right, compare) {
-
-    while (right > left) {
-        if (right - left > 600) {
-            var n = right - left + 1;
-            var m = k - left + 1;
-            var z = Math.log(n);
-            var s = 0.5 * Math.exp(2 * z / 3);
-            var sd = 0.5 * Math.sqrt(z * s * (n - s) / n) * (m - n / 2 < 0 ? -1 : 1);
-            var newLeft = Math.max(left, Math.floor(k - m * s / n + sd));
-            var newRight = Math.min(right, Math.floor(k + (n - m) * s / n + sd));
-            quickselectStep(arr, k, newLeft, newRight, compare);
-        }
-
-        var t = arr[k];
-        var i = left;
-        var j = right;
-
-        swap(arr, left, k);
-        if (compare(arr[right], t) > 0) swap(arr, left, right);
-
-        while (i < j) {
-            swap(arr, i, j);
-            i++;
-            j--;
-            while (compare(arr[i], t) < 0) i++;
-            while (compare(arr[j], t) > 0) j--;
-        }
-
-        if (compare(arr[left], t) === 0) swap(arr, left, j);
-        else {
-            j++;
-            swap(arr, j, right);
-        }
-
-        if (j <= k) left = j + 1;
-        if (k <= j) right = j - 1;
-    }
-}
-
-function swap(arr, i, j) {
-    var tmp = arr[i];
-    arr[i] = arr[j];
-    arr[j] = tmp;
-}
-
-function defaultCompare(a, b) {
-    return a < b ? -1 : a > b ? 1 : 0;
-}
-
-return quickselect;
-
-})));
-
-},{}],17:[function(require,module,exports){
-'use strict';
-
-module.exports = rbush;
-module.exports.default = rbush;
-
-var quickselect = require('quickselect');
-
-function rbush(maxEntries, format) {
-    if (!(this instanceof rbush)) return new rbush(maxEntries, format);
-
-    // max entries in a node is 9 by default; min node fill is 40% for best performance
-    this._maxEntries = Math.max(4, maxEntries || 9);
-    this._minEntries = Math.max(2, Math.ceil(this._maxEntries * 0.4));
-
-    if (format) {
-        this._initFormat(format);
-    }
-
-    this.clear();
-}
-
-rbush.prototype = {
-
-    all: function () {
-        return this._all(this.data, []);
-    },
-
-    search: function (bbox) {
-
-        var node = this.data,
-            result = [],
-            toBBox = this.toBBox;
-
-        if (!intersects(bbox, node)) return result;
-
-        var nodesToSearch = [],
-            i, len, child, childBBox;
-
-        while (node) {
-            for (i = 0, len = node.children.length; i < len; i++) {
-
-                child = node.children[i];
-                childBBox = node.leaf ? toBBox(child) : child;
-
-                if (intersects(bbox, childBBox)) {
-                    if (node.leaf) result.push(child);
-                    else if (contains(bbox, childBBox)) this._all(child, result);
-                    else nodesToSearch.push(child);
-                }
-            }
-            node = nodesToSearch.pop();
-        }
-
-        return result;
-    },
-
-    collides: function (bbox) {
-
-        var node = this.data,
-            toBBox = this.toBBox;
-
-        if (!intersects(bbox, node)) return false;
-
-        var nodesToSearch = [],
-            i, len, child, childBBox;
-
-        while (node) {
-            for (i = 0, len = node.children.length; i < len; i++) {
-
-                child = node.children[i];
-                childBBox = node.leaf ? toBBox(child) : child;
-
-                if (intersects(bbox, childBBox)) {
-                    if (node.leaf || contains(bbox, childBBox)) return true;
-                    nodesToSearch.push(child);
-                }
-            }
-            node = nodesToSearch.pop();
-        }
-
-        return false;
-    },
-
-    load: function (data) {
-        if (!(data && data.length)) return this;
-
-        if (data.length < this._minEntries) {
-            for (var i = 0, len = data.length; i < len; i++) {
-                this.insert(data[i]);
-            }
-            return this;
-        }
-
-        // recursively build the tree with the given data from scratch using OMT algorithm
-        var node = this._build(data.slice(), 0, data.length - 1, 0);
-
-        if (!this.data.children.length) {
-            // save as is if tree is empty
-            this.data = node;
-
-        } else if (this.data.height === node.height) {
-            // split root if trees have the same height
-            this._splitRoot(this.data, node);
-
-        } else {
-            if (this.data.height < node.height) {
-                // swap trees if inserted one is bigger
-                var tmpNode = this.data;
-                this.data = node;
-                node = tmpNode;
-            }
-
-            // insert the small tree into the large tree at appropriate level
-            this._insert(node, this.data.height - node.height - 1, true);
-        }
-
-        return this;
-    },
-
-    insert: function (item) {
-        if (item) this._insert(item, this.data.height - 1);
-        return this;
-    },
-
-    clear: function () {
-        this.data = createNode([]);
-        return this;
-    },
-
-    remove: function (item, equalsFn) {
-        if (!item) return this;
-
-        var node = this.data,
-            bbox = this.toBBox(item),
-            path = [],
-            indexes = [],
-            i, parent, index, goingUp;
-
-        // depth-first iterative tree traversal
-        while (node || path.length) {
-
-            if (!node) { // go up
-                node = path.pop();
-                parent = path[path.length - 1];
-                i = indexes.pop();
-                goingUp = true;
-            }
-
-            if (node.leaf) { // check current node
-                index = findItem(item, node.children, equalsFn);
-
-                if (index !== -1) {
-                    // item found, remove the item and condense tree upwards
-                    node.children.splice(index, 1);
-                    path.push(node);
-                    this._condense(path);
-                    return this;
-                }
-            }
-
-            if (!goingUp && !node.leaf && contains(node, bbox)) { // go down
-                path.push(node);
-                indexes.push(i);
-                i = 0;
-                parent = node;
-                node = node.children[0];
-
-            } else if (parent) { // go right
-                i++;
-                node = parent.children[i];
-                goingUp = false;
-
-            } else node = null; // nothing found
-        }
-
-        return this;
-    },
-
-    toBBox: function (item) { return item; },
-
-    compareMinX: compareNodeMinX,
-    compareMinY: compareNodeMinY,
-
-    toJSON: function () { return this.data; },
-
-    fromJSON: function (data) {
-        this.data = data;
-        return this;
-    },
-
-    _all: function (node, result) {
-        var nodesToSearch = [];
-        while (node) {
-            if (node.leaf) result.push.apply(result, node.children);
-            else nodesToSearch.push.apply(nodesToSearch, node.children);
-
-            node = nodesToSearch.pop();
-        }
-        return result;
-    },
-
-    _build: function (items, left, right, height) {
-
-        var N = right - left + 1,
-            M = this._maxEntries,
-            node;
-
-        if (N <= M) {
-            // reached leaf level; return leaf
-            node = createNode(items.slice(left, right + 1));
-            calcBBox(node, this.toBBox);
-            return node;
-        }
-
-        if (!height) {
-            // target height of the bulk-loaded tree
-            height = Math.ceil(Math.log(N) / Math.log(M));
-
-            // target number of root entries to maximize storage utilization
-            M = Math.ceil(N / Math.pow(M, height - 1));
-        }
-
-        node = createNode([]);
-        node.leaf = false;
-        node.height = height;
-
-        // split the items into M mostly square tiles
-
-        var N2 = Math.ceil(N / M),
-            N1 = N2 * Math.ceil(Math.sqrt(M)),
-            i, j, right2, right3;
-
-        multiSelect(items, left, right, N1, this.compareMinX);
-
-        for (i = left; i <= right; i += N1) {
-
-            right2 = Math.min(i + N1 - 1, right);
-
-            multiSelect(items, i, right2, N2, this.compareMinY);
-
-            for (j = i; j <= right2; j += N2) {
-
-                right3 = Math.min(j + N2 - 1, right2);
-
-                // pack each entry recursively
-                node.children.push(this._build(items, j, right3, height - 1));
-            }
-        }
-
-        calcBBox(node, this.toBBox);
-
-        return node;
-    },
-
-    _chooseSubtree: function (bbox, node, level, path) {
-
-        var i, len, child, targetNode, area, enlargement, minArea, minEnlargement;
-
-        while (true) {
-            path.push(node);
-
-            if (node.leaf || path.length - 1 === level) break;
-
-            minArea = minEnlargement = Infinity;
-
-            for (i = 0, len = node.children.length; i < len; i++) {
-                child = node.children[i];
-                area = bboxArea(child);
-                enlargement = enlargedArea(bbox, child) - area;
-
-                // choose entry with the least area enlargement
-                if (enlargement < minEnlargement) {
-                    minEnlargement = enlargement;
-                    minArea = area < minArea ? area : minArea;
-                    targetNode = child;
-
-                } else if (enlargement === minEnlargement) {
-                    // otherwise choose one with the smallest area
-                    if (area < minArea) {
-                        minArea = area;
-                        targetNode = child;
-                    }
-                }
-            }
-
-            node = targetNode || node.children[0];
-        }
-
-        return node;
-    },
-
-    _insert: function (item, level, isNode) {
-
-        var toBBox = this.toBBox,
-            bbox = isNode ? item : toBBox(item),
-            insertPath = [];
-
-        // find the best node for accommodating the item, saving all nodes along the path too
-        var node = this._chooseSubtree(bbox, this.data, level, insertPath);
-
-        // put the item into the node
-        node.children.push(item);
-        extend(node, bbox);
-
-        // split on node overflow; propagate upwards if necessary
-        while (level >= 0) {
-            if (insertPath[level].children.length > this._maxEntries) {
-                this._split(insertPath, level);
-                level--;
-            } else break;
-        }
-
-        // adjust bboxes along the insertion path
-        this._adjustParentBBoxes(bbox, insertPath, level);
-    },
-
-    // split overflowed node into two
-    _split: function (insertPath, level) {
-
-        var node = insertPath[level],
-            M = node.children.length,
-            m = this._minEntries;
-
-        this._chooseSplitAxis(node, m, M);
-
-        var splitIndex = this._chooseSplitIndex(node, m, M);
-
-        var newNode = createNode(node.children.splice(splitIndex, node.children.length - splitIndex));
-        newNode.height = node.height;
-        newNode.leaf = node.leaf;
-
-        calcBBox(node, this.toBBox);
-        calcBBox(newNode, this.toBBox);
-
-        if (level) insertPath[level - 1].children.push(newNode);
-        else this._splitRoot(node, newNode);
-    },
-
-    _splitRoot: function (node, newNode) {
-        // split root node
-        this.data = createNode([node, newNode]);
-        this.data.height = node.height + 1;
-        this.data.leaf = false;
-        calcBBox(this.data, this.toBBox);
-    },
-
-    _chooseSplitIndex: function (node, m, M) {
-
-        var i, bbox1, bbox2, overlap, area, minOverlap, minArea, index;
-
-        minOverlap = minArea = Infinity;
-
-        for (i = m; i <= M - m; i++) {
-            bbox1 = distBBox(node, 0, i, this.toBBox);
-            bbox2 = distBBox(node, i, M, this.toBBox);
-
-            overlap = intersectionArea(bbox1, bbox2);
-            area = bboxArea(bbox1) + bboxArea(bbox2);
-
-            // choose distribution with minimum overlap
-            if (overlap < minOverlap) {
-                minOverlap = overlap;
-                index = i;
-
-                minArea = area < minArea ? area : minArea;
-
-            } else if (overlap === minOverlap) {
-                // otherwise choose distribution with minimum area
-                if (area < minArea) {
-                    minArea = area;
-                    index = i;
-                }
-            }
-        }
-
-        return index;
-    },
-
-    // sorts node children by the best axis for split
-    _chooseSplitAxis: function (node, m, M) {
-
-        var compareMinX = node.leaf ? this.compareMinX : compareNodeMinX,
-            compareMinY = node.leaf ? this.compareMinY : compareNodeMinY,
-            xMargin = this._allDistMargin(node, m, M, compareMinX),
-            yMargin = this._allDistMargin(node, m, M, compareMinY);
-
-        // if total distributions margin value is minimal for x, sort by minX,
-        // otherwise it's already sorted by minY
-        if (xMargin < yMargin) node.children.sort(compareMinX);
-    },
-
-    // total margin of all possible split distributions where each node is at least m full
-    _allDistMargin: function (node, m, M, compare) {
-
-        node.children.sort(compare);
-
-        var toBBox = this.toBBox,
-            leftBBox = distBBox(node, 0, m, toBBox),
-            rightBBox = distBBox(node, M - m, M, toBBox),
-            margin = bboxMargin(leftBBox) + bboxMargin(rightBBox),
-            i, child;
-
-        for (i = m; i < M - m; i++) {
-            child = node.children[i];
-            extend(leftBBox, node.leaf ? toBBox(child) : child);
-            margin += bboxMargin(leftBBox);
-        }
-
-        for (i = M - m - 1; i >= m; i--) {
-            child = node.children[i];
-            extend(rightBBox, node.leaf ? toBBox(child) : child);
-            margin += bboxMargin(rightBBox);
-        }
-
-        return margin;
-    },
-
-    _adjustParentBBoxes: function (bbox, path, level) {
-        // adjust bboxes along the given tree path
-        for (var i = level; i >= 0; i--) {
-            extend(path[i], bbox);
-        }
-    },
-
-    _condense: function (path) {
-        // go through the path, removing empty nodes and updating bboxes
-        for (var i = path.length - 1, siblings; i >= 0; i--) {
-            if (path[i].children.length === 0) {
-                if (i > 0) {
-                    siblings = path[i - 1].children;
-                    siblings.splice(siblings.indexOf(path[i]), 1);
-
-                } else this.clear();
-
-            } else calcBBox(path[i], this.toBBox);
-        }
-    },
-
-    _initFormat: function (format) {
-        // data format (minX, minY, maxX, maxY accessors)
-
-        // uses eval-type function compilation instead of just accepting a toBBox function
-        // because the algorithms are very sensitive to sorting functions performance,
-        // so they should be dead simple and without inner calls
-
-        var compareArr = ['return a', ' - b', ';'];
-
-        this.compareMinX = new Function('a', 'b', compareArr.join(format[0]));
-        this.compareMinY = new Function('a', 'b', compareArr.join(format[1]));
-
-        this.toBBox = new Function('a',
-            'return {minX: a' + format[0] +
-            ', minY: a' + format[1] +
-            ', maxX: a' + format[2] +
-            ', maxY: a' + format[3] + '};');
-    }
-};
-
-function findItem(item, items, equalsFn) {
-    if (!equalsFn) return items.indexOf(item);
-
-    for (var i = 0; i < items.length; i++) {
-        if (equalsFn(item, items[i])) return i;
-    }
-    return -1;
-}
-
-// calculate node's bbox from bboxes of its children
-function calcBBox(node, toBBox) {
-    distBBox(node, 0, node.children.length, toBBox, node);
-}
-
-// min bounding rectangle of node children from k to p-1
-function distBBox(node, k, p, toBBox, destNode) {
-    if (!destNode) destNode = createNode(null);
-    destNode.minX = Infinity;
-    destNode.minY = Infinity;
-    destNode.maxX = -Infinity;
-    destNode.maxY = -Infinity;
-
-    for (var i = k, child; i < p; i++) {
-        child = node.children[i];
-        extend(destNode, node.leaf ? toBBox(child) : child);
-    }
-
-    return destNode;
-}
-
-function extend(a, b) {
-    a.minX = Math.min(a.minX, b.minX);
-    a.minY = Math.min(a.minY, b.minY);
-    a.maxX = Math.max(a.maxX, b.maxX);
-    a.maxY = Math.max(a.maxY, b.maxY);
-    return a;
-}
-
-function compareNodeMinX(a, b) { return a.minX - b.minX; }
-function compareNodeMinY(a, b) { return a.minY - b.minY; }
-
-function bboxArea(a)   { return (a.maxX - a.minX) * (a.maxY - a.minY); }
-function bboxMargin(a) { return (a.maxX - a.minX) + (a.maxY - a.minY); }
-
-function enlargedArea(a, b) {
-    return (Math.max(b.maxX, a.maxX) - Math.min(b.minX, a.minX)) *
-           (Math.max(b.maxY, a.maxY) - Math.min(b.minY, a.minY));
-}
-
-function intersectionArea(a, b) {
-    var minX = Math.max(a.minX, b.minX),
-        minY = Math.max(a.minY, b.minY),
-        maxX = Math.min(a.maxX, b.maxX),
-        maxY = Math.min(a.maxY, b.maxY);
-
-    return Math.max(0, maxX - minX) *
-           Math.max(0, maxY - minY);
-}
-
-function contains(a, b) {
-    return a.minX <= b.minX &&
-           a.minY <= b.minY &&
-           b.maxX <= a.maxX &&
-           b.maxY <= a.maxY;
-}
-
-function intersects(a, b) {
-    return b.minX <= a.maxX &&
-           b.minY <= a.maxY &&
-           b.maxX >= a.minX &&
-           b.maxY >= a.minY;
-}
-
-function createNode(children) {
-    return {
-        children: children,
-        height: 1,
-        leaf: true,
-        minX: Infinity,
-        minY: Infinity,
-        maxX: -Infinity,
-        maxY: -Infinity
-    };
-}
-
-// sort an array so that items come in groups of n unsorted items, with groups sorted between each other;
-// combines selection algorithm with binary divide & conquer approach
-
-function multiSelect(arr, left, right, n, compare) {
-    var stack = [left, right],
-        mid;
-
-    while (stack.length) {
-        right = stack.pop();
-        left = stack.pop();
-
-        if (right - left <= n) continue;
-
-        mid = left + Math.ceil((right - left) / n / 2) * n;
-        quickselect(arr, mid, left, right, compare);
-
-        stack.push(left, mid, mid, right);
-    }
-}
-
-},{"quickselect":16}],18:[function(require,module,exports){
-const turf = {
-  nearestPointOnLine: require('@turf/nearest-point-on-line').default,
-  booleanPointInPolygon: require('@turf/boolean-point-in-polygon').default
-}
-
-function nearestPointOnGeometry (feature, pt, options) {
-  var result
-
-  if (!feature.geometry) {
-    return null
-  }
-
-  switch (feature.geometry.type) {
-    case 'LineString':
-    case 'MultiLineString':
-      return turf.nearestPointOnLine(feature, pt, options)
-    case 'Polygon':
-      if (turf.booleanPointInPolygon(pt, feature, options)) {
-        let result = JSON.parse(JSON.stringify(pt))
-        result.properties = {
-          'dist': 0,
-          'location': 0
-        }
-        return result
-      } else {
-        let modifiedFeature = JSON.parse(JSON.stringify(feature))
-        modifiedFeature.geometry.type = 'MultiLineString'
-        return nearestPointOnGeometry(modifiedFeature, pt, options)
-      }
-    case 'MultiPolygon':
-      result = feature.geometry.coordinates.map(coord => {
-        let modifiedFeature = {
-          type: 'Feature',
-          geometry: {
-            type: 'Polygon',
-            coordinates: coord
-          }
-        }
-
-        return nearestPointOnGeometry(modifiedFeature, pt, options)
-      })
-
-      result = result.filter(o => o)
-
-      result = result.sort((a, b) => {
-        if (!a || !b) {
-          return null
-        }
-
-        return a.properties.dist - b.properties.dist
-      })
-
-      if (result.length > 0) {
-        return result[0]
-      }
-
-      return
-    case 'GeometryCollection':
-      result = feature.geometry.geometries.map(geom => {
-        let modifiedFeature = {
-          type: 'Feature',
-          geometry: geom
-        }
-
-        return nearestPointOnGeometry(modifiedFeature, pt, options)
-      })
-
-      result = result.filter(o => o)
-
-      result = result.sort((a, b) => {
-        if (!a || !b) {
-          return null
-        }
-
-        return a.properties.dist - b.properties.dist
-      })
-
-      if (result.length > 0) {
-        return result[0]
-      }
-
-      return
-    default:
-      console.log('nearestPointOnGeometry: don\'t know how to handle ' + feature.geometry.type)
-  }
-}
-
-module.exports = nearestPointOnGeometry
-
-},{"@turf/boolean-point-in-polygon":6,"@turf/nearest-point-on-line":14}],19:[function(require,module,exports){
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-var meta_1 = require("@turf/meta");
-// Note: change RADIUS => earthRadius
-var RADIUS = 6378137;
-/**
- * Takes one or more features and returns their area in square meters.
- *
- * @name area
- * @param {GeoJSON} geojson input GeoJSON feature(s)
- * @returns {number} area in square meters
- * @example
- * var polygon = turf.polygon([[[125, -15], [113, -22], [154, -27], [144, -15], [125, -15]]]);
- *
- * var area = turf.area(polygon);
- *
- * //addToMap
- * var addToMap = [polygon]
- * polygon.properties.area = area
- */
-function area(geojson) {
-    return meta_1.geomReduce(geojson, function (value, geom) {
-        return value + calculateArea(geom);
-    }, 0);
-}
-exports.default = area;
-/**
- * Calculate Area
- *
- * @private
- * @param {Geometry} geom GeoJSON Geometries
- * @returns {number} area
- */
-function calculateArea(geom) {
-    var total = 0;
-    var i;
-    switch (geom.type) {
-        case "Polygon":
-            return polygonArea(geom.coordinates);
-        case "MultiPolygon":
-            for (i = 0; i < geom.coordinates.length; i++) {
-                total += polygonArea(geom.coordinates[i]);
-            }
-            return total;
-        case "Point":
-        case "MultiPoint":
-        case "LineString":
-        case "MultiLineString":
-            return 0;
-    }
-    return 0;
-}
-function polygonArea(coords) {
-    var total = 0;
-    if (coords && coords.length > 0) {
-        total += Math.abs(ringArea(coords[0]));
-        for (var i = 1; i < coords.length; i++) {
-            total -= Math.abs(ringArea(coords[i]));
-        }
-    }
-    return total;
-}
-/**
- * @private
- * Calculate the approximate area of the polygon were it projected onto the earth.
- * Note that this area will be positive if ring is oriented clockwise, otherwise it will be negative.
- *
- * Reference:
- * Robert. G. Chamberlain and William H. Duquette, "Some Algorithms for Polygons on a Sphere",
- * JPL Publication 07-03, Jet Propulsion
- * Laboratory, Pasadena, CA, June 2007 http://trs-new.jpl.nasa.gov/dspace/handle/2014/40409
- *
- * @param {Array<Array<number>>} coords Ring Coordinates
- * @returns {number} The approximate signed geodesic area of the polygon in square meters.
- */
-function ringArea(coords) {
-    var p1;
-    var p2;
-    var p3;
-    var lowerIndex;
-    var middleIndex;
-    var upperIndex;
-    var i;
-    var total = 0;
-    var coordsLength = coords.length;
-    if (coordsLength > 2) {
-        for (i = 0; i < coordsLength; i++) {
-            if (i === coordsLength - 2) {
-                lowerIndex = coordsLength - 2;
-                middleIndex = coordsLength - 1;
-                upperIndex = 0;
-            }
-            else if (i === coordsLength - 1) {
-                lowerIndex = coordsLength - 1;
-                middleIndex = 0;
-                upperIndex = 1;
-            }
-            else {
-                lowerIndex = i;
-                middleIndex = i + 1;
-                upperIndex = i + 2;
-            }
-            p1 = coords[lowerIndex];
-            p2 = coords[middleIndex];
-            p3 = coords[upperIndex];
-            total += (rad(p3[0]) - rad(p1[0])) * Math.sin(rad(p2[1]));
-        }
-        total = total * RADIUS * RADIUS / 2;
-    }
-    return total;
-}
-function rad(num) {
-    return num * Math.PI / 180;
-}
-
-},{"@turf/meta":26}],20:[function(require,module,exports){
-"use strict";
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (Object.hasOwnProperty.call(mod, k)) result[k] = mod[k];
-    result["default"] = mod;
-    return result;
-}
-Object.defineProperty(exports, "__esModule", { value: true });
-var helpers_1 = require("@turf/helpers");
-var invariant_1 = require("@turf/invariant");
-var lineclip = __importStar(require("./lib/lineclip"));
-/**
- * Takes a {@link Feature} and a bbox and clips the feature to the bbox using
- * [lineclip](https://github.com/mapbox/lineclip).
- * May result in degenerate edges when clipping Polygons.
- *
- * @name bboxClip
- * @param {Feature<LineString|MultiLineString|Polygon|MultiPolygon>} feature feature to clip to the bbox
- * @param {BBox} bbox extent in [minX, minY, maxX, maxY] order
- * @returns {Feature<LineString|MultiLineString|Polygon|MultiPolygon>} clipped Feature
- * @example
- * var bbox = [0, 0, 10, 10];
- * var poly = turf.polygon([[[2, 2], [8, 4], [12, 8], [3, 7], [2, 2]]]);
- *
- * var clipped = turf.bboxClip(poly, bbox);
- *
- * //addToMap
- * var addToMap = [bbox, poly, clipped]
- */
-function bboxClip(feature, bbox) {
-    var geom = invariant_1.getGeom(feature);
-    var type = geom.type;
-    var properties = feature.type === "Feature" ? feature.properties : {};
-    var coords = geom.coordinates;
-    switch (type) {
-        case "LineString":
-        case "MultiLineString":
-            var lines_1 = [];
-            if (type === "LineString") {
-                coords = [coords];
-            }
-            coords.forEach(function (line) {
-                lineclip.polyline(line, bbox, lines_1);
-            });
-            if (lines_1.length === 1) {
-                return helpers_1.lineString(lines_1[0], properties);
-            }
-            return helpers_1.multiLineString(lines_1, properties);
-        case "Polygon":
-            return helpers_1.polygon(clipPolygon(coords, bbox), properties);
-        case "MultiPolygon":
-            return helpers_1.multiPolygon(coords.map(function (poly) {
-                return clipPolygon(poly, bbox);
-            }), properties);
-        default:
-            throw new Error("geometry " + type + " not supported");
-    }
-}
-exports.default = bboxClip;
-function clipPolygon(rings, bbox) {
-    var outRings = [];
-    for (var _i = 0, rings_1 = rings; _i < rings_1.length; _i++) {
-        var ring = rings_1[_i];
-        var clipped = lineclip.polygon(ring, bbox);
-        if (clipped.length > 0) {
-            if (clipped[0][0] !== clipped[clipped.length - 1][0] || clipped[0][1] !== clipped[clipped.length - 1][1]) {
-                clipped.push(clipped[0]);
-            }
-            if (clipped.length >= 4) {
-                outRings.push(clipped);
-            }
-        }
-    }
-    return outRings;
-}
-
-},{"./lib/lineclip":21,"@turf/helpers":23,"@turf/invariant":25}],21:[function(require,module,exports){
-'use strict';
-
-module.exports = lineclip;
-module.exports.default = lineclip;
-
-lineclip.polyline = lineclip;
-lineclip.polygon = polygonclip;
-
-
-// Cohen-Sutherland line clippign algorithm, adapted to efficiently
-// handle polylines rather than just segments
-
-function lineclip(points, bbox, result) {
-
-    var len = points.length,
-        codeA = bitCode(points[0], bbox),
-        part = [],
-        i, a, b, codeB, lastCode;
-
-    if (!result) result = [];
-
-    for (i = 1; i < len; i++) {
-        a = points[i - 1];
-        b = points[i];
-        codeB = lastCode = bitCode(b, bbox);
-
-        while (true) {
-
-            if (!(codeA | codeB)) { // accept
-                part.push(a);
-
-                if (codeB !== lastCode) { // segment went outside
-                    part.push(b);
-
-                    if (i < len - 1) { // start a new line
-                        result.push(part);
-                        part = [];
-                    }
-                } else if (i === len - 1) {
-                    part.push(b);
-                }
-                break;
-
-            } else if (codeA & codeB) { // trivial reject
-                break;
-
-            } else if (codeA) { // a outside, intersect with clip edge
-                a = intersect(a, b, codeA, bbox);
-                codeA = bitCode(a, bbox);
-
-            } else { // b outside
-                b = intersect(a, b, codeB, bbox);
-                codeB = bitCode(b, bbox);
-            }
-        }
-
-        codeA = lastCode;
-    }
-
-    if (part.length) result.push(part);
-
-    return result;
-}
-
-// Sutherland-Hodgeman polygon clipping algorithm
-
-function polygonclip(points, bbox) {
-
-    var result, edge, prev, prevInside, i, p, inside;
-
-    // clip against each side of the clip rectangle
-    for (edge = 1; edge <= 8; edge *= 2) {
-        result = [];
-        prev = points[points.length - 1];
-        prevInside = !(bitCode(prev, bbox) & edge);
-
-        for (i = 0; i < points.length; i++) {
-            p = points[i];
-            inside = !(bitCode(p, bbox) & edge);
-
-            // if segment goes through the clip window, add an intersection
-            if (inside !== prevInside) result.push(intersect(prev, p, edge, bbox));
-
-            if (inside) result.push(p); // add a point if it's inside
-
-            prev = p;
-            prevInside = inside;
-        }
-
-        points = result;
-
-        if (!points.length) break;
-    }
-
-    return result;
-}
-
-// intersect a segment against one of the 4 lines that make up the bbox
-
-function intersect(a, b, edge, bbox) {
-    return edge & 8 ? [a[0] + (b[0] - a[0]) * (bbox[3] - a[1]) / (b[1] - a[1]), bbox[3]] : // top
-           edge & 4 ? [a[0] + (b[0] - a[0]) * (bbox[1] - a[1]) / (b[1] - a[1]), bbox[1]] : // bottom
-           edge & 2 ? [bbox[2], a[1] + (b[1] - a[1]) * (bbox[2] - a[0]) / (b[0] - a[0])] : // right
-           edge & 1 ? [bbox[0], a[1] + (b[1] - a[1]) * (bbox[0] - a[0]) / (b[0] - a[0])] : // left
-           null;
-}
-
-// bit code reflects the point position relative to the bbox:
-
-//         left  mid  right
-//    top  1001  1000  1010
-//    mid  0001  0000  0010
-// bottom  0101  0100  0110
-
-function bitCode(p, bbox) {
-    var code = 0;
-
-    if (p[0] < bbox[0]) code |= 1; // left
-    else if (p[0] > bbox[2]) code |= 2; // right
-
-    if (p[1] < bbox[1]) code |= 4; // bottom
-    else if (p[1] > bbox[3]) code |= 8; // top
-
-    return code;
-}
-
-},{}],22:[function(require,module,exports){
-'use strict';
-
-function _interopDefault (ex) { return (ex && (typeof ex === 'object') && 'default' in ex) ? ex['default'] : ex; }
-
-var martinez = require('martinez-polygon-clipping');
-var area = _interopDefault(require('@turf/area'));
-var helpers = require('@turf/helpers');
-var invariant = require('@turf/invariant');
-var meta = require('@turf/meta');
-
-/**
- * Finds the difference between two {@link Polygon|polygons} by clipping the second polygon from the first.
- *
- * @name difference
- * @param {Feature<Polygon|MultiPolygon>} polygon1 input Polygon feature
- * @param {Feature<Polygon|MultiPolygon>} polygon2 Polygon feature to difference from polygon1
- * @returns {Feature<Polygon|MultiPolygon>|null} a Polygon or MultiPolygon feature showing the area of `polygon1` excluding the area of `polygon2` (if empty returns `null`)
- * @example
- * var polygon1 = turf.polygon([[
- *   [128, -26],
- *   [141, -26],
- *   [141, -21],
- *   [128, -21],
- *   [128, -26]
- * ]], {
- *   "fill": "#F00",
- *   "fill-opacity": 0.1
- * });
- * var polygon2 = turf.polygon([[
- *   [126, -28],
- *   [140, -28],
- *   [140, -20],
- *   [126, -20],
- *   [126, -28]
- * ]], {
- *   "fill": "#00F",
- *   "fill-opacity": 0.1
- * });
- *
- * var difference = turf.difference(polygon1, polygon2);
- *
- * //addToMap
- * var addToMap = [polygon1, polygon2, difference];
- */
-function difference(polygon1, polygon2) {
-    var geom1 = invariant.getGeom(polygon1);
-    var geom2 = invariant.getGeom(polygon2);
-    var properties = polygon1.properties || {};
-
-    // Issue #721 - JSTS/Martinez can't handle empty polygons
-    geom1 = removeEmptyPolygon(geom1);
-    geom2 = removeEmptyPolygon(geom2);
-    if (!geom1) return null;
-    if (!geom2) return helpers.feature(geom1, properties);
-
-    var differenced = martinez.diff(geom1.coordinates, geom2.coordinates);
-    if (differenced.length === 0) return null;
-    if (differenced.length === 1) return helpers.polygon(differenced[0], properties);
-    return helpers.multiPolygon(differenced, properties);
-}
-
-/**
- * Detect Empty Polygon
- *
- * @private
- * @param {Geometry<Polygon|MultiPolygon>} geom Geometry Object
- * @returns {Geometry<Polygon|MultiPolygon>|null} removed any polygons with no areas
- */
-function removeEmptyPolygon(geom) {
-    switch (geom.type) {
-    case 'Polygon':
-        if (area(geom) > 1) return geom;
-        return null;
-    case 'MultiPolygon':
-        var coordinates = [];
-        meta.flattenEach(geom, function (feature) {
-            if (area(feature) > 1) coordinates.push(feature.geometry.coordinates);
-        });
-        if (coordinates.length) return {type: 'MultiPolygon', coordinates: coordinates};
-    }
-}
-
-module.exports = difference;
-
-},{"@turf/area":19,"@turf/helpers":23,"@turf/invariant":25,"@turf/meta":26,"martinez-polygon-clipping":178}],23:[function(require,module,exports){
-arguments[4][9][0].apply(exports,arguments)
-},{"dup":9}],24:[function(require,module,exports){
-"use strict";
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (Object.hasOwnProperty.call(mod, k)) result[k] = mod[k];
-    result["default"] = mod;
-    return result;
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-var helpers_1 = require("@turf/helpers");
-var invariant_1 = require("@turf/invariant");
-var martinez = __importStar(require("martinez-polygon-clipping"));
-/**
- * Takes two {@link Polygon|polygon} or {@link MultiPolygon|multi-polygon} geometries and
- * finds their polygonal intersection. If they don't intersect, returns null.
- *
- * @name intersect
- * @param {Feature<Polygon | MultiPolygon>} poly1 the first polygon or multipolygon
- * @param {Feature<Polygon | MultiPolygon>} poly2 the second polygon or multipolygon
- * @param {Object} [options={}] Optional Parameters
- * @param {Object} [options.properties={}] Translate GeoJSON Properties to Feature
- * @returns {Feature|null} returns a feature representing the area they share (either a {@link Polygon} or
- * {@link MultiPolygon}). If they do not share any area, returns `null`.
- * @example
- * var poly1 = turf.polygon([[
- *   [-122.801742, 45.48565],
- *   [-122.801742, 45.60491],
- *   [-122.584762, 45.60491],
- *   [-122.584762, 45.48565],
- *   [-122.801742, 45.48565]
- * ]]);
- *
- * var poly2 = turf.polygon([[
- *   [-122.520217, 45.535693],
- *   [-122.64038, 45.553967],
- *   [-122.720031, 45.526554],
- *   [-122.669906, 45.507309],
- *   [-122.723464, 45.446643],
- *   [-122.532577, 45.408574],
- *   [-122.487258, 45.477466],
- *   [-122.520217, 45.535693]
- * ]]);
- *
- * var intersection = turf.intersect(poly1, poly2);
- *
- * //addToMap
- * var addToMap = [poly1, poly2, intersection];
- */
-function intersect(poly1, poly2, options) {
-    if (options === void 0) { options = {}; }
-    var geom1 = invariant_1.getGeom(poly1);
-    var geom2 = invariant_1.getGeom(poly2);
-    if (geom1.type === "Polygon" && geom2.type === "Polygon") {
-        var intersection = martinez.intersection(geom1.coordinates, geom2.coordinates);
-        if (intersection === null || intersection.length === 0) {
-            return null;
-        }
-        if (intersection.length === 1) {
-            var start = intersection[0][0][0];
-            var end = intersection[0][0][intersection[0][0].length - 1];
-            if (start[0] === end[0] && start[1] === end[1]) {
-                return helpers_1.polygon(intersection[0], options.properties);
-            }
-            return null;
-        }
-        return helpers_1.multiPolygon(intersection, options.properties);
-    }
-    else if (geom1.type === "MultiPolygon") {
-        var resultCoords = [];
-        // iterate through the polygon and run intersect with each part, adding to the resultCoords.
-        for (var _i = 0, _a = geom1.coordinates; _i < _a.length; _i++) {
-            var coords = _a[_i];
-            var subGeom = invariant_1.getGeom(helpers_1.polygon(coords));
-            var subIntersection = intersect(subGeom, geom2);
-            if (subIntersection) {
-                var subIntGeom = invariant_1.getGeom(subIntersection);
-                if (subIntGeom.type === "Polygon") {
-                    resultCoords.push(subIntGeom.coordinates);
-                }
-                else if (subIntGeom.type === "MultiPolygon") {
-                    resultCoords = resultCoords.concat(subIntGeom.coordinates);
-                }
-                else {
-                    throw new Error("intersection is invalid");
-                }
-            }
-        }
-        // Make a polygon with the result
-        if (resultCoords.length === 0) {
-            return null;
-        }
-        if (resultCoords.length === 1) {
-            return helpers_1.polygon(resultCoords[0], options.properties);
-        }
-        else {
-            return helpers_1.multiPolygon(resultCoords, options.properties);
-        }
-    }
-    else if (geom2.type === "MultiPolygon") {
-        // geom1 is a polygon and geom2 a multiPolygon,
-        // put the multiPolygon first and fallback to the previous case.
-        return intersect(geom2, geom1);
-    }
-    else {
-        // handle invalid geometry types
-        throw new Error("poly1 and poly2 must be either polygons or multiPolygons");
-    }
-}
-exports.default = intersect;
-
-},{"@turf/helpers":23,"@turf/invariant":25,"martinez-polygon-clipping":178}],25:[function(require,module,exports){
-arguments[4][10][0].apply(exports,arguments)
-},{"@turf/helpers":23,"dup":10}],26:[function(require,module,exports){
-arguments[4][13][0].apply(exports,arguments)
-},{"@turf/helpers":23,"dup":13}],27:[function(require,module,exports){
+},{"@turf/helpers":7}],11:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 var martinez = require("martinez-polygon-clipping");
@@ -4844,7 +2791,7 @@ function union(polygon1, polygon2, options) {
 }
 exports.default = union;
 
-},{"@turf/helpers":23,"@turf/invariant":25,"martinez-polygon-clipping":178}],28:[function(require,module,exports){
+},{"@turf/helpers":7,"@turf/invariant":9,"martinez-polygon-clipping":159}],12:[function(require,module,exports){
 (function (process,global,setImmediate){
 (function (global, factory) {
   typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports) :
@@ -10457,9 +8404,476 @@ Object.defineProperty(exports, '__esModule', { value: true });
 })));
 
 }).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {},require("timers").setImmediate)
-},{"_process":236,"timers":237}],29:[function(require,module,exports){
-arguments[4][1][0].apply(exports,arguments)
-},{"dup":1,"geojson-bounds":49,"haversine":51}],30:[function(require,module,exports){
+},{"_process":239,"timers":242}],13:[function(require,module,exports){
+'use strict'
+
+var GeoJSONBounds = require('geojson-bounds')
+const haversine = require('haversine')
+
+/* global L:false */
+
+/**
+ * create bounding box from input
+ * @class
+ * @param {object|Leaflet.latLngBounds|GeoJSON} bounds Input boundary. Can be an object with { minlat, minlon, maxlat, maxlon } or { lat, lon } or { lat, lng } or [ N (lat), N (lon) ] a GeoJSON object or a Leaflet object (latLng or latLngBounds). The boundary will automatically be wrapped at longitude -180 / 180.
+ * @example
+ * var bbox = new BoundingBox({ minlat: 48.123, minlon: 16.23, maxlat: 49.012, maxlon: 16.367 })
+ */
+function BoundingBox (bounds) {
+  var k
+
+  if (bounds === null || typeof bounds === 'undefined') {
+    this.minlat = -90
+    this.minlon = -180
+    this.maxlat = +90
+    this.maxlon = +180
+    return
+  }
+
+  // Leaflet.latLngBounds detected!
+  if (typeof bounds.getSouthWest === 'function') {
+    var sw = bounds.getSouthWest().wrap()
+    var ne = bounds.getNorthEast().wrap()
+
+    bounds = {
+      minlat: sw.lat,
+      minlon: sw.lng,
+      maxlat: ne.lat,
+      maxlon: ne.lng
+    }
+  }
+
+  // GeoJSON detected
+  if (bounds.type === 'Feature') {
+    let boxes
+
+    if (bounds.geometry.type === 'GeometryCollection') {
+      boxes = bounds.geometry.geometries.map(
+        geometry => {
+          let b = new BoundingBox({ type: 'Feature', geometry })
+          return [ b.minlon, b.minlat, b.maxlon, b.maxlat ]
+        }
+      )
+    } else if ([ 'MultiPoint', 'MultiPolygon', 'MultiLineString' ].includes(bounds.geometry.type)) {
+      boxes = bounds.geometry.coordinates.map(
+        geom => GeoJSONBounds.extent({ type: 'Feature', geometry: { type: bounds.geometry.type.substr(5), coordinates: geom } })
+      )
+    } else {
+      boxes = [ GeoJSONBounds.extent(bounds) ]
+    }
+
+    let b = boxes.shift()
+
+    this.minlat = b[1]
+    this.minlon = b[0]
+    this.maxlat = b[3]
+    this.maxlon = b[2]
+
+    boxes.forEach(b => this.extend({
+      minlat: b[1],
+      minlon: b[0],
+      maxlat: b[3],
+      maxlon: b[2]
+    }))
+
+    this._wrap()
+
+    return
+  }
+
+  if ('bounds' in bounds) {
+    bounds = bounds.bounds
+  }
+
+  if (bounds.lat) {
+    this.minlat = bounds.lat
+    this.maxlat = bounds.lat
+  }
+
+  if (bounds.lon) {
+    this.minlon = bounds.lon
+    this.maxlon = bounds.lon
+  }
+
+  if (Array.isArray(bounds)) {
+    this.minlat = bounds[0]
+    this.maxlat = bounds[0]
+    this.minlon = bounds[1]
+    this.maxlon = bounds[1]
+  }
+
+  // e.g. L.latLng object
+  if (bounds.lng) {
+    this.minlon = bounds.lng
+    this.maxlon = bounds.lng
+  }
+
+  var props = ['minlon', 'minlat', 'maxlon', 'maxlat']
+  for (var i = 0; i < props.length; i++) {
+    k = props[i]
+    if (k in bounds) {
+      this[k] = bounds[k]
+    }
+  }
+
+  this._wrap()
+}
+
+BoundingBox.prototype.wrapMaxLon = function () {
+  return (this.minlon > this.maxlon) ? this.maxlon + 360 : this.maxlon
+}
+
+BoundingBox.prototype.wrapMinLon = function () {
+  return (this.minlon > this.maxlon) ? this.minlon - 360 : this.minlon
+}
+
+BoundingBox.prototype._wrap = function () {
+  if (this.minlon < -180 || this.minlon > 180) {
+    this.minlon = (this.minlon + 180) % 360 - 180
+  }
+  if (this.maxlon < -180 || this.maxlon > 180) {
+    this.maxlon = (this.maxlon + 180) % 360 - 180
+  }
+
+  return this
+}
+
+/**
+  * Checks whether the other bounding box intersects (shares any portion of space) the current object.
+ * @param {BoundingBox} other Other boundingbox to check for
+ * @return {boolean} true if the bounding boxes intersect
+ * @example
+ * var bbox = new BoundingBox({ minlat: 48.123, minlon: 16.23, maxlat: 49.012, maxlon: 16.367 })
+ * var bbox2 = new BoundingBox({ lat: 48.5, lon: 16.267 })
+ * console.log(bbox.intersects(bbox2)) // true
+ */
+BoundingBox.prototype.intersects = function (other) {
+  if (!(other instanceof BoundingBox)) {
+    other = new BoundingBox(other)
+  }
+
+  if (other.maxlat < this.minlat) {
+    return false
+  }
+
+  if (other.minlat > this.maxlat) {
+    return false
+  }
+
+  if (other.wrapMaxLon() < this.wrapMinLon()) {
+    return false
+  }
+
+  if (other.wrapMinLon() > this.wrapMaxLon()) {
+    return false
+  }
+
+  return true
+}
+
+/**
+ * Checks whether the current object is fully within the other bounding box.
+ * @param {BoundingBox} other Other boundingbox to check for
+ * @return {boolean} true if the bounding boxes is within other
+ * @example
+ * var bbox = new BoundingBox({ minlat: 48.123, minlon: 16.23, maxlat: 49.012, maxlon: 16.367 })
+ * var bbox2 = new BoundingBox({ lat: 48.5, lon: 16.267 })
+ * console.log(bbox2.within(bbox)) // true
+ */
+BoundingBox.prototype.within = function (other) {
+  if (!(other instanceof BoundingBox)) {
+    other = new BoundingBox(other)
+  }
+
+  if (other.maxlat < this.maxlat) {
+    return false
+  }
+
+  if (other.minlat > this.minlat) {
+    return false
+  }
+
+  if (other.wrapMaxLon() < this.wrapMaxLon()) {
+    return false
+  }
+
+  if (other.wrapMinLon() > this.wrapMinLon()) {
+    return false
+  }
+
+  return true
+}
+
+BoundingBox.prototype.toTile = function () {
+  return new BoundingBox({
+    minlat: Math.floor(this.minlat * 10) / 10,
+    minlon: Math.floor(this.minlon * 10) / 10,
+    maxlat: Math.ceil(this.maxlat * 10) / 10,
+    maxlon: Math.ceil(this.maxlon * 10) / 10
+  })
+}
+
+/**
+ * return the bounding box as lon-lat string, e.g. '179.5,55,-179.5,56'
+ * @return {string}
+ * @example
+ * var bbox = new BoundingBox({ minlat: 48.123, minlon: 16.23, maxlat: 49.012, maxlon: 16.367 })
+ * console.log(bbox.toLonLatString()) // '16.23,48.123,16.367,49.012'
+ */
+BoundingBox.prototype.toLonLatString = function () {
+  return this.minlon + ',' +
+         this.minlat + ',' +
+         this.maxlon + ',' +
+         this.maxlat
+}
+
+/**
+ * return the bounding box as lon-lat string, e.g. '179.5,55,-179.5,56'. Useful for sending requests to web services that return geo data.
+ * @return {string}
+ * @example
+ * var bbox = new BoundingBox({ minlat: 48.123, minlon: 16.23, maxlat: 49.012, maxlon: 16.367 })
+ * console.log(bbox.toBBoxString()) // '16.23,48.123,16.367,49.012'
+ */
+BoundingBox.prototype.toBBoxString = BoundingBox.prototype.toLonLatString
+
+/**
+ * return the bounding box as lon-lat string, e.g. '55,179.5,56,-179.5'. Useful e.g. for Overpass API requests.
+ * @return {string}
+ * @example
+ * var bbox = new BoundingBox({ minlat: 48.123, minlon: 16.23, maxlat: 49.012, maxlon: 16.367 })
+ * console.log(bbox.toLatLonString()) // '48.123,16.23,49.012,16.367'
+ */
+BoundingBox.prototype.toLatLonString = function () {
+  return this.minlat + ',' +
+         this.minlon + ',' +
+         this.maxlat + ',' +
+         this.maxlon
+}
+
+/**
+ * return the diagonal length (length of hypothenuse).
+ * @return {number}
+ * @example
+ * var bbox = new BoundingBox({ minlat: 48.123, minlon: 16.23, maxlat: 49.012, maxlon: 16.367 })
+ * console.log(bbox.diagonalLength()) // 0.8994943023721748
+ */
+BoundingBox.prototype.diagonalLength = function () {
+  var dlat = this.maxlat - this.minlat
+  var dlon = this.wrapMaxLon() - this.minlon
+
+  return Math.sqrt(dlat * dlat + dlon * dlon)
+}
+
+/**
+ * return the diagonal distance (using the haversine function). See https://github.com/njj/haversine for further details.
+ * @param {object} [options] Options
+ * @param {string} [options.unit=km] Unit of measurement applied to result ('km', 'mile', 'meter', 'nmi')
+ * @param {number} [options.threshold] If passed, will result in library returning boolean value of whether or not the start and end points are within that supplied threshold.
+ * @return {number}
+ * @example
+ * var bbox = new BoundingBox({ minlat: 48.123, minlon: 16.23, maxlat: 49.012, maxlon: 16.367 })
+ * console.log(bbox.diagonalDistance({ unit: 'm' })) // 99.36491328576697
+ */
+BoundingBox.prototype.diagonalDistance = function (options = {}) {
+  return haversine(
+    { latitude: this.minlat, longitude: this.minlon },
+    { latitude: this.maxlat, longitude: this.maxlon },
+    options
+  )
+}
+
+/**
+ * Returns the center point of the bounding box as { lat, lon }
+ * @return {object}
+ * @example
+ * var bbox = new BoundingBox({ minlat: 48.123, minlon: 16.23, maxlat: 49.012, maxlon: 16.367 })
+ * console.log(bbox.getCenter()) // { lat: 48.567499999999995, lon: 16.2985 }
+ */
+BoundingBox.prototype.getCenter = function () {
+  var dlat = this.maxlat - this.minlat
+  var dlon = this.wrapMaxLon() - this.minlon
+  let lon = this.minlon + dlon / 2
+  if (lon < -180 || lon > 180) {
+    lon = (lon + 180) % 360 - 180
+  }
+
+  return {
+    lat: this.minlat + dlat / 2,
+    lon
+  }
+}
+
+/**
+ * get Northern boundary (latitude)
+ * @param {number}
+ */
+BoundingBox.prototype.getNorth = function () {
+  return this.maxlat
+}
+
+/**
+ * get Southern boundary (latitude)
+ * @param {number}
+ */
+BoundingBox.prototype.getSouth = function () {
+  return this.minlat
+}
+
+/**
+ * get Eastern boundary (longitude)
+ * @param {number}
+ */
+BoundingBox.prototype.getEast = function () {
+  return this.maxlon
+}
+
+/**
+ * get Western boundary (longitude)
+ * @param {number}
+ */
+BoundingBox.prototype.getWest = function () {
+  return this.minlon
+}
+
+/**
+ * extends current boundary by the other boundary
+ * @param {BoundingBox} other
+ * @example
+ * var bbox1 = new BoundingBox({ minlat: 48.123, minlon: 16.23, maxlat: 49.012, maxlon: 16.367 })
+ * var bbox2 = new BoundingBox({ minlat: 48.000, minlon: 16.23, maxlat: 49.012, maxlon: 16.789 })
+ * bbox1.extend(bbox2)
+ * console.log(bbox1.bounds) // { minlat: 48, minlon: 16.23, maxlat: 49.012, maxlon: 16.789 }
+ */
+BoundingBox.prototype.extend = function (other) {
+  if (!(other instanceof BoundingBox)) {
+    other = new BoundingBox(other)
+  }
+
+  if (other.minlat < this.minlat) {
+    this.minlat = other.minlat
+  }
+
+  if (other.maxlat > this.maxlat) {
+    this.maxlat = other.maxlat
+  }
+
+  // does bounds intersect with other bounds in longitude?
+  for (let shift = -360; shift <= 360; shift += 360) {
+    if (other.wrapMaxLon() + shift > this.minlon && other.minlon + shift < this.wrapMaxLon()) {
+      this.minlon = Math.min(this.minlon, other.minlon + shift)
+      this.maxlon = Math.max(this.wrapMaxLon(), other.wrapMaxLon() + shift)
+
+      this._wrap()
+      return
+    }
+  }
+
+  let min1 = Math.min(this.minlon, other.minlon)
+  let min2 = Math.max(this.minlon, other.minlon)
+  let max1 = Math.max(this.wrapMaxLon(), other.wrapMaxLon())
+  let max2 = Math.min(this.wrapMaxLon(), other.wrapMaxLon())
+
+  if (max1 - min1 < max2 - min2 + 360) {
+    this.minlon = min1
+    this.maxlon = max1
+  } else {
+    this.minlon = min2
+    this.maxlon = max2
+  }
+
+  this._wrap()
+}
+
+/**
+ * Returns the bounding box as GeoJSON feature. In case of bounding boxes crossing the antimeridian, this function will return a multipolygon with the parts on each side of the antimeridian (as specified in RFC 7946, section 3.1.9).
+ * @return {object}
+ * @example
+ * var bbox = new BoundingBox({ minlat: 48.123, minlon: 16.23, maxlat: 49.012, maxlon: 16.367 })
+ * bbox.toGeoJSON()
+ * // {
+ * //   "type": "Feature",
+ * //   "properties": {},
+ * //   "geometry": {
+ * //     "type": "Polygon",
+ * //     "coordinates": [
+ * //       [
+ * //         [ 16.23, 48.123 ],
+ * //         [ 16.367, 48.123 ],
+ * //         [ 16.367, 49.012 ],
+ * //         [ 16.23, 49.012 ],
+ * //         [ 16.23, 48.123 ]
+ * //       ]
+ * //     ]
+ * //   }
+ * // }
+ */
+BoundingBox.prototype.toGeoJSON = function () {
+  if (this.minlon > this.maxlon) {
+    return {
+      type: 'Feature',
+      properties: {},
+      geometry: {
+        'type': 'MultiPolygon',
+        'coordinates': [
+          [[
+            [ this.minlon, this.minlat ],
+            [ 180, this.minlat ],
+            [ 180, this.maxlat ],
+            [ this.minlon, this.maxlat ],
+            [ this.minlon, this.minlat ]
+          ]],
+          [[
+            [ -180, this.minlat ],
+            [ this.maxlon, this.minlat ],
+            [ this.maxlon, this.maxlat ],
+            [ -180, this.maxlat ],
+            [ -180, this.minlat ]
+          ]]
+        ]
+      }
+    }
+  }
+
+  return {
+    type: 'Feature',
+    properties: {},
+    geometry: {
+      'type': 'Polygon',
+      'coordinates': [[
+        [ this.minlon, this.minlat ],
+        [ this.maxlon, this.minlat ],
+        [ this.maxlon, this.maxlat ],
+        [ this.minlon, this.maxlat ],
+        [ this.minlon, this.minlat ]
+      ]]
+    }
+  }
+}
+
+/**
+ * Returns the bounding box as L.latLngBounds object. Leaflet must be included separately!
+ * @param {object} [options] Options.
+ * @param {number[]} [options.shiftWorld=[0, 0]] Shift the world by the first value for the Western hemisphere (lon < 0) or the second value for the Eastern hemisphere (lon >= 0).
+ */
+BoundingBox.prototype.toLeaflet = function (options = {}) {
+  if (!('shiftWorld' in options)) {
+    options.shiftWorld = [ 0, 0 ]
+  }
+
+  return L.latLngBounds(
+    L.latLng(this.minlat, this.minlon + (this.minlon < 0 ? options.shiftWorld[0] : options.shiftWorld[1])),
+    L.latLng(this.maxlat, this.maxlon + (this.maxlon < 0 ? options.shiftWorld[0] : options.shiftWorld[1]))
+  )
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = BoundingBox
+}
+if (typeof window !== 'undefined') {
+  window.BoundingBox = BoundingBox
+}
+
+},{"geojson-bounds":31,"haversine":32}],14:[function(require,module,exports){
 /*
 bzip2.js - a small bzip2 decompression implementation
 
@@ -10768,41 +9182,40 @@ bzip2.decompress = function (bits, size, len) {
 
 module.exports = bzip2;
 
-},{}],31:[function(require,module,exports){
-'use strict';
+},{}],15:[function(require,module,exports){
+"use strict";
 
-var assign        = require('es5-ext/object/assign')
-  , normalizeOpts = require('es5-ext/object/normalize-options')
-  , isCallable    = require('es5-ext/object/is-callable')
-  , contains      = require('es5-ext/string/#/contains')
+var isValue         = require("type/value/is")
+  , isPlainFunction = require("type/plain-function/is")
+  , assign          = require("es5-ext/object/assign")
+  , normalizeOpts   = require("es5-ext/object/normalize-options")
+  , contains        = require("es5-ext/string/#/contains");
 
-  , d;
-
-d = module.exports = function (dscr, value/*, options*/) {
+var d = (module.exports = function (dscr, value/*, options*/) {
 	var c, e, w, options, desc;
-	if ((arguments.length < 2) || (typeof dscr !== 'string')) {
+	if (arguments.length < 2 || typeof dscr !== "string") {
 		options = value;
 		value = dscr;
 		dscr = null;
 	} else {
 		options = arguments[2];
 	}
-	if (dscr == null) {
+	if (isValue(dscr)) {
+		c = contains.call(dscr, "c");
+		e = contains.call(dscr, "e");
+		w = contains.call(dscr, "w");
+	} else {
 		c = w = true;
 		e = false;
-	} else {
-		c = contains.call(dscr, 'c');
-		e = contains.call(dscr, 'e');
-		w = contains.call(dscr, 'w');
 	}
 
 	desc = { value: value, configurable: c, enumerable: e, writable: w };
 	return !options ? desc : assign(normalizeOpts(options), desc);
-};
+});
 
 d.gs = function (dscr, get, set/*, options*/) {
 	var c, e, options, desc;
-	if (typeof dscr !== 'string') {
+	if (typeof dscr !== "string") {
 		options = set;
 		set = get;
 		get = dscr;
@@ -10810,43 +9223,41 @@ d.gs = function (dscr, get, set/*, options*/) {
 	} else {
 		options = arguments[3];
 	}
-	if (get == null) {
+	if (!isValue(get)) {
 		get = undefined;
-	} else if (!isCallable(get)) {
+	} else if (!isPlainFunction(get)) {
 		options = get;
 		get = set = undefined;
-	} else if (set == null) {
+	} else if (!isValue(set)) {
 		set = undefined;
-	} else if (!isCallable(set)) {
+	} else if (!isPlainFunction(set)) {
 		options = set;
 		set = undefined;
 	}
-	if (dscr == null) {
+	if (isValue(dscr)) {
+		c = contains.call(dscr, "c");
+		e = contains.call(dscr, "e");
+	} else {
 		c = true;
 		e = false;
-	} else {
-		c = contains.call(dscr, 'c');
-		e = contains.call(dscr, 'e');
 	}
 
 	desc = { get: get, set: set, configurable: c, enumerable: e };
 	return !options ? desc : assign(normalizeOpts(options), desc);
 };
 
-},{"es5-ext/object/assign":33,"es5-ext/object/is-callable":36,"es5-ext/object/normalize-options":41,"es5-ext/string/#/contains":44}],32:[function(require,module,exports){
+},{"es5-ext/object/assign":17,"es5-ext/object/normalize-options":24,"es5-ext/string/#/contains":27,"type/plain-function/is":167,"type/value/is":169}],16:[function(require,module,exports){
 "use strict";
 
 // eslint-disable-next-line no-empty-function
 module.exports = function () {};
 
-},{}],33:[function(require,module,exports){
+},{}],17:[function(require,module,exports){
 "use strict";
 
-module.exports = require("./is-implemented")()
-	? Object.assign
-	: require("./shim");
+module.exports = require("./is-implemented")() ? Object.assign : require("./shim");
 
-},{"./is-implemented":34,"./shim":35}],34:[function(require,module,exports){
+},{"./is-implemented":18,"./shim":19}],18:[function(require,module,exports){
 "use strict";
 
 module.exports = function () {
@@ -10854,17 +9265,17 @@ module.exports = function () {
 	if (typeof assign !== "function") return false;
 	obj = { foo: "raz" };
 	assign(obj, { bar: "dwa" }, { trzy: "trzy" });
-	return (obj.foo + obj.bar + obj.trzy) === "razdwatrzy";
+	return obj.foo + obj.bar + obj.trzy === "razdwatrzy";
 };
 
-},{}],35:[function(require,module,exports){
+},{}],19:[function(require,module,exports){
 "use strict";
 
 var keys  = require("../keys")
   , value = require("../valid-value")
   , max   = Math.max;
 
-module.exports = function (dest, src /*, …srcn*/) {
+module.exports = function (dest, src/*, …srcn*/) {
 	var error, i, length = max(arguments.length, 2), assign;
 	dest = Object(value(dest));
 	assign = function (key) {
@@ -10882,30 +9293,19 @@ module.exports = function (dest, src /*, …srcn*/) {
 	return dest;
 };
 
-},{"../keys":38,"../valid-value":43}],36:[function(require,module,exports){
-// Deprecated
-
-"use strict";
-
-module.exports = function (obj) {
- return typeof obj === "function";
-};
-
-},{}],37:[function(require,module,exports){
+},{"../keys":21,"../valid-value":26}],20:[function(require,module,exports){
 "use strict";
 
 var _undefined = require("../function/noop")(); // Support ES3 engines
 
-module.exports = function (val) {
- return (val !== _undefined) && (val !== null);
-};
+module.exports = function (val) { return val !== _undefined && val !== null; };
 
-},{"../function/noop":32}],38:[function(require,module,exports){
+},{"../function/noop":16}],21:[function(require,module,exports){
 "use strict";
 
 module.exports = require("./is-implemented")() ? Object.keys : require("./shim");
 
-},{"./is-implemented":39,"./shim":40}],39:[function(require,module,exports){
+},{"./is-implemented":22,"./shim":23}],22:[function(require,module,exports){
 "use strict";
 
 module.exports = function () {
@@ -10917,7 +9317,7 @@ module.exports = function () {
 	}
 };
 
-},{}],40:[function(require,module,exports){
+},{}],23:[function(require,module,exports){
 "use strict";
 
 var isValue = require("../is-value");
@@ -10926,7 +9326,7 @@ var keys = Object.keys;
 
 module.exports = function (object) { return keys(isValue(object) ? Object(object) : object); };
 
-},{"../is-value":37}],41:[function(require,module,exports){
+},{"../is-value":20}],24:[function(require,module,exports){
 "use strict";
 
 var isValue = require("./is-value");
@@ -10939,7 +9339,7 @@ var process = function (src, obj) {
 };
 
 // eslint-disable-next-line no-unused-vars
-module.exports = function (opts1 /*, …options*/) {
+module.exports = function (opts1/*, …options*/) {
 	var result = create(null);
 	forEach.call(arguments, function (options) {
 		if (!isValue(options)) return;
@@ -10948,7 +9348,7 @@ module.exports = function (opts1 /*, …options*/) {
 	return result;
 };
 
-},{"./is-value":37}],42:[function(require,module,exports){
+},{"./is-value":20}],25:[function(require,module,exports){
 "use strict";
 
 module.exports = function (fn) {
@@ -10956,7 +9356,7 @@ module.exports = function (fn) {
 	return fn;
 };
 
-},{}],43:[function(require,module,exports){
+},{}],26:[function(require,module,exports){
 "use strict";
 
 var isValue = require("./is-value");
@@ -10966,24 +9366,22 @@ module.exports = function (value) {
 	return value;
 };
 
-},{"./is-value":37}],44:[function(require,module,exports){
+},{"./is-value":20}],27:[function(require,module,exports){
 "use strict";
 
-module.exports = require("./is-implemented")()
-	? String.prototype.contains
-	: require("./shim");
+module.exports = require("./is-implemented")() ? String.prototype.contains : require("./shim");
 
-},{"./is-implemented":45,"./shim":46}],45:[function(require,module,exports){
+},{"./is-implemented":28,"./shim":29}],28:[function(require,module,exports){
 "use strict";
 
 var str = "razdwatrzy";
 
 module.exports = function () {
 	if (typeof str.contains !== "function") return false;
-	return (str.contains("dwa") === true) && (str.contains("foo") === false);
+	return str.contains("dwa") === true && str.contains("foo") === false;
 };
 
-},{}],46:[function(require,module,exports){
+},{}],29:[function(require,module,exports){
 "use strict";
 
 var indexOf = String.prototype.indexOf;
@@ -10992,7 +9390,7 @@ module.exports = function (searchString/*, position*/) {
 	return indexOf.call(this, searchString, arguments[1]) > -1;
 };
 
-},{}],47:[function(require,module,exports){
+},{}],30:[function(require,module,exports){
 'use strict';
 
 var d        = require('d')
@@ -11126,128 +9524,257 @@ module.exports = exports = function (o) {
 };
 exports.methods = methods;
 
-},{"d":31,"es5-ext/object/valid-callable":42}],48:[function(require,module,exports){
-var wgs84 = require('wgs84');
-
-module.exports.geometry = geometry;
-module.exports.ring = ringArea;
-
-function geometry(_) {
-    if (_.type === 'Polygon') return polygonArea(_.coordinates);
-    else if (_.type === 'MultiPolygon') {
-        var area = 0;
-        for (var i = 0; i < _.coordinates.length; i++) {
-            area += polygonArea(_.coordinates[i]);
-        }
-        return area;
-    } else {
-        return null;
+},{"d":15,"es5-ext/object/valid-callable":25}],31:[function(require,module,exports){
+(function (process){
+(function() {
+  /*
+   Modified version of underscore.js's flatten function
+   https://github.com/jashkenas/underscore/blob/master/underscore.js#L501
+  */
+  function flatten(input, output) {
+    output = output || [];
+    var idx = output.length;
+    for (var i = 0; i < input.length; i++) {
+      if (Array.isArray(input[i]) && Array.isArray(input[i][0])) {
+        flatten(input[i], output);
+        idx = output.length;
+      } else {
+        output[idx++] = input[i];
+      }
     }
-}
+    return (Array.isArray(output[0])) ? output : [output];
+  };
 
-function polygonArea(coords) {
-    var area = 0;
-    if (coords && coords.length > 0) {
-        area += Math.abs(ringArea(coords[0]));
-        for (var i = 1; i < coords.length; i++) {
-            area -= Math.abs(ringArea(coords[i]));
-        }
-    }
-    return area;
-}
+  function maxLat(coords) {
+    return Math.max.apply(null, coords.map(function(d) { return d[1]; }));
+  }
 
-/**
- * Calculate the approximate area of the polygon were it projected onto
- *     the earth.  Note that this area will be positive if ring is oriented
- *     clockwise, otherwise it will be negative.
- *
- * Reference:
- * Robert. G. Chamberlain and William H. Duquette, "Some Algorithms for
- *     Polygons on a Sphere", JPL Publication 07-03, Jet Propulsion
- *     Laboratory, Pasadena, CA, June 2007 http://trs-new.jpl.nasa.gov/dspace/handle/2014/40409
- *
- * Returns:
- * {float} The approximate signed geodesic area of the polygon in square
- *     meters.
- */
+  function maxLng(coords) {
+    return Math.max.apply(null, coords.map(function(d) { return d[0]; }));
+  }
 
-function ringArea(coords) {
-    var area = 0;
+  function minLat(coords) {
+    return Math.min.apply(null, coords.map(function(d) { return d[1]; }));
+  }
 
-    if (coords.length > 2) {
-        var p1, p2;
-        for (var i = 0; i < coords.length - 1; i++) {
-            p1 = coords[i];
-            p2 = coords[i + 1];
-            area += rad(p2[0] - p1[0]) * (2 + Math.sin(rad(p1[1])) + Math.sin(rad(p2[1])));
-        }
+  function minLng(coords) {
+    return Math.min.apply(null, coords.map(function(d) { return d[0]; }));
+  }
 
-        area = area * wgs84.RADIUS * wgs84.RADIUS / 2;
+  function fetchEnvelope(coords) {
+    var mmc = {
+      "minLng": minLng(coords),
+      "minLat": minLat(coords),
+      "maxLng": maxLng(coords),
+      "maxLat": maxLat(coords)
     }
 
-    return area;
-}
-
-function rad(_) {
-    return _ * Math.PI / 180;
-}
-
-},{"wgs84":184}],49:[function(require,module,exports){
-arguments[4][2][0].apply(exports,arguments)
-},{"_process":236,"dup":2}],50:[function(require,module,exports){
-var geojsonArea = require('geojson-area');
-
-module.exports = rewind;
-
-function rewind(gj, outer) {
-    switch ((gj && gj.type) || null) {
-        case 'FeatureCollection':
-            gj.features = gj.features.map(curryOuter(rewind, outer));
-            return gj;
-        case 'Feature':
-            gj.geometry = rewind(gj.geometry, outer);
-            return gj;
-        case 'Polygon':
-        case 'MultiPolygon':
-            return correct(gj, outer);
-        default:
-            return gj;
+    return {
+      "type": "Feature",
+      "properties": {},
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [mmc.minLng, mmc.minLat],
+          [mmc.minLng, mmc.maxLat],
+          [mmc.maxLng, mmc.maxLat],
+          [mmc.maxLng, mmc.minLat],
+          [mmc.minLng, mmc.minLat]
+        ]]
+      }
     }
-}
+  }
 
-function curryOuter(a, b) {
-    return function(_) { return a(_, b); };
-}
+  function fetchExtent(coords) {
+    return [
+      minLng(coords),
+      minLat(coords),
+      maxLng(coords),
+      maxLat(coords)
+    ]
+  }
 
-function correct(_, outer) {
-    if (_.type === 'Polygon') {
-        _.coordinates = correctRings(_.coordinates, outer);
-    } else if (_.type === 'MultiPolygon') {
-        _.coordinates = _.coordinates.map(curryOuter(correctRings, outer));
+  // Adapted from http://stackoverflow.com/questions/2792443/finding-the-centroid-of-a-polygon
+  function fetchCentroid(vertices) {
+    var centroid = {
+      x: 0,
+      y: 0
     }
-    return _;
-}
+    
+    var signedArea = 0;
+    var x0 = 0;
+    var y0 = 0;
+    var x1 = 0;
+    var y1 = 0;
+    var a = 0;
 
-function correctRings(_, outer) {
-    outer = !!outer;
-    _[0] = wind(_[0], outer);
-    for (var i = 1; i < _.length; i++) {
-        _[i] = wind(_[i], !outer);
+    for (var i = 0; i < vertices.length - 1; i++) {
+      x0 = vertices[i][0];
+      y0 = vertices[i][1];
+      x1 = vertices[i + 1][0];
+      y1 = vertices[i + 1][1];
+      a = (x0 * y1) - (x1 * y0);
+
+      signedArea += a;
+      centroid.x += (x0 + x1) * a;
+      centroid.y += (y0 + y1) * a;
     }
-    return _;
+
+    x0 = vertices[vertices.length - 1][0];
+    y0 = vertices[vertices.length - 1][1];
+    x1 = vertices[0][0];
+    y1 = vertices[0][1];
+    a = (x0 * y1) - (x1 * y0);
+    signedArea += a;
+    centroid.x += (x0 + x1) * a;
+    centroid.y += (y0 + y1) * a;
+
+    signedArea = signedArea * 0.5;
+    centroid.x = centroid.x / (6.0*signedArea);
+    centroid.y = centroid.y / (6.0*signedArea);
+
+    return [centroid.x, centroid.y];
+  }
+
+  function feature(obj) {
+    return flatten(obj.geometry.coordinates);
+  }
+
+  function featureCollection(f) {
+    return flatten(f.features.map(feature));
+  }
+
+  function geometryCollection(g) {
+    return flatten(g.geometries.map(process));
+  }
+
+  function process(t) {
+    if (!t) {
+      return [];
+    }
+
+    switch (t.type) {
+      case "Feature":
+        return feature(t);
+      case "GeometryCollection":
+        return geometryCollection(t);
+      case "FeatureCollection":
+        return featureCollection(t);
+      case "Point":
+      case "LineString":
+      case "Polygon":
+      case "MultiPoint":
+      case "MultiPolygon":
+      case "MultiLineString":
+        return flatten(t.coordinates);
+      default:
+        return [];
+    }
+  }
+
+  function envelope(t) {
+    return fetchEnvelope(process(t));
+  }
+
+  function extent(t) {
+    return fetchExtent(process(t));
+  }
+
+  function centroid(t) {
+    return fetchCentroid(process(t));
+  }
+
+  function xMin(t) {
+    return minLng(process(t));
+  }
+  function xMax(t) {
+    return maxLng(process(t));
+  }
+  function yMin(t) {
+    return minLat(process(t));
+  }
+  function yMax(t) {
+    return maxLat(process(t));
+  }
+
+  module.exports = {
+    "envelope": envelope,
+    "extent": extent,
+    "centroid": centroid,
+    "xMin": xMin,
+    "xMax": xMax,
+    "yMin": yMin,
+    "yMax": yMax
+  }
+
+}());
+
+}).call(this,require('_process'))
+},{"_process":239}],32:[function(require,module,exports){
+var haversine = (function () {
+  var RADII = {
+    km:    6371,
+    mile:  3960,
+    meter: 6371000,
+    nmi:   3440
+  }
+
+  // convert to radians
+  var toRad = function (num) {
+    return num * Math.PI / 180
+  }
+
+  // convert coordinates to standard format based on the passed format option
+  var convertCoordinates = function (format, coordinates) {
+    switch (format) {
+    case '[lat,lon]':
+      return { latitude: coordinates[0], longitude: coordinates[1] }
+    case '[lon,lat]':
+      return { latitude: coordinates[1], longitude: coordinates[0] }
+    case '{lon,lat}':
+      return { latitude: coordinates.lat, longitude: coordinates.lon }
+    case '{lat,lng}':
+      return { latitude: coordinates.lat, longitude: coordinates.lng }
+    case 'geojson':
+      return { latitude: coordinates.geometry.coordinates[1], longitude: coordinates.geometry.coordinates[0] }
+    default:
+      return coordinates
+    }
+  }
+
+  return function haversine (startCoordinates, endCoordinates, options) {
+    options   = options || {}
+
+    var R = options.unit in RADII
+      ? RADII[options.unit]
+      : RADII.km
+
+    var start = convertCoordinates(options.format, startCoordinates)
+    var end = convertCoordinates(options.format, endCoordinates)
+
+    var dLat = toRad(end.latitude - start.latitude)
+    var dLon = toRad(end.longitude - start.longitude)
+    var lat1 = toRad(start.latitude)
+    var lat2 = toRad(end.latitude)
+
+    var a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+            Math.sin(dLon/2) * Math.sin(dLon/2) * Math.cos(lat1) * Math.cos(lat2)
+    var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
+
+    if (options.threshold) {
+      return options.threshold > (R * c)
+    }
+
+    return R * c
+  }
+
+})()
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = haversine
 }
 
-function wind(_, dir) {
-    return cw(_) === dir ? _ : _.reverse();
-}
-
-function cw(_) {
-    return geojsonArea.ring(_) >= 0;
-}
-
-},{"geojson-area":48}],51:[function(require,module,exports){
-arguments[4][3][0].apply(exports,arguments)
-},{"dup":3}],52:[function(require,module,exports){
+},{}],33:[function(require,module,exports){
 var getNative = require('./_getNative'),
     root = require('./_root');
 
@@ -11256,7 +9783,7 @@ var DataView = getNative(root, 'DataView');
 
 module.exports = DataView;
 
-},{"./_getNative":107,"./_root":142}],53:[function(require,module,exports){
+},{"./_getNative":88,"./_root":123}],34:[function(require,module,exports){
 var hashClear = require('./_hashClear'),
     hashDelete = require('./_hashDelete'),
     hashGet = require('./_hashGet'),
@@ -11290,7 +9817,7 @@ Hash.prototype.set = hashSet;
 
 module.exports = Hash;
 
-},{"./_hashClear":113,"./_hashDelete":114,"./_hashGet":115,"./_hashHas":116,"./_hashSet":117}],54:[function(require,module,exports){
+},{"./_hashClear":94,"./_hashDelete":95,"./_hashGet":96,"./_hashHas":97,"./_hashSet":98}],35:[function(require,module,exports){
 var listCacheClear = require('./_listCacheClear'),
     listCacheDelete = require('./_listCacheDelete'),
     listCacheGet = require('./_listCacheGet'),
@@ -11324,7 +9851,7 @@ ListCache.prototype.set = listCacheSet;
 
 module.exports = ListCache;
 
-},{"./_listCacheClear":124,"./_listCacheDelete":125,"./_listCacheGet":126,"./_listCacheHas":127,"./_listCacheSet":128}],55:[function(require,module,exports){
+},{"./_listCacheClear":105,"./_listCacheDelete":106,"./_listCacheGet":107,"./_listCacheHas":108,"./_listCacheSet":109}],36:[function(require,module,exports){
 var getNative = require('./_getNative'),
     root = require('./_root');
 
@@ -11333,7 +9860,7 @@ var Map = getNative(root, 'Map');
 
 module.exports = Map;
 
-},{"./_getNative":107,"./_root":142}],56:[function(require,module,exports){
+},{"./_getNative":88,"./_root":123}],37:[function(require,module,exports){
 var mapCacheClear = require('./_mapCacheClear'),
     mapCacheDelete = require('./_mapCacheDelete'),
     mapCacheGet = require('./_mapCacheGet'),
@@ -11367,7 +9894,7 @@ MapCache.prototype.set = mapCacheSet;
 
 module.exports = MapCache;
 
-},{"./_mapCacheClear":129,"./_mapCacheDelete":130,"./_mapCacheGet":131,"./_mapCacheHas":132,"./_mapCacheSet":133}],57:[function(require,module,exports){
+},{"./_mapCacheClear":110,"./_mapCacheDelete":111,"./_mapCacheGet":112,"./_mapCacheHas":113,"./_mapCacheSet":114}],38:[function(require,module,exports){
 var getNative = require('./_getNative'),
     root = require('./_root');
 
@@ -11376,7 +9903,7 @@ var Promise = getNative(root, 'Promise');
 
 module.exports = Promise;
 
-},{"./_getNative":107,"./_root":142}],58:[function(require,module,exports){
+},{"./_getNative":88,"./_root":123}],39:[function(require,module,exports){
 var getNative = require('./_getNative'),
     root = require('./_root');
 
@@ -11385,7 +9912,7 @@ var Set = getNative(root, 'Set');
 
 module.exports = Set;
 
-},{"./_getNative":107,"./_root":142}],59:[function(require,module,exports){
+},{"./_getNative":88,"./_root":123}],40:[function(require,module,exports){
 var MapCache = require('./_MapCache'),
     setCacheAdd = require('./_setCacheAdd'),
     setCacheHas = require('./_setCacheHas');
@@ -11414,7 +9941,7 @@ SetCache.prototype.has = setCacheHas;
 
 module.exports = SetCache;
 
-},{"./_MapCache":56,"./_setCacheAdd":143,"./_setCacheHas":144}],60:[function(require,module,exports){
+},{"./_MapCache":37,"./_setCacheAdd":124,"./_setCacheHas":125}],41:[function(require,module,exports){
 var ListCache = require('./_ListCache'),
     stackClear = require('./_stackClear'),
     stackDelete = require('./_stackDelete'),
@@ -11443,7 +9970,7 @@ Stack.prototype.set = stackSet;
 
 module.exports = Stack;
 
-},{"./_ListCache":54,"./_stackClear":146,"./_stackDelete":147,"./_stackGet":148,"./_stackHas":149,"./_stackSet":150}],61:[function(require,module,exports){
+},{"./_ListCache":35,"./_stackClear":127,"./_stackDelete":128,"./_stackGet":129,"./_stackHas":130,"./_stackSet":131}],42:[function(require,module,exports){
 var root = require('./_root');
 
 /** Built-in value references. */
@@ -11451,7 +9978,7 @@ var Symbol = root.Symbol;
 
 module.exports = Symbol;
 
-},{"./_root":142}],62:[function(require,module,exports){
+},{"./_root":123}],43:[function(require,module,exports){
 var root = require('./_root');
 
 /** Built-in value references. */
@@ -11459,7 +9986,7 @@ var Uint8Array = root.Uint8Array;
 
 module.exports = Uint8Array;
 
-},{"./_root":142}],63:[function(require,module,exports){
+},{"./_root":123}],44:[function(require,module,exports){
 var getNative = require('./_getNative'),
     root = require('./_root');
 
@@ -11468,7 +9995,7 @@ var WeakMap = getNative(root, 'WeakMap');
 
 module.exports = WeakMap;
 
-},{"./_getNative":107,"./_root":142}],64:[function(require,module,exports){
+},{"./_getNative":88,"./_root":123}],45:[function(require,module,exports){
 /**
  * A specialized version of `_.forEach` for arrays without support for
  * iteratee shorthands.
@@ -11492,7 +10019,7 @@ function arrayEach(array, iteratee) {
 
 module.exports = arrayEach;
 
-},{}],65:[function(require,module,exports){
+},{}],46:[function(require,module,exports){
 /**
  * A specialized version of `_.filter` for arrays without support for
  * iteratee shorthands.
@@ -11519,7 +10046,7 @@ function arrayFilter(array, predicate) {
 
 module.exports = arrayFilter;
 
-},{}],66:[function(require,module,exports){
+},{}],47:[function(require,module,exports){
 var baseTimes = require('./_baseTimes'),
     isArguments = require('./isArguments'),
     isArray = require('./isArray'),
@@ -11570,7 +10097,7 @@ function arrayLikeKeys(value, inherited) {
 
 module.exports = arrayLikeKeys;
 
-},{"./_baseTimes":91,"./_isIndex":118,"./isArguments":159,"./isArray":160,"./isBuffer":162,"./isTypedArray":168}],67:[function(require,module,exports){
+},{"./_baseTimes":72,"./_isIndex":99,"./isArguments":140,"./isArray":141,"./isBuffer":143,"./isTypedArray":149}],48:[function(require,module,exports){
 /**
  * A specialized version of `_.map` for arrays without support for iteratee
  * shorthands.
@@ -11593,7 +10120,7 @@ function arrayMap(array, iteratee) {
 
 module.exports = arrayMap;
 
-},{}],68:[function(require,module,exports){
+},{}],49:[function(require,module,exports){
 /**
  * Appends the elements of `values` to `array`.
  *
@@ -11615,7 +10142,7 @@ function arrayPush(array, values) {
 
 module.exports = arrayPush;
 
-},{}],69:[function(require,module,exports){
+},{}],50:[function(require,module,exports){
 /**
  * A specialized version of `_.some` for arrays without support for iteratee
  * shorthands.
@@ -11640,7 +10167,7 @@ function arraySome(array, predicate) {
 
 module.exports = arraySome;
 
-},{}],70:[function(require,module,exports){
+},{}],51:[function(require,module,exports){
 var eq = require('./eq');
 
 /**
@@ -11663,7 +10190,7 @@ function assocIndexOf(array, key) {
 
 module.exports = assocIndexOf;
 
-},{"./eq":154}],71:[function(require,module,exports){
+},{"./eq":135}],52:[function(require,module,exports){
 var baseForOwn = require('./_baseForOwn'),
     createBaseEach = require('./_createBaseEach');
 
@@ -11679,7 +10206,7 @@ var baseEach = createBaseEach(baseForOwn);
 
 module.exports = baseEach;
 
-},{"./_baseForOwn":73,"./_createBaseEach":98}],72:[function(require,module,exports){
+},{"./_baseForOwn":54,"./_createBaseEach":79}],53:[function(require,module,exports){
 var createBaseFor = require('./_createBaseFor');
 
 /**
@@ -11697,7 +10224,7 @@ var baseFor = createBaseFor();
 
 module.exports = baseFor;
 
-},{"./_createBaseFor":99}],73:[function(require,module,exports){
+},{"./_createBaseFor":80}],54:[function(require,module,exports){
 var baseFor = require('./_baseFor'),
     keys = require('./keys');
 
@@ -11715,7 +10242,7 @@ function baseForOwn(object, iteratee) {
 
 module.exports = baseForOwn;
 
-},{"./_baseFor":72,"./keys":169}],74:[function(require,module,exports){
+},{"./_baseFor":53,"./keys":150}],55:[function(require,module,exports){
 var castPath = require('./_castPath'),
     toKey = require('./_toKey');
 
@@ -11741,7 +10268,7 @@ function baseGet(object, path) {
 
 module.exports = baseGet;
 
-},{"./_castPath":96,"./_toKey":152}],75:[function(require,module,exports){
+},{"./_castPath":77,"./_toKey":133}],56:[function(require,module,exports){
 var arrayPush = require('./_arrayPush'),
     isArray = require('./isArray');
 
@@ -11763,7 +10290,7 @@ function baseGetAllKeys(object, keysFunc, symbolsFunc) {
 
 module.exports = baseGetAllKeys;
 
-},{"./_arrayPush":68,"./isArray":160}],76:[function(require,module,exports){
+},{"./_arrayPush":49,"./isArray":141}],57:[function(require,module,exports){
 var Symbol = require('./_Symbol'),
     getRawTag = require('./_getRawTag'),
     objectToString = require('./_objectToString');
@@ -11793,7 +10320,7 @@ function baseGetTag(value) {
 
 module.exports = baseGetTag;
 
-},{"./_Symbol":61,"./_getRawTag":108,"./_objectToString":140}],77:[function(require,module,exports){
+},{"./_Symbol":42,"./_getRawTag":89,"./_objectToString":121}],58:[function(require,module,exports){
 /**
  * The base implementation of `_.hasIn` without support for deep paths.
  *
@@ -11808,7 +10335,7 @@ function baseHasIn(object, key) {
 
 module.exports = baseHasIn;
 
-},{}],78:[function(require,module,exports){
+},{}],59:[function(require,module,exports){
 var baseGetTag = require('./_baseGetTag'),
     isObjectLike = require('./isObjectLike');
 
@@ -11828,7 +10355,7 @@ function baseIsArguments(value) {
 
 module.exports = baseIsArguments;
 
-},{"./_baseGetTag":76,"./isObjectLike":166}],79:[function(require,module,exports){
+},{"./_baseGetTag":57,"./isObjectLike":147}],60:[function(require,module,exports){
 var baseIsEqualDeep = require('./_baseIsEqualDeep'),
     isObjectLike = require('./isObjectLike');
 
@@ -11858,7 +10385,7 @@ function baseIsEqual(value, other, bitmask, customizer, stack) {
 
 module.exports = baseIsEqual;
 
-},{"./_baseIsEqualDeep":80,"./isObjectLike":166}],80:[function(require,module,exports){
+},{"./_baseIsEqualDeep":61,"./isObjectLike":147}],61:[function(require,module,exports){
 var Stack = require('./_Stack'),
     equalArrays = require('./_equalArrays'),
     equalByTag = require('./_equalByTag'),
@@ -11943,7 +10470,7 @@ function baseIsEqualDeep(object, other, bitmask, customizer, equalFunc, stack) {
 
 module.exports = baseIsEqualDeep;
 
-},{"./_Stack":60,"./_equalArrays":100,"./_equalByTag":101,"./_equalObjects":102,"./_getTag":110,"./isArray":160,"./isBuffer":162,"./isTypedArray":168}],81:[function(require,module,exports){
+},{"./_Stack":41,"./_equalArrays":81,"./_equalByTag":82,"./_equalObjects":83,"./_getTag":91,"./isArray":141,"./isBuffer":143,"./isTypedArray":149}],62:[function(require,module,exports){
 var Stack = require('./_Stack'),
     baseIsEqual = require('./_baseIsEqual');
 
@@ -12007,7 +10534,7 @@ function baseIsMatch(object, source, matchData, customizer) {
 
 module.exports = baseIsMatch;
 
-},{"./_Stack":60,"./_baseIsEqual":79}],82:[function(require,module,exports){
+},{"./_Stack":41,"./_baseIsEqual":60}],63:[function(require,module,exports){
 var isFunction = require('./isFunction'),
     isMasked = require('./_isMasked'),
     isObject = require('./isObject'),
@@ -12056,7 +10583,7 @@ function baseIsNative(value) {
 
 module.exports = baseIsNative;
 
-},{"./_isMasked":121,"./_toSource":153,"./isFunction":163,"./isObject":165}],83:[function(require,module,exports){
+},{"./_isMasked":102,"./_toSource":134,"./isFunction":144,"./isObject":146}],64:[function(require,module,exports){
 var baseGetTag = require('./_baseGetTag'),
     isLength = require('./isLength'),
     isObjectLike = require('./isObjectLike');
@@ -12118,7 +10645,7 @@ function baseIsTypedArray(value) {
 
 module.exports = baseIsTypedArray;
 
-},{"./_baseGetTag":76,"./isLength":164,"./isObjectLike":166}],84:[function(require,module,exports){
+},{"./_baseGetTag":57,"./isLength":145,"./isObjectLike":147}],65:[function(require,module,exports){
 var baseMatches = require('./_baseMatches'),
     baseMatchesProperty = require('./_baseMatchesProperty'),
     identity = require('./identity'),
@@ -12151,7 +10678,7 @@ function baseIteratee(value) {
 
 module.exports = baseIteratee;
 
-},{"./_baseMatches":87,"./_baseMatchesProperty":88,"./identity":158,"./isArray":160,"./property":172}],85:[function(require,module,exports){
+},{"./_baseMatches":68,"./_baseMatchesProperty":69,"./identity":139,"./isArray":141,"./property":153}],66:[function(require,module,exports){
 var isPrototype = require('./_isPrototype'),
     nativeKeys = require('./_nativeKeys');
 
@@ -12183,7 +10710,7 @@ function baseKeys(object) {
 
 module.exports = baseKeys;
 
-},{"./_isPrototype":122,"./_nativeKeys":138}],86:[function(require,module,exports){
+},{"./_isPrototype":103,"./_nativeKeys":119}],67:[function(require,module,exports){
 var baseEach = require('./_baseEach'),
     isArrayLike = require('./isArrayLike');
 
@@ -12207,7 +10734,7 @@ function baseMap(collection, iteratee) {
 
 module.exports = baseMap;
 
-},{"./_baseEach":71,"./isArrayLike":161}],87:[function(require,module,exports){
+},{"./_baseEach":52,"./isArrayLike":142}],68:[function(require,module,exports){
 var baseIsMatch = require('./_baseIsMatch'),
     getMatchData = require('./_getMatchData'),
     matchesStrictComparable = require('./_matchesStrictComparable');
@@ -12231,7 +10758,7 @@ function baseMatches(source) {
 
 module.exports = baseMatches;
 
-},{"./_baseIsMatch":81,"./_getMatchData":106,"./_matchesStrictComparable":135}],88:[function(require,module,exports){
+},{"./_baseIsMatch":62,"./_getMatchData":87,"./_matchesStrictComparable":116}],69:[function(require,module,exports){
 var baseIsEqual = require('./_baseIsEqual'),
     get = require('./get'),
     hasIn = require('./hasIn'),
@@ -12266,7 +10793,7 @@ function baseMatchesProperty(path, srcValue) {
 
 module.exports = baseMatchesProperty;
 
-},{"./_baseIsEqual":79,"./_isKey":119,"./_isStrictComparable":123,"./_matchesStrictComparable":135,"./_toKey":152,"./get":156,"./hasIn":157}],89:[function(require,module,exports){
+},{"./_baseIsEqual":60,"./_isKey":100,"./_isStrictComparable":104,"./_matchesStrictComparable":116,"./_toKey":133,"./get":137,"./hasIn":138}],70:[function(require,module,exports){
 /**
  * The base implementation of `_.property` without support for deep paths.
  *
@@ -12282,7 +10809,7 @@ function baseProperty(key) {
 
 module.exports = baseProperty;
 
-},{}],90:[function(require,module,exports){
+},{}],71:[function(require,module,exports){
 var baseGet = require('./_baseGet');
 
 /**
@@ -12300,7 +10827,7 @@ function basePropertyDeep(path) {
 
 module.exports = basePropertyDeep;
 
-},{"./_baseGet":74}],91:[function(require,module,exports){
+},{"./_baseGet":55}],72:[function(require,module,exports){
 /**
  * The base implementation of `_.times` without support for iteratee shorthands
  * or max array length checks.
@@ -12322,7 +10849,7 @@ function baseTimes(n, iteratee) {
 
 module.exports = baseTimes;
 
-},{}],92:[function(require,module,exports){
+},{}],73:[function(require,module,exports){
 var Symbol = require('./_Symbol'),
     arrayMap = require('./_arrayMap'),
     isArray = require('./isArray'),
@@ -12361,7 +10888,7 @@ function baseToString(value) {
 
 module.exports = baseToString;
 
-},{"./_Symbol":61,"./_arrayMap":67,"./isArray":160,"./isSymbol":167}],93:[function(require,module,exports){
+},{"./_Symbol":42,"./_arrayMap":48,"./isArray":141,"./isSymbol":148}],74:[function(require,module,exports){
 /**
  * The base implementation of `_.unary` without support for storing metadata.
  *
@@ -12377,7 +10904,7 @@ function baseUnary(func) {
 
 module.exports = baseUnary;
 
-},{}],94:[function(require,module,exports){
+},{}],75:[function(require,module,exports){
 /**
  * Checks if a `cache` value for `key` exists.
  *
@@ -12392,7 +10919,7 @@ function cacheHas(cache, key) {
 
 module.exports = cacheHas;
 
-},{}],95:[function(require,module,exports){
+},{}],76:[function(require,module,exports){
 var identity = require('./identity');
 
 /**
@@ -12408,7 +10935,7 @@ function castFunction(value) {
 
 module.exports = castFunction;
 
-},{"./identity":158}],96:[function(require,module,exports){
+},{"./identity":139}],77:[function(require,module,exports){
 var isArray = require('./isArray'),
     isKey = require('./_isKey'),
     stringToPath = require('./_stringToPath'),
@@ -12431,7 +10958,7 @@ function castPath(value, object) {
 
 module.exports = castPath;
 
-},{"./_isKey":119,"./_stringToPath":151,"./isArray":160,"./toString":175}],97:[function(require,module,exports){
+},{"./_isKey":100,"./_stringToPath":132,"./isArray":141,"./toString":156}],78:[function(require,module,exports){
 var root = require('./_root');
 
 /** Used to detect overreaching core-js shims. */
@@ -12439,7 +10966,7 @@ var coreJsData = root['__core-js_shared__'];
 
 module.exports = coreJsData;
 
-},{"./_root":142}],98:[function(require,module,exports){
+},{"./_root":123}],79:[function(require,module,exports){
 var isArrayLike = require('./isArrayLike');
 
 /**
@@ -12473,7 +11000,7 @@ function createBaseEach(eachFunc, fromRight) {
 
 module.exports = createBaseEach;
 
-},{"./isArrayLike":161}],99:[function(require,module,exports){
+},{"./isArrayLike":142}],80:[function(require,module,exports){
 /**
  * Creates a base function for methods like `_.forIn` and `_.forOwn`.
  *
@@ -12500,7 +11027,7 @@ function createBaseFor(fromRight) {
 
 module.exports = createBaseFor;
 
-},{}],100:[function(require,module,exports){
+},{}],81:[function(require,module,exports){
 var SetCache = require('./_SetCache'),
     arraySome = require('./_arraySome'),
     cacheHas = require('./_cacheHas');
@@ -12585,7 +11112,7 @@ function equalArrays(array, other, bitmask, customizer, equalFunc, stack) {
 
 module.exports = equalArrays;
 
-},{"./_SetCache":59,"./_arraySome":69,"./_cacheHas":94}],101:[function(require,module,exports){
+},{"./_SetCache":40,"./_arraySome":50,"./_cacheHas":75}],82:[function(require,module,exports){
 var Symbol = require('./_Symbol'),
     Uint8Array = require('./_Uint8Array'),
     eq = require('./eq'),
@@ -12699,7 +11226,7 @@ function equalByTag(object, other, tag, bitmask, customizer, equalFunc, stack) {
 
 module.exports = equalByTag;
 
-},{"./_Symbol":61,"./_Uint8Array":62,"./_equalArrays":100,"./_mapToArray":134,"./_setToArray":145,"./eq":154}],102:[function(require,module,exports){
+},{"./_Symbol":42,"./_Uint8Array":43,"./_equalArrays":81,"./_mapToArray":115,"./_setToArray":126,"./eq":135}],83:[function(require,module,exports){
 var getAllKeys = require('./_getAllKeys');
 
 /** Used to compose bitmasks for value comparisons. */
@@ -12790,7 +11317,7 @@ function equalObjects(object, other, bitmask, customizer, equalFunc, stack) {
 
 module.exports = equalObjects;
 
-},{"./_getAllKeys":104}],103:[function(require,module,exports){
+},{"./_getAllKeys":85}],84:[function(require,module,exports){
 (function (global){
 /** Detect free variable `global` from Node.js. */
 var freeGlobal = typeof global == 'object' && global && global.Object === Object && global;
@@ -12798,7 +11325,7 @@ var freeGlobal = typeof global == 'object' && global && global.Object === Object
 module.exports = freeGlobal;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}],104:[function(require,module,exports){
+},{}],85:[function(require,module,exports){
 var baseGetAllKeys = require('./_baseGetAllKeys'),
     getSymbols = require('./_getSymbols'),
     keys = require('./keys');
@@ -12816,7 +11343,7 @@ function getAllKeys(object) {
 
 module.exports = getAllKeys;
 
-},{"./_baseGetAllKeys":75,"./_getSymbols":109,"./keys":169}],105:[function(require,module,exports){
+},{"./_baseGetAllKeys":56,"./_getSymbols":90,"./keys":150}],86:[function(require,module,exports){
 var isKeyable = require('./_isKeyable');
 
 /**
@@ -12836,7 +11363,7 @@ function getMapData(map, key) {
 
 module.exports = getMapData;
 
-},{"./_isKeyable":120}],106:[function(require,module,exports){
+},{"./_isKeyable":101}],87:[function(require,module,exports){
 var isStrictComparable = require('./_isStrictComparable'),
     keys = require('./keys');
 
@@ -12862,7 +11389,7 @@ function getMatchData(object) {
 
 module.exports = getMatchData;
 
-},{"./_isStrictComparable":123,"./keys":169}],107:[function(require,module,exports){
+},{"./_isStrictComparable":104,"./keys":150}],88:[function(require,module,exports){
 var baseIsNative = require('./_baseIsNative'),
     getValue = require('./_getValue');
 
@@ -12881,7 +11408,7 @@ function getNative(object, key) {
 
 module.exports = getNative;
 
-},{"./_baseIsNative":82,"./_getValue":111}],108:[function(require,module,exports){
+},{"./_baseIsNative":63,"./_getValue":92}],89:[function(require,module,exports){
 var Symbol = require('./_Symbol');
 
 /** Used for built-in method references. */
@@ -12929,7 +11456,7 @@ function getRawTag(value) {
 
 module.exports = getRawTag;
 
-},{"./_Symbol":61}],109:[function(require,module,exports){
+},{"./_Symbol":42}],90:[function(require,module,exports){
 var arrayFilter = require('./_arrayFilter'),
     stubArray = require('./stubArray');
 
@@ -12961,7 +11488,7 @@ var getSymbols = !nativeGetSymbols ? stubArray : function(object) {
 
 module.exports = getSymbols;
 
-},{"./_arrayFilter":65,"./stubArray":173}],110:[function(require,module,exports){
+},{"./_arrayFilter":46,"./stubArray":154}],91:[function(require,module,exports){
 var DataView = require('./_DataView'),
     Map = require('./_Map'),
     Promise = require('./_Promise'),
@@ -13021,7 +11548,7 @@ if ((DataView && getTag(new DataView(new ArrayBuffer(1))) != dataViewTag) ||
 
 module.exports = getTag;
 
-},{"./_DataView":52,"./_Map":55,"./_Promise":57,"./_Set":58,"./_WeakMap":63,"./_baseGetTag":76,"./_toSource":153}],111:[function(require,module,exports){
+},{"./_DataView":33,"./_Map":36,"./_Promise":38,"./_Set":39,"./_WeakMap":44,"./_baseGetTag":57,"./_toSource":134}],92:[function(require,module,exports){
 /**
  * Gets the value at `key` of `object`.
  *
@@ -13036,7 +11563,7 @@ function getValue(object, key) {
 
 module.exports = getValue;
 
-},{}],112:[function(require,module,exports){
+},{}],93:[function(require,module,exports){
 var castPath = require('./_castPath'),
     isArguments = require('./isArguments'),
     isArray = require('./isArray'),
@@ -13077,7 +11604,7 @@ function hasPath(object, path, hasFunc) {
 
 module.exports = hasPath;
 
-},{"./_castPath":96,"./_isIndex":118,"./_toKey":152,"./isArguments":159,"./isArray":160,"./isLength":164}],113:[function(require,module,exports){
+},{"./_castPath":77,"./_isIndex":99,"./_toKey":133,"./isArguments":140,"./isArray":141,"./isLength":145}],94:[function(require,module,exports){
 var nativeCreate = require('./_nativeCreate');
 
 /**
@@ -13094,7 +11621,7 @@ function hashClear() {
 
 module.exports = hashClear;
 
-},{"./_nativeCreate":137}],114:[function(require,module,exports){
+},{"./_nativeCreate":118}],95:[function(require,module,exports){
 /**
  * Removes `key` and its value from the hash.
  *
@@ -13113,7 +11640,7 @@ function hashDelete(key) {
 
 module.exports = hashDelete;
 
-},{}],115:[function(require,module,exports){
+},{}],96:[function(require,module,exports){
 var nativeCreate = require('./_nativeCreate');
 
 /** Used to stand-in for `undefined` hash values. */
@@ -13145,7 +11672,7 @@ function hashGet(key) {
 
 module.exports = hashGet;
 
-},{"./_nativeCreate":137}],116:[function(require,module,exports){
+},{"./_nativeCreate":118}],97:[function(require,module,exports){
 var nativeCreate = require('./_nativeCreate');
 
 /** Used for built-in method references. */
@@ -13170,7 +11697,7 @@ function hashHas(key) {
 
 module.exports = hashHas;
 
-},{"./_nativeCreate":137}],117:[function(require,module,exports){
+},{"./_nativeCreate":118}],98:[function(require,module,exports){
 var nativeCreate = require('./_nativeCreate');
 
 /** Used to stand-in for `undefined` hash values. */
@@ -13195,7 +11722,7 @@ function hashSet(key, value) {
 
 module.exports = hashSet;
 
-},{"./_nativeCreate":137}],118:[function(require,module,exports){
+},{"./_nativeCreate":118}],99:[function(require,module,exports){
 /** Used as references for various `Number` constants. */
 var MAX_SAFE_INTEGER = 9007199254740991;
 
@@ -13222,7 +11749,7 @@ function isIndex(value, length) {
 
 module.exports = isIndex;
 
-},{}],119:[function(require,module,exports){
+},{}],100:[function(require,module,exports){
 var isArray = require('./isArray'),
     isSymbol = require('./isSymbol');
 
@@ -13253,7 +11780,7 @@ function isKey(value, object) {
 
 module.exports = isKey;
 
-},{"./isArray":160,"./isSymbol":167}],120:[function(require,module,exports){
+},{"./isArray":141,"./isSymbol":148}],101:[function(require,module,exports){
 /**
  * Checks if `value` is suitable for use as unique object key.
  *
@@ -13270,7 +11797,7 @@ function isKeyable(value) {
 
 module.exports = isKeyable;
 
-},{}],121:[function(require,module,exports){
+},{}],102:[function(require,module,exports){
 var coreJsData = require('./_coreJsData');
 
 /** Used to detect methods masquerading as native. */
@@ -13292,7 +11819,7 @@ function isMasked(func) {
 
 module.exports = isMasked;
 
-},{"./_coreJsData":97}],122:[function(require,module,exports){
+},{"./_coreJsData":78}],103:[function(require,module,exports){
 /** Used for built-in method references. */
 var objectProto = Object.prototype;
 
@@ -13312,7 +11839,7 @@ function isPrototype(value) {
 
 module.exports = isPrototype;
 
-},{}],123:[function(require,module,exports){
+},{}],104:[function(require,module,exports){
 var isObject = require('./isObject');
 
 /**
@@ -13329,7 +11856,7 @@ function isStrictComparable(value) {
 
 module.exports = isStrictComparable;
 
-},{"./isObject":165}],124:[function(require,module,exports){
+},{"./isObject":146}],105:[function(require,module,exports){
 /**
  * Removes all key-value entries from the list cache.
  *
@@ -13344,7 +11871,7 @@ function listCacheClear() {
 
 module.exports = listCacheClear;
 
-},{}],125:[function(require,module,exports){
+},{}],106:[function(require,module,exports){
 var assocIndexOf = require('./_assocIndexOf');
 
 /** Used for built-in method references. */
@@ -13381,7 +11908,7 @@ function listCacheDelete(key) {
 
 module.exports = listCacheDelete;
 
-},{"./_assocIndexOf":70}],126:[function(require,module,exports){
+},{"./_assocIndexOf":51}],107:[function(require,module,exports){
 var assocIndexOf = require('./_assocIndexOf');
 
 /**
@@ -13402,7 +11929,7 @@ function listCacheGet(key) {
 
 module.exports = listCacheGet;
 
-},{"./_assocIndexOf":70}],127:[function(require,module,exports){
+},{"./_assocIndexOf":51}],108:[function(require,module,exports){
 var assocIndexOf = require('./_assocIndexOf');
 
 /**
@@ -13420,7 +11947,7 @@ function listCacheHas(key) {
 
 module.exports = listCacheHas;
 
-},{"./_assocIndexOf":70}],128:[function(require,module,exports){
+},{"./_assocIndexOf":51}],109:[function(require,module,exports){
 var assocIndexOf = require('./_assocIndexOf');
 
 /**
@@ -13448,7 +11975,7 @@ function listCacheSet(key, value) {
 
 module.exports = listCacheSet;
 
-},{"./_assocIndexOf":70}],129:[function(require,module,exports){
+},{"./_assocIndexOf":51}],110:[function(require,module,exports){
 var Hash = require('./_Hash'),
     ListCache = require('./_ListCache'),
     Map = require('./_Map');
@@ -13471,7 +11998,7 @@ function mapCacheClear() {
 
 module.exports = mapCacheClear;
 
-},{"./_Hash":53,"./_ListCache":54,"./_Map":55}],130:[function(require,module,exports){
+},{"./_Hash":34,"./_ListCache":35,"./_Map":36}],111:[function(require,module,exports){
 var getMapData = require('./_getMapData');
 
 /**
@@ -13491,7 +12018,7 @@ function mapCacheDelete(key) {
 
 module.exports = mapCacheDelete;
 
-},{"./_getMapData":105}],131:[function(require,module,exports){
+},{"./_getMapData":86}],112:[function(require,module,exports){
 var getMapData = require('./_getMapData');
 
 /**
@@ -13509,7 +12036,7 @@ function mapCacheGet(key) {
 
 module.exports = mapCacheGet;
 
-},{"./_getMapData":105}],132:[function(require,module,exports){
+},{"./_getMapData":86}],113:[function(require,module,exports){
 var getMapData = require('./_getMapData');
 
 /**
@@ -13527,7 +12054,7 @@ function mapCacheHas(key) {
 
 module.exports = mapCacheHas;
 
-},{"./_getMapData":105}],133:[function(require,module,exports){
+},{"./_getMapData":86}],114:[function(require,module,exports){
 var getMapData = require('./_getMapData');
 
 /**
@@ -13551,7 +12078,7 @@ function mapCacheSet(key, value) {
 
 module.exports = mapCacheSet;
 
-},{"./_getMapData":105}],134:[function(require,module,exports){
+},{"./_getMapData":86}],115:[function(require,module,exports){
 /**
  * Converts `map` to its key-value pairs.
  *
@@ -13571,7 +12098,7 @@ function mapToArray(map) {
 
 module.exports = mapToArray;
 
-},{}],135:[function(require,module,exports){
+},{}],116:[function(require,module,exports){
 /**
  * A specialized version of `matchesProperty` for source values suitable
  * for strict equality comparisons, i.e. `===`.
@@ -13593,7 +12120,7 @@ function matchesStrictComparable(key, srcValue) {
 
 module.exports = matchesStrictComparable;
 
-},{}],136:[function(require,module,exports){
+},{}],117:[function(require,module,exports){
 var memoize = require('./memoize');
 
 /** Used as the maximum memoize cache size. */
@@ -13621,7 +12148,7 @@ function memoizeCapped(func) {
 
 module.exports = memoizeCapped;
 
-},{"./memoize":171}],137:[function(require,module,exports){
+},{"./memoize":152}],118:[function(require,module,exports){
 var getNative = require('./_getNative');
 
 /* Built-in method references that are verified to be native. */
@@ -13629,7 +12156,7 @@ var nativeCreate = getNative(Object, 'create');
 
 module.exports = nativeCreate;
 
-},{"./_getNative":107}],138:[function(require,module,exports){
+},{"./_getNative":88}],119:[function(require,module,exports){
 var overArg = require('./_overArg');
 
 /* Built-in method references for those with the same name as other `lodash` methods. */
@@ -13637,7 +12164,7 @@ var nativeKeys = overArg(Object.keys, Object);
 
 module.exports = nativeKeys;
 
-},{"./_overArg":141}],139:[function(require,module,exports){
+},{"./_overArg":122}],120:[function(require,module,exports){
 var freeGlobal = require('./_freeGlobal');
 
 /** Detect free variable `exports`. */
@@ -13669,7 +12196,7 @@ var nodeUtil = (function() {
 
 module.exports = nodeUtil;
 
-},{"./_freeGlobal":103}],140:[function(require,module,exports){
+},{"./_freeGlobal":84}],121:[function(require,module,exports){
 /** Used for built-in method references. */
 var objectProto = Object.prototype;
 
@@ -13693,7 +12220,7 @@ function objectToString(value) {
 
 module.exports = objectToString;
 
-},{}],141:[function(require,module,exports){
+},{}],122:[function(require,module,exports){
 /**
  * Creates a unary function that invokes `func` with its argument transformed.
  *
@@ -13710,7 +12237,7 @@ function overArg(func, transform) {
 
 module.exports = overArg;
 
-},{}],142:[function(require,module,exports){
+},{}],123:[function(require,module,exports){
 var freeGlobal = require('./_freeGlobal');
 
 /** Detect free variable `self`. */
@@ -13721,7 +12248,7 @@ var root = freeGlobal || freeSelf || Function('return this')();
 
 module.exports = root;
 
-},{"./_freeGlobal":103}],143:[function(require,module,exports){
+},{"./_freeGlobal":84}],124:[function(require,module,exports){
 /** Used to stand-in for `undefined` hash values. */
 var HASH_UNDEFINED = '__lodash_hash_undefined__';
 
@@ -13742,7 +12269,7 @@ function setCacheAdd(value) {
 
 module.exports = setCacheAdd;
 
-},{}],144:[function(require,module,exports){
+},{}],125:[function(require,module,exports){
 /**
  * Checks if `value` is in the array cache.
  *
@@ -13758,7 +12285,7 @@ function setCacheHas(value) {
 
 module.exports = setCacheHas;
 
-},{}],145:[function(require,module,exports){
+},{}],126:[function(require,module,exports){
 /**
  * Converts `set` to an array of its values.
  *
@@ -13778,7 +12305,7 @@ function setToArray(set) {
 
 module.exports = setToArray;
 
-},{}],146:[function(require,module,exports){
+},{}],127:[function(require,module,exports){
 var ListCache = require('./_ListCache');
 
 /**
@@ -13795,7 +12322,7 @@ function stackClear() {
 
 module.exports = stackClear;
 
-},{"./_ListCache":54}],147:[function(require,module,exports){
+},{"./_ListCache":35}],128:[function(require,module,exports){
 /**
  * Removes `key` and its value from the stack.
  *
@@ -13815,7 +12342,7 @@ function stackDelete(key) {
 
 module.exports = stackDelete;
 
-},{}],148:[function(require,module,exports){
+},{}],129:[function(require,module,exports){
 /**
  * Gets the stack value for `key`.
  *
@@ -13831,7 +12358,7 @@ function stackGet(key) {
 
 module.exports = stackGet;
 
-},{}],149:[function(require,module,exports){
+},{}],130:[function(require,module,exports){
 /**
  * Checks if a stack value for `key` exists.
  *
@@ -13847,7 +12374,7 @@ function stackHas(key) {
 
 module.exports = stackHas;
 
-},{}],150:[function(require,module,exports){
+},{}],131:[function(require,module,exports){
 var ListCache = require('./_ListCache'),
     Map = require('./_Map'),
     MapCache = require('./_MapCache');
@@ -13883,7 +12410,7 @@ function stackSet(key, value) {
 
 module.exports = stackSet;
 
-},{"./_ListCache":54,"./_Map":55,"./_MapCache":56}],151:[function(require,module,exports){
+},{"./_ListCache":35,"./_Map":36,"./_MapCache":37}],132:[function(require,module,exports){
 var memoizeCapped = require('./_memoizeCapped');
 
 /** Used to match property names within property paths. */
@@ -13912,7 +12439,7 @@ var stringToPath = memoizeCapped(function(string) {
 
 module.exports = stringToPath;
 
-},{"./_memoizeCapped":136}],152:[function(require,module,exports){
+},{"./_memoizeCapped":117}],133:[function(require,module,exports){
 var isSymbol = require('./isSymbol');
 
 /** Used as references for various `Number` constants. */
@@ -13935,7 +12462,7 @@ function toKey(value) {
 
 module.exports = toKey;
 
-},{"./isSymbol":167}],153:[function(require,module,exports){
+},{"./isSymbol":148}],134:[function(require,module,exports){
 /** Used for built-in method references. */
 var funcProto = Function.prototype;
 
@@ -13963,7 +12490,7 @@ function toSource(func) {
 
 module.exports = toSource;
 
-},{}],154:[function(require,module,exports){
+},{}],135:[function(require,module,exports){
 /**
  * Performs a
  * [`SameValueZero`](http://ecma-international.org/ecma-262/7.0/#sec-samevaluezero)
@@ -14002,7 +12529,7 @@ function eq(value, other) {
 
 module.exports = eq;
 
-},{}],155:[function(require,module,exports){
+},{}],136:[function(require,module,exports){
 var arrayEach = require('./_arrayEach'),
     baseEach = require('./_baseEach'),
     castFunction = require('./_castFunction'),
@@ -14045,7 +12572,7 @@ function forEach(collection, iteratee) {
 
 module.exports = forEach;
 
-},{"./_arrayEach":64,"./_baseEach":71,"./_castFunction":95,"./isArray":160}],156:[function(require,module,exports){
+},{"./_arrayEach":45,"./_baseEach":52,"./_castFunction":76,"./isArray":141}],137:[function(require,module,exports){
 var baseGet = require('./_baseGet');
 
 /**
@@ -14080,7 +12607,7 @@ function get(object, path, defaultValue) {
 
 module.exports = get;
 
-},{"./_baseGet":74}],157:[function(require,module,exports){
+},{"./_baseGet":55}],138:[function(require,module,exports){
 var baseHasIn = require('./_baseHasIn'),
     hasPath = require('./_hasPath');
 
@@ -14116,7 +12643,7 @@ function hasIn(object, path) {
 
 module.exports = hasIn;
 
-},{"./_baseHasIn":77,"./_hasPath":112}],158:[function(require,module,exports){
+},{"./_baseHasIn":58,"./_hasPath":93}],139:[function(require,module,exports){
 /**
  * This method returns the first argument it receives.
  *
@@ -14139,7 +12666,7 @@ function identity(value) {
 
 module.exports = identity;
 
-},{}],159:[function(require,module,exports){
+},{}],140:[function(require,module,exports){
 var baseIsArguments = require('./_baseIsArguments'),
     isObjectLike = require('./isObjectLike');
 
@@ -14177,7 +12704,7 @@ var isArguments = baseIsArguments(function() { return arguments; }()) ? baseIsAr
 
 module.exports = isArguments;
 
-},{"./_baseIsArguments":78,"./isObjectLike":166}],160:[function(require,module,exports){
+},{"./_baseIsArguments":59,"./isObjectLike":147}],141:[function(require,module,exports){
 /**
  * Checks if `value` is classified as an `Array` object.
  *
@@ -14205,7 +12732,7 @@ var isArray = Array.isArray;
 
 module.exports = isArray;
 
-},{}],161:[function(require,module,exports){
+},{}],142:[function(require,module,exports){
 var isFunction = require('./isFunction'),
     isLength = require('./isLength');
 
@@ -14240,7 +12767,7 @@ function isArrayLike(value) {
 
 module.exports = isArrayLike;
 
-},{"./isFunction":163,"./isLength":164}],162:[function(require,module,exports){
+},{"./isFunction":144,"./isLength":145}],143:[function(require,module,exports){
 var root = require('./_root'),
     stubFalse = require('./stubFalse');
 
@@ -14280,7 +12807,7 @@ var isBuffer = nativeIsBuffer || stubFalse;
 
 module.exports = isBuffer;
 
-},{"./_root":142,"./stubFalse":174}],163:[function(require,module,exports){
+},{"./_root":123,"./stubFalse":155}],144:[function(require,module,exports){
 var baseGetTag = require('./_baseGetTag'),
     isObject = require('./isObject');
 
@@ -14319,7 +12846,7 @@ function isFunction(value) {
 
 module.exports = isFunction;
 
-},{"./_baseGetTag":76,"./isObject":165}],164:[function(require,module,exports){
+},{"./_baseGetTag":57,"./isObject":146}],145:[function(require,module,exports){
 /** Used as references for various `Number` constants. */
 var MAX_SAFE_INTEGER = 9007199254740991;
 
@@ -14356,7 +12883,7 @@ function isLength(value) {
 
 module.exports = isLength;
 
-},{}],165:[function(require,module,exports){
+},{}],146:[function(require,module,exports){
 /**
  * Checks if `value` is the
  * [language type](http://www.ecma-international.org/ecma-262/7.0/#sec-ecmascript-language-types)
@@ -14389,7 +12916,7 @@ function isObject(value) {
 
 module.exports = isObject;
 
-},{}],166:[function(require,module,exports){
+},{}],147:[function(require,module,exports){
 /**
  * Checks if `value` is object-like. A value is object-like if it's not `null`
  * and has a `typeof` result of "object".
@@ -14420,7 +12947,7 @@ function isObjectLike(value) {
 
 module.exports = isObjectLike;
 
-},{}],167:[function(require,module,exports){
+},{}],148:[function(require,module,exports){
 var baseGetTag = require('./_baseGetTag'),
     isObjectLike = require('./isObjectLike');
 
@@ -14451,7 +12978,7 @@ function isSymbol(value) {
 
 module.exports = isSymbol;
 
-},{"./_baseGetTag":76,"./isObjectLike":166}],168:[function(require,module,exports){
+},{"./_baseGetTag":57,"./isObjectLike":147}],149:[function(require,module,exports){
 var baseIsTypedArray = require('./_baseIsTypedArray'),
     baseUnary = require('./_baseUnary'),
     nodeUtil = require('./_nodeUtil');
@@ -14480,7 +13007,7 @@ var isTypedArray = nodeIsTypedArray ? baseUnary(nodeIsTypedArray) : baseIsTypedA
 
 module.exports = isTypedArray;
 
-},{"./_baseIsTypedArray":83,"./_baseUnary":93,"./_nodeUtil":139}],169:[function(require,module,exports){
+},{"./_baseIsTypedArray":64,"./_baseUnary":74,"./_nodeUtil":120}],150:[function(require,module,exports){
 var arrayLikeKeys = require('./_arrayLikeKeys'),
     baseKeys = require('./_baseKeys'),
     isArrayLike = require('./isArrayLike');
@@ -14519,7 +13046,7 @@ function keys(object) {
 
 module.exports = keys;
 
-},{"./_arrayLikeKeys":66,"./_baseKeys":85,"./isArrayLike":161}],170:[function(require,module,exports){
+},{"./_arrayLikeKeys":47,"./_baseKeys":66,"./isArrayLike":142}],151:[function(require,module,exports){
 var arrayMap = require('./_arrayMap'),
     baseIteratee = require('./_baseIteratee'),
     baseMap = require('./_baseMap'),
@@ -14574,7 +13101,7 @@ function map(collection, iteratee) {
 
 module.exports = map;
 
-},{"./_arrayMap":67,"./_baseIteratee":84,"./_baseMap":86,"./isArray":160}],171:[function(require,module,exports){
+},{"./_arrayMap":48,"./_baseIteratee":65,"./_baseMap":67,"./isArray":141}],152:[function(require,module,exports){
 var MapCache = require('./_MapCache');
 
 /** Error message constants. */
@@ -14649,7 +13176,7 @@ memoize.Cache = MapCache;
 
 module.exports = memoize;
 
-},{"./_MapCache":56}],172:[function(require,module,exports){
+},{"./_MapCache":37}],153:[function(require,module,exports){
 var baseProperty = require('./_baseProperty'),
     basePropertyDeep = require('./_basePropertyDeep'),
     isKey = require('./_isKey'),
@@ -14683,7 +13210,7 @@ function property(path) {
 
 module.exports = property;
 
-},{"./_baseProperty":89,"./_basePropertyDeep":90,"./_isKey":119,"./_toKey":152}],173:[function(require,module,exports){
+},{"./_baseProperty":70,"./_basePropertyDeep":71,"./_isKey":100,"./_toKey":133}],154:[function(require,module,exports){
 /**
  * This method returns a new empty array.
  *
@@ -14708,7 +13235,7 @@ function stubArray() {
 
 module.exports = stubArray;
 
-},{}],174:[function(require,module,exports){
+},{}],155:[function(require,module,exports){
 /**
  * This method returns `false`.
  *
@@ -14728,7 +13255,7 @@ function stubFalse() {
 
 module.exports = stubFalse;
 
-},{}],175:[function(require,module,exports){
+},{}],156:[function(require,module,exports){
 var baseToString = require('./_baseToString');
 
 /**
@@ -14758,7 +13285,7 @@ function toString(value) {
 
 module.exports = toString;
 
-},{"./_baseToString":92}],176:[function(require,module,exports){
+},{"./_baseToString":73}],157:[function(require,module,exports){
 /*
   Loki IndexedDb Adapter (need to include this script to use it)
 
@@ -14785,11 +13312,11 @@ module.exports = toString;
 
     /**
      * Loki persistence adapter class for indexedDb.
-     *     This class fulfills abstract adapter interface which can be applied to other storage methods. 
+     *     This class fulfills abstract adapter interface which can be applied to other storage methods.
      *     Utilizes the included LokiCatalog app/key/value database for actual database persistence.
      *     Indexeddb is highly async, but this adapter has been made 'console-friendly' as well.
      *     Anywhere a callback is omitted, it should return results (if applicable) to console.
-     *     IndexedDb storage is provided per-domain, so we implement app/key/value database to 
+     *     IndexedDb storage is provided per-domain, so we implement app/key/value database to
      *     allow separate contexts for separate apps within a domain.
      *
      * @example
@@ -15392,7 +13919,7 @@ module.exports = toString;
   }());
 }));
 
-},{}],177:[function(require,module,exports){
+},{}],158:[function(require,module,exports){
 (function (process,global){
 /**
  * LokiJS
@@ -15947,6 +14474,25 @@ module.exports = toString;
         return false;
       },
 
+      $elemMatch: function (a, b) {
+        if (Array.isArray(a)) {
+          return a.some(function(item){
+            return Object.keys(b).every(function(property) {
+              var filter = b[property];
+              if (!(typeof filter === 'object' && filter)) {
+                filter = { $eq: filter };
+              }
+
+              if (property.indexOf('.') !== -1) {
+                return dotSubScan(item, property.split('.'), doQueryOp, b[property]);
+              }
+              return doQueryOp(item[property], filter);
+            });
+          });
+        }
+        return false;
+      },
+
       $type: function (a, b) {
         var type = typeof a;
         if (type === 'object') {
@@ -16386,6 +14932,9 @@ module.exports = toString;
           this.persistenceMethod = 'adapter';
           this.persistenceAdapter = options.adapter;
           this.options.adapter = null;
+
+          // if true, will keep track of dirty ids
+          this.isIncremental = this.persistenceAdapter.mode === 'incremental';
         }
 
 
@@ -16513,10 +15062,11 @@ module.exports = toString;
       }
 
       var collection = new Collection(name, options);
+      collection.isIncremental = this.isIncremental;
       this.collections.push(collection);
 
       if (this.verbose)
-        collection.console = console;
+        collection.lokiConsoleWrapper = console;
 
       return collection;
     };
@@ -16628,6 +15178,8 @@ module.exports = toString;
       case 'throttledSavePending':
       case 'throttledCallbacks':
         return undefined;
+      case 'lokiConsoleWrapper':
+        return null;
       default:
         return value;
       }
@@ -17069,7 +15621,11 @@ module.exports = toString;
       for (i; i < len; i += 1) {
         coll = dbObject.collections[i];
 
-        copyColl = this.addCollection(coll.name, { disableChangesApi: coll.disableChangesApi, disableDeltaChangesApi: coll.disableDeltaChangesApi, disableMeta: coll.disableMeta });
+        copyColl = this.addCollection(coll.name, {
+          disableChangesApi: coll.disableChangesApi,
+          disableDeltaChangesApi: coll.disableDeltaChangesApi,
+          disableMeta: coll.disableMeta
+        });
 
         copyColl.adaptiveBinaryIndices = coll.hasOwnProperty('adaptiveBinaryIndices')?(coll.adaptiveBinaryIndices === true): false;
         copyColl.transactional = coll.transactional;
@@ -17078,6 +15634,7 @@ module.exports = toString;
         copyColl.cloneMethod = coll.cloneMethod || "parse-stringify";
         copyColl.autoupdate = coll.autoupdate;
         copyColl.changes = coll.changes;
+        copyColl.dirtyIds = coll.dirtyIds || [];
 
         if (options && options.retainDirtyFlags === true) {
           copyColl.dirty = coll.dirty;
@@ -18020,30 +16577,58 @@ module.exports = toString;
             throw err;
           }
           return;
-        },
-        self = this;
+        };
+      var self = this;
 
       // the persistenceAdapter should be present if all is ok, but check to be sure.
-      if (this.persistenceAdapter !== null) {
-        // check if the adapter is requesting (and supports) a 'reference' mode export
-        if (this.persistenceAdapter.mode === "reference" && typeof this.persistenceAdapter.exportDatabase === "function") {
-          // filename may seem redundant but loadDatabase will need to expect this same filename
-          this.persistenceAdapter.exportDatabase(this.filename, this.copy({removeNonSerializable:true}), function exportDatabaseCallback(err) {
-            self.autosaveClearFlags();
-            cFun(err);
-          });
-        }
-        // otherwise just pass the serialized database to adapter
-        else {
-          // persistenceAdapter might be asynchronous, so we must clear `dirty` immediately
-          // or autosave won't work if an update occurs between here and the callback
-          self.autosaveClearFlags();
-          this.persistenceAdapter.saveDatabase(this.filename, self.serialize(), function saveDatabasecallback(err) {
-            cFun(err);
-          });
-        }
-      } else {
+      if (!this.persistenceAdapter) {
         cFun(new Error('persistenceAdapter not configured'));
+        return;
+      }
+
+      // persistenceAdapter might be asynchronous, so we must clear `dirty` immediately
+      // or autosave won't work if an update occurs between here and the callback
+      // TODO: This should be stored and rolled back in case of DB save failure
+      // TODO: Reference mode adapter should have the same behavior
+      if (this.persistenceAdapter.mode !== "reference") {
+        this.autosaveClearFlags();
+      }
+
+      // run incremental, reference, or normal mode adapters, depending on what's available
+      if (this.persistenceAdapter.mode === "incremental") {
+        var lokiCopy = this.copy({removeNonSerializable:true});
+
+        // remember and clear dirty ids -- we must do it before the save so that if
+        // and update occurs between here and callback, it will get saved later
+        var cachedDirtyIds = this.collections.map(function (collection) {
+          return collection.dirtyIds;
+        });
+        this.collections.forEach(function (col) {
+          col.dirtyIds = [];
+        });
+
+        this.persistenceAdapter.saveDatabase(this.filename, lokiCopy, function exportDatabaseCallback(err) {
+          if (err) {
+            // roll back dirty IDs to be saved later
+            self.collections.forEach(function (col, i) {
+              col.dirtyIds = col.dirtyIds.concat(cachedDirtyIds[i]);
+            });
+          }
+          cFun(err);
+        });
+
+      } else if (this.persistenceAdapter.mode === "reference" && typeof this.persistenceAdapter.exportDatabase === "function") {
+        // filename may seem redundant but loadDatabase will need to expect this same filename
+        this.persistenceAdapter.exportDatabase(this.filename, this.copy({removeNonSerializable:true}), function exportDatabaseCallback(err) {
+          self.autosaveClearFlags();
+          cFun(err);
+        });
+      }
+      // otherwise just pass the serialized database to adapter
+      else {
+        this.persistenceAdapter.saveDatabase(this.filename, this.serialize(), function saveDatabasecallback(err) {
+          cFun(err);
+        });
       }
     };
 
@@ -18455,9 +17040,9 @@ module.exports = toString;
      * var results = users.chain().simplesort('age').data();
      */
     Resultset.prototype.simplesort = function (propname, options) {
-      var eff, 
+      var eff,
         targetEff = 10,
-        dc = this.collection.data.length, 
+        dc = this.collection.data.length,
         frl = this.filteredrows.length,
         hasBinaryIndex = this.collection.binaryIndices.hasOwnProperty(propname);
 
@@ -18474,9 +17059,9 @@ module.exports = toString;
         if (this.filterInitialized) {
           return this;
         }
-        
+
         // otherwise no filters applied implies all documents, so we need to populate filteredrows first
-        
+
         // if we have a binary index, we can just use that instead of sorting (again)
         if (this.collection.binaryIndices.hasOwnProperty(propname)) {
           // make sure index is up-to-date
@@ -18538,7 +17123,7 @@ module.exports = toString;
       }
 
       // at this point, we will not be able to leverage binary index so we will have to do an array sort
-      
+
       // if we have opted to use simplified javascript comparison function...
       if (options.useJavascriptSorting) {
         return this.sort(function(obj1, obj2) {
@@ -18645,10 +17230,6 @@ module.exports = toString;
         // we need to branch existing query to run each filter separately and combine results
         fr = this.branch().find(expressionArray[ei]).filteredrows;
         frlen = fr.length;
-        // if the find operation did not reduce the initial set, then the initial set is the actual result
-        if (frlen === origCount) {
-          return this;
-        }
 
         // add any document 'hits'
         for (fri = 0; fri < frlen; fri++) {
@@ -18764,8 +17345,12 @@ module.exports = toString;
       // apply no filters if they want all
       if (!property || queryObject === 'getAll') {
         if (firstOnly) {
-          this.filteredrows = (this.collection.data.length > 0)?[0]: [];
-          this.filterInitialized = true;
+          if (this.filterInitialized) {
+            this.filteredrows = this.filteredrows.slice(0, 1);
+          } else {
+            this.filteredrows = (this.collection.data.length > 0) ? [0] : [];
+            this.filterInitialized = true;
+          }
         }
 
         return this;
@@ -18852,6 +17437,10 @@ module.exports = toString;
             rowIdx = filter[i];
             if (dotSubScan(t[rowIdx], property, fun, value)) {
               result.push(rowIdx);
+              if (firstOnly) {
+                this.filteredrows = result;
+                return this;
+              }
             }
           }
         } else {
@@ -18859,6 +17448,10 @@ module.exports = toString;
             rowIdx = filter[i];
             if (fun(t[rowIdx][property], value)) {
               result.push(rowIdx);
+              if (firstOnly) {
+                this.filteredrows = result;
+                return this;
+              }
             }
           }
         }
@@ -19233,8 +17826,8 @@ module.exports = toString;
      *
      * // join orders with relevant product info via eqJoin
      * var orderSummary = orders.chain().eqJoin(products, "prodId", "productId", mapfun).data();
-     * 
-     * console.log(orderSummary);     
+     *
+     * console.log(orderSummary);
      */
     Resultset.prototype.eqJoin = function (joinData, leftJoinKey, rightJoinKey, mapFun, dataOptions) {
 
@@ -19477,10 +18070,10 @@ module.exports = toString;
      *   }
      * ];
      * coll.addTransform('viewPaging', tx);
-     * 
+     *
      * // add some records
-     * 
-     * var results = dv.branchResultset('viewPaging', { pageStart: 10, pageSize: 10 }).data();     
+     *
+     * var results = dv.branchResultset('viewPaging', { pageStart: 10, pageSize: 10 }).data();
      */
     DynamicView.prototype.branchResultset = function (transform, parameters) {
       var rs = this.resultset.branch();
@@ -20076,7 +18669,7 @@ module.exports = toString;
           this.resultdata = this.resultdata.filter(function(obj, idx) { return !fxo[idx]; });
         }
 
-        // and queue sorts 
+        // and queue sorts
         if (this.sortFunction || this.sortCriteria || this.sortCriteriaSimple) {
           this.queueSortPhase();
         } else {
@@ -20253,6 +18846,9 @@ module.exports = toString;
       // changes are tracked by collection and aggregated by the db
       this.changes = [];
 
+      // lightweight changes tracking (loki IDs only) for optimized db saving
+      this.dirtyIds = [];
+
       // initialize the id index
       this.ensureId();
       var indices = [];
@@ -20359,7 +18955,7 @@ module.exports = toString;
       });
 
       this.on('warning', function (warning) {
-        self.console.warn(warning);
+        self.lokiConsoleWrapper.warn(warning);
       });
       // for de-serialization purposes
       flushChanges();
@@ -20436,7 +19032,7 @@ module.exports = toString;
       this.createUpdateChange(obj, old);
     };
 
-    Collection.prototype.console = {
+    Collection.prototype.lokiConsoleWrapper = {
       log: function () {},
       warn: function () {},
       error: function () {},
@@ -20671,10 +19267,10 @@ module.exports = toString;
      * // check all indices on a collection, returns array of invalid index names
      * var result = coll.checkAllIndexes({ repair: true, randomSampling: true, randomSamplingFactor: 0.15 });
      * if (result.length > 0) {
-     *   results.forEach(function(name) { 
-     *     console.log('problem encountered with index : ' + name); 
+     *   results.forEach(function(name) {
+     *     console.log('problem encountered with index : ' + name);
      *   });
-     * }     
+     * }
      */
     Collection.prototype.checkAllIndexes = function (options) {
       var key, bIndices = this.binaryIndices;
@@ -20937,7 +19533,7 @@ module.exports = toString;
      * @memberof Collection
      **/
     Collection.prototype.removeDynamicView = function (name) {
-      this.DynamicViews = 
+      this.DynamicViews =
         this.DynamicViews.filter(function(dv) { return dv.name !== name; });
     };
 
@@ -21228,6 +19824,10 @@ module.exports = toString;
         this.idIndex[position] = newInternal.$loki;
         //this.flagBinaryIndexesDirty();
 
+        if (this.isIncremental) {
+          this.dirtyIds.push(newInternal.$loki);
+        }
+
         this.commit();
         this.dirty = true; // for autosave scenarios
 
@@ -21253,7 +19853,7 @@ module.exports = toString;
         return returnObj;
       } catch (err) {
         this.rollback();
-        this.console.error(err.message);
+        this.lokiConsoleWrapper.error(err.message);
         this.emit('error', err);
         throw (err); // re-throw error so user does not think it succeeded
       }
@@ -21300,6 +19900,9 @@ module.exports = toString;
 
         // add new obj id to idIndex
         this.idIndex.push(obj.$loki);
+        if (this.isIncremental) {
+          this.dirtyIds.push(obj.$loki);
+        }
 
         // add the object
         this.data.push(obj);
@@ -21330,7 +19933,7 @@ module.exports = toString;
         return (this.cloneObjects) ? (clone(obj, this.cloneMethod)) : (obj);
       } catch (err) {
         this.rollback();
-        this.console.error(err.message);
+        this.lokiConsoleWrapper.error(err.message);
         this.emit('error', err);
         throw (err); // re-throw error so user does not think it succeeded
       }
@@ -21355,7 +19958,7 @@ module.exports = toString;
 
       } catch (err) {
         this.rollback();
-        this.console.error(err.message);
+        this.lokiConsoleWrapper.error(err.message);
       }
     };
 
@@ -21468,16 +20071,16 @@ module.exports = toString;
 
         // flag collection as dirty for autosave
         this.dirty = true;
-      } 
+      }
       catch (err) {
         this.rollback();
         if (adaptiveOverride) {
           this.adaptiveBinaryIndices = true;
         }
-        this.console.error(err.message);
+        this.lokiConsoleWrapper.error(err.message);
         this.emit('error', err);
         return null;
-      }      
+      }
     };
 
     /**
@@ -21485,12 +20088,12 @@ module.exports = toString;
      * @param {object[]|number[]} batch - array of documents or $loki ids to remove
      */
     Collection.prototype.removeBatch = function(batch) {
-      var len = batch.length, 
-        dlen=this.data.length, 
+      var len = batch.length,
+        dlen=this.data.length,
         idx;
       var xlt = {};
       var posx = [];
-      
+
       // create lookup hashobject to translate $loki id to position
       for (idx=0; idx < dlen; idx++) {
         xlt[this.data[idx].$loki] = idx;
@@ -21565,6 +20168,10 @@ module.exports = toString;
         // remove id from idIndex
         this.idIndex.splice(position, 1);
 
+        if (this.isIncremental) {
+          this.dirtyIds.push(doc.$loki);
+        }
+
         this.commit();
         this.dirty = true; // for autosave scenarios
         this.emit('delete', arr[0]);
@@ -21574,7 +20181,7 @@ module.exports = toString;
 
       } catch (err) {
         this.rollback();
-        this.console.error(err.message);
+        this.lokiConsoleWrapper.error(err.message);
         this.emit('error', err);
         return null;
       }
@@ -21727,19 +20334,19 @@ module.exports = toString;
           for(rmidx=0;rmidx<rmlen; rmidx++) {
             rxo[dataPosition[rmidx]] = true;
           }
-    
+
           // remove document from index (with filter function)
           bi.values = bi.values.filter(function(di) { return !rxo[di]; });
-    
+
           // if we passed this optional flag parameter, we are calling from adaptiveBinaryIndexUpdate,
           // in which case data positions stay the same.
           if (removedFromIndexOnly === true) {
             return;
           }
-    
+
           var sortedPositions = dataPosition.slice();
           sortedPositions.sort(function (a, b) { return a-b; });
-    
+
           // to remove holes, we need to 'shift down' the index's data array positions
           // we need to adjust array positions -1 for each index data positions greater than removed positions
           len = bi.values.length;
@@ -22190,6 +20797,7 @@ module.exports = toString;
         this.cachedData = clone(this.data, this.cloneMethod);
         this.cachedIndex = this.idIndex;
         this.cachedBinaryIndex = this.binaryIndices;
+        this.cachedDirtyIds = this.dirtyIds;
 
         // propagate startTransaction to dynamic views
         for (var idx = 0; idx < this.DynamicViews.length; idx++) {
@@ -22204,6 +20812,7 @@ module.exports = toString;
         this.cachedData = null;
         this.cachedIndex = null;
         this.cachedBinaryIndex = null;
+        this.cachedDirtyIds = null;
 
         // propagate commit to dynamic views
         for (var idx = 0; idx < this.DynamicViews.length; idx++) {
@@ -22219,6 +20828,7 @@ module.exports = toString;
           this.data = this.cachedData;
           this.idIndex = this.cachedIndex;
           this.binaryIndices = this.cachedBinaryIndex;
+          this.dirtyIds = this.cachedDirtyIds;
         }
 
         // propagate rollback to dynamic views
@@ -22826,9 +21436,9 @@ module.exports = toString;
 }));
 
 }).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./loki-indexed-adapter.js":176,"_process":236,"fs":216}],178:[function(require,module,exports){
+},{"./loki-indexed-adapter.js":157,"_process":239,"fs":216}],159:[function(require,module,exports){
 /**
- * martinez v0.5.0
+ * martinez v0.4.3
  * Martinez polygon clipping algorithm, does boolean operation on polygons (multipolygons, polygons with holes etc): intersection, union, difference, xor
  *
  * @author Alex Milevski <info@w8r.name>
@@ -24185,14 +22795,11 @@ module.exports = toString;
    * @return {Number}
    */
   function nextPos(pos, resultEvents, processed, origIndex) {
-    var p, p1;
     var newPos = pos + 1;
     var length = resultEvents.length;
-
-    p  = resultEvents[pos].point;
-
-    if (newPos < length)
-      { p1 = resultEvents[newPos].point; }
+    if (newPos > length - 1) { return pos - 1; }
+    var p  = resultEvents[pos].point;
+    var p1 = resultEvents[newPos].point;
 
 
     // while in range and not the current one by value
@@ -24547,10 +23154,10 @@ module.exports = toString;
 })));
 
 
-},{}],179:[function(require,module,exports){
+},{}],160:[function(require,module,exports){
 module.exports = require('./polygon-features.json')
 
-},{"./polygon-features.json":180}],180:[function(require,module,exports){
+},{"./polygon-features.json":161}],161:[function(require,module,exports){
 module.exports=[
     {
         "key": "building",
@@ -24709,9 +23316,9 @@ module.exports=[
     }
 ]
 
-},{}],181:[function(require,module,exports){
+},{}],162:[function(require,module,exports){
 var _ = require("./lodash.custom.js");
-var rewind = require("geojson-rewind");
+var rewind = require("@mapbox/geojson-rewind");
 
 // see https://wiki.openstreetmap.org/wiki/Overpass_turbo/Polygon_Features
 var polygonFeatures = {};
@@ -25776,7 +24383,7 @@ osmtogeojson.toGeojson = osmtogeojson;
 
 module.exports = osmtogeojson;
 
-},{"./lodash.custom.js":182,"geojson-rewind":50,"osm-polygon-features":179}],182:[function(require,module,exports){
+},{"./lodash.custom.js":163,"@mapbox/geojson-rewind":2,"osm-polygon-features":160}],163:[function(require,module,exports){
 (function (global){
 /**
  * @license
@@ -29483,7 +28090,104 @@ module.exports = osmtogeojson;
 }.call(this));
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}],183:[function(require,module,exports){
+},{}],164:[function(require,module,exports){
+module.exports = function strsearch2regexp (str) {
+  return str
+    .replace('.', '\\.')
+    .replace(' ', '.*')
+    .replace('a', '[aàáâãäå]')
+    .replace('A', '[AÀÁÂÃÄÅ]')
+    .replace('C', '[CÇ]')
+    .replace('c', '[cç]')
+    .replace('E', '[EÉÊË]')
+    .replace('I', '[IÌÍÎÏ]')
+    .replace('D', '[DÐ]')
+    .replace('N', '[NÑ]')
+    .replace('O', '[OÒÓÔÕÖØ]')
+    .replace('X', '[X×]')
+    .replace('U', '[UÙÚÛÜ]')
+    .replace('Y', '[YÝ]')
+    .replace('s', '[sß]')
+    .replace('e', '[eèeéêëė]')
+    .replace('i', '[iìíîï]')
+    .replace('d', '[dð]')
+    .replace('n', '[nñ]')
+    .replace('o', '[oòóôõöø]')
+    .replace('u', '[uùúûü]')
+    .replace('y', '[yýÿ]')
+}
+
+},{}],165:[function(require,module,exports){
+"use strict";
+
+var isPrototype = require("../prototype/is");
+
+module.exports = function (value) {
+	if (typeof value !== "function") return false;
+
+	if (!hasOwnProperty.call(value, "length")) return false;
+
+	try {
+		if (typeof value.length !== "number") return false;
+		if (typeof value.call !== "function") return false;
+		if (typeof value.apply !== "function") return false;
+	} catch (error) {
+		return false;
+	}
+
+	return !isPrototype(value);
+};
+
+},{"../prototype/is":168}],166:[function(require,module,exports){
+"use strict";
+
+var isValue = require("../value/is");
+
+// prettier-ignore
+var possibleTypes = { "object": true, "function": true, "undefined": true /* document.all */ };
+
+module.exports = function (value) {
+	if (!isValue(value)) return false;
+	return hasOwnProperty.call(possibleTypes, typeof value);
+};
+
+},{"../value/is":169}],167:[function(require,module,exports){
+"use strict";
+
+var isFunction = require("../function/is");
+
+var classRe = /^\s*class[\s{/}]/, functionToString = Function.prototype.toString;
+
+module.exports = function (value) {
+	if (!isFunction(value)) return false;
+	if (classRe.test(functionToString.call(value))) return false;
+	return true;
+};
+
+},{"../function/is":165}],168:[function(require,module,exports){
+"use strict";
+
+var isObject = require("../object/is");
+
+module.exports = function (value) {
+	if (!isObject(value)) return false;
+	try {
+		if (!value.constructor) return false;
+		return value.constructor.prototype === value;
+	} catch (error) {
+		return false;
+	}
+};
+
+},{"../object/is":166}],169:[function(require,module,exports){
+"use strict";
+
+// ES3 safe
+var _undefined = void 0;
+
+module.exports = function (value) { return value !== _undefined && value !== null; };
+
+},{}],170:[function(require,module,exports){
 // weightSort(arr, [options | weightKey])
 // Parameters:
 // arr ... an array of form [ [ weight, var], ... ]
@@ -29634,12 +28338,12 @@ if (typeof window !== 'undefined') {
   window.weight_sort = weightSort // legacy
 }
 
-},{}],184:[function(require,module,exports){
+},{}],171:[function(require,module,exports){
 module.exports.RADIUS = 6378137;
 module.exports.FLATTENING = 1/298.257223563;
 module.exports.POLAR_RADIUS = 6356752.3142;
 
-},{}],185:[function(require,module,exports){
+},{}],172:[function(require,module,exports){
 function DOMParser(options){
 	this.options = options ||{locator:{}};
 	
@@ -29892,7 +28596,7 @@ function appendElement (hander,node) {
 	exports.DOMParser = DOMParser;
 //}
 
-},{"./dom":186,"./sax":187}],186:[function(require,module,exports){
+},{"./dom":173,"./sax":174}],173:[function(require,module,exports){
 /*
  * DOM Level 2
  * Object DOMException
@@ -31138,7 +29842,7 @@ try{
 	exports.XMLSerializer = XMLSerializer;
 //}
 
-},{}],187:[function(require,module,exports){
+},{}],174:[function(require,module,exports){
 //[4]   	NameStartChar	   ::=   	":" | [A-Z] | "_" | [a-z] | [#xC0-#xD6] | [#xD8-#xF6] | [#xF8-#x2FF] | [#x370-#x37D] | [#x37F-#x1FFF] | [#x200C-#x200D] | [#x2070-#x218F] | [#x2C00-#x2FEF] | [#x3001-#xD7FF] | [#xF900-#xFDCF] | [#xFDF0-#xFFFD] | [#x10000-#xEFFFF]
 //[4a]   	NameChar	   ::=   	NameStartChar | "-" | "." | [0-9] | #xB7 | [#x0300-#x036F] | [#x203F-#x2040]
 //[5]   	Name	   ::=   	NameStartChar (NameChar)*
@@ -31773,7 +30477,7 @@ function split(source,start){
 exports.XMLReader = XMLReader;
 
 
-},{}],188:[function(require,module,exports){
+},{}],175:[function(require,module,exports){
 const strsearch2regexp = require('strsearch2regexp')
 const filterJoin = require('./filterJoin')
 
@@ -31934,7 +30638,7 @@ function parse (def) {
         if (m[1] === 'rel') {
           result.push({ type: 'relation' })
         } else if (m[1] === 'nwr') {
-            // nothing
+          // nothing
         } else {
           result.push({ type: m[1] })
         }
@@ -31998,7 +30702,7 @@ function parse (def) {
 
         op = m[1] === '^' ? 'has'
           : m[1] === '%' ? 'strsearch'
-          : m[1]
+            : m[1]
         mode = 13
         def = def.slice(m[0].length)
       } else {
@@ -32307,7 +31011,7 @@ class Filter {
 
 module.exports = Filter
 
-},{"./filterJoin":205,"strsearch2regexp":251}],189:[function(require,module,exports){
+},{"./filterJoin":192,"strsearch2regexp":164}],176:[function(require,module,exports){
 (function (global){
 const ee = require('event-emitter')
 var async = require('async')
@@ -32328,6 +31032,7 @@ var RequestMulti = require('./RequestMulti')
 var defines = require('./defines')
 var loadOsmFile = require('./loadOsmFile')
 var copyOsm3sMetaFrom = require('./copyOsm3sMeta')
+const timestamp = require('./timestamp')
 const Filter = require('./Filter')
 
 /**
@@ -32344,6 +31049,7 @@ const Filter = require('./Filter')
  * @param {string} osm3sMeta.generator Data generator
  * @param {string} osm3sMeta.timestamp_osm_base RFC8601 timestamp of OpenStreetMap data
  * @param {string} osm3sMeta.copyright Copyright statement
+ * @param {BoundingBox} [osm3sMeta.bounds] Bounding Box (only when loading from file)
  */
 
 /**
@@ -32361,6 +31067,7 @@ const Filter = require('./Filter')
  * @param {number} [options.effortWay=4] The effort for request a way.
  * @param {number} [options.effortRelation=64] The effort for request a relation.
  * @param {number} [options.timeGap=10] A short time gap between two requests to the Overpass API (milliseconds).
+ * @param {number} [options.timeGap429=1000] A longer time after a 429 response from Overpass API (milliseconds).
  * @param {number} [options.loadChunkSize=1000] When loading a file (instead connecting to an Overpass URL) load elements in chunks of n items.
  * @property {boolean} hasStretchLon180=false Are there any map features in the cache which stretch over lon=180/-180?
  */
@@ -32373,6 +31080,7 @@ class OverpassFrontend {
       effortWay: 4,
       effortRelation: 64,
       timeGap: 10,
+      timeGap429: 1000,
       loadChunkSize: 1000
     }
     for (var k in options) {
@@ -32408,6 +31116,7 @@ class OverpassFrontend {
     this.cacheElements = {}
     this.cacheElementsMemberOf = {}
     this.cacheBBoxQueries = {}
+    this.cacheTimestamp = timestamp()
     this.db.clear()
 
     // Set default properties
@@ -32431,6 +31140,8 @@ class OverpassFrontend {
           chunks.push(result.elements.slice(i, i + this.options.loadChunkSize))
         }
 
+        // collect all objects, so they can be completed later-on
+        let obs = []
         async.eachLimit(
           chunks,
           1,
@@ -32442,8 +31153,7 @@ class OverpassFrontend {
                   properties: OverpassFrontend.TAGS | OverpassFrontend.META | OverpassFrontend.MEMBERS
                 })
 
-                // Set objects to fully known, as no more data can be loaded from the file
-                ob.properties |= OverpassFrontend.ALL
+                obs.push(ob)
               }
             )
 
@@ -32451,6 +31161,16 @@ class OverpassFrontend {
           },
           (err) => {
             this.pendingNotifies()
+
+            // Set objects to fully known, as no more data can be loaded from the file
+            obs.forEach(ob => {
+              ob.properties |= OverpassFrontend.ALL
+              if (osm3sMeta.bounds) {
+                osm3sMeta.bounds.extend(ob.bounds)
+              } else {
+                osm3sMeta.bounds = new BoundingBox(ob.bounds)
+              }
+            })
 
             if (err) {
               console.log('Error loading file', err)
@@ -32538,7 +31258,7 @@ class OverpassFrontend {
 
   _overpassProcess () {
     // currently active - we'll come back later :-)
-    if (this.requestIsActive || !this.ready) {
+    if (!this.ready) {
       return
     }
 
@@ -32546,8 +31266,9 @@ class OverpassFrontend {
     // e.g. call featureCallback for elements which were received in the
     // meantime
     this.requests.forEach(request => {
-      if (request) {
+      if (request && request.timestampPreprocess < this.cacheTimestamp) {
         request.preprocess()
+        request.timestampPreprocess = this.cacheTimestamp
 
         if (request.mayFinish() || this.localOnly) {
           request.finish()
@@ -32555,6 +31276,11 @@ class OverpassFrontend {
       }
     })
     this.requests = removeNullEntries(this.requests)
+
+    // currently active - we'll come back later :-)
+    if (this.requestIsActive || !this.ready) {
+      return
+    }
 
     // nothing todo ...
     if (!this.requests.length) {
@@ -32665,7 +31391,16 @@ class OverpassFrontend {
 
       if (this.errorCount <= 3) {
         // retry
-        this._overpassProcess()
+        if (err.status === 429) {
+          this.requestIsActive = true
+
+          global.setTimeout(() => {
+            this.requestIsActive = false
+            this._overpassProcess()
+          }, this.options.timeGap429 - this.options.timeGap)
+        } else {
+          this._overpassProcess()
+        }
       } else {
         // abort
         // call finalCallback for the request
@@ -32764,6 +31499,8 @@ class OverpassFrontend {
       }
     }
 
+    this.cacheTimestamp = timestamp()
+
     this.pendingNotifies()
 
     request.finishSubRequest(subRequest)
@@ -32807,14 +31544,12 @@ class OverpassFrontend {
           new RequestBBox(this, {
             query: query,
             bounds: bounds1,
-            remainingBounds: bounds1,
             options: options,
             doneFeatures: {}
           }),
           new RequestBBox(this, {
             query: query,
             bounds: bounds2,
-            remainingBounds: bounds2,
             options: options,
             doneFeatures: {}
           })
@@ -32824,7 +31559,6 @@ class OverpassFrontend {
       request = new RequestBBox(this, {
         query: query,
         bounds: bounds,
-        remainingBounds: bounds,
         options: options,
         doneFeatures: {},
         featureCallback: featureCallback,
@@ -32977,19 +31711,19 @@ class OverpassFrontend {
 
   regexpEscape (str) {
     return str.replace('\\', '\\\\')
-         .replace('.', '\\.')
-         .replace('|', '\\|')
-         .replace('[', '\\[')
-         .replace(']', '\\]')
-         .replace('(', '\\(')
-         .replace(')', '\\)')
-         .replace('{', '\\{')
-         .replace('}', '\\}')
-         .replace('?', '\\?')
-         .replace('+', '\\+')
-         .replace('*', '\\*')
-         .replace('^', '\\^')
-         .replace('$', '\\$')
+      .replace('.', '\\.')
+      .replace('|', '\\|')
+      .replace('[', '\\[')
+      .replace(']', '\\]')
+      .replace('(', '\\(')
+      .replace(')', '\\)')
+      .replace('{', '\\{')
+      .replace('}', '\\}')
+      .replace('?', '\\?')
+      .replace('+', '\\+')
+      .replace('*', '\\*')
+      .replace('^', '\\^')
+      .replace('$', '\\$')
   }
 }
 
@@ -33008,7 +31742,7 @@ OverpassFrontend.Filter = Filter
 module.exports = OverpassFrontend
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./Filter":188,"./OverpassNode":190,"./OverpassObject":191,"./OverpassRelation":192,"./OverpassWay":193,"./RequestBBox":195,"./RequestGet":197,"./RequestMulti":199,"./copyOsm3sMeta":203,"./defines":204,"./httpLoad":207,"./loadOsmFile":209,"./removeNullEntries":211,"async":28,"boundingbox":29,"event-emitter":47,"lokijs":177,"weight-sort":183}],190:[function(require,module,exports){
+},{"./Filter":175,"./OverpassNode":177,"./OverpassObject":178,"./OverpassRelation":179,"./OverpassWay":180,"./RequestBBox":182,"./RequestGet":184,"./RequestMulti":186,"./copyOsm3sMeta":190,"./defines":191,"./httpLoad":194,"./loadOsmFile":196,"./removeNullEntries":198,"./timestamp":199,"async":12,"boundingbox":13,"event-emitter":30,"lokijs":158,"weight-sort":170}],177:[function(require,module,exports){
 /* global L:false */
 
 var OverpassObject = require('./OverpassObject')
@@ -33145,7 +31879,7 @@ class OverpassNode extends OverpassObject {
 
 module.exports = OverpassNode
 
-},{"./OverpassObject":191,"./defines":204,"boundingbox":29}],191:[function(require,module,exports){
+},{"./OverpassObject":178,"./defines":191,"boundingbox":13}],178:[function(require,module,exports){
 const ee = require('event-emitter')
 var BoundingBox = require('boundingbox')
 var OverpassFrontend = require('./defines')
@@ -33518,7 +32252,7 @@ ee(OverpassObject.prototype)
 
 module.exports = OverpassObject
 
-},{"./defines":204,"@turf/difference":22,"@turf/intersect":24,"boundingbox":29,"event-emitter":47}],192:[function(require,module,exports){
+},{"./defines":191,"@turf/difference":6,"@turf/intersect":8,"boundingbox":13,"event-emitter":30}],179:[function(require,module,exports){
 /* global L:false */
 
 const async = require('async')
@@ -33733,10 +32467,12 @@ class OverpassRelation extends OverpassObject {
             this.bounds = new BoundingBox(ob.bounds)
           }
         }
+        if (this.bounds) {
+          this.center = this.bounds.getCenter()
+        }
       })
 
       if (this.bounds && allKnown) {
-        this.center = this.bounds.getCenter()
         this.properties = this.properties | OverpassFrontend.BBOX | OverpassFrontend.CENTER
       }
     }
@@ -34023,7 +32759,7 @@ class OverpassRelation extends OverpassObject {
 
 module.exports = OverpassRelation
 
-},{"./OverpassObject":191,"./defines":204,"./geojsonShiftWorld":206,"@turf/bbox-clip":20,"async":28,"boundingbox":29,"osmtogeojson":181}],193:[function(require,module,exports){
+},{"./OverpassObject":178,"./defines":191,"./geojsonShiftWorld":193,"@turf/bbox-clip":4,"async":12,"boundingbox":13,"osmtogeojson":162}],180:[function(require,module,exports){
 /* global L:false */
 
 const async = require('async')
@@ -34095,67 +32831,49 @@ class OverpassWay extends OverpassObject {
 
         memberOb.notifyMemberOf(this, null, i)
       }
-
-      if (!this.geometry) {
-        this.geometry = this.members.map(
-          member => {
-            let node = this.overpass.cacheElements[member.id]
-            if (node) {
-              return node.geometry
-            }
-          }
-        )
-        this.geometry = this.geometry.filter(geom => geom)
-
-        if (!this.geometry.length) {
-          delete this.geometry
-        }
-      }
     }
 
-    if (this.geometry && this.geometry.filter(geom => geom).length === this.geometry.length) {
-      this.properties = this.properties | OverpassFrontend.GEOM
-
-      if (!this.bounds) {
-        this.bounds = new BoundingBox(this.geometry[0])
-        this.geometry.slice(1).forEach(geom => this.bounds.extend(geom))
-        this.center = this.bounds.getCenter()
-        this.properties = this.properties | OverpassFrontend.BBOX | OverpassFrontend.CENTER
-      }
-    }
+    this.checkGeometry()
   }
 
   notifyMemberUpdate (memberObs) {
     super.notifyMemberUpdate(memberObs)
 
-    if (!this.members) {
-      return
-    }
+    this.checkGeometry()
+  }
 
-    memberObs.forEach(memberOb => {
-      this.members.forEach((member, index) => {
-        if (memberOb.id === member.id) {
-          if (memberOb.geometry) {
-            if (!this.geometry) {
-              this.geometry = new Array(this.members.length)
-            }
-
-            this.geometry[index] = memberOb.geometry
+  checkGeometry () {
+    if (this.members && (this.properties & OverpassFrontend.GEOM) === 0) {
+      this.geometry = this.members.map(
+        member => {
+          let node = this.overpass.cacheElements[member.id]
+          if (node) {
+            return node.geometry
           }
         }
+      ).filter(geom => geom)
 
-        if (this.bounds) {
-          this.bounds.extend(memberOb.geometry)
-        } else {
-          this.bounds = new BoundingBox(memberOb.geometry)
-        }
-      })
-    })
+      if (this.geometry.length === 0) {
+        delete this.geometry
+        return
+      }
 
-    // all nodes known -> set bbox, geom and center
-    if (this.geometry && this.geometry.filter(geom => geom).length === this.geometry.length) {
+      if (this.geometry.length === this.members.length) {
+        this.properties = this.properties | OverpassFrontend.GEOM
+      }
+    }
+
+    if (this.geometry && (this.properties & OverpassFrontend.BBOX) === 0) {
+      this.bounds = new BoundingBox(this.geometry[0])
+      this.geometry.slice(1).forEach(geom => this.bounds.extend(geom))
+    }
+
+    if (this.bounds && (this.properties & OverpassFrontend.CENTER) === 0) {
       this.center = this.bounds.getCenter()
-      this.properties = this.properties | OverpassFrontend.BBOX | OverpassFrontend.GEOM | OverpassFrontend.CENTER
+    }
+
+    if ((this.properties & OverpassFrontend.GEOM) === OverpassFrontend.GEOM) {
+      this.properties = this.properties | OverpassFrontend.BBOX | OverpassFrontend.CENTER
     }
   }
 
@@ -34327,7 +33045,7 @@ class OverpassWay extends OverpassObject {
 
 module.exports = OverpassWay
 
-},{"./OverpassObject":191,"./defines":204,"@turf/bbox-clip":20,"async":28,"boundingbox":29}],194:[function(require,module,exports){
+},{"./OverpassObject":178,"./defines":191,"@turf/bbox-clip":4,"async":12,"boundingbox":13}],181:[function(require,module,exports){
 const ee = require('event-emitter')
 const SortedCallbacks = require('./SortedCallbacks')
 
@@ -34365,6 +33083,7 @@ class Request {
     this.finalCallback = callbacks.final.bind(callbacks)
 
     this.callCount = 0
+    this.timestampPreprocess = 0
   }
 
   /**
@@ -34472,7 +33191,7 @@ ee(Request.prototype)
 
 module.exports = Request
 
-},{"./SortedCallbacks":200,"event-emitter":47}],195:[function(require,module,exports){
+},{"./SortedCallbacks":187,"event-emitter":30}],182:[function(require,module,exports){
 const Request = require('./Request')
 const overpassOutOptions = require('./overpassOutOptions')
 const defines = require('./defines')
@@ -34533,7 +33252,6 @@ class RequestBBox extends Request {
     }
 
     this.loadFinish = false
-    this.lastChecked = 0
 
     if ('members' in this.options) {
       RequestBBoxMembers(this)
@@ -34558,7 +33276,6 @@ class RequestBBox extends Request {
       this.overpass.cacheBBoxQueries[this.query] = {}
       this.cache = this.overpass.cacheBBoxQueries[this.query]
       this.cache.requested = new KnownArea()
-      this.cache.timestamp = 0
 
       if (filterId) {
         this.cache.filter = {}
@@ -34572,13 +33289,6 @@ class RequestBBox extends Request {
    * check if there are any map features which can be returned right now
    */
   preprocess () {
-    if (this.lastChecked > this.cache.timestamp) {
-      if (!this.needLoad()) {
-        return
-      }
-    }
-    this.lastChecked = new Date().getTime()
-
     var items = []
     if (this.lokiQuery) {
       items = this.overpass.db.find(this.lokiQuery)
@@ -34739,16 +33449,14 @@ class RequestBBox extends Request {
   finishSubRequest (subRequest) {
     super.finishSubRequest(subRequest)
 
-    this.cache.timestamp = new Date().getTime()
-
     if (('effortSplit' in this.options && this.options.effortSplit > subRequest.parts[0].count) ||
         (this.options.split > subRequest.parts[0].count)) {
       this.loadFinish = true
 
       if (this.options.filter) {
-        this.cacheFilter.add(this.remainingBounds)
+        this.cacheFilter.add(this.bounds)
       } else {
-        this.cache.requested.add(this.remainingBounds)
+        this.cache.requested.add(this.bounds)
       }
     }
   }
@@ -34777,7 +33485,7 @@ class RequestBBox extends Request {
 
 module.exports = RequestBBox
 
-},{"./Filter":188,"./Request":194,"./RequestBBoxMembers":196,"./boundsToLokiQuery":201,"./defines":204,"./knownArea":208,"./overpassOutOptions":210}],196:[function(require,module,exports){
+},{"./Filter":175,"./Request":181,"./RequestBBoxMembers":183,"./boundsToLokiQuery":188,"./defines":191,"./knownArea":195,"./overpassOutOptions":197}],183:[function(require,module,exports){
 const defines = require('./defines')
 const overpassOutOptions = require('./overpassOutOptions')
 const each = require('lodash/forEach')
@@ -34982,7 +33690,7 @@ module.exports = function (request) {
   return new RequestBBoxMembers(request)
 }
 
-},{"./SortedCallbacks":200,"./defines":204,"./overpassOutOptions":210,"boundingbox":29,"lodash/forEach":155,"lodash/keys":169,"lodash/map":170}],197:[function(require,module,exports){
+},{"./SortedCallbacks":187,"./defines":191,"./overpassOutOptions":197,"boundingbox":13,"lodash/forEach":136,"lodash/keys":150,"lodash/map":151}],184:[function(require,module,exports){
 const Request = require('./Request')
 const defines = require('./defines')
 const BoundingBox = require('boundingbox')
@@ -35272,7 +33980,7 @@ class RequestGet extends Request {
 
 module.exports = RequestGet
 
-},{"./Request":194,"./RequestGetMembers":198,"./defines":204,"./overpassOutOptions":210,"boundingbox":29}],198:[function(require,module,exports){
+},{"./Request":181,"./RequestGetMembers":185,"./defines":191,"./overpassOutOptions":197,"boundingbox":13}],185:[function(require,module,exports){
 const defines = require('./defines')
 const overpassOutOptions = require('./overpassOutOptions')
 const each = require('lodash/forEach')
@@ -35494,7 +34202,7 @@ module.exports = function (request) {
   return new RequestGetMembers(request)
 }
 
-},{"./defines":204,"./overpassOutOptions":210,"boundingbox":29,"lodash/forEach":155,"lodash/keys":169,"lodash/map":170}],199:[function(require,module,exports){
+},{"./defines":191,"./overpassOutOptions":197,"boundingbox":13,"lodash/forEach":136,"lodash/keys":150,"lodash/map":151}],186:[function(require,module,exports){
 const Request = require('./Request')
 
 /**
@@ -35551,7 +34259,7 @@ class RequestMulti extends Request {
 
 module.exports = RequestMulti
 
-},{"./Request":194}],200:[function(require,module,exports){
+},{"./Request":181}],187:[function(require,module,exports){
 var async = require('async')
 var weightSort = require('weight-sort')
 var OverpassFrontend = require('./defines')
@@ -35634,7 +34342,7 @@ class SortedCallbacks {
 
 module.exports = SortedCallbacks
 
-},{"./defines":204,"async":28,"weight-sort":183}],201:[function(require,module,exports){
+},{"./defines":191,"async":12,"weight-sort":170}],188:[function(require,module,exports){
 module.exports = function boundsToLokiQuery (bounds, overpass) {
   if (bounds.minlon <= bounds.maxlon) {
     if (overpass.hasStretchLon180) {
@@ -35683,7 +34391,7 @@ module.exports = function boundsToLokiQuery (bounds, overpass) {
   }
 }
 
-},{}],202:[function(require,module,exports){
+},{}],189:[function(require,module,exports){
 module.exports = function convertFromXML (xml) {
   let result = {
     version: parseFloat(xml.getAttribute('version')),
@@ -35757,7 +34465,7 @@ module.exports = function convertFromXML (xml) {
   return result
 }
 
-},{}],203:[function(require,module,exports){
+},{}],190:[function(require,module,exports){
 module.exports = function copyOsm3sMetaFrom (results) {
   let osm3sMeta = {}
 
@@ -35776,7 +34484,7 @@ module.exports = function copyOsm3sMetaFrom (results) {
   return osm3sMeta
 }
 
-},{}],204:[function(require,module,exports){
+},{}],191:[function(require,module,exports){
 module.exports = {
   'ID_ONLY': 0,
   'TAGS': 1,
@@ -35789,7 +34497,7 @@ module.exports = {
   'DEFAULT': 13
 }
 
-},{}],205:[function(require,module,exports){
+},{}],192:[function(require,module,exports){
 module.exports = function filterJoin (def) {
   let result = [ '' ]
 
@@ -35814,7 +34522,7 @@ module.exports = function filterJoin (def) {
   return result
 }
 
-},{}],206:[function(require,module,exports){
+},{}],193:[function(require,module,exports){
 function geojsonShiftWorld (geojson, shift) {
   switch (geojson.type) {
     case 'FeatureCollection':
@@ -35863,7 +34571,7 @@ function geojsonShiftWorld (geojson, shift) {
 
 module.exports = geojsonShiftWorld
 
-},{}],207:[function(require,module,exports){
+},{}],194:[function(require,module,exports){
 (function (global){
 /* global location:false */
 
@@ -35889,7 +34597,7 @@ function httpLoad (url, getParam, postParam, callback) {
         callback(err, data)
       } else {
         try {
-          err = JSON.parse(req.responseText)
+          err = new Error(JSON.parse(req.responseText))
         } catch (err) {
           if (req.responseText.search('OSM3S Response') !== -1) {
             var lines = req.responseText.split(/\n/)
@@ -35907,9 +34615,15 @@ function httpLoad (url, getParam, postParam, callback) {
               e = 'Got error ' + req.status
             }
 
-            callback(e, null)
+            let error = new Error(e)
+            error.status = req.status
+
+            callback(error, null)
           } else {
-            callback(req.responseText, null)
+            let error = new Error(req.responseText)
+            error.status = req.status
+
+            callback(error, null)
           }
         }
       }
@@ -35942,7 +34656,7 @@ function httpLoad (url, getParam, postParam, callback) {
 module.exports = httpLoad
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}],208:[function(require,module,exports){
+},{}],195:[function(require,module,exports){
 const BoundingBox = require('boundingbox')
 const turf = require('./turf')
 
@@ -35994,7 +34708,7 @@ class KnownArea {
 
 module.exports = KnownArea
 
-},{"./turf":212,"boundingbox":29}],209:[function(require,module,exports){
+},{"./turf":200,"boundingbox":13}],196:[function(require,module,exports){
 const fs = require('fs')
 const DOMParser = require('xmldom').DOMParser
 const bzip2 = require('bzip2')
@@ -36077,11 +34791,12 @@ module.exports = function loadOsmFile (url, callback) {
     req.responseType = 'arraybuffer'
   }
 
+  req.overrideMimeType('text/xml')
   req.open('GET', url)
   req.send()
 }
 
-},{"./convertFromXML":202,"bzip2":30,"fs":216,"xmldom":185}],210:[function(require,module,exports){
+},{"./convertFromXML":189,"bzip2":14,"fs":216,"xmldom":172}],197:[function(require,module,exports){
 var defines = require('./defines')
 
 function overpassOutOptions (options, optionsOverride) {
@@ -36122,7 +34837,7 @@ function overpassOutOptions (options, optionsOverride) {
 
 module.exports = overpassOutOptions
 
-},{"./defines":204}],211:[function(require,module,exports){
+},{"./defines":191}],198:[function(require,module,exports){
 function removeNullEntries (arr) {
   var p
 
@@ -36135,14 +34850,19 @@ function removeNullEntries (arr) {
 
 module.exports = removeNullEntries
 
-},{}],212:[function(require,module,exports){
+},{}],199:[function(require,module,exports){
+module.exports = function timestamp () {
+  return new Date().getTime()
+}
+
+},{}],200:[function(require,module,exports){
 module.exports = {
   difference: require('@turf/difference'),
   union: require('@turf/union').default
 }
 
 
-},{"@turf/difference":22,"@turf/union":27}],213:[function(require,module,exports){
+},{"@turf/difference":6,"@turf/union":11}],201:[function(require,module,exports){
 const OverpassFrontend = require('overpass-frontend')
 
 const OverpassLayer = require('./src/OverpassLayer')
@@ -36157,7 +34877,628 @@ if (typeof window !== 'undefined') {
 OverpassLayer.List = OverpassLayerList
 module.exports = OverpassLayer
 
-},{"./src/OverpassLayer":242,"./src/OverpassLayerList":244,"overpass-frontend":189}],214:[function(require,module,exports){
+},{"./src/OverpassLayer":252,"./src/OverpassLayerList":254,"overpass-frontend":176}],202:[function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+var meta_1 = require("@turf/meta");
+/**
+ * Takes a set of features, calculates the bbox of all input features, and returns a bounding box.
+ *
+ * @name bbox
+ * @param {GeoJSON} geojson any GeoJSON object
+ * @returns {BBox} bbox extent in [minX, minY, maxX, maxY] order
+ * @example
+ * var line = turf.lineString([[-74, 40], [-78, 42], [-82, 35]]);
+ * var bbox = turf.bbox(line);
+ * var bboxPolygon = turf.bboxPolygon(bbox);
+ *
+ * //addToMap
+ * var addToMap = [line, bboxPolygon]
+ */
+function bbox(geojson) {
+    var result = [Infinity, Infinity, -Infinity, -Infinity];
+    meta_1.coordEach(geojson, function (coord) {
+        if (result[0] > coord[0]) {
+            result[0] = coord[0];
+        }
+        if (result[1] > coord[1]) {
+            result[1] = coord[1];
+        }
+        if (result[2] < coord[0]) {
+            result[2] = coord[0];
+        }
+        if (result[3] < coord[1]) {
+            result[3] = coord[1];
+        }
+    });
+    return result;
+}
+exports.default = bbox;
+
+},{"@turf/meta":211}],203:[function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+var helpers_1 = require("@turf/helpers");
+var invariant_1 = require("@turf/invariant");
+// http://en.wikipedia.org/wiki/Haversine_formula
+// http://www.movable-type.co.uk/scripts/latlong.html
+/**
+ * Takes two {@link Point|points} and finds the geographic bearing between them,
+ * i.e. the angle measured in degrees from the north line (0 degrees)
+ *
+ * @name bearing
+ * @param {Coord} start starting Point
+ * @param {Coord} end ending Point
+ * @param {Object} [options={}] Optional parameters
+ * @param {boolean} [options.final=false] calculates the final bearing if true
+ * @returns {number} bearing in decimal degrees, between -180 and 180 degrees (positive clockwise)
+ * @example
+ * var point1 = turf.point([-75.343, 39.984]);
+ * var point2 = turf.point([-75.534, 39.123]);
+ *
+ * var bearing = turf.bearing(point1, point2);
+ *
+ * //addToMap
+ * var addToMap = [point1, point2]
+ * point1.properties['marker-color'] = '#f00'
+ * point2.properties['marker-color'] = '#0f0'
+ * point1.properties.bearing = bearing
+ */
+function bearing(start, end, options) {
+    if (options === void 0) { options = {}; }
+    // Reverse calculation
+    if (options.final === true) {
+        return calculateFinalBearing(start, end);
+    }
+    var coordinates1 = invariant_1.getCoord(start);
+    var coordinates2 = invariant_1.getCoord(end);
+    var lon1 = helpers_1.degreesToRadians(coordinates1[0]);
+    var lon2 = helpers_1.degreesToRadians(coordinates2[0]);
+    var lat1 = helpers_1.degreesToRadians(coordinates1[1]);
+    var lat2 = helpers_1.degreesToRadians(coordinates2[1]);
+    var a = Math.sin(lon2 - lon1) * Math.cos(lat2);
+    var b = Math.cos(lat1) * Math.sin(lat2) -
+        Math.sin(lat1) * Math.cos(lat2) * Math.cos(lon2 - lon1);
+    return helpers_1.radiansToDegrees(Math.atan2(a, b));
+}
+/**
+ * Calculates Final Bearing
+ *
+ * @private
+ * @param {Coord} start starting Point
+ * @param {Coord} end ending Point
+ * @returns {number} bearing
+ */
+function calculateFinalBearing(start, end) {
+    // Swap start & end
+    var bear = bearing(end, start);
+    bear = (bear + 180) % 360;
+    return bear;
+}
+exports.default = bearing;
+
+},{"@turf/helpers":207,"@turf/invariant":208}],204:[function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+var invariant_1 = require("@turf/invariant");
+// http://en.wikipedia.org/wiki/Even%E2%80%93odd_rule
+// modified from: https://github.com/substack/point-in-polygon/blob/master/index.js
+// which was modified from http://www.ecse.rpi.edu/Homepages/wrf/Research/Short_Notes/pnpoly.html
+/**
+ * Takes a {@link Point} and a {@link Polygon} or {@link MultiPolygon} and determines if the point
+ * resides inside the polygon. The polygon can be convex or concave. The function accounts for holes.
+ *
+ * @name booleanPointInPolygon
+ * @param {Coord} point input point
+ * @param {Feature<Polygon|MultiPolygon>} polygon input polygon or multipolygon
+ * @param {Object} [options={}] Optional parameters
+ * @param {boolean} [options.ignoreBoundary=false] True if polygon boundary should be ignored when determining if
+ * the point is inside the polygon otherwise false.
+ * @returns {boolean} `true` if the Point is inside the Polygon; `false` if the Point is not inside the Polygon
+ * @example
+ * var pt = turf.point([-77, 44]);
+ * var poly = turf.polygon([[
+ *   [-81, 41],
+ *   [-81, 47],
+ *   [-72, 47],
+ *   [-72, 41],
+ *   [-81, 41]
+ * ]]);
+ *
+ * turf.booleanPointInPolygon(pt, poly);
+ * //= true
+ */
+function booleanPointInPolygon(point, polygon, options) {
+    if (options === void 0) { options = {}; }
+    // validation
+    if (!point) {
+        throw new Error("point is required");
+    }
+    if (!polygon) {
+        throw new Error("polygon is required");
+    }
+    var pt = invariant_1.getCoord(point);
+    var geom = invariant_1.getGeom(polygon);
+    var type = geom.type;
+    var bbox = polygon.bbox;
+    var polys = geom.coordinates;
+    // Quick elimination if point is not inside bbox
+    if (bbox && inBBox(pt, bbox) === false) {
+        return false;
+    }
+    // normalize to multipolygon
+    if (type === "Polygon") {
+        polys = [polys];
+    }
+    var insidePoly = false;
+    for (var i = 0; i < polys.length && !insidePoly; i++) {
+        // check if it is in the outer ring first
+        if (inRing(pt, polys[i][0], options.ignoreBoundary)) {
+            var inHole = false;
+            var k = 1;
+            // check for the point in any of the holes
+            while (k < polys[i].length && !inHole) {
+                if (inRing(pt, polys[i][k], !options.ignoreBoundary)) {
+                    inHole = true;
+                }
+                k++;
+            }
+            if (!inHole) {
+                insidePoly = true;
+            }
+        }
+    }
+    return insidePoly;
+}
+exports.default = booleanPointInPolygon;
+/**
+ * inRing
+ *
+ * @private
+ * @param {Array<number>} pt [x,y]
+ * @param {Array<Array<number>>} ring [[x,y], [x,y],..]
+ * @param {boolean} ignoreBoundary ignoreBoundary
+ * @returns {boolean} inRing
+ */
+function inRing(pt, ring, ignoreBoundary) {
+    var isInside = false;
+    if (ring[0][0] === ring[ring.length - 1][0] && ring[0][1] === ring[ring.length - 1][1]) {
+        ring = ring.slice(0, ring.length - 1);
+    }
+    for (var i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+        var xi = ring[i][0];
+        var yi = ring[i][1];
+        var xj = ring[j][0];
+        var yj = ring[j][1];
+        var onBoundary = (pt[1] * (xi - xj) + yi * (xj - pt[0]) + yj * (pt[0] - xi) === 0) &&
+            ((xi - pt[0]) * (xj - pt[0]) <= 0) && ((yi - pt[1]) * (yj - pt[1]) <= 0);
+        if (onBoundary) {
+            return !ignoreBoundary;
+        }
+        var intersect = ((yi > pt[1]) !== (yj > pt[1])) &&
+            (pt[0] < (xj - xi) * (pt[1] - yi) / (yj - yi) + xi);
+        if (intersect) {
+            isInside = !isInside;
+        }
+    }
+    return isInside;
+}
+/**
+ * inBBox
+ *
+ * @private
+ * @param {Position} pt point [x,y]
+ * @param {BBox} bbox BBox [west, south, east, north]
+ * @returns {boolean} true/false if point is inside BBox
+ */
+function inBBox(pt, bbox) {
+    return bbox[0] <= pt[0] &&
+        bbox[1] <= pt[1] &&
+        bbox[2] >= pt[0] &&
+        bbox[3] >= pt[1];
+}
+
+},{"@turf/invariant":208}],205:[function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+// http://en.wikipedia.org/wiki/Haversine_formula
+// http://www.movable-type.co.uk/scripts/latlong.html
+var helpers_1 = require("@turf/helpers");
+var invariant_1 = require("@turf/invariant");
+/**
+ * Takes a {@link Point} and calculates the location of a destination point given a distance in
+ * degrees, radians, miles, or kilometers; and bearing in degrees.
+ * This uses the [Haversine formula](http://en.wikipedia.org/wiki/Haversine_formula) to account for global curvature.
+ *
+ * @name destination
+ * @param {Coord} origin starting point
+ * @param {number} distance distance from the origin point
+ * @param {number} bearing ranging from -180 to 180
+ * @param {Object} [options={}] Optional parameters
+ * @param {string} [options.units='kilometers'] miles, kilometers, degrees, or radians
+ * @param {Object} [options.properties={}] Translate properties to Point
+ * @returns {Feature<Point>} destination point
+ * @example
+ * var point = turf.point([-75.343, 39.984]);
+ * var distance = 50;
+ * var bearing = 90;
+ * var options = {units: 'miles'};
+ *
+ * var destination = turf.destination(point, distance, bearing, options);
+ *
+ * //addToMap
+ * var addToMap = [point, destination]
+ * destination.properties['marker-color'] = '#f00';
+ * point.properties['marker-color'] = '#0f0';
+ */
+function destination(origin, distance, bearing, options) {
+    if (options === void 0) { options = {}; }
+    // Handle input
+    var coordinates1 = invariant_1.getCoord(origin);
+    var longitude1 = helpers_1.degreesToRadians(coordinates1[0]);
+    var latitude1 = helpers_1.degreesToRadians(coordinates1[1]);
+    var bearingRad = helpers_1.degreesToRadians(bearing);
+    var radians = helpers_1.lengthToRadians(distance, options.units);
+    // Main
+    var latitude2 = Math.asin(Math.sin(latitude1) * Math.cos(radians) +
+        Math.cos(latitude1) * Math.sin(radians) * Math.cos(bearingRad));
+    var longitude2 = longitude1 + Math.atan2(Math.sin(bearingRad) * Math.sin(radians) * Math.cos(latitude1), Math.cos(radians) - Math.sin(latitude1) * Math.sin(latitude2));
+    var lng = helpers_1.radiansToDegrees(longitude2);
+    var lat = helpers_1.radiansToDegrees(latitude2);
+    return helpers_1.point([lng, lat], options.properties);
+}
+exports.default = destination;
+
+},{"@turf/helpers":207,"@turf/invariant":208}],206:[function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+var invariant_1 = require("@turf/invariant");
+var helpers_1 = require("@turf/helpers");
+//http://en.wikipedia.org/wiki/Haversine_formula
+//http://www.movable-type.co.uk/scripts/latlong.html
+/**
+ * Calculates the distance between two {@link Point|points} in degrees, radians, miles, or kilometers.
+ * This uses the [Haversine formula](http://en.wikipedia.org/wiki/Haversine_formula) to account for global curvature.
+ *
+ * @name distance
+ * @param {Coord} from origin point
+ * @param {Coord} to destination point
+ * @param {Object} [options={}] Optional parameters
+ * @param {string} [options.units='kilometers'] can be degrees, radians, miles, or kilometers
+ * @returns {number} distance between the two points
+ * @example
+ * var from = turf.point([-75.343, 39.984]);
+ * var to = turf.point([-75.534, 39.123]);
+ * var options = {units: 'miles'};
+ *
+ * var distance = turf.distance(from, to, options);
+ *
+ * //addToMap
+ * var addToMap = [from, to];
+ * from.properties.distance = distance;
+ * to.properties.distance = distance;
+ */
+function distance(from, to, options) {
+    if (options === void 0) { options = {}; }
+    var coordinates1 = invariant_1.getCoord(from);
+    var coordinates2 = invariant_1.getCoord(to);
+    var dLat = helpers_1.degreesToRadians((coordinates2[1] - coordinates1[1]));
+    var dLon = helpers_1.degreesToRadians((coordinates2[0] - coordinates1[0]));
+    var lat1 = helpers_1.degreesToRadians(coordinates1[1]);
+    var lat2 = helpers_1.degreesToRadians(coordinates2[1]);
+    var a = Math.pow(Math.sin(dLat / 2), 2) +
+        Math.pow(Math.sin(dLon / 2), 2) * Math.cos(lat1) * Math.cos(lat2);
+    return helpers_1.radiansToLength(2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)), options.units);
+}
+exports.default = distance;
+
+},{"@turf/helpers":207,"@turf/invariant":208}],207:[function(require,module,exports){
+arguments[4][7][0].apply(exports,arguments)
+},{"dup":7}],208:[function(require,module,exports){
+arguments[4][9][0].apply(exports,arguments)
+},{"@turf/helpers":207,"dup":9}],209:[function(require,module,exports){
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+}
+Object.defineProperty(exports, "__esModule", { value: true });
+var helpers_1 = require("@turf/helpers");
+var invariant_1 = require("@turf/invariant");
+var line_segment_1 = __importDefault(require("@turf/line-segment"));
+var meta_1 = require("@turf/meta");
+var geojson_rbush_1 = __importDefault(require("geojson-rbush"));
+/**
+ * Takes any LineString or Polygon GeoJSON and returns the intersecting point(s).
+ *
+ * @name lineIntersect
+ * @param {GeoJSON} line1 any LineString or Polygon
+ * @param {GeoJSON} line2 any LineString or Polygon
+ * @returns {FeatureCollection<Point>} point(s) that intersect both
+ * @example
+ * var line1 = turf.lineString([[126, -11], [129, -21]]);
+ * var line2 = turf.lineString([[123, -18], [131, -14]]);
+ * var intersects = turf.lineIntersect(line1, line2);
+ *
+ * //addToMap
+ * var addToMap = [line1, line2, intersects]
+ */
+function lineIntersect(line1, line2) {
+    var unique = {};
+    var results = [];
+    // First, normalize geometries to features
+    // Then, handle simple 2-vertex segments
+    if (line1.type === "LineString") {
+        line1 = helpers_1.feature(line1);
+    }
+    if (line2.type === "LineString") {
+        line2 = helpers_1.feature(line2);
+    }
+    if (line1.type === "Feature" &&
+        line2.type === "Feature" &&
+        line1.geometry !== null &&
+        line2.geometry !== null &&
+        line1.geometry.type === "LineString" &&
+        line2.geometry.type === "LineString" &&
+        line1.geometry.coordinates.length === 2 &&
+        line2.geometry.coordinates.length === 2) {
+        var intersect = intersects(line1, line2);
+        if (intersect) {
+            results.push(intersect);
+        }
+        return helpers_1.featureCollection(results);
+    }
+    // Handles complex GeoJSON Geometries
+    var tree = geojson_rbush_1.default();
+    tree.load(line_segment_1.default(line2));
+    meta_1.featureEach(line_segment_1.default(line1), function (segment) {
+        meta_1.featureEach(tree.search(segment), function (match) {
+            var intersect = intersects(segment, match);
+            if (intersect) {
+                // prevent duplicate points https://github.com/Turfjs/turf/issues/688
+                var key = invariant_1.getCoords(intersect).join(",");
+                if (!unique[key]) {
+                    unique[key] = true;
+                    results.push(intersect);
+                }
+            }
+        });
+    });
+    return helpers_1.featureCollection(results);
+}
+/**
+ * Find a point that intersects LineStrings with two coordinates each
+ *
+ * @private
+ * @param {Feature<LineString>} line1 GeoJSON LineString (Must only contain 2 coordinates)
+ * @param {Feature<LineString>} line2 GeoJSON LineString (Must only contain 2 coordinates)
+ * @returns {Feature<Point>} intersecting GeoJSON Point
+ */
+function intersects(line1, line2) {
+    var coords1 = invariant_1.getCoords(line1);
+    var coords2 = invariant_1.getCoords(line2);
+    if (coords1.length !== 2) {
+        throw new Error("<intersects> line1 must only contain 2 coordinates");
+    }
+    if (coords2.length !== 2) {
+        throw new Error("<intersects> line2 must only contain 2 coordinates");
+    }
+    var x1 = coords1[0][0];
+    var y1 = coords1[0][1];
+    var x2 = coords1[1][0];
+    var y2 = coords1[1][1];
+    var x3 = coords2[0][0];
+    var y3 = coords2[0][1];
+    var x4 = coords2[1][0];
+    var y4 = coords2[1][1];
+    var denom = ((y4 - y3) * (x2 - x1)) - ((x4 - x3) * (y2 - y1));
+    var numeA = ((x4 - x3) * (y1 - y3)) - ((y4 - y3) * (x1 - x3));
+    var numeB = ((x2 - x1) * (y1 - y3)) - ((y2 - y1) * (x1 - x3));
+    if (denom === 0) {
+        if (numeA === 0 && numeB === 0) {
+            return null;
+        }
+        return null;
+    }
+    var uA = numeA / denom;
+    var uB = numeB / denom;
+    if (uA >= 0 && uA <= 1 && uB >= 0 && uB <= 1) {
+        var x = x1 + (uA * (x2 - x1));
+        var y = y1 + (uA * (y2 - y1));
+        return helpers_1.point([x, y]);
+    }
+    return null;
+}
+exports.default = lineIntersect;
+
+},{"@turf/helpers":207,"@turf/invariant":208,"@turf/line-segment":210,"@turf/meta":211,"geojson-rbush":234}],210:[function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+var helpers_1 = require("@turf/helpers");
+var invariant_1 = require("@turf/invariant");
+var meta_1 = require("@turf/meta");
+/**
+ * Creates a {@link FeatureCollection} of 2-vertex {@link LineString} segments from a
+ * {@link LineString|(Multi)LineString} or {@link Polygon|(Multi)Polygon}.
+ *
+ * @name lineSegment
+ * @param {GeoJSON} geojson GeoJSON Polygon or LineString
+ * @returns {FeatureCollection<LineString>} 2-vertex line segments
+ * @example
+ * var polygon = turf.polygon([[[-50, 5], [-40, -10], [-50, -10], [-40, 5], [-50, 5]]]);
+ * var segments = turf.lineSegment(polygon);
+ *
+ * //addToMap
+ * var addToMap = [polygon, segments]
+ */
+function lineSegment(geojson) {
+    if (!geojson) {
+        throw new Error("geojson is required");
+    }
+    var results = [];
+    meta_1.flattenEach(geojson, function (feature) {
+        lineSegmentFeature(feature, results);
+    });
+    return helpers_1.featureCollection(results);
+}
+/**
+ * Line Segment
+ *
+ * @private
+ * @param {Feature<LineString|Polygon>} geojson Line or polygon feature
+ * @param {Array} results push to results
+ * @returns {void}
+ */
+function lineSegmentFeature(geojson, results) {
+    var coords = [];
+    var geometry = geojson.geometry;
+    if (geometry !== null) {
+        switch (geometry.type) {
+            case "Polygon":
+                coords = invariant_1.getCoords(geometry);
+                break;
+            case "LineString":
+                coords = [invariant_1.getCoords(geometry)];
+        }
+        coords.forEach(function (coord) {
+            var segments = createSegments(coord, geojson.properties);
+            segments.forEach(function (segment) {
+                segment.id = results.length;
+                results.push(segment);
+            });
+        });
+    }
+}
+/**
+ * Create Segments from LineString coordinates
+ *
+ * @private
+ * @param {Array<Array<number>>} coords LineString coordinates
+ * @param {*} properties GeoJSON properties
+ * @returns {Array<Feature<LineString>>} line segments
+ */
+function createSegments(coords, properties) {
+    var segments = [];
+    coords.reduce(function (previousCoords, currentCoords) {
+        var segment = helpers_1.lineString([previousCoords, currentCoords], properties);
+        segment.bbox = bbox(previousCoords, currentCoords);
+        segments.push(segment);
+        return currentCoords;
+    });
+    return segments;
+}
+/**
+ * Create BBox between two coordinates (faster than @turf/bbox)
+ *
+ * @private
+ * @param {Array<number>} coords1 Point coordinate
+ * @param {Array<number>} coords2 Point coordinate
+ * @returns {BBox} [west, south, east, north]
+ */
+function bbox(coords1, coords2) {
+    var x1 = coords1[0];
+    var y1 = coords1[1];
+    var x2 = coords2[0];
+    var y2 = coords2[1];
+    var west = (x1 < x2) ? x1 : x2;
+    var south = (y1 < y2) ? y1 : y2;
+    var east = (x1 > x2) ? x1 : x2;
+    var north = (y1 > y2) ? y1 : y2;
+    return [west, south, east, north];
+}
+exports.default = lineSegment;
+
+},{"@turf/helpers":207,"@turf/invariant":208,"@turf/meta":211}],211:[function(require,module,exports){
+arguments[4][10][0].apply(exports,arguments)
+},{"@turf/helpers":207,"dup":10}],212:[function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+var bearing_1 = require("@turf/bearing");
+var distance_1 = require("@turf/distance");
+var destination_1 = require("@turf/destination");
+var line_intersect_1 = require("@turf/line-intersect");
+var meta_1 = require("@turf/meta");
+var helpers_1 = require("@turf/helpers");
+var invariant_1 = require("@turf/invariant");
+/**
+ * Takes a {@link Point} and a {@link LineString} and calculates the closest Point on the (Multi)LineString.
+ *
+ * @name nearestPointOnLine
+ * @param {Geometry|Feature<LineString|MultiLineString>} lines lines to snap to
+ * @param {Geometry|Feature<Point>|number[]} pt point to snap from
+ * @param {Object} [options={}] Optional parameters
+ * @param {string} [options.units='kilometers'] can be degrees, radians, miles, or kilometers
+ * @returns {Feature<Point>} closest point on the `line` to `point`. The properties object will contain three values: `index`: closest point was found on nth line part, `dist`: distance between pt and the closest point, `location`: distance along the line between start and the closest point.
+ * @example
+ * var line = turf.lineString([
+ *     [-77.031669, 38.878605],
+ *     [-77.029609, 38.881946],
+ *     [-77.020339, 38.884084],
+ *     [-77.025661, 38.885821],
+ *     [-77.021884, 38.889563],
+ *     [-77.019824, 38.892368]
+ * ]);
+ * var pt = turf.point([-77.037076, 38.884017]);
+ *
+ * var snapped = turf.nearestPointOnLine(line, pt, {units: 'miles'});
+ *
+ * //addToMap
+ * var addToMap = [line, pt, snapped];
+ * snapped.properties['marker-color'] = '#00f';
+ */
+function nearestPointOnLine(lines, pt, options) {
+    if (options === void 0) { options = {}; }
+    var closestPt = helpers_1.point([Infinity, Infinity], {
+        dist: Infinity
+    });
+    var length = 0.0;
+    meta_1.flattenEach(lines, function (line) {
+        var coords = invariant_1.getCoords(line);
+        for (var i = 0; i < coords.length - 1; i++) {
+            //start
+            var start = helpers_1.point(coords[i]);
+            start.properties.dist = distance_1.default(pt, start, options);
+            //stop
+            var stop_1 = helpers_1.point(coords[i + 1]);
+            stop_1.properties.dist = distance_1.default(pt, stop_1, options);
+            // sectionLength
+            var sectionLength = distance_1.default(start, stop_1, options);
+            //perpendicular
+            var heightDistance = Math.max(start.properties.dist, stop_1.properties.dist);
+            var direction = bearing_1.default(start, stop_1);
+            var perpendicularPt1 = destination_1.default(pt, heightDistance, direction + 90, options);
+            var perpendicularPt2 = destination_1.default(pt, heightDistance, direction - 90, options);
+            var intersect = line_intersect_1.default(helpers_1.lineString([perpendicularPt1.geometry.coordinates, perpendicularPt2.geometry.coordinates]), helpers_1.lineString([start.geometry.coordinates, stop_1.geometry.coordinates]));
+            var intersectPt = null;
+            if (intersect.features.length > 0) {
+                intersectPt = intersect.features[0];
+                intersectPt.properties.dist = distance_1.default(pt, intersectPt, options);
+                intersectPt.properties.location = length + distance_1.default(start, intersectPt, options);
+            }
+            if (start.properties.dist < closestPt.properties.dist) {
+                closestPt = start;
+                closestPt.properties.index = i;
+                closestPt.properties.location = length;
+            }
+            if (stop_1.properties.dist < closestPt.properties.dist) {
+                closestPt = stop_1;
+                closestPt.properties.index = i + 1;
+                closestPt.properties.location = length + sectionLength;
+            }
+            if (intersectPt && intersectPt.properties.dist < closestPt.properties.dist) {
+                closestPt = intersectPt;
+                closestPt.properties.index = i;
+            }
+            // update length
+            length += sectionLength;
+        }
+    });
+    return closestPt;
+}
+exports.default = nearestPointOnLine;
+
+},{"@turf/bearing":203,"@turf/destination":205,"@turf/distance":206,"@turf/helpers":207,"@turf/invariant":208,"@turf/line-intersect":209,"@turf/meta":211}],213:[function(require,module,exports){
+arguments[4][13][0].apply(exports,arguments)
+},{"dup":13,"geojson-bounds":233,"haversine":235}],214:[function(require,module,exports){
 
 },{}],215:[function(require,module,exports){
 'use strict';
@@ -36239,40 +35580,252 @@ module.exports = {
 },{}],216:[function(require,module,exports){
 arguments[4][214][0].apply(exports,arguments)
 },{"dup":214}],217:[function(require,module,exports){
+arguments[4][15][0].apply(exports,arguments)
+},{"dup":15,"es5-ext/object/assign":219,"es5-ext/object/normalize-options":226,"es5-ext/string/#/contains":229,"type/plain-function/is":246,"type/value/is":248}],218:[function(require,module,exports){
+arguments[4][16][0].apply(exports,arguments)
+},{"dup":16}],219:[function(require,module,exports){
+arguments[4][17][0].apply(exports,arguments)
+},{"./is-implemented":220,"./shim":221,"dup":17}],220:[function(require,module,exports){
+arguments[4][18][0].apply(exports,arguments)
+},{"dup":18}],221:[function(require,module,exports){
+arguments[4][19][0].apply(exports,arguments)
+},{"../keys":223,"../valid-value":228,"dup":19}],222:[function(require,module,exports){
+arguments[4][20][0].apply(exports,arguments)
+},{"../function/noop":218,"dup":20}],223:[function(require,module,exports){
+arguments[4][21][0].apply(exports,arguments)
+},{"./is-implemented":224,"./shim":225,"dup":21}],224:[function(require,module,exports){
+arguments[4][22][0].apply(exports,arguments)
+},{"dup":22}],225:[function(require,module,exports){
+arguments[4][23][0].apply(exports,arguments)
+},{"../is-value":222,"dup":23}],226:[function(require,module,exports){
+arguments[4][24][0].apply(exports,arguments)
+},{"./is-value":222,"dup":24}],227:[function(require,module,exports){
+arguments[4][25][0].apply(exports,arguments)
+},{"dup":25}],228:[function(require,module,exports){
+arguments[4][26][0].apply(exports,arguments)
+},{"./is-value":222,"dup":26}],229:[function(require,module,exports){
+arguments[4][27][0].apply(exports,arguments)
+},{"./is-implemented":230,"./shim":231,"dup":27}],230:[function(require,module,exports){
+arguments[4][28][0].apply(exports,arguments)
+},{"dup":28}],231:[function(require,module,exports){
+arguments[4][29][0].apply(exports,arguments)
+},{"dup":29}],232:[function(require,module,exports){
+arguments[4][30][0].apply(exports,arguments)
+},{"d":217,"dup":30,"es5-ext/object/valid-callable":227}],233:[function(require,module,exports){
 arguments[4][31][0].apply(exports,arguments)
-},{"dup":31,"es5-ext/object/assign":219,"es5-ext/object/is-callable":222,"es5-ext/object/normalize-options":227,"es5-ext/string/#/contains":230}],218:[function(require,module,exports){
+},{"_process":239,"dup":31}],234:[function(require,module,exports){
+var rbush = require('rbush');
+var helpers = require('@turf/helpers');
+var meta = require('@turf/meta');
+var turfBBox = require('@turf/bbox').default;
+var featureEach = meta.featureEach;
+var coordEach = meta.coordEach;
+var polygon = helpers.polygon;
+var featureCollection = helpers.featureCollection;
+
+/**
+ * GeoJSON implementation of [RBush](https://github.com/mourner/rbush#rbush) spatial index.
+ *
+ * @name rbush
+ * @param {number} [maxEntries=9] defines the maximum number of entries in a tree node. 9 (used by default) is a
+ * reasonable choice for most applications. Higher value means faster insertion and slower search, and vice versa.
+ * @returns {RBush} GeoJSON RBush
+ * @example
+ * var geojsonRbush = require('geojson-rbush').default;
+ * var tree = geojsonRbush();
+ */
+function geojsonRbush(maxEntries) {
+    var tree = rbush(maxEntries);
+    /**
+     * [insert](https://github.com/mourner/rbush#data-format)
+     *
+     * @param {Feature} feature insert single GeoJSON Feature
+     * @returns {RBush} GeoJSON RBush
+     * @example
+     * var poly = turf.polygon([[[-78, 41], [-67, 41], [-67, 48], [-78, 48], [-78, 41]]]);
+     * tree.insert(poly)
+     */
+    tree.insert = function (feature) {
+        if (feature.type !== 'Feature') throw new Error('invalid feature');
+        feature.bbox = feature.bbox ? feature.bbox : turfBBox(feature);
+        return rbush.prototype.insert.call(this, feature);
+    };
+
+    /**
+     * [load](https://github.com/mourner/rbush#bulk-inserting-data)
+     *
+     * @param {FeatureCollection|Array<Feature>} features load entire GeoJSON FeatureCollection
+     * @returns {RBush} GeoJSON RBush
+     * @example
+     * var polys = turf.polygons([
+     *     [[[-78, 41], [-67, 41], [-67, 48], [-78, 48], [-78, 41]]],
+     *     [[[-93, 32], [-83, 32], [-83, 39], [-93, 39], [-93, 32]]]
+     * ]);
+     * tree.load(polys);
+     */
+    tree.load = function (features) {
+        var load = [];
+        // Load an Array of Features
+        if (Array.isArray(features)) {
+            features.forEach(function (feature) {
+                if (feature.type !== 'Feature') throw new Error('invalid features');
+                feature.bbox = feature.bbox ? feature.bbox : turfBBox(feature);
+                load.push(feature);
+            });
+        } else {
+            // Load a FeatureCollection
+            featureEach(features, function (feature) {
+                if (feature.type !== 'Feature') throw new Error('invalid features');
+                feature.bbox = feature.bbox ? feature.bbox : turfBBox(feature);
+                load.push(feature);
+            });
+        }
+        return rbush.prototype.load.call(this, load);
+    };
+
+    /**
+     * [remove](https://github.com/mourner/rbush#removing-data)
+     *
+     * @param {Feature} feature remove single GeoJSON Feature
+     * @param {Function} equals Pass a custom equals function to compare by value for removal.
+     * @returns {RBush} GeoJSON RBush
+     * @example
+     * var poly = turf.polygon([[[-78, 41], [-67, 41], [-67, 48], [-78, 48], [-78, 41]]]);
+     *
+     * tree.remove(poly);
+     */
+    tree.remove = function (feature, equals) {
+        if (feature.type !== 'Feature') throw new Error('invalid feature');
+        feature.bbox = feature.bbox ? feature.bbox : turfBBox(feature);
+        return rbush.prototype.remove.call(this, feature, equals);
+    };
+
+    /**
+     * [clear](https://github.com/mourner/rbush#removing-data)
+     *
+     * @returns {RBush} GeoJSON Rbush
+     * @example
+     * tree.clear()
+     */
+    tree.clear = function () {
+        return rbush.prototype.clear.call(this);
+    };
+
+    /**
+     * [search](https://github.com/mourner/rbush#search)
+     *
+     * @param {BBox|FeatureCollection|Feature} geojson search with GeoJSON
+     * @returns {FeatureCollection} all features that intersects with the given GeoJSON.
+     * @example
+     * var poly = turf.polygon([[[-78, 41], [-67, 41], [-67, 48], [-78, 48], [-78, 41]]]);
+     *
+     * tree.search(poly);
+     */
+    tree.search = function (geojson) {
+        var features = rbush.prototype.search.call(this, this.toBBox(geojson));
+        return featureCollection(features);
+    };
+
+    /**
+     * [collides](https://github.com/mourner/rbush#collisions)
+     *
+     * @param {BBox|FeatureCollection|Feature} geojson collides with GeoJSON
+     * @returns {boolean} true if there are any items intersecting the given GeoJSON, otherwise false.
+     * @example
+     * var poly = turf.polygon([[[-78, 41], [-67, 41], [-67, 48], [-78, 48], [-78, 41]]]);
+     *
+     * tree.collides(poly);
+     */
+    tree.collides = function (geojson) {
+        return rbush.prototype.collides.call(this, this.toBBox(geojson));
+    };
+
+    /**
+     * [all](https://github.com/mourner/rbush#search)
+     *
+     * @returns {FeatureCollection} all the features in RBush
+     * @example
+     * tree.all()
+     */
+    tree.all = function () {
+        var features = rbush.prototype.all.call(this);
+        return featureCollection(features);
+    };
+
+    /**
+     * [toJSON](https://github.com/mourner/rbush#export-and-import)
+     *
+     * @returns {any} export data as JSON object
+     * @example
+     * var exported = tree.toJSON()
+     */
+    tree.toJSON = function () {
+        return rbush.prototype.toJSON.call(this);
+    };
+
+    /**
+     * [fromJSON](https://github.com/mourner/rbush#export-and-import)
+     *
+     * @param {any} json import previously exported data
+     * @returns {RBush} GeoJSON RBush
+     * @example
+     * var exported = {
+     *   "children": [
+     *     {
+     *       "type": "Feature",
+     *       "geometry": {
+     *         "type": "Point",
+     *         "coordinates": [110, 50]
+     *       },
+     *       "properties": {},
+     *       "bbox": [110, 50, 110, 50]
+     *     }
+     *   ],
+     *   "height": 1,
+     *   "leaf": true,
+     *   "minX": 110,
+     *   "minY": 50,
+     *   "maxX": 110,
+     *   "maxY": 50
+     * }
+     * tree.fromJSON(exported)
+     */
+    tree.fromJSON = function (json) {
+        return rbush.prototype.fromJSON.call(this, json);
+    };
+
+    /**
+     * Converts GeoJSON to {minX, minY, maxX, maxY} schema
+     *
+     * @private
+     * @param {BBox|FeatureCollection|Feature} geojson feature(s) to retrieve BBox from
+     * @returns {Object} converted to {minX, minY, maxX, maxY}
+     */
+    tree.toBBox = function (geojson) {
+        var bbox;
+        if (geojson.bbox) bbox = geojson.bbox;
+        else if (Array.isArray(geojson) && geojson.length === 4) bbox = geojson;
+        else if (Array.isArray(geojson) && geojson.length === 6) bbox = [geojson[0], geojson[1], geojson[3], geojson[4]];
+        else if (geojson.type === 'Feature') bbox = turfBBox(geojson);
+        else if (geojson.type === 'FeatureCollection') bbox = turfBBox(geojson);
+        else throw new Error('invalid geojson')
+
+        return {
+            minX: bbox[0],
+            minY: bbox[1],
+            maxX: bbox[2],
+            maxY: bbox[3]
+        };
+    };
+    return tree;
+}
+
+module.exports = geojsonRbush;
+module.exports.default = geojsonRbush;
+
+},{"@turf/bbox":202,"@turf/helpers":207,"@turf/meta":211,"rbush":241}],235:[function(require,module,exports){
 arguments[4][32][0].apply(exports,arguments)
-},{"dup":32}],219:[function(require,module,exports){
-arguments[4][33][0].apply(exports,arguments)
-},{"./is-implemented":220,"./shim":221,"dup":33}],220:[function(require,module,exports){
-arguments[4][34][0].apply(exports,arguments)
-},{"dup":34}],221:[function(require,module,exports){
-arguments[4][35][0].apply(exports,arguments)
-},{"../keys":224,"../valid-value":229,"dup":35}],222:[function(require,module,exports){
-arguments[4][36][0].apply(exports,arguments)
-},{"dup":36}],223:[function(require,module,exports){
-arguments[4][37][0].apply(exports,arguments)
-},{"../function/noop":218,"dup":37}],224:[function(require,module,exports){
-arguments[4][38][0].apply(exports,arguments)
-},{"./is-implemented":225,"./shim":226,"dup":38}],225:[function(require,module,exports){
-arguments[4][39][0].apply(exports,arguments)
-},{"dup":39}],226:[function(require,module,exports){
-arguments[4][40][0].apply(exports,arguments)
-},{"../is-value":223,"dup":40}],227:[function(require,module,exports){
-arguments[4][41][0].apply(exports,arguments)
-},{"./is-value":223,"dup":41}],228:[function(require,module,exports){
-arguments[4][42][0].apply(exports,arguments)
-},{"dup":42}],229:[function(require,module,exports){
-arguments[4][43][0].apply(exports,arguments)
-},{"./is-value":223,"dup":43}],230:[function(require,module,exports){
-arguments[4][44][0].apply(exports,arguments)
-},{"./is-implemented":231,"./shim":232,"dup":44}],231:[function(require,module,exports){
-arguments[4][45][0].apply(exports,arguments)
-},{"dup":45}],232:[function(require,module,exports){
-arguments[4][46][0].apply(exports,arguments)
-},{"dup":46}],233:[function(require,module,exports){
-arguments[4][47][0].apply(exports,arguments)
-},{"d":217,"dup":47,"es5-ext/object/valid-callable":228}],234:[function(require,module,exports){
+},{"dup":32}],236:[function(require,module,exports){
 "use strict";
 
 // Implementation originally from Twitter's Hogan.js:
@@ -36305,7 +35858,97 @@ module.exports = function(str) {
   }
 };
 
-},{}],235:[function(require,module,exports){
+},{}],237:[function(require,module,exports){
+const turf = {
+  nearestPointOnLine: require('@turf/nearest-point-on-line').default,
+  booleanPointInPolygon: require('@turf/boolean-point-in-polygon').default
+}
+
+function nearestPointOnGeometry (feature, pt, options) {
+  var result
+
+  if (!feature.geometry) {
+    return null
+  }
+
+  switch (feature.geometry.type) {
+    case 'LineString':
+    case 'MultiLineString':
+      return turf.nearestPointOnLine(feature, pt, options)
+    case 'Polygon':
+      if (turf.booleanPointInPolygon(pt, feature, options)) {
+        let result = JSON.parse(JSON.stringify(pt))
+        result.properties = {
+          'dist': 0,
+          'location': 0
+        }
+        return result
+      } else {
+        let modifiedFeature = JSON.parse(JSON.stringify(feature))
+        modifiedFeature.geometry.type = 'MultiLineString'
+        return nearestPointOnGeometry(modifiedFeature, pt, options)
+      }
+    case 'MultiPolygon':
+      result = feature.geometry.coordinates.map(coord => {
+        let modifiedFeature = {
+          type: 'Feature',
+          geometry: {
+            type: 'Polygon',
+            coordinates: coord
+          }
+        }
+
+        return nearestPointOnGeometry(modifiedFeature, pt, options)
+      })
+
+      result = result.filter(o => o)
+
+      result = result.sort((a, b) => {
+        if (!a || !b) {
+          return null
+        }
+
+        return a.properties.dist - b.properties.dist
+      })
+
+      if (result.length > 0) {
+        return result[0]
+      }
+
+      return
+    case 'GeometryCollection':
+      result = feature.geometry.geometries.map(geom => {
+        let modifiedFeature = {
+          type: 'Feature',
+          geometry: geom
+        }
+
+        return nearestPointOnGeometry(modifiedFeature, pt, options)
+      })
+
+      result = result.filter(o => o)
+
+      result = result.sort((a, b) => {
+        if (!a || !b) {
+          return null
+        }
+
+        return a.properties.dist - b.properties.dist
+      })
+
+      if (result.length > 0) {
+        return result[0]
+      }
+
+      return
+    default:
+      console.log('nearestPointOnGeometry: don\'t know how to handle ' + feature.geometry.type)
+  }
+}
+
+module.exports = nearestPointOnGeometry
+
+},{"@turf/boolean-point-in-polygon":204,"@turf/nearest-point-on-line":212}],238:[function(require,module,exports){
 (function (process){
 // .dirname, .basename, and .extname methods are extracted from Node.js v8.11.1,
 // backported and transplited with Babel, with backwards-compat fixes
@@ -36611,7 +36254,7 @@ var substr = 'ab'.substr(-1) === 'b'
 ;
 
 }).call(this,require('_process'))
-},{"_process":236}],236:[function(require,module,exports){
+},{"_process":239}],239:[function(require,module,exports){
 // shim for using process in browser
 var process = module.exports = {};
 
@@ -36797,7 +36440,636 @@ process.chdir = function (dir) {
 };
 process.umask = function() { return 0; };
 
-},{}],237:[function(require,module,exports){
+},{}],240:[function(require,module,exports){
+(function (global, factory) {
+	typeof exports === 'object' && typeof module !== 'undefined' ? module.exports = factory() :
+	typeof define === 'function' && define.amd ? define(factory) :
+	(global.quickselect = factory());
+}(this, (function () { 'use strict';
+
+function quickselect(arr, k, left, right, compare) {
+    quickselectStep(arr, k, left || 0, right || (arr.length - 1), compare || defaultCompare);
+}
+
+function quickselectStep(arr, k, left, right, compare) {
+
+    while (right > left) {
+        if (right - left > 600) {
+            var n = right - left + 1;
+            var m = k - left + 1;
+            var z = Math.log(n);
+            var s = 0.5 * Math.exp(2 * z / 3);
+            var sd = 0.5 * Math.sqrt(z * s * (n - s) / n) * (m - n / 2 < 0 ? -1 : 1);
+            var newLeft = Math.max(left, Math.floor(k - m * s / n + sd));
+            var newRight = Math.min(right, Math.floor(k + (n - m) * s / n + sd));
+            quickselectStep(arr, k, newLeft, newRight, compare);
+        }
+
+        var t = arr[k];
+        var i = left;
+        var j = right;
+
+        swap(arr, left, k);
+        if (compare(arr[right], t) > 0) swap(arr, left, right);
+
+        while (i < j) {
+            swap(arr, i, j);
+            i++;
+            j--;
+            while (compare(arr[i], t) < 0) i++;
+            while (compare(arr[j], t) > 0) j--;
+        }
+
+        if (compare(arr[left], t) === 0) swap(arr, left, j);
+        else {
+            j++;
+            swap(arr, j, right);
+        }
+
+        if (j <= k) left = j + 1;
+        if (k <= j) right = j - 1;
+    }
+}
+
+function swap(arr, i, j) {
+    var tmp = arr[i];
+    arr[i] = arr[j];
+    arr[j] = tmp;
+}
+
+function defaultCompare(a, b) {
+    return a < b ? -1 : a > b ? 1 : 0;
+}
+
+return quickselect;
+
+})));
+
+},{}],241:[function(require,module,exports){
+'use strict';
+
+module.exports = rbush;
+module.exports.default = rbush;
+
+var quickselect = require('quickselect');
+
+function rbush(maxEntries, format) {
+    if (!(this instanceof rbush)) return new rbush(maxEntries, format);
+
+    // max entries in a node is 9 by default; min node fill is 40% for best performance
+    this._maxEntries = Math.max(4, maxEntries || 9);
+    this._minEntries = Math.max(2, Math.ceil(this._maxEntries * 0.4));
+
+    if (format) {
+        this._initFormat(format);
+    }
+
+    this.clear();
+}
+
+rbush.prototype = {
+
+    all: function () {
+        return this._all(this.data, []);
+    },
+
+    search: function (bbox) {
+
+        var node = this.data,
+            result = [],
+            toBBox = this.toBBox;
+
+        if (!intersects(bbox, node)) return result;
+
+        var nodesToSearch = [],
+            i, len, child, childBBox;
+
+        while (node) {
+            for (i = 0, len = node.children.length; i < len; i++) {
+
+                child = node.children[i];
+                childBBox = node.leaf ? toBBox(child) : child;
+
+                if (intersects(bbox, childBBox)) {
+                    if (node.leaf) result.push(child);
+                    else if (contains(bbox, childBBox)) this._all(child, result);
+                    else nodesToSearch.push(child);
+                }
+            }
+            node = nodesToSearch.pop();
+        }
+
+        return result;
+    },
+
+    collides: function (bbox) {
+
+        var node = this.data,
+            toBBox = this.toBBox;
+
+        if (!intersects(bbox, node)) return false;
+
+        var nodesToSearch = [],
+            i, len, child, childBBox;
+
+        while (node) {
+            for (i = 0, len = node.children.length; i < len; i++) {
+
+                child = node.children[i];
+                childBBox = node.leaf ? toBBox(child) : child;
+
+                if (intersects(bbox, childBBox)) {
+                    if (node.leaf || contains(bbox, childBBox)) return true;
+                    nodesToSearch.push(child);
+                }
+            }
+            node = nodesToSearch.pop();
+        }
+
+        return false;
+    },
+
+    load: function (data) {
+        if (!(data && data.length)) return this;
+
+        if (data.length < this._minEntries) {
+            for (var i = 0, len = data.length; i < len; i++) {
+                this.insert(data[i]);
+            }
+            return this;
+        }
+
+        // recursively build the tree with the given data from scratch using OMT algorithm
+        var node = this._build(data.slice(), 0, data.length - 1, 0);
+
+        if (!this.data.children.length) {
+            // save as is if tree is empty
+            this.data = node;
+
+        } else if (this.data.height === node.height) {
+            // split root if trees have the same height
+            this._splitRoot(this.data, node);
+
+        } else {
+            if (this.data.height < node.height) {
+                // swap trees if inserted one is bigger
+                var tmpNode = this.data;
+                this.data = node;
+                node = tmpNode;
+            }
+
+            // insert the small tree into the large tree at appropriate level
+            this._insert(node, this.data.height - node.height - 1, true);
+        }
+
+        return this;
+    },
+
+    insert: function (item) {
+        if (item) this._insert(item, this.data.height - 1);
+        return this;
+    },
+
+    clear: function () {
+        this.data = createNode([]);
+        return this;
+    },
+
+    remove: function (item, equalsFn) {
+        if (!item) return this;
+
+        var node = this.data,
+            bbox = this.toBBox(item),
+            path = [],
+            indexes = [],
+            i, parent, index, goingUp;
+
+        // depth-first iterative tree traversal
+        while (node || path.length) {
+
+            if (!node) { // go up
+                node = path.pop();
+                parent = path[path.length - 1];
+                i = indexes.pop();
+                goingUp = true;
+            }
+
+            if (node.leaf) { // check current node
+                index = findItem(item, node.children, equalsFn);
+
+                if (index !== -1) {
+                    // item found, remove the item and condense tree upwards
+                    node.children.splice(index, 1);
+                    path.push(node);
+                    this._condense(path);
+                    return this;
+                }
+            }
+
+            if (!goingUp && !node.leaf && contains(node, bbox)) { // go down
+                path.push(node);
+                indexes.push(i);
+                i = 0;
+                parent = node;
+                node = node.children[0];
+
+            } else if (parent) { // go right
+                i++;
+                node = parent.children[i];
+                goingUp = false;
+
+            } else node = null; // nothing found
+        }
+
+        return this;
+    },
+
+    toBBox: function (item) { return item; },
+
+    compareMinX: compareNodeMinX,
+    compareMinY: compareNodeMinY,
+
+    toJSON: function () { return this.data; },
+
+    fromJSON: function (data) {
+        this.data = data;
+        return this;
+    },
+
+    _all: function (node, result) {
+        var nodesToSearch = [];
+        while (node) {
+            if (node.leaf) result.push.apply(result, node.children);
+            else nodesToSearch.push.apply(nodesToSearch, node.children);
+
+            node = nodesToSearch.pop();
+        }
+        return result;
+    },
+
+    _build: function (items, left, right, height) {
+
+        var N = right - left + 1,
+            M = this._maxEntries,
+            node;
+
+        if (N <= M) {
+            // reached leaf level; return leaf
+            node = createNode(items.slice(left, right + 1));
+            calcBBox(node, this.toBBox);
+            return node;
+        }
+
+        if (!height) {
+            // target height of the bulk-loaded tree
+            height = Math.ceil(Math.log(N) / Math.log(M));
+
+            // target number of root entries to maximize storage utilization
+            M = Math.ceil(N / Math.pow(M, height - 1));
+        }
+
+        node = createNode([]);
+        node.leaf = false;
+        node.height = height;
+
+        // split the items into M mostly square tiles
+
+        var N2 = Math.ceil(N / M),
+            N1 = N2 * Math.ceil(Math.sqrt(M)),
+            i, j, right2, right3;
+
+        multiSelect(items, left, right, N1, this.compareMinX);
+
+        for (i = left; i <= right; i += N1) {
+
+            right2 = Math.min(i + N1 - 1, right);
+
+            multiSelect(items, i, right2, N2, this.compareMinY);
+
+            for (j = i; j <= right2; j += N2) {
+
+                right3 = Math.min(j + N2 - 1, right2);
+
+                // pack each entry recursively
+                node.children.push(this._build(items, j, right3, height - 1));
+            }
+        }
+
+        calcBBox(node, this.toBBox);
+
+        return node;
+    },
+
+    _chooseSubtree: function (bbox, node, level, path) {
+
+        var i, len, child, targetNode, area, enlargement, minArea, minEnlargement;
+
+        while (true) {
+            path.push(node);
+
+            if (node.leaf || path.length - 1 === level) break;
+
+            minArea = minEnlargement = Infinity;
+
+            for (i = 0, len = node.children.length; i < len; i++) {
+                child = node.children[i];
+                area = bboxArea(child);
+                enlargement = enlargedArea(bbox, child) - area;
+
+                // choose entry with the least area enlargement
+                if (enlargement < minEnlargement) {
+                    minEnlargement = enlargement;
+                    minArea = area < minArea ? area : minArea;
+                    targetNode = child;
+
+                } else if (enlargement === minEnlargement) {
+                    // otherwise choose one with the smallest area
+                    if (area < minArea) {
+                        minArea = area;
+                        targetNode = child;
+                    }
+                }
+            }
+
+            node = targetNode || node.children[0];
+        }
+
+        return node;
+    },
+
+    _insert: function (item, level, isNode) {
+
+        var toBBox = this.toBBox,
+            bbox = isNode ? item : toBBox(item),
+            insertPath = [];
+
+        // find the best node for accommodating the item, saving all nodes along the path too
+        var node = this._chooseSubtree(bbox, this.data, level, insertPath);
+
+        // put the item into the node
+        node.children.push(item);
+        extend(node, bbox);
+
+        // split on node overflow; propagate upwards if necessary
+        while (level >= 0) {
+            if (insertPath[level].children.length > this._maxEntries) {
+                this._split(insertPath, level);
+                level--;
+            } else break;
+        }
+
+        // adjust bboxes along the insertion path
+        this._adjustParentBBoxes(bbox, insertPath, level);
+    },
+
+    // split overflowed node into two
+    _split: function (insertPath, level) {
+
+        var node = insertPath[level],
+            M = node.children.length,
+            m = this._minEntries;
+
+        this._chooseSplitAxis(node, m, M);
+
+        var splitIndex = this._chooseSplitIndex(node, m, M);
+
+        var newNode = createNode(node.children.splice(splitIndex, node.children.length - splitIndex));
+        newNode.height = node.height;
+        newNode.leaf = node.leaf;
+
+        calcBBox(node, this.toBBox);
+        calcBBox(newNode, this.toBBox);
+
+        if (level) insertPath[level - 1].children.push(newNode);
+        else this._splitRoot(node, newNode);
+    },
+
+    _splitRoot: function (node, newNode) {
+        // split root node
+        this.data = createNode([node, newNode]);
+        this.data.height = node.height + 1;
+        this.data.leaf = false;
+        calcBBox(this.data, this.toBBox);
+    },
+
+    _chooseSplitIndex: function (node, m, M) {
+
+        var i, bbox1, bbox2, overlap, area, minOverlap, minArea, index;
+
+        minOverlap = minArea = Infinity;
+
+        for (i = m; i <= M - m; i++) {
+            bbox1 = distBBox(node, 0, i, this.toBBox);
+            bbox2 = distBBox(node, i, M, this.toBBox);
+
+            overlap = intersectionArea(bbox1, bbox2);
+            area = bboxArea(bbox1) + bboxArea(bbox2);
+
+            // choose distribution with minimum overlap
+            if (overlap < minOverlap) {
+                minOverlap = overlap;
+                index = i;
+
+                minArea = area < minArea ? area : minArea;
+
+            } else if (overlap === minOverlap) {
+                // otherwise choose distribution with minimum area
+                if (area < minArea) {
+                    minArea = area;
+                    index = i;
+                }
+            }
+        }
+
+        return index;
+    },
+
+    // sorts node children by the best axis for split
+    _chooseSplitAxis: function (node, m, M) {
+
+        var compareMinX = node.leaf ? this.compareMinX : compareNodeMinX,
+            compareMinY = node.leaf ? this.compareMinY : compareNodeMinY,
+            xMargin = this._allDistMargin(node, m, M, compareMinX),
+            yMargin = this._allDistMargin(node, m, M, compareMinY);
+
+        // if total distributions margin value is minimal for x, sort by minX,
+        // otherwise it's already sorted by minY
+        if (xMargin < yMargin) node.children.sort(compareMinX);
+    },
+
+    // total margin of all possible split distributions where each node is at least m full
+    _allDistMargin: function (node, m, M, compare) {
+
+        node.children.sort(compare);
+
+        var toBBox = this.toBBox,
+            leftBBox = distBBox(node, 0, m, toBBox),
+            rightBBox = distBBox(node, M - m, M, toBBox),
+            margin = bboxMargin(leftBBox) + bboxMargin(rightBBox),
+            i, child;
+
+        for (i = m; i < M - m; i++) {
+            child = node.children[i];
+            extend(leftBBox, node.leaf ? toBBox(child) : child);
+            margin += bboxMargin(leftBBox);
+        }
+
+        for (i = M - m - 1; i >= m; i--) {
+            child = node.children[i];
+            extend(rightBBox, node.leaf ? toBBox(child) : child);
+            margin += bboxMargin(rightBBox);
+        }
+
+        return margin;
+    },
+
+    _adjustParentBBoxes: function (bbox, path, level) {
+        // adjust bboxes along the given tree path
+        for (var i = level; i >= 0; i--) {
+            extend(path[i], bbox);
+        }
+    },
+
+    _condense: function (path) {
+        // go through the path, removing empty nodes and updating bboxes
+        for (var i = path.length - 1, siblings; i >= 0; i--) {
+            if (path[i].children.length === 0) {
+                if (i > 0) {
+                    siblings = path[i - 1].children;
+                    siblings.splice(siblings.indexOf(path[i]), 1);
+
+                } else this.clear();
+
+            } else calcBBox(path[i], this.toBBox);
+        }
+    },
+
+    _initFormat: function (format) {
+        // data format (minX, minY, maxX, maxY accessors)
+
+        // uses eval-type function compilation instead of just accepting a toBBox function
+        // because the algorithms are very sensitive to sorting functions performance,
+        // so they should be dead simple and without inner calls
+
+        var compareArr = ['return a', ' - b', ';'];
+
+        this.compareMinX = new Function('a', 'b', compareArr.join(format[0]));
+        this.compareMinY = new Function('a', 'b', compareArr.join(format[1]));
+
+        this.toBBox = new Function('a',
+            'return {minX: a' + format[0] +
+            ', minY: a' + format[1] +
+            ', maxX: a' + format[2] +
+            ', maxY: a' + format[3] + '};');
+    }
+};
+
+function findItem(item, items, equalsFn) {
+    if (!equalsFn) return items.indexOf(item);
+
+    for (var i = 0; i < items.length; i++) {
+        if (equalsFn(item, items[i])) return i;
+    }
+    return -1;
+}
+
+// calculate node's bbox from bboxes of its children
+function calcBBox(node, toBBox) {
+    distBBox(node, 0, node.children.length, toBBox, node);
+}
+
+// min bounding rectangle of node children from k to p-1
+function distBBox(node, k, p, toBBox, destNode) {
+    if (!destNode) destNode = createNode(null);
+    destNode.minX = Infinity;
+    destNode.minY = Infinity;
+    destNode.maxX = -Infinity;
+    destNode.maxY = -Infinity;
+
+    for (var i = k, child; i < p; i++) {
+        child = node.children[i];
+        extend(destNode, node.leaf ? toBBox(child) : child);
+    }
+
+    return destNode;
+}
+
+function extend(a, b) {
+    a.minX = Math.min(a.minX, b.minX);
+    a.minY = Math.min(a.minY, b.minY);
+    a.maxX = Math.max(a.maxX, b.maxX);
+    a.maxY = Math.max(a.maxY, b.maxY);
+    return a;
+}
+
+function compareNodeMinX(a, b) { return a.minX - b.minX; }
+function compareNodeMinY(a, b) { return a.minY - b.minY; }
+
+function bboxArea(a)   { return (a.maxX - a.minX) * (a.maxY - a.minY); }
+function bboxMargin(a) { return (a.maxX - a.minX) + (a.maxY - a.minY); }
+
+function enlargedArea(a, b) {
+    return (Math.max(b.maxX, a.maxX) - Math.min(b.minX, a.minX)) *
+           (Math.max(b.maxY, a.maxY) - Math.min(b.minY, a.minY));
+}
+
+function intersectionArea(a, b) {
+    var minX = Math.max(a.minX, b.minX),
+        minY = Math.max(a.minY, b.minY),
+        maxX = Math.min(a.maxX, b.maxX),
+        maxY = Math.min(a.maxY, b.maxY);
+
+    return Math.max(0, maxX - minX) *
+           Math.max(0, maxY - minY);
+}
+
+function contains(a, b) {
+    return a.minX <= b.minX &&
+           a.minY <= b.minY &&
+           b.maxX <= a.maxX &&
+           b.maxY <= a.maxY;
+}
+
+function intersects(a, b) {
+    return b.minX <= a.maxX &&
+           b.minY <= a.maxY &&
+           b.maxX >= a.minX &&
+           b.maxY >= a.minY;
+}
+
+function createNode(children) {
+    return {
+        children: children,
+        height: 1,
+        leaf: true,
+        minX: Infinity,
+        minY: Infinity,
+        maxX: -Infinity,
+        maxY: -Infinity
+    };
+}
+
+// sort an array so that items come in groups of n unsorted items, with groups sorted between each other;
+// combines selection algorithm with binary divide & conquer approach
+
+function multiSelect(arr, left, right, n, compare) {
+    var stack = [left, right],
+        mid;
+
+    while (stack.length) {
+        right = stack.pop();
+        left = stack.pop();
+
+        if (right - left <= n) continue;
+
+        mid = left + Math.ceil((right - left) / n / 2) * n;
+        quickselect(arr, mid, left, right, compare);
+
+        stack.push(left, mid, mid, right);
+    }
+}
+
+},{"quickselect":240}],242:[function(require,module,exports){
 (function (setImmediate,clearImmediate){
 var nextTick = require('process/browser.js').nextTick;
 var apply = Function.prototype.apply;
@@ -36876,9 +37148,308 @@ exports.clearImmediate = typeof clearImmediate === "function" ? clearImmediate :
   delete immediateIds[id];
 };
 }).call(this,require("timers").setImmediate,require("timers").clearImmediate)
-},{"process/browser.js":236,"timers":237}],238:[function(require,module,exports){
-(function (global,__dirname){
-!function(e,t){"object"==typeof exports&&"object"==typeof module?module.exports=t():"function"==typeof define&&define.amd?define([],t):"object"==typeof exports?exports.Twig=t():e.Twig=t()}(global,function(){return function(e){var t={};function r(n){if(t[n])return t[n].exports;var o=t[n]={i:n,l:!1,exports:{}};return e[n].call(o.exports,o,o.exports,r),o.l=!0,o.exports}return r.m=e,r.c=t,r.d=function(e,t,n){r.o(e,t)||Object.defineProperty(e,t,{configurable:!1,enumerable:!0,get:n})},r.r=function(e){Object.defineProperty(e,"__esModule",{value:!0})},r.n=function(e){var t=e&&e.__esModule?function(){return e.default}:function(){return e};return r.d(t,"a",t),t},r.o=function(e,t){return Object.prototype.hasOwnProperty.call(e,t)},r.p="",r(r.s=27)}([function(e,t){e.exports=require("path")},function(e,t,r){"use strict";e.exports=function(){var e=arguments,t=0,r=function(e,t,r,n){r||(r=" ");var o=e.length>=t?"":new Array(1+t-e.length>>>0).join(r);return n?e+o:o+e},n=function(e,t,n,o,i,s){var a=o-e.length;return a>0&&(e=n||!i?r(e,o,s,n):[e.slice(0,t.length),r("",a,"0",!0),e.slice(t.length)].join("")),e},o=function(e,t,o,i,s,a,p){var c=e>>>0;return e=(o=o&&c&&{2:"0b",8:"0",16:"0x"}[t]||"")+r(c.toString(t),a||0,"0",!1),n(e,o,i,s,p)},i=function(e,t,r,o,i,s){return null!==o&&void 0!==o&&(e=e.slice(0,o)),n(e,"",t,r,i,s)};return e[t++].replace(/%%|%(\d+\$)?([-+'#0 ]*)(\*\d+\$|\*|\d+)?(?:\.(\*\d+\$|\*|\d+))?([scboxXuideEfFgG])/g,function(s,a,p,c,l,u){var f,h,y,d,g;if("%%"===s)return"%";var m,x=!1,v="",b=!1,w=!1,k=" ",_=p.length;for(m=0;m<_;m++)switch(p.charAt(m)){case" ":v=" ";break;case"+":v="+";break;case"-":x=!0;break;case"'":k=p.charAt(m+1);break;case"0":b=!0,k="0";break;case"#":w=!0}if((c=c?"*"===c?+e[t++]:"*"===c.charAt(0)?+e[c.slice(1,-1)]:+c:0)<0&&(c=-c,x=!0),!isFinite(c))throw new Error("sprintf: (minimum-)width must be finite");switch(l=l?"*"===l?+e[t++]:"*"===l.charAt(0)?+e[l.slice(1,-1)]:+l:"fFeE".indexOf(u)>-1?6:"d"===u?0:void 0,g=a?e[a.slice(0,-1)]:e[t++],u){case"s":return i(g+"",x,c,l,b,k);case"c":return i(String.fromCharCode(+g),x,c,l,b);case"b":return o(g,2,w,x,c,l,b);case"o":return o(g,8,w,x,c,l,b);case"x":return o(g,16,w,x,c,l,b);case"X":return o(g,16,w,x,c,l,b).toUpperCase();case"u":return o(g,10,w,x,c,l,b);case"i":case"d":return f=+g||0,g=(h=(f=Math.round(f-f%1))<0?"-":v)+r(String(Math.abs(f)),l,"0",!1),n(g,h,x,c,b);case"e":case"E":case"f":case"F":case"g":case"G":return h=(f=+g)<0?"-":v,y=["toExponential","toFixed","toPrecision"]["efg".indexOf(u.toLowerCase())],d=["toString","toUpperCase"]["eEfFgG".indexOf(u)%2],g=h+Math.abs(f)[y](l),n(g,h,x,c,b)[d]();default:return s}})}},function(e,t){e.exports=function(e){"use strict";return e.exports={VERSION:e.VERSION},e.exports.twig=function(t){var r=t.id,n={strict_variables:t.strict_variables||!1,autoescape:null!=t.autoescape&&t.autoescape||!1,allowInlineIncludes:t.allowInlineIncludes||!1,rethrow:t.rethrow||!1,namespaces:t.namespaces};if(e.cache&&r&&e.validateId(r),void 0!==t.debug&&(e.debug=t.debug),void 0!==t.trace&&(e.trace=t.trace),void 0!==t.data)return e.Templates.parsers.twig({data:t.data,path:t.hasOwnProperty("path")?t.path:void 0,module:t.module,id:r,options:n});if(void 0!==t.ref){if(void 0!==t.id)throw new e.Error("Both ref and id cannot be set on a twig.js template.");return e.Templates.load(t.ref)}if(void 0!==t.method){if(!e.Templates.isRegisteredLoader(t.method))throw new e.Error('Loader for "'+t.method+'" is not defined.');return e.Templates.loadRemote(t.name||t.href||t.path||r||void 0,{id:r,method:t.method,parser:t.parser||"twig",base:t.base,module:t.module,precompiled:t.precompiled,async:t.async,options:n},t.load,t.error)}return void 0!==t.href?e.Templates.loadRemote(t.href,{id:r,method:"ajax",parser:t.parser||"twig",base:t.base,module:t.module,precompiled:t.precompiled,async:t.async,options:n},t.load,t.error):void 0!==t.path?e.Templates.loadRemote(t.path,{id:r,method:"fs",parser:t.parser||"twig",base:t.base,module:t.module,precompiled:t.precompiled,async:t.async,options:n},t.load,t.error):void 0},e.exports.extendFilter=function(t,r){e.filter.extend(t,r)},e.exports.extendFunction=function(t,r){e._function.extend(t,r)},e.exports.extendTest=function(t,r){e.test.extend(t,r)},e.exports.extendTag=function(t){e.logic.extend(t)},e.exports.extend=function(t){t(e)},e.exports.compile=function(t,r){var n,o=r.filename,i=r.filename;return n=new e.Template({data:t,path:i,id:o,options:r.settings["twig options"]}),function(e){return n.render(e)}},e.exports.renderFile=function(t,r,n){"function"==typeof r&&(n=r,r={});var o=(r=r||{}).settings||{},i={path:t,base:o.views,load:function(e){n(null,""+e.render(r))}},s=o["twig options"];if(s)for(var a in s)s.hasOwnProperty(a)&&(i[a]=s[a]);e.exports.twig(i)},e.exports.__express=e.exports.renderFile,e.exports.cache=function(t){e.cache=t},e.exports.path=e.path,e.exports.filters=e.filters,e.exports.Promise=e.Promise,e}},function(e,t){e.exports=function(e){"use strict";var t=1,r=2;return e.parseAsync=function(t,r){return e.parse.call(this,t,r,!0)},e.expression.parseAsync=function(t,r,n){return e.expression.parse.call(this,t,r,n,!0)},e.logic.parseAsync=function(t,r,n){return e.logic.parse.call(this,t,r,n,!0)},e.Template.prototype.renderAsync=function(e,t){return this.render(e,t,!0)},e.async={},e.isPromise=function(e){return e&&e.then&&"function"==typeof e.then},e.async.potentiallyAsync=function(t,r,n){return r?e.Promise.resolve(n.call(t)):function(t,r,n){var o=n.call(t),i=null,s=!0;if(!e.isPromise(o))return o;if(o.then(function(e){o=e,s=!1}).catch(function(e){i=e}),null!==i)throw i;if(s)throw new e.Error("You are using Twig.js in sync mode in combination with async extensions.");return o}(t,0,n)},e.Thenable=function(e,t,r){this.then=e,this._value=r?t:null,this._state=r||0},e.Thenable.prototype.catch=function(e){return this._state==t?this:this.then(null,e)},e.Thenable.resolvedThen=function(t){try{return e.Promise.resolve(t(this._value))}catch(t){return e.Promise.reject(t)}},e.Thenable.rejectedThen=function(t,r){if(!r||"function"!=typeof r)return this;var n=this._value,o=e.attempt(function(){return r(n)},e.Promise.reject);return e.Promise.resolve(o)},e.Promise=function(n){var o=0,i=null,s=function(e,t){o=e,i=t};return function(e,t,r){try{e(t,r)}catch(e){r(e)}}(n,function(e){s(t,e)},function(e){s(r,e)}),o===t?e.Promise.resolve(i):o===r?e.Promise.reject(i):(s=e.FullPromise()).promise},e.FullPromise=function(){var r=null;function n(e){e(a._value)}function o(e,t){t(a._value)}var i=function(e,t){r=function(e,t,r){var n=[t,r,-2];return e?-2==e[2]?e=[e,n]:e.push(n):e=n,e}(r,e,t)};function s(s,p){a._state||(a._value=p,a._state=s,i=s==t?n:o,r&&(-2===r[2]&&(i(r[0],r[1]),r=null),e.forEach(r,function(e){i(e[0],e[1])}),r=null))}var a=new e.Thenable(function(r,n){var o="function"==typeof r;if(a._state==t&&!o)return e.Promise.resolve(a._value);if(a._state===t)return e.attempt(function(){return e.Promise.resolve(r(a._value))},e.Promise.reject);var s="function"==typeof n;return e.Promise(function(t,a){i(o?function(n){e.attempt(function(){t(r(n))},a)}:t,s?function(r){e.attempt(function(){t(n(r))},a)}:a)})});return s.promise=a,s},e.Promise.defaultResolved=new e.Thenable(e.Thenable.resolvedThen,void 0,t),e.Promise.emptyStringResolved=new e.Thenable(e.Thenable.resolvedThen,"",t),e.Promise.resolve=function(r){return arguments.length<1||void 0===r?e.Promise.defaultResolved:e.isPromise(r)?r:""===r?e.Promise.emptyStringResolved:new e.Thenable(e.Thenable.resolvedThen,r,t)},e.Promise.reject=function(t){return new e.Thenable(e.Thenable.rejectedThen,t,r)},e.Promise.all=function(r){var n=new Array(r.length);return e.async.forEach(r,function(r,o){if(e.isPromise(r)){if(r._state!=t)return r.then(function(e){n[o]=e});n[o]=r._value}else n[o]=r}).then(function(){return n})},e.async.forEach=function(r,n){var o=r.length,i=0;return function s(){var a=null;do{if(i==o)return e.Promise.resolve();a=n(r[i],i),i++}while(!a||!e.isPromise(a)||a._state==t);return a.then(s)}()},e}},function(e,t){e.exports=function(e){"use strict";return e.tests={empty:function(e){if(null===e||void 0===e)return!0;if("number"==typeof e)return!1;if(e.length&&e.length>0)return!1;for(var t in e)if(e.hasOwnProperty(t))return!1;return!0},odd:function(e){return e%2==1},even:function(e){return e%2==0},divisibleby:function(e,t){return e%t[0]==0},defined:function(e){return void 0!==e},none:function(e){return null===e},null:function(e){return this.none(e)},"same as":function(e,t){return e===t[0]},sameas:function(t,r){return console.warn("`sameas` is deprecated use `same as`"),e.tests["same as"](t,r)},iterable:function(t){return t&&(e.lib.is("Array",t)||e.lib.is("Object",t))}},e.test=function(t,r,n){if(!e.tests[t])throw"Test "+t+" is not defined.";return e.tests[t](r,n)},e.test.extend=function(t,r){e.tests[t]=r},e}},function(e,t,r){e.exports=function(e){"use strict";e.path={};var t=/.::/,n=/@/;return e.path.parsePath=function(r,o){var i=null,s=r.options.namespaces,a=o||"";if(s&&"object"==typeof s){for(i in s)t.test(a)?a=a.replace(i+"::",s[i]):n.test(a)&&(a=a.replace("@"+i,s[i]));return a}return e.path.relativePath(r,a)},e.path.relativePath=function(t,n){var o,i,s,a="/",p=[];n=n||"";if(t.url)o=void 0!==t.base?t.base+("/"===t.base.charAt(t.base.length-1)?"":"/"):t.url;else if(t.path){var c=r(0),l=c.sep||a,u=new RegExp("^\\.{1,2}"+l.replace("\\","\\\\"));n=n.replace(/\//g,l),void 0!==t.base&&null==n.match(u)?(n=n.replace(t.base,""),o=t.base+l):o=c.normalize(t.path),o=o.replace(l+l,l),a=l}else{if(!t.name&&!t.id||!t.method||"fs"===t.method||"ajax"===t.method)throw new e.Error("Cannot extend an inline template.");o=t.base||t.name||t.id}for((i=o.split(a)).pop(),i=i.concat(n.split(a));i.length>0;)"."==(s=i.shift())||(".."==s&&p.length>0&&".."!=p[p.length-1]?p.pop():p.push(s));return p.join(a)},e}},function(e,t){e.exports=function(e){"use strict";e.Templates.registerParser("twig",function(t){return new e.Template(t)})}},function(e,t){e.exports=function(e){"use strict";e.Templates.registerParser("source",function(e){return e.data||""})}},function(e,t){e.exports=function(e){"use strict";for(e.logic={},e.logic.type={if_:"Twig.logic.type.if",endif:"Twig.logic.type.endif",for_:"Twig.logic.type.for",endfor:"Twig.logic.type.endfor",else_:"Twig.logic.type.else",elseif:"Twig.logic.type.elseif",set:"Twig.logic.type.set",setcapture:"Twig.logic.type.setcapture",endset:"Twig.logic.type.endset",filter:"Twig.logic.type.filter",endfilter:"Twig.logic.type.endfilter",shortblock:"Twig.logic.type.shortblock",block:"Twig.logic.type.block",endblock:"Twig.logic.type.endblock",extends_:"Twig.logic.type.extends",use:"Twig.logic.type.use",include:"Twig.logic.type.include",spaceless:"Twig.logic.type.spaceless",endspaceless:"Twig.logic.type.endspaceless",macro:"Twig.logic.type.macro",endmacro:"Twig.logic.type.endmacro",import_:"Twig.logic.type.import",from:"Twig.logic.type.from",embed:"Twig.logic.type.embed",endembed:"Twig.logic.type.endembed",with:"Twig.logic.type.with",endwith:"Twig.logic.type.endwith"},e.logic.definitions=[{type:e.logic.type.if_,regex:/^if\s+([\s\S]+)$/,next:[e.logic.type.else_,e.logic.type.elseif,e.logic.type.endif],open:!0,compile:function(t){var r=t.match[1];return t.stack=e.expression.compile.call(this,{type:e.expression.type.expression,value:r}).stack,delete t.match,t},parse:function(t,r,n){var o=this;return e.expression.parseAsync.call(this,t.stack,r).then(function(i){return n=!0,e.lib.boolval(i)?(n=!1,e.parseAsync.call(o,t.output,r)):""}).then(function(e){return{chain:n,output:e}})}},{type:e.logic.type.elseif,regex:/^elseif\s+([^\s].*)$/,next:[e.logic.type.else_,e.logic.type.elseif,e.logic.type.endif],open:!1,compile:function(t){var r=t.match[1];return t.stack=e.expression.compile.call(this,{type:e.expression.type.expression,value:r}).stack,delete t.match,t},parse:function(t,r,n){var o=this;return e.expression.parseAsync.call(this,t.stack,r).then(function(i){return n&&e.lib.boolval(i)?(n=!1,e.parseAsync.call(o,t.output,r)):""}).then(function(e){return{chain:n,output:e}})}},{type:e.logic.type.else_,regex:/^else$/,next:[e.logic.type.endif,e.logic.type.endfor],open:!1,parse:function(t,r,n){var o=e.Promise.resolve("");return n&&(o=e.parseAsync.call(this,t.output,r)),o.then(function(e){return{chain:n,output:e}})}},{type:e.logic.type.endif,regex:/^endif$/,next:[],open:!1},{type:e.logic.type.for_,regex:/^for\s+([a-zA-Z0-9_,\s]+)\s+in\s+([^\s].*?)(?:\s+if\s+([^\s].*))?$/,next:[e.logic.type.else_,e.logic.type.endfor],open:!0,compile:function(t){var r=t.match[1],n=t.match[2],o=t.match[3],i=null;if(t.key_var=null,t.value_var=null,r.indexOf(",")>=0){if(2!==(i=r.split(",")).length)throw new e.Error("Invalid expression in for loop: "+r);t.key_var=i[0].trim(),t.value_var=i[1].trim()}else t.value_var=r;return t.expression=e.expression.compile.call(this,{type:e.expression.type.expression,value:n}).stack,o&&(t.conditional=e.expression.compile.call(this,{type:e.expression.type.expression,value:o}).stack),delete t.match,t},parse:function(t,r,n){var o,i,s=[],a=0,p=this,c=t.conditional,l=function(n,i){var l=e.ChildContext(r);return l[t.value_var]=i,t.key_var&&(l[t.key_var]=n),l.loop=function(e,t){var n=void 0!==c;return{index:e+1,index0:e,revindex:n?void 0:t-e,revindex0:n?void 0:t-e-1,first:0===e,last:n?void 0:e===t-1,length:n?void 0:t,parent:r}}(a,o),(void 0===c?e.Promise.resolve(!0):e.expression.parseAsync.call(p,c,l)).then(function(r){if(r)return e.parseAsync.call(p,t.output,l).then(function(e){s.push(e),a+=1})}).then(function(){delete l.loop,delete l[t.value_var],delete l[t.key_var],e.merge(r,l,!0)})};return e.expression.parseAsync.call(this,t.expression,r).then(function(t){return e.lib.isArray(t)?(o=t.length,e.async.forEach(t,function(e){return l(a,e)})):e.lib.is("Object",t)?(i=void 0!==t._keys?t._keys:Object.keys(t),o=i.length,e.async.forEach(i,function(e){if("_keys"!==e)return l(e,t[e])})):void 0}).then(function(){return{chain:0===s.length,output:e.output.call(p,s)}})}},{type:e.logic.type.endfor,regex:/^endfor$/,next:[],open:!1},{type:e.logic.type.set,regex:/^set\s+([a-zA-Z0-9_,\s]+)\s*=\s*([\s\S]+)$/,next:[],open:!0,compile:function(t){var r=t.match[1].trim(),n=t.match[2],o=e.expression.compile.call(this,{type:e.expression.type.expression,value:n}).stack;return t.key=r,t.expression=o,delete t.match,t},parse:function(t,r,n){var o=t.key;return e.expression.parseAsync.call(this,t.expression,r).then(function(t){return t===r&&(t=e.lib.copy(t)),r[o]=t,{chain:n,context:r}})}},{type:e.logic.type.setcapture,regex:/^set\s+([a-zA-Z0-9_,\s]+)$/,next:[e.logic.type.endset],open:!0,compile:function(e){var t=e.match[1].trim();return e.key=t,delete e.match,e},parse:function(t,r,n){var o=this,i=t.key;return e.parseAsync.call(this,t.output,r).then(function(e){return o.context[i]=e,r[i]=e,{chain:n,context:r}})}},{type:e.logic.type.endset,regex:/^endset$/,next:[],open:!1},{type:e.logic.type.filter,regex:/^filter\s+(.+)$/,next:[e.logic.type.endfilter],open:!0,compile:function(t){var r="|"+t.match[1].trim();return t.stack=e.expression.compile.call(this,{type:e.expression.type.expression,value:r}).stack,delete t.match,t},parse:function(t,r,n){var o=this;return e.parseAsync.call(this,t.output,r).then(function(n){var i=[{type:e.expression.type.string,value:n}].concat(t.stack);return e.expression.parseAsync.call(o,i,r)}).then(function(e){return{chain:n,output:e}})}},{type:e.logic.type.endfilter,regex:/^endfilter$/,next:[],open:!1},{type:e.logic.type.block,regex:/^block\s+([a-zA-Z0-9_]+)$/,next:[e.logic.type.endblock],open:!0,compile:function(e){return e.block=e.match[1].trim(),delete e.match,e},parse:function(t,r,n){var o,i=this,s=e.Promise.resolve(),a=e.indexOf(this.importedBlocks,t.block)>-1,p=this.blocks[t.block]&&e.indexOf(this.blocks[t.block],e.placeholders.parent)>-1;return e.forEach(this.parseStack,function(r){r.type==e.logic.type.for_&&(t.overwrite=!0)}),(void 0===this.blocks[t.block]||a||p||t.overwrite)&&(s=(s=t.expression?e.expression.parseAsync.call(this,t.output,r).then(function(t){return e.expression.parseAsync.call(i,{type:e.expression.type.string,value:t},r)}):e.parseAsync.call(this,t.output,r).then(function(t){return e.expression.parseAsync.call(i,{type:e.expression.type.string,value:t},r)})).then(function(r){a&&i.importedBlocks.splice(i.importedBlocks.indexOf(t.block),1),i.blocks[t.block]=p?e.Markup(i.blocks[t.block].replace(e.placeholders.parent,r)):r,i.originalBlockTokens[t.block]={type:t.type,block:t.block,output:t.output,overwrite:!0}})),s.then(function(){return o=i.child.blocks[t.block]?i.child.blocks[t.block]:i.blocks[t.block],{chain:n,output:o}})}},{type:e.logic.type.shortblock,regex:/^block\s+([a-zA-Z0-9_]+)\s+(.+)$/,next:[],open:!0,compile:function(t){return t.expression=t.match[2].trim(),t.output=e.expression.compile({type:e.expression.type.expression,value:t.expression}).stack,t.block=t.match[1].trim(),delete t.match,t},parse:function(t,r,n){for(var o=new Array(arguments.length),i=arguments.length;i-- >0;)o[i]=arguments[i];return e.logic.handler[e.logic.type.block].parse.apply(this,o)}},{type:e.logic.type.endblock,regex:/^endblock(?:\s+([a-zA-Z0-9_]+))?$/,next:[],open:!1},{type:e.logic.type.extends_,regex:/^extends\s+(.+)$/,next:[],open:!0,compile:function(t){var r=t.match[1].trim();return delete t.match,t.stack=e.expression.compile.call(this,{type:e.expression.type.expression,value:r}).stack,t},parse:function(t,r,n){var o=this,i=e.ChildContext(r);return e.expression.parseAsync.call(this,t.stack,r).then(function(t){return o.extend=t,(t instanceof e.Template?t:o.importFile(t)).renderAsync(i)}).then(function(){return e.lib.extend(r,i),{chain:n,output:""}})}},{type:e.logic.type.use,regex:/^use\s+(.+)$/,next:[],open:!0,compile:function(t){var r=t.match[1].trim();return delete t.match,t.stack=e.expression.compile.call(this,{type:e.expression.type.expression,value:r}).stack,t},parse:function(t,r,n){var o=this;return e.expression.parseAsync.call(this,t.stack,r).then(function(e){return o.importBlocks(e),{chain:n,output:""}})}},{type:e.logic.type.include,regex:/^include\s+(.+?)(?:\s|$)(ignore missing(?:\s|$))?(?:with\s+([\S\s]+?))?(?:\s|$)(only)?$/,next:[],open:!0,compile:function(t){var r=t.match,n=r[1].trim(),o=void 0!==r[2],i=r[3],s=void 0!==r[4]&&r[4].length;return delete t.match,t.only=s,t.ignoreMissing=o,t.stack=e.expression.compile.call(this,{type:e.expression.type.expression,value:n}).stack,void 0!==i&&(t.withStack=e.expression.compile.call(this,{type:e.expression.type.expression,value:i.trim()}).stack),t},parse:function(t,r,n){var o=t.only?{}:e.ChildContext(r),i=t.ignoreMissing,s=this,a={chain:n,output:""};return(void 0!==t.withStack?e.expression.parseAsync.call(this,t.withStack,r).then(function(t){e.lib.extend(o,t)}):e.Promise.resolve()).then(function(){return e.expression.parseAsync.call(s,t.stack,r)}).then(function(t){if(t instanceof e.Template)return t.renderAsync(o);try{return s.importFile(t).renderAsync(o)}catch(e){if(i)return"";throw e}}).then(function(e){return""!==e&&(a.output=e),a})}},{type:e.logic.type.spaceless,regex:/^spaceless$/,next:[e.logic.type.endspaceless],open:!0,parse:function(t,r,n){return e.parseAsync.call(this,t.output,r).then(function(t){var r=t.replace(/>\s+</g,"><").trim();return r=e.Markup(r),{chain:n,output:r}})}},{type:e.logic.type.endspaceless,regex:/^endspaceless$/,next:[],open:!1},{type:e.logic.type.macro,regex:/^macro\s+([a-zA-Z0-9_]+)\s*\(\s*((?:[a-zA-Z0-9_]+(?:\s*=\s*([\s\S]+))?(?:,\s*)?)*)\s*\)$/,next:[e.logic.type.endmacro],open:!0,compile:function(t){var r=t.match[1],n=t.match[2].split(/\s*,\s*/),o=n.map(function(e){return e.split(/\s*=\s*/)[0]}),i=o.length;if(i>1)for(var s={},a=0;a<i;a++){var p=o[a];if(s[p])throw new e.Error("Duplicate arguments for parameter: "+p);s[p]=1}return t.macroName=r,t.parameters=o,t.defaults=n.reduce(function(t,r){var n=r.split(/\s*=\s*/),o=n[0],i=n[1];return t[o]=i?e.expression.compile.call(this,{type:e.expression.type.expression,value:i}).stack:void 0,t},{}),delete t.match,t},parse:function(t,r,n){var o=this;return this.macros[t.macroName]=function(){var n={_self:o.macros},i=Array.prototype.slice.call(arguments);return e.async.forEach(t.parameters,function(o,s){return void 0!==i[s]?(n[o]=i[s],!0):void 0!==t.defaults[o]?e.expression.parseAsync.call(this,t.defaults[o],r).then(function(t){return n[o]=t,e.Promise.resolve()}):(n[o]=void 0,!0)}).then(function(){return e.parseAsync.call(o,t.output,n)})},{chain:n,output:""}}},{type:e.logic.type.endmacro,regex:/^endmacro$/,next:[],open:!1},{type:e.logic.type.import_,regex:/^import\s+(.+)\s+as\s+([a-zA-Z0-9_]+)$/,next:[],open:!0,compile:function(t){var r=t.match[1].trim(),n=t.match[2].trim();return delete t.match,t.expression=r,t.contextName=n,t.stack=e.expression.compile.call(this,{type:e.expression.type.expression,value:r}).stack,t},parse:function(t,r,n){var o=this,i={chain:n,output:""};return"_self"===t.expression?(r[t.contextName]=this.macros,e.Promise.resolve(i)):e.expression.parseAsync.call(this,t.stack,r).then(function(e){return o.importFile(e||t.expression)}).then(function(e){return r[t.contextName]=e.renderAsync({},{output:"macros"}),i})}},{type:e.logic.type.from,regex:/^from\s+(.+)\s+import\s+([a-zA-Z0-9_, ]+)$/,next:[],open:!0,compile:function(t){for(var r=t.match[1].trim(),n=t.match[2].trim().split(/\s*,\s*/),o={},i=0;i<n.length;i++){var s=n[i],a=s.match(/^([a-zA-Z0-9_]+)\s+as\s+([a-zA-Z0-9_]+)$/);a?o[a[1].trim()]=a[2].trim():s.match(/^([a-zA-Z0-9_]+)$/)&&(o[s]=s)}return delete t.match,t.expression=r,t.macroNames=o,t.stack=e.expression.compile.call(this,{type:e.expression.type.expression,value:r}).stack,t},parse:function(t,r,n){var o=this,i=e.Promise.resolve(this.macros);return"_self"!==t.expression&&(i=e.expression.parseAsync.call(this,t.stack,r).then(function(e){return o.importFile(e||t.expression)}).then(function(e){return e.renderAsync({},{output:"macros"})})),i.then(function(e){for(var o in t.macroNames)e.hasOwnProperty(o)&&(r[t.macroNames[o]]=e[o]);return{chain:n,output:""}})}},{type:e.logic.type.embed,regex:/^embed\s+(.+?)(?:\s+(ignore missing))?(?:\s+with\s+([\S\s]+?))?(?:\s+(only))?$/,next:[e.logic.type.endembed],open:!0,compile:function(t){var r=t.match,n=r[1].trim(),o=void 0!==r[2],i=r[3],s=void 0!==r[4]&&r[4].length;return delete t.match,t.only=s,t.ignoreMissing=o,t.stack=e.expression.compile.call(this,{type:e.expression.type.expression,value:n}).stack,void 0!==i&&(t.withStack=e.expression.compile.call(this,{type:e.expression.type.expression,value:i.trim()}).stack),t},parse:function(t,r,n){var o,i,s={},a=this,p=e.Promise.resolve();if(!t.only)for(o in r)r.hasOwnProperty(o)&&(s[o]=r[o]);return void 0!==t.withStack&&(p=e.expression.parseAsync.call(this,t.withStack,r).then(function(e){for(o in e)e.hasOwnProperty(o)&&(s[o]=e[o])})),p.then(function(){return p=null,e.expression.parseAsync.call(a,t.stack,s)}).then(function(r){if(r instanceof e.Template)i=r;else try{i=a.importFile(r)}catch(e){if(t.ignoreMissing)return"";throw a=null,e}return a._blocks=e.lib.copy(a.blocks),a.blocks={},e.parseAsync.call(a,t.output,s).then(function(){return i.renderAsync(s,{blocks:a.blocks})})}).then(function(t){return a.blocks=e.lib.copy(a._blocks),{chain:n,output:t}})}},{type:e.logic.type.endembed,regex:/^endembed$/,next:[],open:!1},{type:e.logic.type.with,regex:/^(?:with\s+([\S\s]+?))(?:\s|$)(only)?$/,next:[e.logic.type.endwith],open:!0,compile:function(t){var r=t.match,n=r[1],o=void 0!==r[2]&&r[2].length;return delete t.match,t.only=o,void 0!==n&&(t.withStack=e.expression.compile.call(this,{type:e.expression.type.expression,value:n.trim()}).stack),t},parse:function(t,r,n){var o,i={},s=this,a=e.Promise.resolve();return t.only||(i=e.ChildContext(r)),void 0!==t.withStack&&(a=e.expression.parseAsync.call(this,t.withStack,r).then(function(e){for(o in e)e.hasOwnProperty(o)&&(i[o]=e[o])})),a.then(function(){return e.parseAsync.call(s,t.output,i)}).then(function(e){return{chain:n,output:e}})}},{type:e.logic.type.endwith,regex:/^endwith$/,next:[],open:!1}],e.logic.handler={},e.logic.extendType=function(t,r){r=r||"Twig.logic.type"+t,e.logic.type[t]=r},e.logic.extend=function(t){if(!t.type)throw new e.Error("Unable to extend logic definition. No type provided for "+t);e.logic.extendType(t.type),e.logic.handler[t.type]=t};e.logic.definitions.length>0;)e.logic.extend(e.logic.definitions.shift());return e.logic.compile=function(t){var r=t.value.trim(),n=e.logic.tokenize.call(this,r),o=e.logic.handler[n.type];return o.compile&&(n=o.compile.call(this,n),e.log.trace("Twig.logic.compile: ","Compiled logic token to ",n)),n},e.logic.tokenize=function(t){var r=null,n=null,o=null,i=null,s=null,a=null,p=null;for(r in t=t.trim(),e.logic.handler)for(n=e.logic.handler[r].type,i=o=e.logic.handler[r].regex,e.lib.isArray(o)||(i=[o]),s=i.length,a=0;a<s;a++)if(null!==(p=i[a].exec(t)))return e.log.trace("Twig.logic.tokenize: ","Matched a ",n," regular expression of ",p),{type:n,match:p};throw new e.Error("Unable to parse '"+t.trim()+"'")},e.logic.parse=function(t,r,n,o){return e.async.potentiallyAsync(this,o,function(){e.log.debug("Twig.logic.parse: ","Parsing logic token ",t);var o,i=e.logic.handler[t.type],s=this;return i.parse?(s.parseStack.unshift(t),o=i.parse.call(s,t,r||{},n),e.isPromise(o)?o=o.then(function(e){return s.parseStack.shift(),e}):s.parseStack.shift(),o):""})},e}},function(e,t){e.exports=require("fs")},function(e,t,r){e.exports=function(e){"use strict";var t,n;try{t=r(9),n=r(0)}catch(e){}e.Templates.registerLoader("fs",function(r,o,i,s){var a,p=null,c=o.precompiled,l=this.parsers[o.parser]||this.parser.twig;if(!t||!n)throw new e.Error('Unsupported platform: Unable to load from file because there is no "fs" or "path" implementation');var u=function(e,t){e?"function"==typeof s&&s(e):(!0===c&&(t=JSON.parse(t)),o.data=t,o.path=o.path||r,a=l.call(this,o),"function"==typeof i&&i(a))};if(o.path=o.path||r,o.async)return t.stat(o.path,function(r,n){!r&&n.isFile()?t.readFile(o.path,"utf8",u):"function"==typeof s&&s(new e.Error("Unable to find template file "+o.path))}),!0;try{if(!t.statSync(o.path).isFile())throw new e.Error("Unable to find template file "+o.path)}catch(t){throw new e.Error("Unable to find template file "+o.path)}return p=t.readFileSync(o.path,"utf8"),u(void 0,p),a})}},function(e,t){e.exports=function(e){"use strict";e.Templates.registerLoader("ajax",function(t,r,n,o){var i,s,a=r.precompiled,p=this.parsers[r.parser]||this.parser.twig;if("undefined"==typeof XMLHttpRequest)throw new e.Error('Unsupported platform: Unable to do ajax requests because there is no "XMLHTTPRequest" implementation');return(s=new XMLHttpRequest).onreadystatechange=function(){var c=null;4===s.readyState&&(200===s.status||window.cordova&&0==s.status?(e.log.debug("Got template ",s.responseText),c=!0===a?JSON.parse(s.responseText):s.responseText,r.url=t,r.data=c,i=p.call(this,r),"function"==typeof n&&n(i)):"function"==typeof o&&o(s))},s.open("GET",t,!!r.async),s.send(),!!r.async||i})}},function(e,t,r){"use strict";e.exports=function(e){return!1!==e&&(0!==e&&0!==e&&(""!==e&&"0"!==e&&((!Array.isArray(e)||0!==e.length)&&(null!==e&&void 0!==e))))}},function(e,t,r){"use strict";e.exports=function(e,t){var r,n,o=["Sun","Mon","Tues","Wednes","Thurs","Fri","Satur","January","February","March","April","May","June","July","August","September","October","November","December"],i=/\\?(.?)/gi,s=function(e,t){return n[e]?n[e]():t},a=function(e,t){for(e=String(e);e.length<t;)e="0"+e;return e};n={d:function(){return a(n.j(),2)},D:function(){return n.l().slice(0,3)},j:function(){return r.getDate()},l:function(){return o[n.w()]+"day"},N:function(){return n.w()||7},S:function(){var e=n.j(),t=e%10;return t<=3&&1===parseInt(e%100/10,10)&&(t=0),["st","nd","rd"][t-1]||"th"},w:function(){return r.getDay()},z:function(){var e=new Date(n.Y(),n.n()-1,n.j()),t=new Date(n.Y(),0,1);return Math.round((e-t)/864e5)},W:function(){var e=new Date(n.Y(),n.n()-1,n.j()-n.N()+3),t=new Date(e.getFullYear(),0,4);return a(1+Math.round((e-t)/864e5/7),2)},F:function(){return o[6+n.n()]},m:function(){return a(n.n(),2)},M:function(){return n.F().slice(0,3)},n:function(){return r.getMonth()+1},t:function(){return new Date(n.Y(),n.n(),0).getDate()},L:function(){var e=n.Y();return e%4==0&e%100!=0|e%400==0},o:function(){var e=n.n(),t=n.W();return n.Y()+(12===e&&t<9?1:1===e&&t>9?-1:0)},Y:function(){return r.getFullYear()},y:function(){return n.Y().toString().slice(-2)},a:function(){return r.getHours()>11?"pm":"am"},A:function(){return n.a().toUpperCase()},B:function(){var e=3600*r.getUTCHours(),t=60*r.getUTCMinutes(),n=r.getUTCSeconds();return a(Math.floor((e+t+n+3600)/86.4)%1e3,3)},g:function(){return n.G()%12||12},G:function(){return r.getHours()},h:function(){return a(n.g(),2)},H:function(){return a(n.G(),2)},i:function(){return a(r.getMinutes(),2)},s:function(){return a(r.getSeconds(),2)},u:function(){return a(1e3*r.getMilliseconds(),6)},e:function(){throw new Error("Not supported (see source code of date() for timezone on how to add support)")},I:function(){return new Date(n.Y(),0)-Date.UTC(n.Y(),0)!=new Date(n.Y(),6)-Date.UTC(n.Y(),6)?1:0},O:function(){var e=r.getTimezoneOffset(),t=Math.abs(e);return(e>0?"-":"+")+a(100*Math.floor(t/60)+t%60,4)},P:function(){var e=n.O();return e.substr(0,3)+":"+e.substr(3,2)},T:function(){return"UTC"},Z:function(){return 60*-r.getTimezoneOffset()},c:function(){return"Y-m-d\\TH:i:sP".replace(i,s)},r:function(){return"D, d M Y H:i:s O".replace(i,s)},U:function(){return r/1e3|0}};return function(e,t){return r=void 0===t?new Date:t instanceof Date?new Date(t):new Date(1e3*t),e.replace(i,s)}(e,t)}},function(e,t,r){"use strict";e.exports=function(e,t){var r,n,o,i,s,a,p,c,l,u,f;if(!e)return!1;e=e.replace(/^\s+|\s+$/g,"").replace(/\s{2,}/g," ").replace(/[\t\r\n]/g,"").toLowerCase();var h=new RegExp(["^(\\d{1,4})","([\\-\\.\\/:])","(\\d{1,2})","([\\-\\.\\/:])","(\\d{1,4})","(?:\\s(\\d{1,2}):(\\d{2})?:?(\\d{2})?)?","(?:\\s([A-Z]+)?)?$"].join(""));if((n=e.match(h))&&n[2]===n[4])if(n[1]>1901)switch(n[2]){case"-":return!(n[3]>12||n[5]>31)&&new Date(n[1],parseInt(n[3],10)-1,n[5],n[6]||0,n[7]||0,n[8]||0,n[9]||0)/1e3;case".":return!1;case"/":return!(n[3]>12||n[5]>31)&&new Date(n[1],parseInt(n[3],10)-1,n[5],n[6]||0,n[7]||0,n[8]||0,n[9]||0)/1e3}else if(n[5]>1901)switch(n[2]){case"-":case".":return!(n[3]>12||n[1]>31)&&new Date(n[5],parseInt(n[3],10)-1,n[1],n[6]||0,n[7]||0,n[8]||0,n[9]||0)/1e3;case"/":return!(n[1]>12||n[3]>31)&&new Date(n[5],parseInt(n[1],10)-1,n[3],n[6]||0,n[7]||0,n[8]||0,n[9]||0)/1e3}else switch(n[2]){case"-":return!(n[3]>12||n[5]>31||n[1]<70&&n[1]>38)&&(i=n[1]>=0&&n[1]<=38?+n[1]+2e3:n[1],new Date(i,parseInt(n[3],10)-1,n[5],n[6]||0,n[7]||0,n[8]||0,n[9]||0)/1e3);case".":return n[5]>=70?!(n[3]>12||n[1]>31)&&new Date(n[5],parseInt(n[3],10)-1,n[1],n[6]||0,n[7]||0,n[8]||0,n[9]||0)/1e3:n[5]<60&&!n[6]&&(!(n[1]>23||n[3]>59)&&(o=new Date,new Date(o.getFullYear(),o.getMonth(),o.getDate(),n[1]||0,n[3]||0,n[5]||0,n[9]||0)/1e3));case"/":return!(n[1]>12||n[3]>31||n[5]<70&&n[5]>38)&&(i=n[5]>=0&&n[5]<=38?+n[5]+2e3:n[5],new Date(i,parseInt(n[1],10)-1,n[3],n[6]||0,n[7]||0,n[8]||0,n[9]||0)/1e3);case":":return!(n[1]>23||n[3]>59||n[5]>59)&&(o=new Date,new Date(o.getFullYear(),o.getMonth(),o.getDate(),n[1]||0,n[3]||0,n[5]||0)/1e3)}if("now"===e)return null===t||isNaN(t)?(new Date).getTime()/1e3|0:0|t;if(!isNaN(r=Date.parse(e)))return r/1e3|0;if(h=new RegExp(["^([0-9]{4}-[0-9]{2}-[0-9]{2})","[ t]","([0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?)","([\\+-][0-9]{2}(:[0-9]{2})?|z)"].join("")),(n=e.match(h))&&("z"===n[4]?n[4]="Z":n[4].match(/^([+-][0-9]{2})$/)&&(n[4]=n[4]+":00"),!isNaN(r=Date.parse(n[1]+"T"+n[2]+n[4]))))return r/1e3|0;function y(e){var t=e.split(" "),r=t[0],n=t[1].substring(0,3),o=/\d+/.test(r),i="ago"===t[2],c=("last"===r?-1:1)*(i?-1:1);if(o&&(c*=parseInt(r,10)),p.hasOwnProperty(n)&&!t[1].match(/^mon(day|\.)?$/i))return s["set"+p[n]](s["get"+p[n]]()+c);if("wee"===n)return s.setDate(s.getDate()+7*c);if("next"===r||"last"===r)!function(e,t,r){var n,o=a[t];void 0!==o&&(0==(n=o-s.getDay())?n=7*r:n>0&&"last"===e?n-=7:n<0&&"next"===e&&(n+=7),s.setDate(s.getDate()+n))}(r,n,c);else if(!o)return!1;return!0}if(s=t?new Date(1e3*t):new Date,a={sun:0,mon:1,tue:2,wed:3,thu:4,fri:5,sat:6},p={yea:"FullYear",mon:"Month",day:"Date",hou:"Hours",min:"Minutes",sec:"Seconds"},u="([+-]?\\d+\\s"+(l="(years?|months?|weeks?|days?|hours?|minutes?|min|seconds?|sec|sunday|sun\\.?|monday|mon\\.?|tuesday|tue\\.?|wednesday|wed\\.?|thursday|thu\\.?|friday|fri\\.?|saturday|sat\\.?)")+"|(last|next)\\s"+l+")(\\sago)?",!(n=e.match(new RegExp(u,"gi"))))return!1;for(f=0,c=n.length;f<c;f++)if(!y(n[f]))return!1;return s.getTime()/1e3}},function(e,t,r){"use strict";e.exports=function(e,t){t=(((t||"")+"").toLowerCase().match(/<[a-z][a-z0-9]*>/g)||[]).join("");return e.replace(/<!--[\s\S]*?-->|<\?(?:php)?[\s\S]*?\?>/gi,"").replace(/<\/?([a-z][a-z0-9]*)\b[^>]*>/gi,function(e,r){return t.indexOf("<"+r.toLowerCase()+">")>-1?e:""})}},function(e,t,r){"use strict";var n="function"==typeof Symbol&&"symbol"==typeof Symbol.iterator?function(e){return typeof e}:function(e){return e&&"function"==typeof Symbol&&e.constructor===Symbol&&e!==Symbol.prototype?"symbol":typeof e};e.exports=function(){var e,t,r,o=0,i=arguments,s=i.length,a=function(e){if("[object Array]"===Object.prototype.toString.call(e))return e;var t=[];for(var r in e)e.hasOwnProperty(r)&&t.push(e[r]);return t},p=function e(t,r){var o=0,i=0,s=0,p=0,c=0;if(t===r)return 0;if("object"===(void 0===t?"undefined":n(t))){if("object"===(void 0===r?"undefined":n(r))){if(t=a(t),r=a(r),c=t.length,(p=r.length)>c)return 1;if(p<c)return-1;for(o=0,i=c;o<i;++o){if(1===(s=e(t[o],r[o])))return 1;if(-1===s)return-1}return 0}return-1}return"object"===(void 0===r?"undefined":n(r))?1:isNaN(r)&&!isNaN(t)?0===t?0:t<0?1:-1:isNaN(t)&&!isNaN(r)?0===r?0:r>0?1:-1:r===t?0:r>t?1:-1};if(0===s)throw new Error("At least one value should be passed to min()");if(1===s){if("object"!==n(i[0]))throw new Error("Wrong parameter count for min()");if(0===(e=a(i[0])).length)throw new Error("Array must contain at least one element for min()")}else e=i;for(t=e[0],o=1,r=e.length;o<r;++o)-1===p(t,e[o])&&(t=e[o]);return t}},function(e,t,r){"use strict";var n="function"==typeof Symbol&&"symbol"==typeof Symbol.iterator?function(e){return typeof e}:function(e){return e&&"function"==typeof Symbol&&e.constructor===Symbol&&e!==Symbol.prototype?"symbol":typeof e};e.exports=function(){var e,t,r,o=0,i=arguments,s=i.length,a=function(e){if("[object Array]"===Object.prototype.toString.call(e))return e;var t=[];for(var r in e)e.hasOwnProperty(r)&&t.push(e[r]);return t},p=function e(t,r){var o=0,i=0,s=0,p=0,c=0;if(t===r)return 0;if("object"===(void 0===t?"undefined":n(t))){if("object"===(void 0===r?"undefined":n(r))){if(t=a(t),r=a(r),c=t.length,(p=r.length)>c)return 1;if(p<c)return-1;for(o=0,i=c;o<i;++o){if(1===(s=e(t[o],r[o])))return 1;if(-1===s)return-1}return 0}return-1}return"object"===(void 0===r?"undefined":n(r))?1:isNaN(r)&&!isNaN(t)?0===t?0:t<0?1:-1:isNaN(t)&&!isNaN(r)?0===r?0:r>0?1:-1:r===t?0:r>t?1:-1};if(0===s)throw new Error("At least one value should be passed to max()");if(1===s){if("object"!==n(i[0]))throw new Error("Wrong parameter count for max()");if(0===(e=a(i[0])).length)throw new Error("Array must contain at least one element for max()")}else e=i;for(t=e[0],o=1,r=e.length;o<r;++o)1===p(t,e[o])&&(t=e[o]);return t}},function(e,t,r){"use strict";e.exports=function(e,t,r){var n,o,i,s;if(t|=0,i=(e*=n=Math.pow(10,t))%1==.5*(s=e>0|-(e<0)),o=Math.floor(e),i)switch(r){case"PHP_ROUND_HALF_DOWN":e=o+(s<0);break;case"PHP_ROUND_HALF_EVEN":e=o+o%2*s;break;case"PHP_ROUND_HALF_ODD":e=o+!(o%2);break;default:e=o+(s>0)}return(i?e:Math.round(e))/n}},function(e,t,r){"use strict";e.exports=function(e,t){return r(1).apply(this,[e].concat(t))}},function(e,t,r){e.exports=function(e){e.lib={},e.lib.sprintf=r(1),e.lib.vsprintf=r(19),e.lib.round=r(18),e.lib.max=r(17),e.lib.min=r(16),e.lib.strip_tags=r(15),e.lib.strtotime=r(14),e.lib.date=r(13),e.lib.boolval=r(12);var t=Object.prototype.toString;return e.lib.is=function(e,r){return void 0!==r&&null!==r&&("Array"===e&&Array.isArray?Array.isArray(r):t.call(r).slice(8,-1)===e)},e.lib.isArray=Array.isArray||function(e){return"Array"===t.call(e).slice(8,-1)},e.lib.copy=function(e){var t,r={};for(t in e)r[t]=e[t];return r},e.lib.extend=function(e,t){var r,n=Object.keys(t);for(r=n.length;r--;)e[n[r]]=t[n[r]];return e},e.lib.replaceAll=function(e,t,r){return e.split(t).join(r)},e.lib.chunkArray=function(t,r){var n=[],o=0,i=t.length;if(r<1||!e.lib.is("Array",t))return[];for(;o<i;)n.push(t.slice(o,o+=r));return n},e}},function(e,t){e.exports=function(t){return t.functions={range:function(e,t,r){var n,o,i=[],s=r||1,a=!1;if(isNaN(e)||isNaN(t)?isNaN(e)&&isNaN(t)?(a=!0,n=e.charCodeAt(0),o=t.charCodeAt(0)):(n=isNaN(e)?0:e,o=isNaN(t)?0:t):(n=parseInt(e,10),o=parseInt(t,10)),!(n>o))for(;n<=o;)i.push(a?String.fromCharCode(n):n),n+=s;else for(;n>=o;)i.push(a?String.fromCharCode(n):n),n-=s;return i},cycle:function(e,t){return e[t%e.length]},dump:function(){var e=arguments.length;for(args=new Array(e);e-- >0;)args[e]=arguments[e];var r=0,n="",o=function(e){for(var t="";e>0;)e--,t+="  ";return t},i=function(e){n+=o(r),"object"==typeof e?s(e):"function"==typeof e?n+="function()\n":"string"==typeof e?n+="string("+e.length+') "'+e+'"\n':"number"==typeof e?n+="number("+e+")\n":"boolean"==typeof e&&(n+="bool("+e+")\n")},s=function(e){var t;if(null===e)n+="NULL\n";else if(void 0===e)n+="undefined\n";else if("object"==typeof e){for(t in n+=o(r)+typeof e,r++,n+="("+function(e){var t,r=0;for(t in e)e.hasOwnProperty(t)&&r++;return r}(e)+") {\n",e)n+=o(r)+"["+t+"]=> \n",i(e[t]);n+=o(--r)+"}\n"}else i(e)};return 0==args.length&&args.push(this.context),t.forEach(args,function(e){s(e)}),n},date:function(e,r){var n;if(void 0===e||null===e||""===e)n=new Date;else if(t.lib.is("Date",e))n=e;else if(t.lib.is("String",e))n=e.match(/^[0-9]+$/)?new Date(1e3*e):new Date(1e3*t.lib.strtotime(e));else{if(!t.lib.is("Number",e))throw new t.Error("Unable to parse date "+e);n=new Date(1e3*e)}return n},block:function(e){return this.originalBlockTokens[e]?t.logic.parse.call(this,this.originalBlockTokens[e],this.context).output:this.blocks[e]},parent:function(){return t.placeholders.parent},attribute:function(e,r,n){return t.lib.is("Object",e)&&e.hasOwnProperty(r)?"function"==typeof e[r]?e[r].apply(void 0,n):e[r]:e[r]||void 0},max:function(e){return t.lib.is("Object",e)?(delete e._keys,t.lib.max(e)):t.lib.max.apply(null,arguments)},min:function(e){return t.lib.is("Object",e)?(delete e._keys,t.lib.min(e)):t.lib.min.apply(null,arguments)},template_from_string:function(e){return void 0===e&&(e=""),t.Templates.parsers.twig({options:this.options,data:e})},random:function(e){var r=2147483648;function n(e){var t=Math.floor(Math.random()*r),n=Math.min.call(null,0,e),o=Math.max.call(null,0,e);return n+Math.floor((o-n+1)*t/r)}if(t.lib.is("Number",e))return n(e);if(t.lib.is("String",e))return e.charAt(n(e.length-1));if(t.lib.is("Array",e))return e[n(e.length-1)];if(t.lib.is("Object",e)){var o=Object.keys(e);return e[o[n(o.length-1)]]}return n(r-1)},source:function(r,n){var o,i,s,a=!1;void 0!==e&&void 0!==e.exports&&"undefined"==typeof window?(i="fs",s=__dirname+"/"+r):(i="ajax",s=r);var p={id:r,path:s,method:i,parser:"source",async:!1,fetchTemplateSource:!0};void 0===n&&(n=!1);try{void 0===(o=t.Templates.loadRemote(r,p))||null===o?o="":a=!0}catch(e){t.log.debug("Twig.functions.source: ","Problem loading template  ",e)}return a||n?o:'Template "{name}" is not defined.'.replace("{name}",r)}},t._function=function(e,r,n){if(!t.functions[e])throw"Unable to find function "+e;return t.functions[e](r,n)},t._function.extend=function(e,r){t.functions[e]=r},t}},function(e,t){e.exports=function(e){function t(e,t){var r=Object.prototype.toString.call(t).slice(8,-1);return void 0!==t&&null!==t&&r===e}return e.filters={upper:function(e){return"string"!=typeof e?e:e.toUpperCase()},lower:function(e){return"string"!=typeof e?e:e.toLowerCase()},capitalize:function(e){return"string"!=typeof e?e:e.substr(0,1).toUpperCase()+e.toLowerCase().substr(1)},title:function(e){return"string"!=typeof e?e:e.toLowerCase().replace(/(^|\s)([a-z])/g,function(e,t,r){return t+r.toUpperCase()})},length:function(t){return e.lib.is("Array",t)||"string"==typeof t?t.length:e.lib.is("Object",t)?void 0===t._keys?Object.keys(t).length:t._keys.length:0},reverse:function(e){if(t("Array",e))return e.reverse();if(t("String",e))return e.split("").reverse().join("");if(t("Object",e)){var r=e._keys||Object.keys(e).reverse();return e._keys=r,e}},sort:function(e){if(t("Array",e))return e.sort();if(t("Object",e)){delete e._keys;var r=Object.keys(e).sort(function(t,r){var n;return e[t]>e[r]==!(e[t]<=e[r])?e[t]>e[r]?1:e[t]<e[r]?-1:0:isNaN(n=parseFloat(e[t]))||isNaN(b1=parseFloat(e[r]))?"string"==typeof e[t]?e[t]>e[r].toString()?1:e[t]<e[r].toString()?-1:0:"string"==typeof e[r]?e[t].toString()>e[r]?1:e[t].toString()<e[r]?-1:0:null:n>b1?1:n<b1?-1:0});return e._keys=r,e}},keys:function(t){if(void 0!==t&&null!==t){var r=t._keys||Object.keys(t),n=[];return e.forEach(r,function(e){"_keys"!==e&&t.hasOwnProperty(e)&&n.push(e)}),n}},url_encode:function(e){if(void 0!==e&&null!==e){var t=encodeURIComponent(e);return t=t.replace("'","%27")}},join:function(r,n){if(void 0!==r&&null!==r){var o="",i=[],s=null;return n&&n[0]&&(o=n[0]),t("Array",r)?i=r:(s=r._keys||Object.keys(r),e.forEach(s,function(e){"_keys"!==e&&r.hasOwnProperty(e)&&i.push(r[e])})),i.join(o)}},default:function(t,r){if(void 0!==r&&r.length>1)throw new e.Error("default filter expects one argument");return void 0===t||null===t||""===t?void 0===r?"":r[0]:t},json_encode:function(r){if(void 0===r||null===r)return"null";if("object"==typeof r&&t("Array",r))return o=[],e.forEach(r,function(t){o.push(e.filters.json_encode(t))}),"["+o.join(",")+"]";if("object"==typeof r&&t("Date",r))return'"'+r.toISOString()+'"';if("object"==typeof r){var n=r._keys||Object.keys(r),o=[];return e.forEach(n,function(t){o.push(JSON.stringify(t)+":"+e.filters.json_encode(r[t]))}),"{"+o.join(",")+"}"}return JSON.stringify(r)},merge:function(r,n){var o=[],i=0,s=[];if(t("Array",r)?e.forEach(n,function(e){t("Array",e)||(o={})}):o={},t("Array",o)||(o._keys=[]),t("Array",r)?e.forEach(r,function(e){o._keys&&o._keys.push(i),o[i]=e,i++}):(s=r._keys||Object.keys(r),e.forEach(s,function(e){o[e]=r[e],o._keys.push(e);var t=parseInt(e,10);!isNaN(t)&&t>=i&&(i=t+1)})),e.forEach(n,function(r){t("Array",r)?e.forEach(r,function(e){o._keys&&o._keys.push(i),o[i]=e,i++}):(s=r._keys||Object.keys(r),e.forEach(s,function(e){o[e]||o._keys.push(e),o[e]=r[e];var t=parseInt(e,10);!isNaN(t)&&t>=i&&(i=t+1)}))}),0===n.length)throw new e.Error("Filter merge expects at least one parameter");return o},date:function(t,r){var n=e.functions.date(t),o=r&&r.length?r[0]:"F j, Y H:i";return e.lib.date(o,n)},date_modify:function(t,r){if(void 0!==t&&null!==t){if(void 0===r||1!==r.length)throw new e.Error("date_modify filter expects 1 argument");var n,o=r[0];return e.lib.is("Date",t)&&(n=e.lib.strtotime(o,t.getTime()/1e3)),e.lib.is("String",t)&&(n=e.lib.strtotime(o,e.lib.strtotime(t))),e.lib.is("Number",t)&&(n=e.lib.strtotime(o,t)),new Date(1e3*n)}},replace:function(t,r){if(void 0!==t&&null!==t){var n,o=r[0];for(n in o)o.hasOwnProperty(n)&&"_keys"!==n&&(t=e.lib.replaceAll(t,n,o[n]));return t}},format:function(t,r){if(void 0!==t&&null!==t)return e.lib.vsprintf(t,r)},striptags:function(t,r){if(void 0!==t&&null!==t)return e.lib.strip_tags(t,r)},escape:function(t,r){if(void 0!==t&&null!==t){var n="html";if(r&&r.length&&!0!==r[0]&&(n=r[0]),"html"==n){var o=t.toString().replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#039;");return e.Markup(o,"html")}if("js"==n){o=t.toString();for(var i="",s=0;s<o.length;s++){if(o[s].match(/^[a-zA-Z0-9,\._]$/))i+=o[s];else i+=(a=o.charCodeAt(s))<128?"\\x"+a.toString(16).toUpperCase():e.lib.sprintf("\\u%04s",a.toString(16).toUpperCase())}return e.Markup(i,"js")}if("css"==n){for(o=t.toString(),i="",s=0;s<o.length;s++){if(o[s].match(/^[a-zA-Z0-9]$/))i+=o[s];else i+="\\"+(a=o.charCodeAt(s)).toString(16).toUpperCase()+" "}return e.Markup(i,"css")}if("url"==n){i=e.filters.url_encode(t);return e.Markup(i,"url")}if("html_attr"==n){for(o=t.toString(),i="",s=0;s<o.length;s++)if(o[s].match(/^[a-zA-Z0-9,\.\-_]$/))i+=o[s];else if(o[s].match(/^[&<>"]$/))i+=o[s].replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");else{var a;i+=(a=o.charCodeAt(s))<=31&&9!=a&&10!=a&&13!=a?"&#xFFFD;":a<128?e.lib.sprintf("&#x%02s;",a.toString(16).toUpperCase()):e.lib.sprintf("&#x%04s;",a.toString(16).toUpperCase())}return e.Markup(i,"html_attr")}throw new e.Error("escape strategy unsupported")}},e:function(t,r){return e.filters.escape(t,r)},nl2br:function(t){if(void 0!==t&&null!==t){var r="<br />BACKSLASH_n_replace";return t=e.filters.escape(t).replace(/\r\n/g,r).replace(/\r/g,r).replace(/\n/g,r),t=e.lib.replaceAll(t,"BACKSLASH_n_replace","\n"),e.Markup(t)}},number_format:function(e,t){var r=e,n=t&&t[0]?t[0]:void 0,o=t&&void 0!==t[1]?t[1]:".",i=t&&void 0!==t[2]?t[2]:",";r=(r+"").replace(/[^0-9+\-Ee.]/g,"");var s=isFinite(+r)?+r:0,a=isFinite(+n)?Math.abs(n):0,p="";return(p=(a?function(e,t){var r=Math.pow(10,t);return""+Math.round(e*r)/r}(s,a):""+Math.round(s)).split("."))[0].length>3&&(p[0]=p[0].replace(/\B(?=(?:\d{3})+(?!\d))/g,i)),(p[1]||"").length<a&&(p[1]=p[1]||"",p[1]+=new Array(a-p[1].length+1).join("0")),p.join(o)},trim:function(e,t){if(void 0!==e&&null!==e){var r,n=""+e;r=t&&t[0]?""+t[0]:" \n\r\t\f\v            ​\u2028\u2029　";for(var o=0;o<n.length;o++)if(-1===r.indexOf(n.charAt(o))){n=n.substring(o);break}for(o=n.length-1;o>=0;o--)if(-1===r.indexOf(n.charAt(o))){n=n.substring(0,o+1);break}return-1===r.indexOf(n.charAt(0))?n:""}},truncate:function(e,t){var r=30,n=!1,o="...";if(e+="",t&&(t[0]&&(r=t[0]),t[1]&&(n=t[1]),t[2]&&(o=t[2])),e.length>r){if(n&&-1===(r=e.indexOf(" ",r)))return e;e=e.substr(0,r)+o}return e},slice:function(t,r){if(void 0!==t&&null!==t){if(void 0===r||r.length<1)throw new e.Error("slice filter expects at least 1 argument");var n=r[0]||0,o=r.length>1?r[1]:t.length,i=n>=0?n:Math.max(t.length+n,0);if(e.lib.is("Array",t)){for(var s=[],a=i;a<i+o&&a<t.length;a++)s.push(t[a]);return s}if(e.lib.is("String",t))return t.substr(i,o);throw new e.Error("slice filter expects value to be an array or string")}},abs:function(e){if(void 0!==e&&null!==e)return Math.abs(e)},first:function(e){if(t("Array",e))return e[0];if(t("Object",e)){if("_keys"in e)return e[e._keys[0]]}else if("string"==typeof e)return e.substr(0,1)},split:function(t,r){if(void 0!==t&&null!==t){if(void 0===r||r.length<1||r.length>2)throw new e.Error("split filter expects 1 or 2 argument");if(e.lib.is("String",t)){var n=r[0],o=r[1],i=t.split(n);if(void 0===o)return i;if(o<0)return t.split(n,i.length+o);var s=[];if(""==n)for(;i.length>0;){for(var a="",p=0;p<o&&i.length>0;p++)a+=i.shift();s.push(a)}else{for(p=0;p<o-1&&i.length>0;p++)s.push(i.shift());i.length>0&&s.push(i.join(n))}return s}throw new e.Error("split filter expects value to be a string")}},last:function(t){var r;return e.lib.is("Object",t)?t[(r=void 0===t._keys?Object.keys(t):t._keys)[r.length-1]]:t[t.length-1]},raw:function(t){return e.Markup(t)},batch:function(t,r){var n,o,i,s=r.shift(),a=r.shift();if(!e.lib.is("Array",t))throw new e.Error("batch filter expects items to be an array");if(!e.lib.is("Number",s))throw new e.Error("batch filter expects size to be a number");if(s=Math.ceil(s),n=e.lib.chunkArray(t,s),a&&t.length%s!=0){for(i=s-(o=n.pop()).length;i--;)o.push(a);n.push(o)}return n},round:function(t,r){var n=(r=r||[]).length>0?r[0]:0,o=r.length>1?r[1]:"common";if(t=parseFloat(t),n&&!e.lib.is("Number",n))throw new e.Error("round filter expects precision to be a number");if("common"===o)return e.lib.round(t,n);if(!e.lib.is("Function",Math[o]))throw new e.Error("round filter expects method to be 'floor', 'ceil', or 'common'");return Math[o](t*Math.pow(10,n))/Math.pow(10,n)}},e.filter=function(t,r,n){if(!e.filters[t])throw"Unable to find filter "+t;return e.filters[t].call(this,r,n)},e.filter.extend=function(t,r){e.filters[t]=r},e}},function(e,t){e.exports=function(e){"use strict";e.expression.operator={leftToRight:"leftToRight",rightToLeft:"rightToLeft"};var t=function(e,t){if(void 0===t||null===t)return null;if(void 0!==t.indexOf)return e===t||""!==e&&t.indexOf(e)>-1;var r;for(r in t)if(t.hasOwnProperty(r)&&t[r]===e)return!0;return!1};return e.expression.operator.lookup=function(t,r){switch(t){case"..":r.precidence=20,r.associativity=e.expression.operator.leftToRight;break;case",":r.precidence=18,r.associativity=e.expression.operator.leftToRight;break;case"?:":case"?":case":":r.precidence=16,r.associativity=e.expression.operator.rightToLeft;break;case"or":r.precidence=14,r.associativity=e.expression.operator.leftToRight;break;case"and":r.precidence=13,r.associativity=e.expression.operator.leftToRight;break;case"b-or":r.precidence=12,r.associativity=e.expression.operator.leftToRight;break;case"b-xor":r.precidence=11,r.associativity=e.expression.operator.leftToRight;break;case"b-and":r.precidence=10,r.associativity=e.expression.operator.leftToRight;break;case"==":case"!=":r.precidence=9,r.associativity=e.expression.operator.leftToRight;break;case"<":case"<=":case">":case">=":case"not in":case"in":r.precidence=8,r.associativity=e.expression.operator.leftToRight;break;case"~":case"+":case"-":r.precidence=6,r.associativity=e.expression.operator.leftToRight;break;case"//":case"**":case"*":case"/":case"%":r.precidence=5,r.associativity=e.expression.operator.leftToRight;break;case"not":r.precidence=3,r.associativity=e.expression.operator.rightToLeft;break;default:throw new e.Error("Failed to lookup operator: "+t+" is an unknown operator.")}return r.operator=t,r},e.expression.operator.parse=function(r,n){var o,i,s;switch(e.log.trace("Twig.expression.operator.parse: ","Handling ",r),"?"===r&&(s=n.pop()),i=n.pop(),"not"!==r&&(o=n.pop()),"in"!==r&&"not in"!==r&&(o&&Array.isArray(o)&&(o=o.length),i&&Array.isArray(i)&&(i=i.length)),r){case":":break;case"?:":e.lib.boolval(o)?n.push(o):n.push(i);break;case"?":void 0===o&&(o=i,i=s,s=void 0),e.lib.boolval(o)?n.push(i):n.push(s);break;case"+":i=parseFloat(i),o=parseFloat(o),n.push(o+i);break;case"-":i=parseFloat(i),o=parseFloat(o),n.push(o-i);break;case"*":i=parseFloat(i),o=parseFloat(o),n.push(o*i);break;case"/":i=parseFloat(i),o=parseFloat(o),n.push(o/i);break;case"//":i=parseFloat(i),o=parseFloat(o),n.push(Math.floor(o/i));break;case"%":i=parseFloat(i),o=parseFloat(o),n.push(o%i);break;case"~":n.push((null!=o?o.toString():"")+(null!=i?i.toString():""));break;case"not":case"!":n.push(!e.lib.boolval(i));break;case"<":n.push(o<i);break;case"<=":n.push(o<=i);break;case">":n.push(o>i);break;case">=":n.push(o>=i);break;case"===":n.push(o===i);break;case"==":n.push(o==i);break;case"!==":n.push(o!==i);break;case"!=":n.push(o!=i);break;case"or":n.push(e.lib.boolval(o)||e.lib.boolval(i));break;case"b-or":n.push(o|i);break;case"b-xor":n.push(o^i);break;case"and":n.push(e.lib.boolval(o)&&e.lib.boolval(i));break;case"b-and":n.push(o&i);break;case"**":n.push(Math.pow(o,i));break;case"not in":n.push(!t(o,i));break;case"in":n.push(t(o,i));break;case"..":n.push(e.functions.range(o,i));break;default:throw new e.Error("Failed to parse operator: "+r+" is an unknown operator.")}},e}},function(e,t,r){e.exports=function(e){"use strict";function t(t,r,n){return r?e.expression.parseAsync.call(t,r,n):e.Promise.resolve(!1)}for(e.expression={},r(23)(e),e.expression.reservedWords=["true","false","null","TRUE","FALSE","NULL","_context","and","b-and","or","b-or","b-xor","in","not in","if"],e.expression.type={comma:"Twig.expression.type.comma",operator:{unary:"Twig.expression.type.operator.unary",binary:"Twig.expression.type.operator.binary"},string:"Twig.expression.type.string",bool:"Twig.expression.type.bool",slice:"Twig.expression.type.slice",array:{start:"Twig.expression.type.array.start",end:"Twig.expression.type.array.end"},object:{start:"Twig.expression.type.object.start",end:"Twig.expression.type.object.end"},parameter:{start:"Twig.expression.type.parameter.start",end:"Twig.expression.type.parameter.end"},subexpression:{start:"Twig.expression.type.subexpression.start",end:"Twig.expression.type.subexpression.end"},key:{period:"Twig.expression.type.key.period",brackets:"Twig.expression.type.key.brackets"},filter:"Twig.expression.type.filter",_function:"Twig.expression.type._function",variable:"Twig.expression.type.variable",number:"Twig.expression.type.number",_null:"Twig.expression.type.null",context:"Twig.expression.type.context",test:"Twig.expression.type.test"},e.expression.set={operations:[e.expression.type.filter,e.expression.type.operator.unary,e.expression.type.operator.binary,e.expression.type.array.end,e.expression.type.object.end,e.expression.type.parameter.end,e.expression.type.subexpression.end,e.expression.type.comma,e.expression.type.test],expressions:[e.expression.type._function,e.expression.type.bool,e.expression.type.string,e.expression.type.variable,e.expression.type.number,e.expression.type._null,e.expression.type.context,e.expression.type.parameter.start,e.expression.type.array.start,e.expression.type.object.start,e.expression.type.subexpression.start,e.expression.type.operator.unary]},e.expression.set.operations_extended=e.expression.set.operations.concat([e.expression.type.key.period,e.expression.type.key.brackets,e.expression.type.slice]),e.expression.fn={compile:{push:function(e,t,r){r.push(e)},push_both:function(e,t,r){r.push(e),t.push(e)}},parse:{push:function(e,t,r){t.push(e)},push_value:function(e,t,r){t.push(e.value)}}},e.expression.definitions=[{type:e.expression.type.test,regex:/^is\s+(not)?\s*([a-zA-Z_][a-zA-Z0-9_]*(\s?as)?)/,next:e.expression.set.operations.concat([e.expression.type.parameter.start]),compile:function(e,t,r){e.filter=e.match[2],e.modifier=e.match[1],delete e.match,delete e.value,r.push(e)},parse:function(r,n,o){var i=n.pop();return t(this,r.params,o).then(function(t){var o=e.test(r.filter,i,t);"not"==r.modifier?n.push(!o):n.push(o)})}},{type:e.expression.type.comma,regex:/^,/,next:e.expression.set.expressions.concat([e.expression.type.array.end,e.expression.type.object.end]),compile:function(t,r,n){var o,i=r.length-1;for(delete t.match,delete t.value;i>=0;i--){if((o=r.pop()).type===e.expression.type.object.start||o.type===e.expression.type.parameter.start||o.type===e.expression.type.array.start){r.push(o);break}n.push(o)}n.push(t)}},{type:e.expression.type.number,regex:/^\-?\d+(\.\d+)?/,next:e.expression.set.operations,compile:function(e,t,r){e.value=Number(e.value),r.push(e)},parse:e.expression.fn.parse.push_value},{type:e.expression.type.operator.binary,regex:/(^\?\:|^(b\-and)|^(b\-or)|^(b\-xor)|^[\+\-~%\?]|^[\:](?!\d\])|^[!=]==?|^[!<>]=?|^\*\*?|^\/\/?|^(and)[\(|\s+]|^(or)[\(|\s+]|^(in)[\(|\s+]|^(not in)[\(|\s+]|^\.\.)/,next:e.expression.set.expressions,transform:function(e,t){switch(e[0]){case"and(":case"or(":case"in(":case"not in(":return t[t.length-1].value=e[2],e[0];default:return""}},compile:function(t,r,n){delete t.match,t.value=t.value.trim();var o=t.value,i=e.expression.operator.lookup(o,t);for(e.log.trace("Twig.expression.compile: ","Operator: ",i," from ",o);r.length>0&&(r[r.length-1].type==e.expression.type.operator.unary||r[r.length-1].type==e.expression.type.operator.binary)&&(i.associativity===e.expression.operator.leftToRight&&i.precidence>=r[r.length-1].precidence||i.associativity===e.expression.operator.rightToLeft&&i.precidence>r[r.length-1].precidence);){var s=r.pop();n.push(s)}if(":"===o){if(!r[r.length-1]||"?"!==r[r.length-1].value){var a=n.pop();if(a.type===e.expression.type.string||a.type===e.expression.type.variable)t.key=a.value;else if(a.type===e.expression.type.number)t.key=a.value.toString();else{if(!a.expression||a.type!==e.expression.type.parameter.end&&a.type!=e.expression.type.subexpression.end)throw new e.Error("Unexpected value before ':' of "+a.type+" = "+a.value);t.params=a.params}return void n.push(t)}}else r.push(i)},parse:function(t,r,n){if(t.key)r.push(t);else{if(t.params)return e.expression.parseAsync.call(this,t.params,n).then(function(e){t.key=e,r.push(t),n.loop||delete t.params});e.expression.operator.parse(t.value,r)}}},{type:e.expression.type.operator.unary,regex:/(^not\s+)/,next:e.expression.set.expressions,compile:function(t,r,n){delete t.match,t.value=t.value.trim();var o=t.value,i=e.expression.operator.lookup(o,t);for(e.log.trace("Twig.expression.compile: ","Operator: ",i," from ",o);r.length>0&&(r[r.length-1].type==e.expression.type.operator.unary||r[r.length-1].type==e.expression.type.operator.binary)&&(i.associativity===e.expression.operator.leftToRight&&i.precidence>=r[r.length-1].precidence||i.associativity===e.expression.operator.rightToLeft&&i.precidence>r[r.length-1].precidence);){var s=r.pop();n.push(s)}r.push(i)},parse:function(t,r,n){e.expression.operator.parse(t.value,r)}},{type:e.expression.type.string,regex:/^(["'])(?:(?=(\\?))\2[\s\S])*?\1/,next:e.expression.set.operations_extended,compile:function(t,r,n){var o=t.value;delete t.match,o='"'===o.substring(0,1)?o.replace('\\"','"'):o.replace("\\'","'"),t.value=o.substring(1,o.length-1).replace(/\\n/g,"\n").replace(/\\r/g,"\r"),e.log.trace("Twig.expression.compile: ","String value: ",t.value),n.push(t)},parse:e.expression.fn.parse.push_value},{type:e.expression.type.subexpression.start,regex:/^\(/,next:e.expression.set.expressions.concat([e.expression.type.subexpression.end]),compile:function(e,t,r){e.value="(",r.push(e),t.push(e)},parse:e.expression.fn.parse.push},{type:e.expression.type.subexpression.end,regex:/^\)/,next:e.expression.set.operations_extended,validate:function(t,r){for(var n=r.length-1,o=!1,i=!1,s=0;!o&&n>=0;){var a=r[n];(o=a.type===e.expression.type.subexpression.start)&&i&&(i=!1,o=!1),a.type===e.expression.type.parameter.start?s++:a.type===e.expression.type.parameter.end?s--:a.type===e.expression.type.subexpression.end&&(i=!0),n--}return o&&0===s},compile:function(t,r,n){var o,i=t;for(o=r.pop();r.length>0&&o.type!=e.expression.type.subexpression.start;)n.push(o),o=r.pop();for(var s=[];t.type!==e.expression.type.subexpression.start;)s.unshift(t),t=n.pop();s.unshift(t);void 0===(o=r[r.length-1])||o.type!==e.expression.type._function&&o.type!==e.expression.type.filter&&o.type!==e.expression.type.test&&o.type!==e.expression.type.key.brackets?(i.expression=!0,s.pop(),s.shift(),i.params=s,n.push(i)):(i.expression=!1,o.params=s)},parse:function(t,r,n){if(t.expression)return e.expression.parseAsync.call(this,t.params,n).then(function(e){r.push(e)});throw new e.Error("Unexpected subexpression end when token is not marked as an expression")}},{type:e.expression.type.parameter.start,regex:/^\(/,next:e.expression.set.expressions.concat([e.expression.type.parameter.end]),validate:function(t,r){var n=r[r.length-1];return n&&e.indexOf(e.expression.reservedWords,n.value.trim())<0},compile:e.expression.fn.compile.push_both,parse:e.expression.fn.parse.push},{type:e.expression.type.parameter.end,regex:/^\)/,next:e.expression.set.operations_extended,compile:function(t,r,n){var o,i=t;for(o=r.pop();r.length>0&&o.type!=e.expression.type.parameter.start;)n.push(o),o=r.pop();for(var s=[];t.type!==e.expression.type.parameter.start;)s.unshift(t),t=n.pop();s.unshift(t);void 0===(t=n[n.length-1])||t.type!==e.expression.type._function&&t.type!==e.expression.type.filter&&t.type!==e.expression.type.test&&t.type!==e.expression.type.key.brackets?(i.expression=!0,s.pop(),s.shift(),i.params=s,n.push(i)):(i.expression=!1,t.params=s)},parse:function(t,r,n){var o=[],i=!1,s=null;if(t.expression)return e.expression.parseAsync.call(this,t.params,n).then(function(e){r.push(e)});for(;r.length>0;){if((s=r.pop())&&s.type&&s.type==e.expression.type.parameter.start){i=!0;break}o.unshift(s)}if(!i)throw new e.Error("Expected end of parameter set.");r.push(o)}},{type:e.expression.type.slice,regex:/^\[(\d*\:\d*)\]/,next:e.expression.set.operations_extended,compile:function(e,t,r){var n=e.match[1].split(":"),o=n[0]?parseInt(n[0]):void 0,i=n[1]?parseInt(n[1]):void 0;e.value="slice",e.params=[o,i],i||(e.params=[o]),r.push(e)},parse:function(t,r,n){var o=r.pop(),i=t.params;r.push(e.filter.call(this,t.value,o,i))}},{type:e.expression.type.array.start,regex:/^\[/,next:e.expression.set.expressions.concat([e.expression.type.array.end]),compile:e.expression.fn.compile.push_both,parse:e.expression.fn.parse.push},{type:e.expression.type.array.end,regex:/^\]/,next:e.expression.set.operations_extended,compile:function(t,r,n){for(var o,i=r.length-1;i>=0&&(o=r.pop()).type!==e.expression.type.array.start;i--)n.push(o);n.push(t)},parse:function(t,r,n){for(var o=[],i=!1,s=null;r.length>0;){if((s=r.pop()).type&&s.type==e.expression.type.array.start){i=!0;break}o.unshift(s)}if(!i)throw new e.Error("Expected end of array.");r.push(o)}},{type:e.expression.type.object.start,regex:/^\{/,next:e.expression.set.expressions.concat([e.expression.type.object.end]),compile:e.expression.fn.compile.push_both,parse:e.expression.fn.parse.push},{type:e.expression.type.object.end,regex:/^\}/,next:e.expression.set.operations_extended,compile:function(t,r,n){for(var o,i=r.length-1;i>=0&&(!(o=r.pop())||o.type!==e.expression.type.object.start);i--)n.push(o);n.push(t)},parse:function(t,r,n){for(var o={},i=!1,s=null,a=!1,p=null;r.length>0;){if((s=r.pop())&&s.type&&s.type===e.expression.type.object.start){i=!0;break}if(s&&s.type&&(s.type===e.expression.type.operator.binary||s.type===e.expression.type.operator.unary)&&s.key){if(!a)throw new e.Error("Missing value for key '"+s.key+"' in object definition.");o[s.key]=p,void 0===o._keys&&(o._keys=[]),o._keys.unshift(s.key),p=null,a=!1}else a=!0,p=s}if(!i)throw new e.Error("Unexpected end of object.");r.push(o)}},{type:e.expression.type.filter,regex:/^\|\s?([a-zA-Z_][a-zA-Z0-9_\-]*)/,next:e.expression.set.operations_extended.concat([e.expression.type.parameter.start]),compile:function(e,t,r){e.value=e.match[1],r.push(e)},parse:function(r,n,o){var i=this,s=n.pop();return t(this,r.params,o).then(function(t){return e.filter.call(i,r.value,s,t)}).then(function(e){n.push(e)})}},{type:e.expression.type._function,regex:/^([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/,next:e.expression.type.parameter.start,validate:function(t,r){return t[1]&&e.indexOf(e.expression.reservedWords,t[1])<0},transform:function(e,t){return"("},compile:function(e,t,r){var n=e.match[1];e.fn=n,delete e.match,delete e.value,r.push(e)},parse:function(r,n,o){var i,s=this,a=r.fn;return t(this,r.params,o).then(function(t){if(e.functions[a])i=e.functions[a].apply(s,t);else{if("function"!=typeof o[a])throw new e.Error(a+" function does not exist and is not defined in the context");i=o[a].apply(o,t)}return i}).then(function(e){n.push(e)})}},{type:e.expression.type.variable,regex:/^[a-zA-Z_][a-zA-Z0-9_]*/,next:e.expression.set.operations_extended.concat([e.expression.type.parameter.start]),compile:e.expression.fn.compile.push,validate:function(t,r){return e.indexOf(e.expression.reservedWords,t[0])<0},parse:function(t,r,n){return e.expression.resolveAsync.call(this,n[t.value],n).then(function(e){r.push(e)})}},{type:e.expression.type.key.period,regex:/^\.([a-zA-Z0-9_]+)/,next:e.expression.set.operations_extended.concat([e.expression.type.parameter.start]),compile:function(e,t,r){e.key=e.match[1],delete e.match,delete e.value,r.push(e)},parse:function(r,n,o,i){var s,a=this,p=r.key,c=n.pop();return t(this,r.params,o).then(function(t){if(null===c||void 0===c){if(a.options.strict_variables)throw new e.Error("Can't access a key "+p+" on an null or undefined object.");s=void 0}else{var r=function(e){return e.substr(0,1).toUpperCase()+e.substr(1)};s="object"==typeof c&&p in c?c[p]:void 0!==c["get"+r(p)]?c["get"+r(p)]:void 0!==c["is"+r(p)]?c["is"+r(p)]:void 0}return e.expression.resolveAsync.call(a,s,o,t,i,c)}).then(function(e){n.push(e)})}},{type:e.expression.type.key.brackets,regex:/^\[([^\]\:]*)\]/,next:e.expression.set.operations_extended.concat([e.expression.type.parameter.start]),compile:function(t,r,n){var o=t.match[1];delete t.value,delete t.match,t.stack=e.expression.compile({value:o}).stack,n.push(t)},parse:function(r,n,o,i){var s,a,p=this,c=null;return t(this,r.params,o).then(function(t){return c=t,e.expression.parseAsync.call(p,r.stack,o)}).then(function(t){if(null===(s=n.pop())||void 0===s){if(p.options.strict_variables)throw new e.Error("Can't access a key "+t+" on an null or undefined object.");return null}return a="object"==typeof s&&t in s?s[t]:null,e.expression.resolveAsync.call(p,a,s,c,i)}).then(function(e){n.push(e)})}},{type:e.expression.type._null,regex:/^(null|NULL|none|NONE)/,next:e.expression.set.operations,compile:function(e,t,r){delete e.match,e.value=null,r.push(e)},parse:e.expression.fn.parse.push_value},{type:e.expression.type.context,regex:/^_context/,next:e.expression.set.operations_extended.concat([e.expression.type.parameter.start]),compile:e.expression.fn.compile.push,parse:function(e,t,r){t.push(r)}},{type:e.expression.type.bool,regex:/^(true|TRUE|false|FALSE)/,next:e.expression.set.operations,compile:function(e,t,r){e.value="true"===e.match[0].toLowerCase(),delete e.match,r.push(e)},parse:e.expression.fn.parse.push_value}],e.expression.resolveAsync=function(t,r,n,o,i){if("function"!=typeof t)return e.Promise.resolve(t);var s=e.Promise.resolve(n);if(o&&o.type===e.expression.type.parameter.end){s=s.then(function(){return o.params&&e.expression.parseAsync.call(this,o.params,r,!0)}).then(function(e){return o.cleanup=!0,e})}return s.then(function(e){return t.apply(i||r,e||[])})},e.expression.resolve=function(t,r,n,o,i){return e.async.potentiallyAsync(this,!1,function(){return e.expression.resolveAsync.call(this,t,r,n,o,i)})},e.expression.handler={},e.expression.extendType=function(t){e.expression.type[t]="Twig.expression.type."+t},e.expression.extend=function(t){if(!t.type)throw new e.Error("Unable to extend logic definition. No type provided for "+t);e.expression.handler[t.type]=t};e.expression.definitions.length>0;)e.expression.extend(e.expression.definitions.shift());return e.expression.tokenize=function(t){var r,n,o,i,s,a,p=[],c=0,l=null,u=[];for(a=function(){for(var t=arguments.length-2,n=new Array(t);t-- >0;)n[t]=arguments[t];if(e.log.trace("Twig.expression.tokenize","Matched a ",r," regular expression of ",n),l&&e.indexOf(l,r)<0)return u.push(r+" cannot follow a "+p[p.length-1].type+" at template:"+c+" near '"+n[0].substring(0,20)+"...'"),n[0];var o=e.expression.handler[r];return o.validate&&!o.validate(n,p)?n[0]:(u=[],p.push({type:r,value:n[0],match:n}),s=!0,l=i,c+=n[0].length,o.transform?o.transform(n,p):"")},e.log.debug("Twig.expression.tokenize","Tokenizing expression ",t);t.length>0;){for(r in t=t.trim(),e.expression.handler){if(i=e.expression.handler[r].next,n=e.expression.handler[r].regex,e.log.trace("Checking type ",r," on ",t),s=!1,e.lib.isArray(n))for(o=n.length;o-- >0;)t=t.replace(n[o],a);else t=t.replace(n,a);if(s)break}if(!s)throw u.length>0?new e.Error(u.join(" OR ")):new e.Error("Unable to parse '"+t+"' at template position"+c)}return e.log.trace("Twig.expression.tokenize","Tokenized to ",p),p},e.expression.compile=function(t){var r=t.value,n=e.expression.tokenize(r),o=null,i=[],s=[],a=null;for(e.log.trace("Twig.expression.compile: ","Compiling ",r);n.length>0;)o=n.shift(),a=e.expression.handler[o.type],e.log.trace("Twig.expression.compile: ","Compiling ",o),a.compile&&a.compile(o,s,i),e.log.trace("Twig.expression.compile: ","Stack is",s),e.log.trace("Twig.expression.compile: ","Output is",i);for(;s.length>0;)i.push(s.pop());return e.log.trace("Twig.expression.compile: ","Final output is",i),t.stack=i,delete t.value,t},e.expression.parse=function(t,r,n,o){var i=this;e.lib.isArray(t)||(t=[t]);var s=[],a=[],p=e.expression.type.operator.binary;return e.async.potentiallyAsync(this,o,function(){return e.async.forEach(t,function(n,o){var c,l=null,u=null;if(!n.cleanup)return t.length>o+1&&(u=t[o+1]),(l=e.expression.handler[n.type]).parse&&(c=l.parse.call(i,n,s,r,u)),n.type===p&&r.loop&&a.push(n),c}).then(function(){for(var e=a.length,t=null;e-- >0;)(t=a[e]).params&&t.key&&delete t.key;if(n){var r=s.splice(0);s.push(r)}return s.pop()})})},e}},function(e,t){e.exports=function(e){return e.compiler={module:{}},e.compiler.compile=function(t,r){var n,o=JSON.stringify(t.tokens),i=t.id;if(r.module){if(void 0===e.compiler.module[r.module])throw new e.Error("Unable to find module type "+r.module);n=e.compiler.module[r.module](i,o,r.twig)}else n=e.compiler.wrap(i,o);return n},e.compiler.module={amd:function(t,r,n){return'define(["'+n+'"], function (Twig) {\n\tvar twig, templates;\ntwig = Twig.twig;\ntemplates = '+e.compiler.wrap(t,r)+"\n\treturn templates;\n});"},node:function(t,r){return'var twig = require("twig").twig;\nexports.template = '+e.compiler.wrap(t,r)},cjs2:function(t,r,n){return'module.declare([{ twig: "'+n+'" }], function (require, exports, module) {\n\tvar twig = require("twig").twig;\n\texports.template = '+e.compiler.wrap(t,r)+"\n});"}},e.compiler.wrap=function(e,t){return'twig({id:"'+e.replace('"','\\"')+'", data:'+t+", precompiled: true});\n"},e}},function(e,t){e.exports=function(e){"use strict";function t(t,r){if(t.options.rethrow)throw"string"==typeof r&&(r=new e.Error(r)),"TwigException"!=r.type||r.file||(r.file=t.id),r;if(e.log.error("Error parsing twig template "+t.id+": "),r.stack?e.log.error(r.stack):e.log.error(r.toString()),e.debug)return r.toString()}return e.trace=!1,e.debug=!1,e.cache=!0,e.noop=function(){},e.placeholders={parent:"{{|PARENT|}}"},e.hasIndexOf=Array.prototype.hasOwnProperty("indexOf"),e.indexOf=function(t,r){if(e.hasIndexOf)return t.indexOf(r);if(void 0===t||null===t)throw new TypeError;var n=Object(t),o=n.length>>>0;if(0===o)return-1;var i=0;if(arguments.length>0&&((i=Number(arguments[1]))!=i?i=0:0!==i&&i!==1/0&&i!==-1/0&&(i=(i>0||-1)*Math.floor(Math.abs(i)))),i>=o)return-1;for(var s=i>=0?i:Math.max(o-Math.abs(i),0);s<o;s++)if(s in n&&n[s]===r)return s;return t==r?0:-1},e.forEach=function(e,t,r){if(Array.prototype.forEach)return e.forEach(t,r);var n,o;if(null==e)throw new TypeError(" this is null or not defined");var i=Object(e),s=i.length>>>0;if("[object Function]"!={}.toString.call(t))throw new TypeError(t+" is not a function");for(r&&(n=r),o=0;o<s;){var a;o in i&&(a=i[o],t.call(n,a,o,i)),o++}},e.merge=function(t,r,n){return e.forEach(Object.keys(r),function(e){(!n||e in t)&&(t[e]=r[e])}),t},e.attempt=function(e,t){try{return e()}catch(e){return t(e)}},e.Error=function(e,t){this.message=e,this.name="TwigException",this.type="TwigException",this.file=t},e.Error.prototype.toString=function(){return this.name+": "+this.message},e.log={trace:function(){e.trace&&console&&console.log(Array.prototype.slice.call(arguments))},debug:function(){e.debug&&console&&console.log(Array.prototype.slice.call(arguments))}},"undefined"!=typeof console?void 0!==console.error?e.log.error=function(){console.error.apply(console,arguments)}:void 0!==console.log&&(e.log.error=function(){console.log.apply(console,arguments)}):e.log.error=function(){},e.ChildContext=function(t){return e.lib.copy(t)},e.token={},e.token.type={output:"output",logic:"logic",comment:"comment",raw:"raw",output_whitespace_pre:"output_whitespace_pre",output_whitespace_post:"output_whitespace_post",output_whitespace_both:"output_whitespace_both",logic_whitespace_pre:"logic_whitespace_pre",logic_whitespace_post:"logic_whitespace_post",logic_whitespace_both:"logic_whitespace_both"},e.token.definitions=[{type:e.token.type.raw,open:"{% raw %}",close:"{% endraw %}"},{type:e.token.type.raw,open:"{% verbatim %}",close:"{% endverbatim %}"},{type:e.token.type.output_whitespace_pre,open:"{{-",close:"}}"},{type:e.token.type.output_whitespace_post,open:"{{",close:"-}}"},{type:e.token.type.output_whitespace_both,open:"{{-",close:"-}}"},{type:e.token.type.logic_whitespace_pre,open:"{%-",close:"%}"},{type:e.token.type.logic_whitespace_post,open:"{%",close:"-%}"},{type:e.token.type.logic_whitespace_both,open:"{%-",close:"-%}"},{type:e.token.type.output,open:"{{",close:"}}"},{type:e.token.type.logic,open:"{%",close:"%}"},{type:e.token.type.comment,open:"{#",close:"#}"}],e.token.strings=['"',"'"],e.token.findStart=function(t){var r,n,o,i,s={position:null,def:null},a=null,p=e.token.definitions.length;for(r=0;r<p;r++)n=e.token.definitions[r],o=t.indexOf(n.open),i=t.indexOf(n.close),e.log.trace("Twig.token.findStart: ","Searching for ",n.open," found at ",o),o>=0&&n.open.length!==n.close.length&&i<0||(o>=0&&(null===s.position||o<s.position)?(s.position=o,s.def=n,a=i):o>=0&&null!==s.position&&o===s.position&&(n.open.length>s.def.open.length?(s.position=o,s.def=n,a=i):n.open.length===s.def.open.length&&(n.close.length,s.def.close.length,i>=0&&i<a&&(s.position=o,s.def=n,a=i))));return s},e.token.findEnd=function(t,r,n){for(var o,i,s=null,a=!1,p=0,c=null,l=null,u=null,f=null,h=null,y=null;!a;){if(c=null,l=null,!((u=t.indexOf(r.close,p))>=0))throw new e.Error("Unable to find closing bracket '"+r.close+"' opened near template position "+n);if(s=u,a=!0,r.type===e.token.type.comment)break;if(r.type===e.token.type.raw)break;for(i=e.token.strings.length,o=0;o<i;o+=1)(h=t.indexOf(e.token.strings[o],p))>0&&h<u&&(null===c||h<c)&&(c=h,l=e.token.strings[o]);if(null!==c)for(f=c+1,s=null,a=!1;;){if((y=t.indexOf(l,f))<0)throw"Unclosed string in template";if("\\"!==t.substr(y-1,1)){p=y+1;break}f=y+1}}return s},e.tokenize=function(t){for(var r=[],n=0,o=null,i=null;t.length>0;)if(o=e.token.findStart(t),e.log.trace("Twig.tokenize: ","Found token: ",o),null!==o.position){if(o.position>0&&r.push({type:e.token.type.raw,value:t.substring(0,o.position)}),t=t.substr(o.position+o.def.open.length),n+=o.position+o.def.open.length,i=e.token.findEnd(t,o.def,n),e.log.trace("Twig.tokenize: ","Token ends at ",i),r.push({type:o.def.type,value:t.substring(0,i).trim()}),"\n"===t.substr(i+o.def.close.length,1))switch(o.def.type){case"logic_whitespace_pre":case"logic_whitespace_post":case"logic_whitespace_both":case"logic":i+=1}t=t.substr(i+o.def.close.length),n+=i+o.def.close.length}else r.push({type:e.token.type.raw,value:t}),t="";return r},e.compile=function(t){var r=this;return e.attempt(function(){for(var n=[],o=[],i=[],s=null,a=null,p=null,c=null,l=null,u=null,f=null,h=null,y=null,d=null,g=null,m=null,x=function(t){e.expression.compile.call(r,t),o.length>0?i.push(t):n.push(t)},v=function(t){if(a=e.logic.compile.call(r,t),d=a.type,g=e.logic.handler[d].open,m=e.logic.handler[d].next,e.log.trace("Twig.compile: ","Compiled logic token to ",a," next is: ",m," open is : ",g),void 0!==g&&!g){if(c=o.pop(),f=e.logic.handler[c.type],e.indexOf(f.next,d)<0)throw new Error(d+" not expected after a "+c.type);c.output=c.output||[],c.output=c.output.concat(i),i=[],y={type:e.token.type.logic,token:c},o.length>0?i.push(y):n.push(y)}void 0!==m&&m.length>0?(e.log.trace("Twig.compile: ","Pushing ",a," to logic stack."),o.length>0&&((c=o.pop()).output=c.output||[],c.output=c.output.concat(i),o.push(c),i=[]),o.push(a)):void 0!==g&&g&&(y={type:e.token.type.logic,token:a},o.length>0?i.push(y):n.push(y))};t.length>0;){switch(s=t.shift(),l=n[n.length-1],u=i[i.length-1],h=t[0],e.log.trace("Compiling token ",s),s.type){case e.token.type.raw:o.length>0?i.push(s):n.push(s);break;case e.token.type.logic:v.call(r,s);break;case e.token.type.comment:break;case e.token.type.output:x.call(r,s);break;case e.token.type.logic_whitespace_pre:case e.token.type.logic_whitespace_post:case e.token.type.logic_whitespace_both:case e.token.type.output_whitespace_pre:case e.token.type.output_whitespace_post:case e.token.type.output_whitespace_both:switch(s.type!==e.token.type.output_whitespace_post&&s.type!==e.token.type.logic_whitespace_post&&(l&&l.type===e.token.type.raw&&(n.pop(),null===l.value.match(/^\s*$/)&&(l.value=l.value.trim(),n.push(l))),u&&u.type===e.token.type.raw&&(i.pop(),null===u.value.match(/^\s*$/)&&(u.value=u.value.trim(),i.push(u)))),s.type){case e.token.type.output_whitespace_pre:case e.token.type.output_whitespace_post:case e.token.type.output_whitespace_both:x.call(r,s);break;case e.token.type.logic_whitespace_pre:case e.token.type.logic_whitespace_post:case e.token.type.logic_whitespace_both:v.call(r,s)}s.type!==e.token.type.output_whitespace_pre&&s.type!==e.token.type.logic_whitespace_pre&&h&&h.type===e.token.type.raw&&(t.shift(),null===h.value.match(/^\s*$/)&&(h.value=h.value.trim(),t.unshift(h)))}e.log.trace("Twig.compile: "," Output: ",n," Logic Stack: ",o," Pending Output: ",i)}if(o.length>0)throw p=o.pop(),new Error("Unable to find an end tag for "+p.type+", expecting one of "+p.next);return n},function(t){if(r.options.rethrow)throw"TwigException"!=t.type||t.file||(t.file=r.id),t;e.log.error("Error compiling twig template "+r.id+": "),t.stack?e.log.error(t.stack):e.log.error(t.toString())})},e.parse=function(r,n,o){var i,s=this,a=[],p=null,c=!0,l=!0;function u(e){a.push(e)}function f(e){void 0!==e.chain&&(l=e.chain),void 0!==e.context&&(n=e.context),void 0!==e.output&&a.push(e.output)}if(i=e.async.forEach(r,function(t){switch(e.log.debug("Twig.parse: ","Parsing token: ",t),t.type){case e.token.type.raw:a.push(e.filters.raw(t.value));break;case e.token.type.logic:return e.logic.parseAsync.call(s,t.token,n,l).then(f);case e.token.type.comment:break;case e.token.type.output_whitespace_pre:case e.token.type.output_whitespace_post:case e.token.type.output_whitespace_both:case e.token.type.output:return e.log.debug("Twig.parse: ","Output token: ",t.stack),e.expression.parseAsync.call(s,t.stack,n).then(u)}}).then(function(){return a=e.output.call(s,a),c=!1,a}).catch(function(e){o&&t(s,e),p=e}),o)return i;if(null!==p)return t(this,p);if(c)throw new e.Error("You are using Twig.js in sync mode in combination with async extensions.");return a},e.prepare=function(t){var r,n;return e.log.debug("Twig.prepare: ","Tokenizing ",t),n=e.tokenize.call(this,t),e.log.debug("Twig.prepare: ","Compiling ",n),r=e.compile.call(this,n),e.log.debug("Twig.prepare: ","Compiled ",r),r},e.output=function(t){var r=this.options.autoescape;if(!r)return t.join("");var n="string"==typeof r?r:"html",o=0,i=t.length,s="",a=new Array(i);for(o=0;o<i;o++)(s=t[o])&&!0!==s.twig_markup&&s.twig_markup!=n&&(s=e.filters.escape(s,[n])),a[o]=s;return a.length<1?"":e.Markup(a.join(""),!0)},e.Templates={loaders:{},parsers:{},registry:{}},e.validateId=function(t){if("prototype"===t)throw new e.Error(t+" is not a valid twig identifier");if(e.cache&&e.Templates.registry.hasOwnProperty(t))throw new e.Error("There is already a template with the ID "+t);return!0},e.Templates.registerLoader=function(t,r,n){if("function"!=typeof r)throw new e.Error("Unable to add loader for "+t+": Invalid function reference given.");n&&(r=r.bind(n)),this.loaders[t]=r},e.Templates.unRegisterLoader=function(e){this.isRegisteredLoader(e)&&delete this.loaders[e]},e.Templates.isRegisteredLoader=function(e){return this.loaders.hasOwnProperty(e)},e.Templates.registerParser=function(t,r,n){if("function"!=typeof r)throw new e.Error("Unable to add parser for "+t+": Invalid function regerence given.");n&&(r=r.bind(n)),this.parsers[t]=r},e.Templates.unRegisterParser=function(e){this.isRegisteredParser(e)&&delete this.parsers[e]},e.Templates.isRegisteredParser=function(e){return this.parsers.hasOwnProperty(e)},e.Templates.save=function(t){if(void 0===t.id)throw new e.Error("Unable to save template with no id");e.Templates.registry[t.id]=t},e.Templates.load=function(t){return e.Templates.registry.hasOwnProperty(t)?e.Templates.registry[t]:null},e.Templates.loadRemote=function(t,r,n,o){var i=void 0===r.id?t:r.id,s=e.Templates.registry[i];return e.cache&&void 0!==s?("function"==typeof n&&n(s),s):(r.parser=r.parser||"twig",r.id=i,void 0===r.async&&(r.async=!0),(this.loaders[r.method]||this.loaders.fs).call(this,t,r,n,o))},e.Template=function(t){var r,n,o,i=t.data,s=t.id,a=t.blocks,p=t.macros||{},c=t.base,l=t.path,u=t.url,f=t.name,h=t.method,y=t.options;this.id=s,this.method=h,this.base=c,this.path=l,this.url=u,this.name=f,this.macros=p,this.options=y,this.reset(a),r="String",n=i,o=Object.prototype.toString.call(n).slice(8,-1),this.tokens=void 0!==n&&null!==n&&o===r?e.prepare.call(this,i):i,void 0!==s&&e.Templates.save(this)},e.Template.prototype.reset=function(t){e.log.debug("Twig.Template.reset","Reseting template "+this.id),this.blocks={},this.importedBlocks=[],this.originalBlockTokens={},this.child={blocks:t||{}},this.extend=null,this.parseStack=[]},e.Template.prototype.render=function(t,r,n){var o=this;return this.context=t||{},this.reset(),r&&r.blocks&&(this.blocks=r.blocks),r&&r.macros&&(this.macros=r.macros),e.async.potentiallyAsync(this,n,function(){return e.parseAsync.call(this,this.tokens,this.context).then(function(t){var n,i;return o.extend?(o.options.allowInlineIncludes&&(n=e.Templates.load(o.extend))&&(n.options=o.options),n||(i=e.path.parsePath(o,o.extend),n=e.Templates.loadRemote(i,{method:o.getLoaderMethod(),base:o.base,async:!1,id:i,options:o.options})),o.parent=n,o.parent.renderAsync(o.context,{blocks:o.blocks})):r?"blocks"==r.output?o.blocks:"macros"==r.output?o.macros:t:t})})},e.Template.prototype.importFile=function(t){var r,n;if(!this.url&&this.options.allowInlineIncludes){if(t=this.path?e.path.parsePath(this,t):t,!(n=e.Templates.load(t))&&!(n=e.Templates.loadRemote(r,{id:t,method:this.getLoaderMethod(),async:!1,path:t,options:this.options})))throw new e.Error("Unable to find the template "+t);return n.options=this.options,n}return r=e.path.parsePath(this,t),n=e.Templates.loadRemote(r,{method:this.getLoaderMethod(),base:this.base,async:!1,options:this.options,id:r})},e.Template.prototype.importBlocks=function(t,r){var n=this.importFile(t),o=this.context,i=this;r=r||!1,n.render(o),e.forEach(Object.keys(n.blocks),function(e){(r||void 0===i.blocks[e])&&(i.blocks[e]=n.blocks[e],i.importedBlocks.push(e))})},e.Template.prototype.importMacros=function(t){var r=e.path.parsePath(this,t);return e.Templates.loadRemote(r,{method:this.getLoaderMethod(),async:!1,id:r})},e.Template.prototype.getLoaderMethod=function(){return this.path?"fs":this.url?"ajax":this.method||"fs"},e.Template.prototype.compile=function(t){return e.compiler.compile(this,t)},e.Markup=function(e,t){if("string"!=typeof e||e.length<1)return e;var r=new String(e);return r.twig_markup=void 0===t||t,r},e}},function(e,t,r){
+},{"process/browser.js":239,"timers":242}],243:[function(require,module,exports){
+(function (global){
+(function webpackUniversalModuleDefinition(root, factory) {
+	if(typeof exports === 'object' && typeof module === 'object')
+		module.exports = factory();
+	else if(typeof define === 'function' && define.amd)
+		define([], factory);
+	else if(typeof exports === 'object')
+		exports["Twig"] = factory();
+	else
+		root["Twig"] = factory();
+})(global, function() {
+return /******/ (function(modules) { // webpackBootstrap
+/******/ 	// The module cache
+/******/ 	var installedModules = {};
+/******/
+/******/ 	// The require function
+/******/ 	function __webpack_require__(moduleId) {
+/******/
+/******/ 		// Check if module is in cache
+/******/ 		if(installedModules[moduleId]) {
+/******/ 			return installedModules[moduleId].exports;
+/******/ 		}
+/******/ 		// Create a new module (and put it into the cache)
+/******/ 		var module = installedModules[moduleId] = {
+/******/ 			i: moduleId,
+/******/ 			l: false,
+/******/ 			exports: {}
+/******/ 		};
+/******/
+/******/ 		// Execute the module function
+/******/ 		modules[moduleId].call(module.exports, module, module.exports, __webpack_require__);
+/******/
+/******/ 		// Flag the module as loaded
+/******/ 		module.l = true;
+/******/
+/******/ 		// Return the exports of the module
+/******/ 		return module.exports;
+/******/ 	}
+/******/
+/******/
+/******/ 	// expose the modules object (__webpack_modules__)
+/******/ 	__webpack_require__.m = modules;
+/******/
+/******/ 	// expose the module cache
+/******/ 	__webpack_require__.c = installedModules;
+/******/
+/******/ 	// define getter function for harmony exports
+/******/ 	__webpack_require__.d = function(exports, name, getter) {
+/******/ 		if(!__webpack_require__.o(exports, name)) {
+/******/ 			Object.defineProperty(exports, name, { enumerable: true, get: getter });
+/******/ 		}
+/******/ 	};
+/******/
+/******/ 	// define __esModule on exports
+/******/ 	__webpack_require__.r = function(exports) {
+/******/ 		if(typeof Symbol !== 'undefined' && Symbol.toStringTag) {
+/******/ 			Object.defineProperty(exports, Symbol.toStringTag, { value: 'Module' });
+/******/ 		}
+/******/ 		Object.defineProperty(exports, '__esModule', { value: true });
+/******/ 	};
+/******/
+/******/ 	// create a fake namespace object
+/******/ 	// mode & 1: value is a module id, require it
+/******/ 	// mode & 2: merge all properties of value into the ns
+/******/ 	// mode & 4: return value when already ns object
+/******/ 	// mode & 8|1: behave like require
+/******/ 	__webpack_require__.t = function(value, mode) {
+/******/ 		if(mode & 1) value = __webpack_require__(value);
+/******/ 		if(mode & 8) return value;
+/******/ 		if((mode & 4) && typeof value === 'object' && value && value.__esModule) return value;
+/******/ 		var ns = Object.create(null);
+/******/ 		__webpack_require__.r(ns);
+/******/ 		Object.defineProperty(ns, 'default', { enumerable: true, value: value });
+/******/ 		if(mode & 2 && typeof value != 'string') for(var key in value) __webpack_require__.d(ns, key, function(key) { return value[key]; }.bind(null, key));
+/******/ 		return ns;
+/******/ 	};
+/******/
+/******/ 	// getDefaultExport function for compatibility with non-harmony modules
+/******/ 	__webpack_require__.n = function(module) {
+/******/ 		var getter = module && module.__esModule ?
+/******/ 			function getDefault() { return module['default']; } :
+/******/ 			function getModuleExports() { return module; };
+/******/ 		__webpack_require__.d(getter, 'a', getter);
+/******/ 		return getter;
+/******/ 	};
+/******/
+/******/ 	// Object.prototype.hasOwnProperty.call
+/******/ 	__webpack_require__.o = function(object, property) { return Object.prototype.hasOwnProperty.call(object, property); };
+/******/
+/******/ 	// __webpack_public_path__
+/******/ 	__webpack_require__.p = "";
+/******/
+/******/
+/******/ 	// Load entry module and return exports
+/******/ 	return __webpack_require__(__webpack_require__.s = 2);
+/******/ })
+/************************************************************************/
+/******/ ([
+/* 0 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+
+module.exports = function sprintf() {
+  //  discuss at: http://locutus.io/php/sprintf/
+  // original by: Ash Searle (http://hexmen.com/blog/)
+  // improved by: Michael White (http://getsprink.com)
+  // improved by: Jack
+  // improved by: Kevin van Zonneveld (http://kvz.io)
+  // improved by: Kevin van Zonneveld (http://kvz.io)
+  // improved by: Kevin van Zonneveld (http://kvz.io)
+  // improved by: Dj
+  // improved by: Allidylls
+  //    input by: Paulo Freitas
+  //    input by: Brett Zamir (http://brett-zamir.me)
+  //   example 1: sprintf("%01.2f", 123.1)
+  //   returns 1: '123.10'
+  //   example 2: sprintf("[%10s]", 'monkey')
+  //   returns 2: '[    monkey]'
+  //   example 3: sprintf("[%'#10s]", 'monkey')
+  //   returns 3: '[####monkey]'
+  //   example 4: sprintf("%d", 123456789012345)
+  //   returns 4: '123456789012345'
+  //   example 5: sprintf('%-03s', 'E')
+  //   returns 5: 'E00'
+
+  var regex = /%%|%(\d+\$)?([\-+'#0 ]*)(\*\d+\$|\*|\d+)?(?:\.(\*\d+\$|\*|\d+))?([scboxXuideEfFgG])/g;
+  var a = arguments;
+  var i = 0;
+  var format = a[i++];
+
+  var _pad = function _pad(str, len, chr, leftJustify) {
+    if (!chr) {
+      chr = ' ';
+    }
+    var padding = str.length >= len ? '' : new Array(1 + len - str.length >>> 0).join(chr);
+    return leftJustify ? str + padding : padding + str;
+  };
+
+  var justify = function justify(value, prefix, leftJustify, minWidth, zeroPad, customPadChar) {
+    var diff = minWidth - value.length;
+    if (diff > 0) {
+      if (leftJustify || !zeroPad) {
+        value = _pad(value, minWidth, customPadChar, leftJustify);
+      } else {
+        value = [value.slice(0, prefix.length), _pad('', diff, '0', true), value.slice(prefix.length)].join('');
+      }
+    }
+    return value;
+  };
+
+  var _formatBaseX = function _formatBaseX(value, base, prefix, leftJustify, minWidth, precision, zeroPad) {
+    // Note: casts negative numbers to positive ones
+    var number = value >>> 0;
+    prefix = prefix && number && {
+      '2': '0b',
+      '8': '0',
+      '16': '0x'
+    }[base] || '';
+    value = prefix + _pad(number.toString(base), precision || 0, '0', false);
+    return justify(value, prefix, leftJustify, minWidth, zeroPad);
+  };
+
+  // _formatString()
+  var _formatString = function _formatString(value, leftJustify, minWidth, precision, zeroPad, customPadChar) {
+    if (precision !== null && precision !== undefined) {
+      value = value.slice(0, precision);
+    }
+    return justify(value, '', leftJustify, minWidth, zeroPad, customPadChar);
+  };
+
+  // doFormat()
+  var doFormat = function doFormat(substring, valueIndex, flags, minWidth, precision, type) {
+    var number, prefix, method, textTransform, value;
+
+    if (substring === '%%') {
+      return '%';
+    }
+
+    // parse flags
+    var leftJustify = false;
+    var positivePrefix = '';
+    var zeroPad = false;
+    var prefixBaseX = false;
+    var customPadChar = ' ';
+    var flagsl = flags.length;
+    var j;
+    for (j = 0; j < flagsl; j++) {
+      switch (flags.charAt(j)) {
+        case ' ':
+          positivePrefix = ' ';
+          break;
+        case '+':
+          positivePrefix = '+';
+          break;
+        case '-':
+          leftJustify = true;
+          break;
+        case "'":
+          customPadChar = flags.charAt(j + 1);
+          break;
+        case '0':
+          zeroPad = true;
+          customPadChar = '0';
+          break;
+        case '#':
+          prefixBaseX = true;
+          break;
+      }
+    }
+
+    // parameters may be null, undefined, empty-string or real valued
+    // we want to ignore null, undefined and empty-string values
+    if (!minWidth) {
+      minWidth = 0;
+    } else if (minWidth === '*') {
+      minWidth = +a[i++];
+    } else if (minWidth.charAt(0) === '*') {
+      minWidth = +a[minWidth.slice(1, -1)];
+    } else {
+      minWidth = +minWidth;
+    }
+
+    // Note: undocumented perl feature:
+    if (minWidth < 0) {
+      minWidth = -minWidth;
+      leftJustify = true;
+    }
+
+    if (!isFinite(minWidth)) {
+      throw new Error('sprintf: (minimum-)width must be finite');
+    }
+
+    if (!precision) {
+      precision = 'fFeE'.indexOf(type) > -1 ? 6 : type === 'd' ? 0 : undefined;
+    } else if (precision === '*') {
+      precision = +a[i++];
+    } else if (precision.charAt(0) === '*') {
+      precision = +a[precision.slice(1, -1)];
+    } else {
+      precision = +precision;
+    }
+
+    // grab value using valueIndex if required?
+    value = valueIndex ? a[valueIndex.slice(0, -1)] : a[i++];
+
+    switch (type) {
+      case 's':
+        return _formatString(value + '', leftJustify, minWidth, precision, zeroPad, customPadChar);
+      case 'c':
+        return _formatString(String.fromCharCode(+value), leftJustify, minWidth, precision, zeroPad);
+      case 'b':
+        return _formatBaseX(value, 2, prefixBaseX, leftJustify, minWidth, precision, zeroPad);
+      case 'o':
+        return _formatBaseX(value, 8, prefixBaseX, leftJustify, minWidth, precision, zeroPad);
+      case 'x':
+        return _formatBaseX(value, 16, prefixBaseX, leftJustify, minWidth, precision, zeroPad);
+      case 'X':
+        return _formatBaseX(value, 16, prefixBaseX, leftJustify, minWidth, precision, zeroPad).toUpperCase();
+      case 'u':
+        return _formatBaseX(value, 10, prefixBaseX, leftJustify, minWidth, precision, zeroPad);
+      case 'i':
+      case 'd':
+        number = +value || 0;
+        // Plain Math.round doesn't just truncate
+        number = Math.round(number - number % 1);
+        prefix = number < 0 ? '-' : positivePrefix;
+        value = prefix + _pad(String(Math.abs(number)), precision, '0', false);
+        return justify(value, prefix, leftJustify, minWidth, zeroPad);
+      case 'e':
+      case 'E':
+      case 'f': // @todo: Should handle locales (as per setlocale)
+      case 'F':
+      case 'g':
+      case 'G':
+        number = +value;
+        prefix = number < 0 ? '-' : positivePrefix;
+        method = ['toExponential', 'toFixed', 'toPrecision']['efg'.indexOf(type.toLowerCase())];
+        textTransform = ['toString', 'toUpperCase']['eEfFgG'.indexOf(type) % 2];
+        value = prefix + Math.abs(number)[method](precision);
+        return justify(value, prefix, leftJustify, minWidth, zeroPad)[textTransform]();
+      default:
+        return substring;
+    }
+  };
+
+  return format.replace(regex, doFormat);
+};
+
+
+/***/ }),
+/* 1 */
+/***/ (function(module, exports) {
+
+module.exports = require("path");
+
+/***/ }),
+/* 2 */
+/***/ (function(module, exports, __webpack_require__) {
+
 /**
  * Twig.js
  *
@@ -36886,13 +37457,8095 @@ exports.clearImmediate = typeof clearImmediate === "function" ? clearImmediate :
  * @license   Available under the BSD 2-Clause License
  * @link      https://github.com/twigjs/twig.js
  */
-var n={VERSION:"1.11.1"};r(26)(n),r(25)(n),r(24)(n),r(22)(n),r(21)(n),r(20)(n),r(11)(n),r(10)(n),r(8)(n),r(7)(n),r(6)(n),r(5)(n),r(4)(n),r(3)(n),r(2)(n),e.exports=n.exports}])});
-}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {},"/node_modules/twig")
-},{"fs":214,"path":235}],239:[function(require,module,exports){
+
+module.exports = __webpack_require__(3)();
+
+
+/***/ }),
+/* 3 */
+/***/ (function(module, exports, __webpack_require__) {
+
+// ## twig.factory.js
+//
+// This file handles creating the Twig library
+module.exports = function factory() {
+    const Twig = {
+        VERSION: '1.14.0'
+    };
+
+    __webpack_require__(4)(Twig);
+    __webpack_require__(5)(Twig);
+    __webpack_require__(6)(Twig);
+    __webpack_require__(8)(Twig);
+    __webpack_require__(9)(Twig);
+    __webpack_require__(10)(Twig);
+    __webpack_require__(19)(Twig);
+    __webpack_require__(20)(Twig);
+    __webpack_require__(22)(Twig);
+    __webpack_require__(23)(Twig);
+    __webpack_require__(24)(Twig);
+    __webpack_require__(25)(Twig);
+    __webpack_require__(26)(Twig);
+    __webpack_require__(27)(Twig);
+    __webpack_require__(28)(Twig);
+
+    Twig.exports.factory = factory;
+
+    return Twig.exports;
+};
+
+
+/***/ }),
+/* 4 */
+/***/ (function(module, exports) {
+
+// ## twig.core.js
+//
+// This file handles template level tokenizing, compiling and parsing.
+module.exports = function (Twig) {
+    'use strict';
+
+    Twig.trace = false;
+    Twig.debug = false;
+
+    // Default caching to true for the improved performance it offers
+    Twig.cache = true;
+
+    Twig.noop = function () {};
+
+    Twig.merge = function (target, source, onlyChanged) {
+        Object.keys(source).forEach(key => {
+            if (onlyChanged && !(key in target)) {
+                return;
+            }
+
+            target[key] = source[key];
+        });
+
+        return target;
+    };
+
+    /**
+     * Exception thrown by twig.js.
+     */
+    Twig.Error = function (message, file) {
+        this.message = message;
+        this.name = 'TwigException';
+        this.type = 'TwigException';
+        this.file = file;
+    };
+
+    /**
+     * Get the string representation of a Twig error.
+     */
+    Twig.Error.prototype.toString = function () {
+        const output = this.name + ': ' + this.message;
+
+        return output;
+    };
+
+    /**
+     * Wrapper for logging to the console.
+     */
+    Twig.log = {
+        trace(...args) {
+            if (Twig.trace && console) {
+                console.log(Array.prototype.slice.call(args));
+            }
+        },
+        debug(...args) {
+            if (Twig.debug && console) {
+                console.log(Array.prototype.slice.call(args));
+            }
+        }
+    };
+
+    if (typeof console === 'undefined') {
+        Twig.log.error = function () {};
+    } else if (typeof console.error !== 'undefined') {
+        Twig.log.error = function (...args) {
+            console.error(...args);
+        };
+    } else if (typeof console.log !== 'undefined') {
+        Twig.log.error = function (...args) {
+            console.log(...args);
+        };
+    }
+
+    /**
+     * Container for methods related to handling high level template tokens
+     *      (for example: {{ expression }}, {% logic %}, {# comment #}, raw data)
+     */
+    Twig.token = {};
+
+    /**
+     * Token types.
+     */
+    Twig.token.type = {
+        output: 'output',
+        logic: 'logic',
+        comment: 'comment',
+        raw: 'raw',
+        outputWhitespacePre: 'output_whitespace_pre',
+        outputWhitespacePost: 'output_whitespace_post',
+        outputWhitespaceBoth: 'output_whitespace_both',
+        logicWhitespacePre: 'logic_whitespace_pre',
+        logicWhitespacePost: 'logic_whitespace_post',
+        logicWhitespaceBoth: 'logic_whitespace_both'
+    };
+
+    /**
+     * Token syntax definitions.
+     */
+    Twig.token.definitions = [
+        {
+            type: Twig.token.type.raw,
+            open: '{% raw %}',
+            close: '{% endraw %}'
+        },
+        {
+            type: Twig.token.type.raw,
+            open: '{% verbatim %}',
+            close: '{% endverbatim %}'
+        },
+        // *Whitespace type tokens*
+        //
+        // These typically take the form `{{- expression -}}` or `{{- expression }}` or `{{ expression -}}`.
+        {
+            type: Twig.token.type.outputWhitespacePre,
+            open: '{{-',
+            close: '}}'
+        },
+        {
+            type: Twig.token.type.outputWhitespacePost,
+            open: '{{',
+            close: '-}}'
+        },
+        {
+            type: Twig.token.type.outputWhitespaceBoth,
+            open: '{{-',
+            close: '-}}'
+        },
+        {
+            type: Twig.token.type.logicWhitespacePre,
+            open: '{%-',
+            close: '%}'
+        },
+        {
+            type: Twig.token.type.logicWhitespacePost,
+            open: '{%',
+            close: '-%}'
+        },
+        {
+            type: Twig.token.type.logicWhitespaceBoth,
+            open: '{%-',
+            close: '-%}'
+        },
+        // *Output type tokens*
+        //
+        // These typically take the form `{{ expression }}`.
+        {
+            type: Twig.token.type.output,
+            open: '{{',
+            close: '}}'
+        },
+        // *Logic type tokens*
+        //
+        // These typically take a form like `{% if expression %}` or `{% endif %}`
+        {
+            type: Twig.token.type.logic,
+            open: '{%',
+            close: '%}'
+        },
+        // *Comment type tokens*
+        //
+        // These take the form `{# anything #}`
+        {
+            type: Twig.token.type.comment,
+            open: '{#',
+            close: '#}'
+        }
+    ];
+
+    /**
+     * What characters start "strings" in token definitions. We need this to ignore token close
+     * strings inside an expression.
+     */
+    Twig.token.strings = ['"', '\''];
+
+    Twig.token.findStart = function (template) {
+        const output = {
+            position: null,
+            def: null
+        };
+        let closePosition = null;
+        const len = Twig.token.definitions.length;
+        let i;
+        let tokenTemplate;
+        let firstKeyPosition;
+        let closeKeyPosition;
+
+        for (i = 0; i < len; i++) {
+            tokenTemplate = Twig.token.definitions[i];
+            firstKeyPosition = template.indexOf(tokenTemplate.open);
+            closeKeyPosition = template.indexOf(tokenTemplate.close);
+
+            Twig.log.trace('Twig.token.findStart: ', 'Searching for ', tokenTemplate.open, ' found at ', firstKeyPosition);
+
+            // Special handling for mismatched tokens
+            if (firstKeyPosition >= 0) {
+                // This token matches the template
+                if (tokenTemplate.open.length !== tokenTemplate.close.length) {
+                    // This token has mismatched closing and opening tags
+                    if (closeKeyPosition < 0) {
+                        // This token's closing tag does not match the template
+                        continue;
+                    }
+                }
+            }
+            // Does this token occur before any other types?
+
+            if (firstKeyPosition >= 0 && (output.position === null || firstKeyPosition < output.position)) {
+                output.position = firstKeyPosition;
+                output.def = tokenTemplate;
+                closePosition = closeKeyPosition;
+            } else if (firstKeyPosition >= 0 && output.position !== null && firstKeyPosition === output.position) {
+                /* This token exactly matches another token,
+                greedily match to check if this token has a greater specificity */
+                if (tokenTemplate.open.length > output.def.open.length) {
+                    // This token's opening tag is more specific than the previous match
+                    output.position = firstKeyPosition;
+                    output.def = tokenTemplate;
+                    closePosition = closeKeyPosition;
+                } else if (tokenTemplate.open.length === output.def.open.length) {
+                    if (tokenTemplate.close.length > output.def.close.length) {
+                        // This token's opening tag is as specific as the previous match,
+                        // but the closing tag has greater specificity
+                        if (closeKeyPosition >= 0 && closeKeyPosition < closePosition) {
+                            // This token's closing tag exists in the template,
+                            // and it occurs sooner than the previous match
+                            output.position = firstKeyPosition;
+                            output.def = tokenTemplate;
+                            closePosition = closeKeyPosition;
+                        }
+                    } else if (closeKeyPosition >= 0 && closeKeyPosition < closePosition) {
+                        // This token's closing tag is not more specific than the previous match,
+                        // but it occurs sooner than the previous match
+                        output.position = firstKeyPosition;
+                        output.def = tokenTemplate;
+                        closePosition = closeKeyPosition;
+                    }
+                }
+            }
+        }
+
+        return output;
+    };
+
+    Twig.token.findEnd = function (template, tokenDef, start) {
+        let end = null;
+        let found = false;
+        let offset = 0;
+
+        // String position variables
+        let strPos = null;
+        let strFound = null;
+        let pos = null;
+        let endOffset = null;
+        let thisStrPos = null;
+        let endStrPos = null;
+
+        // For loop variables
+        let i;
+        let l;
+
+        while (!found) {
+            strPos = null;
+            strFound = null;
+            pos = template.indexOf(tokenDef.close, offset);
+
+            if (pos >= 0) {
+                end = pos;
+                found = true;
+            } else {
+                // Throw an exception
+                throw new Twig.Error('Unable to find closing bracket \'' + tokenDef.close +
+                                '\' opened near template position ' + start);
+            }
+
+            // Ignore quotes within comments; just look for the next comment close sequence,
+            // regardless of what comes before it. https://github.com/justjohn/twig.js/issues/95
+            if (tokenDef.type === Twig.token.type.comment) {
+                break;
+            }
+            // Ignore quotes within raw tag
+            // Fixes #283
+
+            if (tokenDef.type === Twig.token.type.raw) {
+                break;
+            }
+
+            l = Twig.token.strings.length;
+            for (i = 0; i < l; i += 1) {
+                thisStrPos = template.indexOf(Twig.token.strings[i], offset);
+
+                if (thisStrPos > 0 && thisStrPos < pos &&
+                        (strPos === null || thisStrPos < strPos)) {
+                    strPos = thisStrPos;
+                    strFound = Twig.token.strings[i];
+                }
+            }
+
+            // We found a string before the end of the token, now find the string's end and set the search offset to it
+            if (strPos !== null) {
+                endOffset = strPos + 1;
+                end = null;
+                found = false;
+                for (;;) {
+                    endStrPos = template.indexOf(strFound, endOffset);
+                    if (endStrPos < 0) {
+                        throw Twig.Error('Unclosed string in template');
+                    }
+                    // Ignore escaped quotes
+
+                    if (template.substr(endStrPos - 1, 1) === '\\') {
+                        endOffset = endStrPos + 1;
+                    } else {
+                        offset = endStrPos + 1;
+                        break;
+                    }
+                }
+            }
+        }
+
+        return end;
+    };
+
+    /**
+     * Convert a template into high-level tokens.
+     */
+    Twig.tokenize = function (template) {
+        const tokens = [];
+        // An offset for reporting errors locations in the template.
+        let errorOffset = 0;
+
+        // The start and type of the first token found in the template.
+        let foundToken = null;
+        // The end position of the matched token.
+        let end = null;
+
+        while (template.length > 0) {
+            // Find the first occurance of any token type in the template
+            foundToken = Twig.token.findStart(template);
+
+            Twig.log.trace('Twig.tokenize: ', 'Found token: ', foundToken);
+
+            if (foundToken.position === null) {
+                // No more tokens -> add the rest of the template as a raw-type token
+                tokens.push({
+                    type: Twig.token.type.raw,
+                    value: template
+                });
+                template = '';
+            } else {
+                // Add a raw type token for anything before the start of the token
+                if (foundToken.position > 0) {
+                    tokens.push({
+                        type: Twig.token.type.raw,
+                        value: template.substring(0, foundToken.position)
+                    });
+                }
+
+                template = template.substr(foundToken.position + foundToken.def.open.length);
+                errorOffset += foundToken.position + foundToken.def.open.length;
+
+                // Find the end of the token
+                end = Twig.token.findEnd(template, foundToken.def, errorOffset);
+
+                Twig.log.trace('Twig.tokenize: ', 'Token ends at ', end);
+
+                tokens.push({
+                    type: foundToken.def.type,
+                    value: template.substring(0, end).trim()
+                });
+
+                if (template.substr(end + foundToken.def.close.length, 1) === '\n') {
+                    switch (foundToken.def.type) {
+                        case 'logic_whitespace_pre':
+                        case 'logic_whitespace_post':
+                        case 'logic_whitespace_both':
+                        case 'logic':
+                            // Newlines directly after logic tokens are ignored
+                            end += 1;
+                            break;
+                        default:
+                            break;
+                    }
+                }
+
+                template = template.substr(end + foundToken.def.close.length);
+
+                // Increment the position in the template
+                errorOffset += end + foundToken.def.close.length;
+            }
+        }
+
+        return tokens;
+    };
+
+    Twig.compile = function (tokens) {
+        const self = this;
+        try {
+            // Output and intermediate stacks
+            const output = [];
+            const stack = [];
+            // The tokens between open and close tags
+            let intermediateOutput = [];
+
+            let token = null;
+            let logicToken = null;
+            let unclosedToken = null;
+            // Temporary previous token.
+            let prevToken = null;
+            // Temporary previous output.
+            let prevOutput = null;
+            // Temporary previous intermediate output.
+            let prevIntermediateOutput = null;
+            // The previous token's template
+            let prevTemplate = null;
+            // Token lookahead
+            let nextToken = null;
+            // The output token
+            let tokOutput = null;
+
+            // Logic Token values
+            let type = null;
+            let open = null;
+            let next = null;
+
+            const compileOutput = function (token) {
+                Twig.expression.compile.call(self, token);
+                if (stack.length > 0) {
+                    intermediateOutput.push(token);
+                } else {
+                    output.push(token);
+                }
+            };
+
+            const compileLogic = function (token) {
+                // Compile the logic token
+                logicToken = Twig.logic.compile.call(self, token);
+
+                type = logicToken.type;
+                open = Twig.logic.handler[type].open;
+                next = Twig.logic.handler[type].next;
+
+                Twig.log.trace('Twig.compile: ', 'Compiled logic token to ', logicToken,
+                    ' next is: ', next, ' open is : ', open);
+
+                // Not a standalone token, check logic stack to see if this is expected
+                if (open !== undefined && !open) {
+                    prevToken = stack.pop();
+                    prevTemplate = Twig.logic.handler[prevToken.type];
+
+                    if (prevTemplate.next.indexOf(type) < 0) {
+                        throw new Error(type + ' not expected after a ' + prevToken.type);
+                    }
+
+                    prevToken.output = prevToken.output || [];
+
+                    prevToken.output = prevToken.output.concat(intermediateOutput);
+                    intermediateOutput = [];
+
+                    tokOutput = {
+                        type: Twig.token.type.logic,
+                        token: prevToken
+                    };
+                    if (stack.length > 0) {
+                        intermediateOutput.push(tokOutput);
+                    } else {
+                        output.push(tokOutput);
+                    }
+                }
+
+                // This token requires additional tokens to complete the logic structure.
+                if (next !== undefined && next.length > 0) {
+                    Twig.log.trace('Twig.compile: ', 'Pushing ', logicToken, ' to logic stack.');
+
+                    if (stack.length > 0) {
+                        // Put any currently held output into the output list of the logic operator
+                        // currently at the head of the stack before we push a new one on.
+                        prevToken = stack.pop();
+                        prevToken.output = prevToken.output || [];
+                        prevToken.output = prevToken.output.concat(intermediateOutput);
+                        stack.push(prevToken);
+                        intermediateOutput = [];
+                    }
+
+                    // Push the new logic token onto the logic stack
+                    stack.push(logicToken);
+                } else if (open !== undefined && open) {
+                    tokOutput = {
+                        type: Twig.token.type.logic,
+                        token: logicToken
+                    };
+                    // Standalone token (like {% set ... %}
+                    if (stack.length > 0) {
+                        intermediateOutput.push(tokOutput);
+                    } else {
+                        output.push(tokOutput);
+                    }
+                }
+            };
+
+            while (tokens.length > 0) {
+                token = tokens.shift();
+                prevOutput = output[output.length - 1];
+                prevIntermediateOutput = intermediateOutput[intermediateOutput.length - 1];
+                nextToken = tokens[0];
+                Twig.log.trace('Compiling token ', token);
+                switch (token.type) {
+                    case Twig.token.type.raw:
+                        if (stack.length > 0) {
+                            intermediateOutput.push(token);
+                        } else {
+                            output.push(token);
+                        }
+
+                        break;
+
+                    case Twig.token.type.logic:
+                        compileLogic.call(self, token);
+                        break;
+
+                    // Do nothing, comments should be ignored
+                    case Twig.token.type.comment:
+                        break;
+
+                    case Twig.token.type.output:
+                        compileOutput.call(self, token);
+                        break;
+
+                    // Kill whitespace ahead and behind this token
+                    case Twig.token.type.logicWhitespacePre:
+                    case Twig.token.type.logicWhitespacePost:
+                    case Twig.token.type.logicWhitespaceBoth:
+                    case Twig.token.type.outputWhitespacePre:
+                    case Twig.token.type.outputWhitespacePost:
+                    case Twig.token.type.outputWhitespaceBoth:
+                        if (token.type !== Twig.token.type.outputWhitespacePost && token.type !== Twig.token.type.logicWhitespacePost) {
+                            if (prevOutput) {
+                                // If the previous output is raw, pop it off
+                                if (prevOutput.type === Twig.token.type.raw) {
+                                    output.pop();
+
+                                    // If the previous output is not just whitespace, trim it
+                                    if (prevOutput.value.match(/^\s*$/) === null) {
+                                        prevOutput.value = prevOutput.value.trim();
+                                        // Repush the previous output
+                                        output.push(prevOutput);
+                                    }
+                                }
+                            }
+
+                            if (prevIntermediateOutput) {
+                                // If the previous intermediate output is raw, pop it off
+                                if (prevIntermediateOutput.type === Twig.token.type.raw) {
+                                    intermediateOutput.pop();
+
+                                    // If the previous output is not just whitespace, trim it
+                                    if (prevIntermediateOutput.value.match(/^\s*$/) === null) {
+                                        prevIntermediateOutput.value = prevIntermediateOutput.value.trim();
+                                        // Repush the previous intermediate output
+                                        intermediateOutput.push(prevIntermediateOutput);
+                                    }
+                                }
+                            }
+                        }
+
+                        // Compile this token
+                        switch (token.type) {
+                            case Twig.token.type.outputWhitespacePre:
+                            case Twig.token.type.outputWhitespacePost:
+                            case Twig.token.type.outputWhitespaceBoth:
+                                compileOutput.call(self, token);
+                                break;
+                            case Twig.token.type.logicWhitespacePre:
+                            case Twig.token.type.logicWhitespacePost:
+                            case Twig.token.type.logicWhitespaceBoth:
+                                compileLogic.call(self, token);
+                                break;
+                            default:
+                                break;
+                        }
+
+                        if (token.type !== Twig.token.type.outputWhitespacePre && token.type !== Twig.token.type.logicWhitespacePre) {
+                            if (nextToken) {
+                                // If the next token is raw, shift it out
+                                if (nextToken.type === Twig.token.type.raw) {
+                                    tokens.shift();
+
+                                    // If the next token is not just whitespace, trim it
+                                    if (nextToken.value.match(/^\s*$/) === null) {
+                                        nextToken.value = nextToken.value.trim();
+                                        // Unshift the next token
+                                        tokens.unshift(nextToken);
+                                    }
+                                }
+                            }
+                        }
+
+                        break;
+                    default:
+                        break;
+                }
+
+                Twig.log.trace('Twig.compile: ', ' Output: ', output,
+                    ' Logic Stack: ', stack,
+                    ' Pending Output: ', intermediateOutput
+                );
+            }
+
+            // Verify that there are no logic tokens left in the stack.
+            if (stack.length > 0) {
+                unclosedToken = stack.pop();
+                throw new Error('Unable to find an end tag for ' + unclosedToken.type +
+                                ', expecting one of ' + unclosedToken.next);
+            }
+
+            return output;
+        } catch (error) {
+            if (self.options.rethrow) {
+                if (error.type === 'TwigException' && !error.file) {
+                    error.file = self.id;
+                }
+
+                throw error;
+            } else {
+                Twig.log.error('Error compiling twig template ' + self.id + ': ');
+                if (error.stack) {
+                    Twig.log.error(error.stack);
+                } else {
+                    Twig.log.error(error.toString());
+                }
+            }
+        }
+    };
+
+    function handleException(state, ex) {
+        if (state.template.options.rethrow) {
+            if (typeof ex === 'string') {
+                ex = new Twig.Error(ex);
+            }
+
+            if (ex.type === 'TwigException' && !ex.file) {
+                ex.file = state.template.id;
+            }
+
+            throw ex;
+        } else {
+            Twig.log.error('Error parsing twig template ' + state.template.id + ': ');
+            if (ex.stack) {
+                Twig.log.error(ex.stack);
+            } else {
+                Twig.log.error(ex.toString());
+            }
+
+            if (Twig.debug) {
+                return ex.toString();
+            }
+        }
+    }
+
+    /**
+     * Tokenize and compile a string template.
+     *
+     * @param {string} data The template.
+     *
+     * @return {Array} The compiled tokens.
+     */
+    Twig.prepare = function (data) {
+        // Tokenize
+        Twig.log.debug('Twig.prepare: ', 'Tokenizing ', data);
+        const rawTokens = Twig.tokenize.call(this, data);
+
+        // Compile
+        Twig.log.debug('Twig.prepare: ', 'Compiling ', rawTokens);
+        const tokens = Twig.compile.call(this, rawTokens);
+
+        Twig.log.debug('Twig.prepare: ', 'Compiled ', tokens);
+
+        return tokens;
+    };
+
+    /**
+     * Join the output token's stack and escape it if needed
+     *
+     * @param {Array} Output token's stack
+     *
+     * @return {string|String} Autoescaped output
+     */
+    Twig.output = function (output) {
+        const {autoescape} = this.options;
+
+        if (!autoescape) {
+            return output.join('');
+        }
+
+        const strategy = (typeof autoescape === 'string') ? autoescape : 'html';
+
+        const escapedOutput = output.map(str => {
+            if (
+                str &&
+                (str.twigMarkup !== true && str.twigMarkup !== strategy) &&
+                !(strategy === 'html' && str.twigMarkup === 'html_attr')
+            ) {
+                str = Twig.filters.escape(str, [strategy]);
+            }
+
+            return str;
+        });
+
+        if (escapedOutput.length === 0) {
+            return '';
+        }
+
+        return new Twig.Markup(escapedOutput.join(''), true);
+    };
+
+    // Namespace for template storage and retrieval
+    Twig.Templates = {
+        /**
+         * Registered template loaders - use Twig.Templates.registerLoader to add supported loaders
+         * @type {Object}
+         */
+        loaders: {},
+
+        /**
+         * Registered template parsers - use Twig.Templates.registerParser to add supported parsers
+         * @type {Object}
+         */
+        parsers: {},
+
+        /**
+         * Cached / loaded templates
+         * @type {Object}
+         */
+        registry: {}
+    };
+
+    /**
+     * Is this id valid for a twig template?
+     *
+     * @param {string} id The ID to check.
+     *
+     * @throws {Twig.Error} If the ID is invalid or used.
+     * @return {boolean} True if the ID is valid.
+     */
+    Twig.validateId = function (id) {
+        if (id === 'prototype') {
+            throw new Twig.Error(id + ' is not a valid twig identifier');
+        } else if (Twig.cache && Object.hasOwnProperty.call(Twig.Templates.registry, id)) {
+            throw new Twig.Error('There is already a template with the ID ' + id);
+        }
+
+        return true;
+    };
+
+    /**
+     * Register a template loader
+     *
+     * @example
+     * Twig.extend(function (Twig) {
+     *    Twig.Templates.registerLoader('custom_loader', function (location, params, callback, errorCallback) {
+     *        // ... load the template ...
+     *        params.data = loadedTemplateData;
+     *        // create and return the template
+     *        var template = new Twig.Template(params);
+     *        if (typeof callback === 'function') {
+     *            callback(template);
+     *        }
+     *        return template;
+     *    });
+     * });
+     *
+     * @param {String} methodName The method this loader is intended for (ajax, fs)
+     * @param {Function} func The function to execute when loading the template
+     * @param {Object|undefined} scope Optional scope parameter to bind func to
+     *
+     * @throws Twig.Error
+     *
+     * @return {void}
+     */
+    Twig.Templates.registerLoader = function (methodName, func, scope) {
+        if (typeof func !== 'function') {
+            throw new Twig.Error('Unable to add loader for ' + methodName + ': Invalid function reference given.');
+        }
+
+        if (scope) {
+            func = func.bind(scope);
+        }
+
+        this.loaders[methodName] = func;
+    };
+
+    /**
+     * Remove a registered loader
+     *
+     * @param {String} methodName The method name for the loader you wish to remove
+     *
+     * @return {void}
+     */
+    Twig.Templates.unRegisterLoader = function (methodName) {
+        if (this.isRegisteredLoader(methodName)) {
+            delete this.loaders[methodName];
+        }
+    };
+
+    /**
+     * See if a loader is registered by its method name
+     *
+     * @param {String} methodName The name of the loader you are looking for
+     *
+     * @return {boolean}
+     */
+    Twig.Templates.isRegisteredLoader = function (methodName) {
+        return Object.hasOwnProperty.call(this.loaders, methodName);
+    };
+
+    /**
+     * Register a template parser
+     *
+     * @example
+     * Twig.extend(function (Twig) {
+     *    Twig.Templates.registerParser('custom_parser', function (params) {
+     *        // this template source can be accessed in params.data
+     *        var template = params.data
+     *
+     *        // ... custom process that modifies the template
+     *
+     *        // return the parsed template
+     *        return template;
+     *    });
+     * });
+     *
+     * @param {String} methodName The method this parser is intended for (twig, source)
+     * @param {Function} func The function to execute when parsing the template
+     * @param {Object|undefined} scope Optional scope parameter to bind func to
+     *
+     * @throws Twig.Error
+     *
+     * @return {void}
+     */
+    Twig.Templates.registerParser = function (methodName, func, scope) {
+        if (typeof func !== 'function') {
+            throw new Twig.Error('Unable to add parser for ' + methodName + ': Invalid function regerence given.');
+        }
+
+        if (scope) {
+            func = func.bind(scope);
+        }
+
+        this.parsers[methodName] = func;
+    };
+
+    /**
+     * Remove a registered parser
+     *
+     * @param {String} methodName The method name for the parser you wish to remove
+     *
+     * @return {void}
+     */
+    Twig.Templates.unRegisterParser = function (methodName) {
+        if (this.isRegisteredParser(methodName)) {
+            delete this.parsers[methodName];
+        }
+    };
+
+    /**
+     * See if a parser is registered by its method name
+     *
+     * @param {String} methodName The name of the parser you are looking for
+     *
+     * @return {boolean}
+     */
+    Twig.Templates.isRegisteredParser = function (methodName) {
+        return Object.hasOwnProperty.call(this.parsers, methodName);
+    };
+
+    /**
+     * Save a template object to the store.
+     *
+     * @param {Twig.Template} template   The twig.js template to store.
+     */
+    Twig.Templates.save = function (template) {
+        if (template.id === undefined) {
+            throw new Twig.Error('Unable to save template with no id');
+        }
+
+        Twig.Templates.registry[template.id] = template;
+    };
+
+    /**
+     * Load a previously saved template from the store.
+     *
+     * @param {string} id   The ID of the template to load.
+     *
+     * @return {Twig.Template} A twig.js template stored with the provided ID.
+     */
+    Twig.Templates.load = function (id) {
+        if (!Object.hasOwnProperty.call(Twig.Templates.registry, id)) {
+            return null;
+        }
+
+        return Twig.Templates.registry[id];
+    };
+
+    /**
+     * Load a template from a remote location using AJAX and saves in with the given ID.
+     *
+     * Available parameters:
+     *
+     *      async:       Should the HTTP request be performed asynchronously.
+     *                      Defaults to true.
+     *      method:      What method should be used to load the template
+     *                      (fs or ajax)
+     *      parser:      What method should be used to parse the template
+     *                      (twig or source)
+     *      precompiled: Has the template already been compiled.
+     *
+     * @param {string} location  The remote URL to load as a template.
+     * @param {Object} params The template parameters.
+     * @param {function} callback  A callback triggered when the template finishes loading.
+     * @param {function} errorCallback  A callback triggered if an error occurs loading the template.
+     *
+     *
+     */
+    Twig.Templates.loadRemote = function (location, params, callback, errorCallback) {
+        // Default to the URL so the template is cached.
+        const id = typeof params.id === 'undefined' ? location : params.id;
+        const cached = Twig.Templates.registry[id];
+
+        // Check for existing template
+        if (Twig.cache && typeof cached !== 'undefined') {
+            // A template is already saved with the given id.
+            if (typeof callback === 'function') {
+                callback(cached);
+            }
+            // TODO: if async, return deferred promise
+
+            return cached;
+        }
+
+        // If the parser name hasn't been set, default it to twig
+        params.parser = params.parser || 'twig';
+        params.id = id;
+
+        // Default to async
+        if (typeof params.async === 'undefined') {
+            params.async = true;
+        }
+
+        // Assume 'fs' if the loader is not defined
+        const loader = this.loaders[params.method] || this.loaders.fs;
+        return loader.call(this, location, params, callback, errorCallback);
+    };
+
+    // Determine object type
+    function is(type, obj) {
+        const clas = Object.prototype.toString.call(obj).slice(8, -1);
+        return obj !== undefined && obj !== null && clas === type;
+    }
+
+    /**
+     * A wrapper for template blocks.
+     *
+     * @param  {Twig.Template} The template that the block was originally defined in.
+     * @param  {Object} The compiled block token.
+     */
+    Twig.Block = function (template, token) {
+        this.template = template;
+        this.token = token;
+    };
+
+    /**
+     * Render the block using a specific parse state and context.
+     *
+     * @param  {Twig.ParseState} parseState
+     * @param  {Object} context
+     *
+     * @return {Promise}
+     */
+    Twig.Block.prototype.render = function (parseState, context) {
+        const originalTemplate = parseState.template;
+        let promise;
+
+        parseState.template = this.template;
+
+        if (this.token.expression) {
+            promise = Twig.expression.parseAsync.call(parseState, this.token.output, context);
+        } else {
+            promise = parseState.parseAsync(this.token.output, context);
+        }
+
+        return promise
+            .then(value => {
+                return Twig.expression.parseAsync.call(
+                    parseState,
+                    {
+                        type: Twig.expression.type.string,
+                        value
+                    },
+                    context
+                );
+            })
+            .then(output => {
+                parseState.template = originalTemplate;
+
+                return output;
+            });
+    };
+
+    /**
+     * Holds the state needed to parse a template.
+     *
+     * @param {Twig.Template} template The template that the tokens being parsed are associated with.
+     * @param {Object} blockOverrides Any blocks that should override those defined in the associated template.
+     */
+    Twig.ParseState = function (template, blockOverrides) {
+        this.renderedBlocks = {};
+        this.overrideBlocks = blockOverrides === undefined ? {} : blockOverrides;
+        this.context = {};
+        this.macros = {};
+        this.nestingStack = [];
+        this.template = template;
+    };
+
+    /**
+     * Get a block by its name, resolving in the following order:
+     *     - override blocks specified when initialized (except when excluded)
+     *     - blocks resolved from the associated template
+     *     - blocks resolved from the parent template when extending
+     *
+     * @param {String} name The name of the block to return.
+     * @param {Boolean} checkOnlyInheritedBlocks Whether to skip checking the overrides and associated template, will not skip by default.
+     *
+     * @return {Twig.Block|undefined}
+     */
+    Twig.ParseState.prototype.getBlock = function (name, checkOnlyInheritedBlocks) {
+        let block;
+
+        if (checkOnlyInheritedBlocks !== true) {
+            // Blocks specified when initialized
+            block = this.overrideBlocks[name];
+        }
+
+        if (block === undefined) {
+            // Block defined by the associated template
+            block = this.template.getBlock(name, checkOnlyInheritedBlocks);
+        }
+
+        if (block === undefined && this.template.parentTemplate !== null) {
+            // Block defined in the parent template when extending
+            block = this.template.parentTemplate.getBlock(name);
+        }
+
+        return block;
+    };
+
+    /**
+     * Get all the available blocks, resolving in the following order:
+     *     - override blocks specified when initialized
+     *     - blocks resolved from the associated template
+     *     - blocks resolved from the parent template when extending (except when excluded)
+     *
+     * @param {Boolean} includeParentBlocks Whether to get blocks from the parent template when extending, will always do so by default.
+     *
+     * @return {Object}
+     */
+    Twig.ParseState.prototype.getBlocks = function (includeParentBlocks) {
+        let blocks = {};
+
+        if (includeParentBlocks !== false &&
+            this.template.parentTemplate !== null &&
+            // Prevent infinite loop
+            this.template.parentTemplate !== this.template
+        ) {
+            // Blocks from the parent template when extending
+            blocks = this.template.parentTemplate.getBlocks();
+        }
+
+        blocks = {
+            ...blocks,
+            // Override with any blocks defined within the associated template
+            ...this.template.getBlocks(),
+            // Override with any blocks specified when initialized
+            ...this.overrideBlocks
+        };
+
+        return blocks;
+    };
+
+    /**
+     * Get the closest token of a specific type to the current nest level.
+     *
+     * @param  {String} type  The logic token type
+     *
+     * @return {Object}
+     */
+    Twig.ParseState.prototype.getNestingStackToken = function (type) {
+        let matchingToken;
+
+        this.nestingStack.forEach(token => {
+            if (matchingToken === undefined && token.type === type) {
+                matchingToken = token;
+            }
+        });
+
+        return matchingToken;
+    };
+
+    /**
+     * Parse a set of tokens using the current state.
+     *
+     * @param {Array} tokens The compiled tokens.
+     * @param {Object} context The context to set the state to while parsing.
+     * @param {Boolean} allowAsync Whether to parse asynchronously.
+     * @param {Object} blocks Blocks that should override any defined while parsing.
+     *
+     * @return {String} The rendered tokens.
+     *
+     */
+    Twig.ParseState.prototype.parse = function (tokens, context, allowAsync) {
+        const state = this;
+        let output = [];
+
+        // Store any error that might be thrown by the promise chain.
+        let err = null;
+
+        // This will be set to isAsync if template renders synchronously
+        let isAsync = true;
+        let promise = null;
+        // Track logic chains
+        let chain = true;
+
+        if (context) {
+            state.context = context;
+        }
+
+        /*
+         * Extracted into it's own function such that the function
+         * does not get recreated over and over again in the `forEach`
+         * loop below. This method can be compiled and optimized
+         * a single time instead of being recreated on each iteration.
+         */
+        function outputPush(o) {
+            output.push(o);
+        }
+
+        function parseTokenLogic(logic) {
+            if (typeof logic.chain !== 'undefined') {
+                chain = logic.chain;
+            }
+
+            if (typeof logic.context !== 'undefined') {
+                state.context = logic.context;
+            }
+
+            if (typeof logic.output !== 'undefined') {
+                output.push(logic.output);
+            }
+        }
+
+        promise = Twig.async.forEach(tokens, token => {
+            Twig.log.debug('Twig.ParseState.parse: ', 'Parsing token: ', token);
+
+            switch (token.type) {
+                case Twig.token.type.raw:
+                    output.push(Twig.filters.raw(token.value));
+                    break;
+
+                case Twig.token.type.logic:
+                    return Twig.logic.parseAsync.call(state, token.token /* logicToken */, state.context, chain)
+                        .then(parseTokenLogic);
+                case Twig.token.type.comment:
+                    // Do nothing, comments should be ignored
+                    break;
+
+                // Fall through whitespace to output
+                case Twig.token.type.outputWhitespacePre:
+                case Twig.token.type.outputWhitespacePost:
+                case Twig.token.type.outputWhitespaceBoth:
+                case Twig.token.type.output:
+                    Twig.log.debug('Twig.ParseState.parse: ', 'Output token: ', token.stack);
+                    // Parse the given expression in the given context
+                    return Twig.expression.parseAsync.call(state, token.stack, state.context)
+                        .then(outputPush);
+                default:
+                    break;
+            }
+        }).then(() => {
+            output = Twig.output.call(state.template, output);
+            isAsync = false;
+            return output;
+        }).catch(error => {
+            if (allowAsync) {
+                handleException(state, error);
+            }
+
+            err = error;
+        });
+
+        // If `allowAsync` we will always return a promise since we do not
+        // know in advance if we are going to run asynchronously or not.
+        if (allowAsync) {
+            return promise;
+        }
+
+        // Handle errors here if we fail synchronously.
+        if (err !== null) {
+            return handleException(state, err);
+        }
+
+        // If `allowAsync` is not true we should not allow the user
+        // to use asynchronous functions or filters.
+        if (isAsync) {
+            throw new Twig.Error('You are using Twig.js in sync mode in combination with async extensions.');
+        }
+
+        return output;
+    };
+
+    /**
+     * Create a new twig.js template.
+     *
+     * Parameters: {
+     *      data:   The template, either pre-compiled tokens or a string template
+     *      id:     The name of this template
+     * }
+     *
+     * @param {Object} params The template parameters.
+     */
+    Twig.Template = function (params) {
+        const {data, id, base, path, url, name, method, options} = params;
+
+        // # What is stored in a Twig.Template
+        //
+        // The Twig Template hold several chucks of data.
+        //
+        //     {
+        //          id:     The token ID (if any)
+        //          tokens: The list of tokens that makes up this template.
+        //          base:   The base template (if any)
+        //            options:  {
+        //                Compiler/parser options
+        //
+        //                strict_variables: true/false
+        //                    Should missing variable/keys emit an error message. If false, they default to null.
+        //            }
+        //     }
+        //
+
+        this.base = base;
+        this.blocks = {
+            defined: {},
+            imported: {}
+        };
+        this.id = id;
+        this.method = method;
+        this.name = name;
+        this.options = options;
+        this.parentTemplate = null;
+        this.path = path;
+        this.url = url;
+
+        if (is('String', data)) {
+            this.tokens = Twig.prepare.call(this, data);
+        } else {
+            this.tokens = data;
+        }
+
+        if (id !== undefined) {
+            Twig.Templates.save(this);
+        }
+    };
+
+    /**
+     * Get a block by its name, resolving in the following order:
+     *     - blocks defined in the template itself
+     *     - blocks imported from another template
+     *
+     * @param {String} name The name of the block to return.
+     * @param {Boolean} checkOnlyInheritedBlocks Whether to skip checking the blocks defined in the template itself, will not skip by default.
+     *
+     * @return {Twig.Block|undefined}
+     */
+    Twig.Template.prototype.getBlock = function (name, checkOnlyInheritedBlocks) {
+        let block;
+
+        if (checkOnlyInheritedBlocks !== true) {
+            block = this.blocks.defined[name];
+        }
+
+        if (block === undefined) {
+            block = this.blocks.imported[name];
+        }
+
+        return block;
+    };
+
+    /**
+     * Get all the available blocks, resolving in the following order:
+     *     - blocks defined in the template itself
+     *     - blocks imported from other templates
+     *
+     * @return {Object}
+     */
+    Twig.Template.prototype.getBlocks = function () {
+        let blocks = {};
+
+        blocks = {
+            ...blocks,
+            // Get any blocks imported from other templates
+            ...this.blocks.imported,
+            // Override with any blocks defined within the template itself
+            ...this.blocks.defined
+        };
+
+        return blocks;
+    };
+
+    Twig.Template.prototype.render = function (context, params, allowAsync) {
+        const template = this;
+
+        params = params || {};
+
+        return Twig.async.potentiallyAsync(template, allowAsync, () => {
+            const state = new Twig.ParseState(template, params.blocks);
+
+            return state.parseAsync(template.tokens, context)
+                .then(output => {
+                    let parentTemplate;
+                    let url;
+
+                    if (template.parentTemplate !== null) {
+                        // This template extends another template
+
+                        if (template.options.allowInlineIncludes) {
+                            // The template is provided inline
+                            parentTemplate = Twig.Templates.load(template.parentTemplate);
+
+                            if (parentTemplate) {
+                                parentTemplate.options = template.options;
+                            }
+                        }
+
+                        // Check for the template file via include
+                        if (!parentTemplate) {
+                            url = Twig.path.parsePath(template, template.parentTemplate);
+
+                            parentTemplate = Twig.Templates.loadRemote(url, {
+                                method: template.getLoaderMethod(),
+                                base: template.base,
+                                async: false,
+                                id: url,
+                                options: template.options
+                            });
+                        }
+
+                        template.parentTemplate = parentTemplate;
+
+                        return template.parentTemplate.renderAsync(
+                            state.context,
+                            {
+                                blocks: state.getBlocks(false),
+                                isInclude: true
+                            }
+                        );
+                    }
+
+                    if (params.isInclude === true) {
+                        return output;
+                    }
+
+                    return output.valueOf();
+                });
+        });
+    };
+
+    Twig.Template.prototype.importFile = function (file) {
+        let url = null;
+        let subTemplate;
+        if (!this.url && this.options.allowInlineIncludes) {
+            file = this.path ? Twig.path.parsePath(this, file) : file;
+            subTemplate = Twig.Templates.load(file);
+
+            if (!subTemplate) {
+                subTemplate = Twig.Templates.loadRemote(url, {
+                    id: file,
+                    method: this.getLoaderMethod(),
+                    async: false,
+                    path: file,
+                    options: this.options
+                });
+
+                if (!subTemplate) {
+                    throw new Twig.Error('Unable to find the template ' + file);
+                }
+            }
+
+            subTemplate.options = this.options;
+
+            return subTemplate;
+        }
+
+        url = Twig.path.parsePath(this, file);
+
+        // Load blocks from an external file
+        subTemplate = Twig.Templates.loadRemote(url, {
+            method: this.getLoaderMethod(),
+            base: this.base,
+            async: false,
+            options: this.options,
+            id: url
+        });
+
+        return subTemplate;
+    };
+
+    Twig.Template.prototype.getLoaderMethod = function () {
+        if (this.path) {
+            return 'fs';
+        }
+
+        if (this.url) {
+            return 'ajax';
+        }
+
+        return this.method || 'fs';
+    };
+
+    Twig.Template.prototype.compile = function (options) {
+        // Compile the template into raw JS
+        return Twig.compiler.compile(this, options);
+    };
+
+    /**
+     * Create safe output
+     *
+     * @param {string} Content safe to output
+     *
+     * @return {String} Content wrapped into a String
+     */
+
+    Twig.Markup = function (content, strategy) {
+        if (typeof content !== 'string' || content.length === 0) {
+            return content;
+        }
+
+        /* eslint-disable no-new-wrappers, unicorn/new-for-builtins */
+        const output = new String(content);
+        /* eslint-enable */
+        output.twigMarkup = (typeof strategy === 'undefined') ? true : strategy;
+
+        return output;
+    };
+
+    return Twig;
+};
+
+
+/***/ }),
+/* 5 */
+/***/ (function(module, exports) {
+
+// ## twig.compiler.js
+//
+// This file handles compiling templates into JS
+module.exports = function (Twig) {
+    /**
+     * Namespace for compilation.
+     */
+    Twig.compiler = {
+        module: {}
+    };
+
+    // Compile a Twig Template to output.
+    Twig.compiler.compile = function (template, options) {
+        // Get tokens
+        const tokens = JSON.stringify(template.tokens);
+        const {id} = template;
+        let output = null;
+
+        if (options.module) {
+            if (Twig.compiler.module[options.module] === undefined) {
+                throw new Twig.Error('Unable to find module type ' + options.module);
+            }
+
+            output = Twig.compiler.module[options.module](id, tokens, options.twig);
+        } else {
+            output = Twig.compiler.wrap(id, tokens);
+        }
+
+        return output;
+    };
+
+    Twig.compiler.module = {
+        amd(id, tokens, pathToTwig) {
+            return 'define(["' + pathToTwig + '"], function (Twig) {\n\tvar twig, templates;\ntwig = Twig.twig;\ntemplates = ' + Twig.compiler.wrap(id, tokens) + '\n\treturn templates;\n});';
+        },
+        node(id, tokens) {
+            return 'var twig = require("twig").twig;\nexports.template = ' + Twig.compiler.wrap(id, tokens);
+        },
+        cjs2(id, tokens, pathToTwig) {
+            return 'module.declare([{ twig: "' + pathToTwig + '" }], function (require, exports, module) {\n\tvar twig = require("twig").twig;\n\texports.template = ' + Twig.compiler.wrap(id, tokens) + '\n});';
+        }
+    };
+
+    Twig.compiler.wrap = function (id, tokens) {
+        return 'twig({id:"' + id.replace('"', '\\"') + '", data:' + tokens + ', precompiled: true});\n';
+    };
+
+    return Twig;
+};
+
+
+/***/ }),
+/* 6 */
+/***/ (function(module, exports, __webpack_require__) {
+
+// ## twig.expression.js
+//
+// This file handles tokenizing, compiling and parsing expressions.
+module.exports = function (Twig) {
+    'use strict';
+
+    function parseParams(state, params, context) {
+        if (params) {
+            return Twig.expression.parseAsync.call(state, params, context);
+        }
+
+        return Twig.Promise.resolve(false);
+    }
+
+    /**
+     * Namespace for expression handling.
+     */
+    Twig.expression = { };
+
+    __webpack_require__(7)(Twig);
+
+    /**
+     * Reserved word that can't be used as variable names.
+     */
+    Twig.expression.reservedWords = [
+        'true', 'false', 'null', 'TRUE', 'FALSE', 'NULL', '_context', 'and', 'b-and', 'or', 'b-or', 'b-xor', 'in', 'not in', 'if', 'matches', 'starts', 'ends', 'with'
+    ];
+
+    /**
+     * The type of tokens used in expressions.
+     */
+    Twig.expression.type = {
+        comma: 'Twig.expression.type.comma',
+        operator: {
+            unary: 'Twig.expression.type.operator.unary',
+            binary: 'Twig.expression.type.operator.binary'
+        },
+        string: 'Twig.expression.type.string',
+        bool: 'Twig.expression.type.bool',
+        slice: 'Twig.expression.type.slice',
+        array: {
+            start: 'Twig.expression.type.array.start',
+            end: 'Twig.expression.type.array.end'
+        },
+        object: {
+            start: 'Twig.expression.type.object.start',
+            end: 'Twig.expression.type.object.end'
+        },
+        parameter: {
+            start: 'Twig.expression.type.parameter.start',
+            end: 'Twig.expression.type.parameter.end'
+        },
+        subexpression: {
+            start: 'Twig.expression.type.subexpression.start',
+            end: 'Twig.expression.type.subexpression.end'
+        },
+        key: {
+            period: 'Twig.expression.type.key.period',
+            brackets: 'Twig.expression.type.key.brackets'
+        },
+        filter: 'Twig.expression.type.filter',
+        _function: 'Twig.expression.type._function',
+        variable: 'Twig.expression.type.variable',
+        number: 'Twig.expression.type.number',
+        _null: 'Twig.expression.type.null',
+        context: 'Twig.expression.type.context',
+        test: 'Twig.expression.type.test'
+    };
+
+    Twig.expression.set = {
+        // What can follow an expression (in general)
+        operations: [
+            Twig.expression.type.filter,
+            Twig.expression.type.operator.unary,
+            Twig.expression.type.operator.binary,
+            Twig.expression.type.array.end,
+            Twig.expression.type.object.end,
+            Twig.expression.type.parameter.end,
+            Twig.expression.type.subexpression.end,
+            Twig.expression.type.comma,
+            Twig.expression.type.test
+        ],
+        expressions: [
+            Twig.expression.type._function,
+            Twig.expression.type.bool,
+            Twig.expression.type.string,
+            Twig.expression.type.variable,
+            Twig.expression.type.number,
+            Twig.expression.type._null,
+            Twig.expression.type.context,
+            Twig.expression.type.parameter.start,
+            Twig.expression.type.array.start,
+            Twig.expression.type.object.start,
+            Twig.expression.type.subexpression.start,
+            Twig.expression.type.operator.unary
+        ]
+    };
+
+    // Most expressions allow a '.' or '[' after them, so we provide a convenience set
+    Twig.expression.set.operationsExtended = Twig.expression.set.operations.concat([
+        Twig.expression.type.key.period,
+        Twig.expression.type.key.brackets,
+        Twig.expression.type.slice
+    ]);
+
+    // Some commonly used compile and parse functions.
+    Twig.expression.fn = {
+        compile: {
+            push(token, stack, output) {
+                output.push(token);
+            },
+            pushBoth(token, stack, output) {
+                output.push(token);
+                stack.push(token);
+            }
+        },
+        parse: {
+            push(token, stack) {
+                stack.push(token);
+            },
+            pushValue(token, stack) {
+                stack.push(token.value);
+            }
+        }
+    };
+
+    // The regular expressions and compile/parse logic used to match tokens in expressions.
+    //
+    // Properties:
+    //
+    //      type:  The type of expression this matches
+    //
+    //      regex: One or more regular expressions that matche the format of the token.
+    //
+    //      next:  Valid tokens that can occur next in the expression.
+    //
+    // Functions:
+    //
+    //      compile: A function that compiles the raw regular expression match into a token.
+    //
+    //      parse:   A function that parses the compiled token into output.
+    //
+    Twig.expression.definitions = [
+        {
+            type: Twig.expression.type.test,
+            regex: /^is\s+(not)?\s*([a-zA-Z_]\w*(\s?as)?)/,
+            next: Twig.expression.set.operations.concat([Twig.expression.type.parameter.start]),
+            compile(token, stack, output) {
+                token.filter = token.match[2];
+                token.modifier = token.match[1];
+                delete token.match;
+                delete token.value;
+                output.push(token);
+            },
+            parse(token, stack, context) {
+                const value = stack.pop();
+                const state = this;
+
+                return parseParams(state, token.params, context)
+                    .then(params => {
+                        const result = Twig.test(token.filter, value, params);
+
+                        if (token.modifier === 'not') {
+                            stack.push(!result);
+                        } else {
+                            stack.push(result);
+                        }
+                    });
+            }
+        },
+        {
+            type: Twig.expression.type.comma,
+            // Match a comma
+            regex: /^,/,
+            next: Twig.expression.set.expressions.concat([Twig.expression.type.array.end, Twig.expression.type.object.end]),
+            compile(token, stack, output) {
+                let i = stack.length - 1;
+                let stackToken;
+
+                delete token.match;
+                delete token.value;
+
+                // Pop tokens off the stack until the start of the object
+                for (;i >= 0; i--) {
+                    stackToken = stack.pop();
+                    if (stackToken.type === Twig.expression.type.object.start ||
+                            stackToken.type === Twig.expression.type.parameter.start ||
+                            stackToken.type === Twig.expression.type.array.start) {
+                        stack.push(stackToken);
+                        break;
+                    }
+
+                    output.push(stackToken);
+                }
+
+                output.push(token);
+            }
+        },
+        {
+            /**
+             * Match a number (integer or decimal)
+             */
+            type: Twig.expression.type.number,
+            // Match a number
+            regex: /^-?\d+(\.\d+)?/,
+            next: Twig.expression.set.operations,
+            compile(token, stack, output) {
+                token.value = Number(token.value);
+                output.push(token);
+            },
+            parse: Twig.expression.fn.parse.pushValue
+        },
+        {
+            type: Twig.expression.type.operator.binary,
+            // Match any of ??, ?:, +, *, /, -, %, ~, <, <=, >, >=, !=, ==, **, ?, :, and, b-and, or, b-or, b-xor, in, not in
+            // and, or, in, not in, matches, starts with, ends with can be followed by a space or parenthesis
+            regex: /(^\?\?|^\?:|^(b-and)|^(b-or)|^(b-xor)|^[+\-~%?]|^[:](?!\d\])|^[!=]==?|^[!<>]=?|^\*\*?|^\/\/?|^(and)[(|\s+]|^(or)[(|\s+]|^(in)[(|\s+]|^(not in)[(|\s+]|^(matches)|^(starts with)|^(ends with)|^\.\.)/,
+            next: Twig.expression.set.expressions,
+            transform(match, tokens) {
+                switch (match[0]) {
+                    case 'and(':
+                    case 'or(':
+                    case 'in(':
+                    case 'not in(':
+                        // Strip off the ( if it exists
+                        tokens[tokens.length - 1].value = match[2];
+                        return match[0];
+                    default:
+                        return '';
+                }
+            },
+            compile(token, stack, output) {
+                delete token.match;
+
+                token.value = token.value.trim();
+                const {value} = token;
+                const operator = Twig.expression.operator.lookup(value, token);
+
+                Twig.log.trace('Twig.expression.compile: ', 'Operator: ', operator, ' from ', value);
+
+                while (stack.length > 0 &&
+                       (stack[stack.length - 1].type === Twig.expression.type.operator.unary || stack[stack.length - 1].type === Twig.expression.type.operator.binary) &&
+                            (
+                                (operator.associativity === Twig.expression.operator.leftToRight &&
+                                 operator.precidence >= stack[stack.length - 1].precidence) ||
+
+                                (operator.associativity === Twig.expression.operator.rightToLeft &&
+                                 operator.precidence > stack[stack.length - 1].precidence)
+                            )
+                ) {
+                    const temp = stack.pop();
+                    output.push(temp);
+                }
+
+                if (value === ':') {
+                    // Check if this is a ternary or object key being set
+                    if (stack[stack.length - 1] && stack[stack.length - 1].value === '?') {
+                        // Continue as normal for a ternary
+                    } else {
+                        // This is not a ternary so we push the token to the output where it can be handled
+                        //   when the assocated object is closed.
+                        const keyToken = output.pop();
+
+                        if (keyToken.type === Twig.expression.type.string ||
+                                keyToken.type === Twig.expression.type.variable) {
+                            token.key = keyToken.value;
+                        } else if (keyToken.type === Twig.expression.type.number) {
+                            // Convert integer keys into string keys
+                            token.key = keyToken.value.toString();
+                        } else if (keyToken.expression &&
+                            (keyToken.type === Twig.expression.type.parameter.end ||
+                            keyToken.type === Twig.expression.type.subexpression.end)) {
+                            token.params = keyToken.params;
+                        } else {
+                            throw new Twig.Error('Unexpected value before \':\' of ' + keyToken.type + ' = ' + keyToken.value);
+                        }
+
+                        output.push(token);
+                    }
+                } else {
+                    stack.push(operator);
+                }
+            },
+            parse(token, stack, context) {
+                const state = this;
+
+                if (token.key) {
+                    // Handle ternary ':' operator
+                    stack.push(token);
+                } else if (token.params) {
+                    // Handle "{(expression):value}"
+                    return Twig.expression.parseAsync.call(state, token.params, context)
+                        .then(key => {
+                            token.key = key;
+                            stack.push(token);
+
+                            // If we're in a loop, we might need token.params later, especially in this form of "(expression):value"
+                            if (!context.loop) {
+                                delete (token.params);
+                            }
+                        });
+                } else {
+                    Twig.expression.operator.parse(token.value, stack);
+                }
+            }
+        },
+        {
+            type: Twig.expression.type.operator.unary,
+            // Match any of not
+            regex: /(^not\s+)/,
+            next: Twig.expression.set.expressions,
+            compile(token, stack, output) {
+                delete token.match;
+
+                token.value = token.value.trim();
+                const {value} = token;
+                const operator = Twig.expression.operator.lookup(value, token);
+
+                Twig.log.trace('Twig.expression.compile: ', 'Operator: ', operator, ' from ', value);
+
+                while (stack.length > 0 &&
+                       (stack[stack.length - 1].type === Twig.expression.type.operator.unary || stack[stack.length - 1].type === Twig.expression.type.operator.binary) &&
+                            (
+                                (operator.associativity === Twig.expression.operator.leftToRight &&
+                                 operator.precidence >= stack[stack.length - 1].precidence) ||
+
+                                (operator.associativity === Twig.expression.operator.rightToLeft &&
+                                 operator.precidence > stack[stack.length - 1].precidence)
+                            )
+                ) {
+                    const temp = stack.pop();
+                    output.push(temp);
+                }
+
+                stack.push(operator);
+            },
+            parse(token, stack) {
+                Twig.expression.operator.parse(token.value, stack);
+            }
+        },
+        {
+            /**
+             * Match a string. This is anything between a pair of single or double quotes.
+             */
+            type: Twig.expression.type.string,
+            // See: http://blog.stevenlevithan.com/archives/match-quoted-string
+            regex: /^(["'])(?:(?=(\\?))\2[\s\S])*?\1/,
+            next: Twig.expression.set.operationsExtended,
+            compile(token, stack, output) {
+                let {value} = token;
+                delete token.match;
+
+                // Remove the quotes from the string
+                if (value.substring(0, 1) === '"') {
+                    value = value.replace('\\"', '"');
+                } else {
+                    value = value.replace('\\\'', '\'');
+                }
+
+                token.value = value.substring(1, value.length - 1).replace(/\\n/g, '\n').replace(/\\r/g, '\r');
+                Twig.log.trace('Twig.expression.compile: ', 'String value: ', token.value);
+                output.push(token);
+            },
+            parse: Twig.expression.fn.parse.pushValue
+        },
+        {
+            /**
+             * Match a subexpression set start.
+             */
+            type: Twig.expression.type.subexpression.start,
+            regex: /^\(/,
+            next: Twig.expression.set.expressions.concat([Twig.expression.type.subexpression.end]),
+            compile(token, stack, output) {
+                token.value = '(';
+                output.push(token);
+                stack.push(token);
+            },
+            parse: Twig.expression.fn.parse.push
+        },
+        {
+            /**
+             * Match a subexpression set end.
+             */
+            type: Twig.expression.type.subexpression.end,
+            regex: /^\)/,
+            next: Twig.expression.set.operationsExtended,
+            validate(match, tokens) {
+                // Iterate back through previous tokens to ensure we follow a subexpression start
+                let i = tokens.length - 1;
+                let foundSubexpressionStart = false;
+                let nextSubexpressionStartInvalid = false;
+                let unclosedParameterCount = 0;
+
+                while (!foundSubexpressionStart && i >= 0) {
+                    const token = tokens[i];
+
+                    foundSubexpressionStart = token.type === Twig.expression.type.subexpression.start;
+
+                    // If we have previously found a subexpression end, then this subexpression start is the start of
+                    // that subexpression, not the subexpression we are searching for
+                    if (foundSubexpressionStart && nextSubexpressionStartInvalid) {
+                        nextSubexpressionStartInvalid = false;
+                        foundSubexpressionStart = false;
+                    }
+
+                    // Count parameter tokens to ensure we dont return truthy for a parameter opener
+                    if (token.type === Twig.expression.type.parameter.start) {
+                        unclosedParameterCount++;
+                    } else if (token.type === Twig.expression.type.parameter.end) {
+                        unclosedParameterCount--;
+                    } else if (token.type === Twig.expression.type.subexpression.end) {
+                        nextSubexpressionStartInvalid = true;
+                    }
+
+                    i--;
+                }
+
+                // If we found unclosed parameters, return false
+                // If we didnt find subexpression start, return false
+                // Otherwise return true
+
+                return (foundSubexpressionStart && (unclosedParameterCount === 0));
+            },
+            compile(token, stack, output) {
+                // This is basically a copy of parameter end compilation
+                let stackToken;
+                const endToken = token;
+
+                stackToken = stack.pop();
+                while (stack.length > 0 && stackToken.type !== Twig.expression.type.subexpression.start) {
+                    output.push(stackToken);
+                    stackToken = stack.pop();
+                }
+
+                // Move contents of parens into preceding filter
+                const paramStack = [];
+                while (token.type !== Twig.expression.type.subexpression.start) {
+                    // Add token to arguments stack
+                    paramStack.unshift(token);
+                    token = output.pop();
+                }
+
+                paramStack.unshift(token);
+
+                // If the token at the top of the *stack* is a function token, pop it onto the output queue.
+                // Get the token preceding the parameters
+                stackToken = stack[stack.length - 1];
+
+                if (stackToken === undefined ||
+                    (stackToken.type !== Twig.expression.type._function &&
+                    stackToken.type !== Twig.expression.type.filter &&
+                    stackToken.type !== Twig.expression.type.test &&
+                    stackToken.type !== Twig.expression.type.key.brackets)) {
+                    endToken.expression = true;
+
+                    // Remove start and end token from stack
+                    paramStack.pop();
+                    paramStack.shift();
+
+                    endToken.params = paramStack;
+
+                    output.push(endToken);
+                } else {
+                    // This should never be hit
+                    endToken.expression = false;
+                    stackToken.params = paramStack;
+                }
+            },
+            parse(token, stack, context) {
+                const state = this;
+
+                if (token.expression) {
+                    return Twig.expression.parseAsync.call(state, token.params, context)
+                        .then(value => {
+                            stack.push(value);
+                        });
+                }
+
+                throw new Twig.Error('Unexpected subexpression end when token is not marked as an expression');
+            }
+        },
+        {
+            /**
+             * Match a parameter set start.
+             */
+            type: Twig.expression.type.parameter.start,
+            regex: /^\(/,
+            next: Twig.expression.set.expressions.concat([Twig.expression.type.parameter.end]),
+            validate(match, tokens) {
+                const lastToken = tokens[tokens.length - 1];
+                // We can't use the regex to test if we follow a space because expression is trimmed
+                return lastToken && (Twig.expression.reservedWords.indexOf(lastToken.value.trim()) < 0);
+            },
+            compile: Twig.expression.fn.compile.pushBoth,
+            parse: Twig.expression.fn.parse.push
+        },
+        {
+            /**
+             * Match a parameter set end.
+             */
+            type: Twig.expression.type.parameter.end,
+            regex: /^\)/,
+            next: Twig.expression.set.operationsExtended,
+            compile(token, stack, output) {
+                let stackToken;
+                const endToken = token;
+
+                stackToken = stack.pop();
+                while (stack.length > 0 && stackToken.type !== Twig.expression.type.parameter.start) {
+                    output.push(stackToken);
+                    stackToken = stack.pop();
+                }
+
+                // Move contents of parens into preceding filter
+                const paramStack = [];
+                while (token.type !== Twig.expression.type.parameter.start) {
+                    // Add token to arguments stack
+                    paramStack.unshift(token);
+                    token = output.pop();
+                }
+
+                paramStack.unshift(token);
+
+                // Get the token preceding the parameters
+                token = output[output.length - 1];
+
+                if (token === undefined ||
+                    (token.type !== Twig.expression.type._function &&
+                    token.type !== Twig.expression.type.filter &&
+                    token.type !== Twig.expression.type.test &&
+                    token.type !== Twig.expression.type.key.brackets)) {
+                    endToken.expression = true;
+
+                    // Remove start and end token from stack
+                    paramStack.pop();
+                    paramStack.shift();
+
+                    endToken.params = paramStack;
+
+                    output.push(endToken);
+                } else {
+                    endToken.expression = false;
+                    token.params = paramStack;
+                }
+            },
+            parse(token, stack, context) {
+                const newArray = [];
+                let arrayEnded = false;
+                let value = null;
+                const state = this;
+
+                if (token.expression) {
+                    return Twig.expression.parseAsync.call(state, token.params, context)
+                        .then(value => {
+                            stack.push(value);
+                        });
+                }
+
+                while (stack.length > 0) {
+                    value = stack.pop();
+                    // Push values into the array until the start of the array
+                    if (value && value.type && value.type === Twig.expression.type.parameter.start) {
+                        arrayEnded = true;
+                        break;
+                    }
+
+                    newArray.unshift(value);
+                }
+
+                if (!arrayEnded) {
+                    throw new Twig.Error('Expected end of parameter set.');
+                }
+
+                stack.push(newArray);
+            }
+        },
+        {
+            type: Twig.expression.type.slice,
+            regex: /^\[(\d*:\d*)\]/,
+            next: Twig.expression.set.operationsExtended,
+            compile(token, stack, output) {
+                const sliceRange = token.match[1].split(':');
+
+                // SliceStart can be undefined when we pass parameters to the slice filter later
+                const sliceStart = (sliceRange[0]) ? parseInt(sliceRange[0], 10) : undefined;
+                const sliceEnd = (sliceRange[1]) ? parseInt(sliceRange[1], 10) : undefined;
+
+                token.value = 'slice';
+                token.params = [sliceStart, sliceEnd];
+
+                // SliceEnd can't be undefined as the slice filter doesn't check for this, but it does check the length
+                // of the params array, so just shorten it.
+                if (!sliceEnd) {
+                    token.params = [sliceStart];
+                }
+
+                output.push(token);
+            },
+            parse(token, stack) {
+                const input = stack.pop();
+                const {params} = token;
+                const state = this;
+
+                stack.push(Twig.filter.call(state, token.value, input, params));
+            }
+        },
+        {
+            /**
+             * Match an array start.
+             */
+            type: Twig.expression.type.array.start,
+            regex: /^\[/,
+            next: Twig.expression.set.expressions.concat([Twig.expression.type.array.end]),
+            compile: Twig.expression.fn.compile.pushBoth,
+            parse: Twig.expression.fn.parse.push
+        },
+        {
+            /**
+             * Match an array end.
+             */
+            type: Twig.expression.type.array.end,
+            regex: /^\]/,
+            next: Twig.expression.set.operationsExtended,
+            compile(token, stack, output) {
+                let i = stack.length - 1;
+                let stackToken;
+                // Pop tokens off the stack until the start of the object
+                for (;i >= 0; i--) {
+                    stackToken = stack.pop();
+                    if (stackToken.type === Twig.expression.type.array.start) {
+                        break;
+                    }
+
+                    output.push(stackToken);
+                }
+
+                output.push(token);
+            },
+            parse(token, stack) {
+                const newArray = [];
+                let arrayEnded = false;
+                let value = null;
+
+                while (stack.length > 0) {
+                    value = stack.pop();
+                    // Push values into the array until the start of the array
+                    if (value.type && value.type === Twig.expression.type.array.start) {
+                        arrayEnded = true;
+                        break;
+                    }
+
+                    newArray.unshift(value);
+                }
+
+                if (!arrayEnded) {
+                    throw new Twig.Error('Expected end of array.');
+                }
+
+                stack.push(newArray);
+            }
+        },
+        // Token that represents the start of a hash map '}'
+        //
+        // Hash maps take the form:
+        //    { "key": 'value', "another_key": item }
+        //
+        // Keys must be quoted (either single or double) and values can be any expression.
+        {
+            type: Twig.expression.type.object.start,
+            regex: /^\{/,
+            next: Twig.expression.set.expressions.concat([Twig.expression.type.object.end]),
+            compile: Twig.expression.fn.compile.pushBoth,
+            parse: Twig.expression.fn.parse.push
+        },
+
+        // Token that represents the end of a Hash Map '}'
+        //
+        // This is where the logic for building the internal
+        // representation of a hash map is defined.
+        {
+            type: Twig.expression.type.object.end,
+            regex: /^\}/,
+            next: Twig.expression.set.operationsExtended,
+            compile(token, stack, output) {
+                let i = stack.length - 1;
+                let stackToken;
+
+                // Pop tokens off the stack until the start of the object
+                for (;i >= 0; i--) {
+                    stackToken = stack.pop();
+                    if (stackToken && stackToken.type === Twig.expression.type.object.start) {
+                        break;
+                    }
+
+                    output.push(stackToken);
+                }
+
+                output.push(token);
+            },
+            parse(endToken, stack) {
+                const newObject = {};
+                let objectEnded = false;
+                let token = null;
+                let hasValue = false;
+                let value = null;
+
+                while (stack.length > 0) {
+                    token = stack.pop();
+                    // Push values into the array until the start of the object
+                    if (token && token.type && token.type === Twig.expression.type.object.start) {
+                        objectEnded = true;
+                        break;
+                    }
+
+                    if (token && token.type && (token.type === Twig.expression.type.operator.binary || token.type === Twig.expression.type.operator.unary) && token.key) {
+                        if (!hasValue) {
+                            throw new Twig.Error('Missing value for key \'' + token.key + '\' in object definition.');
+                        }
+
+                        newObject[token.key] = value;
+
+                        // Preserve the order that elements are added to the map
+                        // This is necessary since JavaScript objects don't
+                        // guarantee the order of keys
+                        if (newObject._keys === undefined) {
+                            newObject._keys = [];
+                        }
+
+                        newObject._keys.unshift(token.key);
+
+                        // Reset value check
+                        value = null;
+                        hasValue = false;
+                    } else {
+                        hasValue = true;
+                        value = token;
+                    }
+                }
+
+                if (!objectEnded) {
+                    throw new Twig.Error('Unexpected end of object.');
+                }
+
+                stack.push(newObject);
+            }
+        },
+
+        // Token representing a filter
+        //
+        // Filters can follow any expression and take the form:
+        //    expression|filter(optional, args)
+        //
+        // Filter parsing is done in the Twig.filters namespace.
+        {
+            type: Twig.expression.type.filter,
+            // Match a | then a letter or _, then any number of letters, numbers, _ or -
+            regex: /^\|\s?([a-zA-Z_][a-zA-Z0-9_-]*)/,
+            next: Twig.expression.set.operationsExtended.concat([
+                Twig.expression.type.parameter.start
+            ]),
+            compile(token, stack, output) {
+                token.value = token.match[1];
+                output.push(token);
+            },
+            parse(token, stack, context) {
+                const input = stack.pop();
+                const state = this;
+
+                return parseParams(state, token.params, context)
+                    .then(params => {
+                        return Twig.filter.call(state, token.value, input, params);
+                    })
+                    .then(value => {
+                        stack.push(value);
+                    });
+            }
+        },
+        {
+            type: Twig.expression.type._function,
+            // Match any letter or _, then any number of letters, numbers, _ or - followed by (
+            regex: /^([a-zA-Z_]\w*)\s*\(/,
+            next: Twig.expression.type.parameter.start,
+            validate(match) {
+                // Make sure this function is not a reserved word
+                return match[1] && (Twig.expression.reservedWords.indexOf(match[1]) < 0);
+            },
+            transform() {
+                return '(';
+            },
+            compile(token, stack, output) {
+                const fn = token.match[1];
+                token.fn = fn;
+                // Cleanup token
+                delete token.match;
+                delete token.value;
+
+                output.push(token);
+            },
+            parse(token, stack, context) {
+                const state = this;
+                const {fn} = token;
+                let value;
+
+                return parseParams(state, token.params, context)
+                    .then(params => {
+                        if (Twig.functions[fn]) {
+                        // Get the function from the built-in functions
+                            value = Twig.functions[fn].apply(state, params);
+                        } else if (typeof context[fn] === 'function') {
+                        // Get the function from the user/context defined functions
+                            value = context[fn](...params);
+                        } else {
+                            throw new Twig.Error(fn + ' function does not exist and is not defined in the context');
+                        }
+
+                        return value;
+                    })
+                    .then(result => {
+                        stack.push(result);
+                    });
+            }
+        },
+
+        // Token representing a variable.
+        //
+        // Variables can contain letters, numbers, underscores and
+        // dashes, but must start with a letter or underscore.
+        //
+        // Variables are retrieved from the render context and take
+        // the value of 'undefined' if the given variable doesn't
+        // exist in the context.
+        {
+            type: Twig.expression.type.variable,
+            // Match any letter or _, then any number of letters, numbers, _ or -
+            regex: /^[a-zA-Z_]\w*/,
+            next: Twig.expression.set.operationsExtended.concat([
+                Twig.expression.type.parameter.start
+            ]),
+            compile: Twig.expression.fn.compile.push,
+            validate(match) {
+                return (Twig.expression.reservedWords.indexOf(match[0]) < 0);
+            },
+            parse(token, stack, context) {
+                const state = this;
+
+                // Get the variable from the context
+                return Twig.expression.resolveAsync.call(state, context[token.value], context)
+                    .then(value => {
+                        if (state.template.options.strictVariables && value === undefined) {
+                            throw new Twig.Error('Variable "' + token.value + '" does not exist.');
+                        }
+
+                        stack.push(value);
+                    });
+            }
+        },
+        {
+            type: Twig.expression.type.key.period,
+            regex: /^\.(\w+)/,
+            next: Twig.expression.set.operationsExtended.concat([
+                Twig.expression.type.parameter.start
+            ]),
+            compile(token, stack, output) {
+                token.key = token.match[1];
+                delete token.match;
+                delete token.value;
+
+                output.push(token);
+            },
+            parse(token, stack, context, nextToken) {
+                const state = this;
+                const {key} = token;
+                const object = stack.pop();
+                let value;
+
+                if (object && !Object.prototype.hasOwnProperty.call(object, key) && state.template.options.strictVariables) {
+                    const keys = Object.keys(object);
+                    if (keys.length > 0) {
+                        throw new Twig.Error('Key "' + key + '" for object with keys "' + Object.keys(object).join(', ') + '" does not exist.');
+                    } else {
+                        throw new Twig.Error('Key "' + key + '" does not exist as the object is empty.');
+                    }
+                }
+
+                return parseParams(state, token.params, context)
+                    .then(params => {
+                        if (object === null || object === undefined) {
+                            value = undefined;
+                        } else {
+                            const capitalize = function (value) {
+                                return value.substr(0, 1).toUpperCase() + value.substr(1);
+                            };
+
+                            // Get the variable from the context
+                            if (typeof object === 'object' && key in object) {
+                                value = object[key];
+                            } else if (object['get' + capitalize(key)]) {
+                                value = object['get' + capitalize(key)];
+                            } else if (object['is' + capitalize(key)]) {
+                                value = object['is' + capitalize(key)];
+                            } else {
+                                value = undefined;
+                            }
+                        }
+
+                        // When resolving an expression we need to pass nextToken in case the expression is a function
+                        return Twig.expression.resolveAsync.call(state, value, context, params, nextToken, object);
+                    })
+                    .then(result => {
+                        stack.push(result);
+                    });
+            }
+        },
+        {
+            type: Twig.expression.type.key.brackets,
+            regex: /^\[([^\]:]*)\]/,
+            next: Twig.expression.set.operationsExtended.concat([
+                Twig.expression.type.parameter.start
+            ]),
+            compile(token, stack, output) {
+                const match = token.match[1];
+                delete token.value;
+                delete token.match;
+
+                // The expression stack for the key
+                token.stack = Twig.expression.compile({
+                    value: match
+                }).stack;
+
+                output.push(token);
+            },
+            parse(token, stack, context, nextToken) {
+                // Evaluate key
+                const state = this;
+                let params = null;
+                let object;
+                let value;
+
+                return parseParams(state, token.params, context)
+                    .then(parameters => {
+                        params = parameters;
+                        return Twig.expression.parseAsync.call(state, token.stack, context);
+                    })
+                    .then(key => {
+                        object = stack.pop();
+
+                        if (object && !Object.prototype.hasOwnProperty.call(object, key) && state.template.options.strictVariables) {
+                            const keys = Object.keys(object);
+                            if (keys.length > 0) {
+                                throw new Twig.Error('Key "' + key + '" for array with keys "' + keys.join(', ') + '" does not exist.');
+                            } else {
+                                throw new Twig.Error('Key "' + key + '" does not exist as the array is empty.');
+                            }
+                        } else if (object === null || object === undefined) {
+                            return null;
+                        }
+
+                        // Get the variable from the context
+                        if (typeof object === 'object' && key in object) {
+                            value = object[key];
+                        } else {
+                            value = null;
+                        }
+
+                        // When resolving an expression we need to pass nextToken in case the expression is a function
+                        return Twig.expression.resolveAsync.call(state, value, object, params, nextToken);
+                    })
+                    .then(result => {
+                        stack.push(result);
+                    });
+            }
+        },
+        {
+            /**
+             * Match a null value.
+             */
+            type: Twig.expression.type._null,
+            // Match a number
+            regex: /^(null|NULL|none|NONE)/,
+            next: Twig.expression.set.operations,
+            compile(token, stack, output) {
+                delete token.match;
+                token.value = null;
+                output.push(token);
+            },
+            parse: Twig.expression.fn.parse.pushValue
+        },
+        {
+            /**
+             * Match the context
+             */
+            type: Twig.expression.type.context,
+            regex: /^_context/,
+            next: Twig.expression.set.operationsExtended.concat([
+                Twig.expression.type.parameter.start
+            ]),
+            compile: Twig.expression.fn.compile.push,
+            parse(token, stack, context) {
+                stack.push(context);
+            }
+        },
+        {
+            /**
+             * Match a boolean
+             */
+            type: Twig.expression.type.bool,
+            regex: /^(true|TRUE|false|FALSE)/,
+            next: Twig.expression.set.operations,
+            compile(token, stack, output) {
+                token.value = (token.match[0].toLowerCase() === 'true');
+                delete token.match;
+                output.push(token);
+            },
+            parse: Twig.expression.fn.parse.pushValue
+        }
+    ];
+
+    /**
+     * Resolve a context value.
+     *
+     * If the value is a function, it is executed with a context parameter.
+     *
+     * @param {string} key The context object key.
+     * @param {Object} context The render context.
+     */
+    Twig.expression.resolveAsync = function (value, context, params, nextToken, object) {
+        const state = this;
+
+        if (typeof value !== 'function') {
+            return Twig.Promise.resolve(value);
+        }
+
+        let promise = Twig.Promise.resolve(params);
+
+        /*
+        If value is a function, it will have been impossible during the compile stage to determine that a following
+        set of parentheses were parameters for this function.
+
+        Those parentheses will have therefore been marked as an expression, with their own parameters, which really
+        belong to this function.
+
+        Those parameters will also need parsing in case they are actually an expression to pass as parameters.
+            */
+        if (nextToken && nextToken.type === Twig.expression.type.parameter.end) {
+            // When parsing these parameters, we need to get them all back, not just the last item on the stack.
+            const tokensAreParameters = true;
+
+            promise = promise.then(() => {
+                return nextToken.params && Twig.expression.parseAsync.call(state, nextToken.params, context, tokensAreParameters);
+            })
+                .then(p => {
+                // Clean up the parentheses tokens on the next loop
+                    nextToken.cleanup = true;
+
+                    return p;
+                });
+        }
+
+        return promise.then(params => {
+            return value.apply(object || context, params || []);
+        });
+    };
+
+    Twig.expression.resolve = function (value, context, params, nextToken, object) {
+        return Twig.async.potentiallyAsync(this, false, function () {
+            return Twig.expression.resolveAsync.call(this, value, context, params, nextToken, object);
+        });
+    };
+
+    /**
+     * Registry for logic handlers.
+     */
+    Twig.expression.handler = {};
+
+    /**
+     * Define a new expression type, available at Twig.logic.type.{type}
+     *
+     * @param {string} type The name of the new type.
+     */
+    Twig.expression.extendType = function (type) {
+        Twig.expression.type[type] = 'Twig.expression.type.' + type;
+    };
+
+    /**
+     * Extend the expression parsing functionality with a new definition.
+     *
+     * Token definitions follow this format:
+     *  {
+     *      type:     One of Twig.expression.type.[type], either pre-defined or added using
+     *                    Twig.expression.extendType
+     *
+     *      next:     Array of types from Twig.expression.type that can follow this token,
+     *
+     *      regex:    A regex or array of regex's that should match the token.
+     *
+     *      compile: function(token, stack, output) called when this token is being compiled.
+     *                   Should return an object with stack and output set.
+     *
+     *      parse:   function(token, stack, context) called when this token is being parsed.
+     *                   Should return an object with stack and context set.
+     *  }
+     *
+     * @param {Object} definition A token definition.
+     */
+    Twig.expression.extend = function (definition) {
+        if (!definition.type) {
+            throw new Twig.Error('Unable to extend logic definition. No type provided for ' + definition);
+        }
+
+        Twig.expression.handler[definition.type] = definition;
+    };
+
+    // Extend with built-in expressions
+    while (Twig.expression.definitions.length > 0) {
+        Twig.expression.extend(Twig.expression.definitions.shift());
+    }
+
+    /**
+     * Break an expression into tokens defined in Twig.expression.definitions.
+     *
+     * @param {string} expression The string to tokenize.
+     *
+     * @return {Array} An array of tokens.
+     */
+    Twig.expression.tokenize = function (expression) {
+        const tokens = [];
+        // Keep an offset of the location in the expression for error messages.
+        let expOffset = 0;
+        // The valid next tokens of the previous token
+        let next = null;
+        // Match information
+        let type;
+        let regex;
+        let regexI;
+        // The possible next token for the match
+        let tokenNext;
+        // Has a match been found from the definitions
+        let matchFound;
+        let invalidMatches = [];
+
+        const matchFunction = function (...args) {
+            // Don't pass arguments to `Array.slice`, that is a performance killer
+            let matchI = arguments.length - 2;
+            const match = new Array(matchI);
+
+            while (matchI-- > 0) {
+                match[matchI] = args[matchI];
+            }
+
+            Twig.log.trace('Twig.expression.tokenize',
+                'Matched a ', type, ' regular expression of ', match);
+
+            if (next && next.indexOf(type) < 0) {
+                invalidMatches.push(
+                    type + ' cannot follow a ' + tokens[tokens.length - 1].type +
+                           ' at template:' + expOffset + ' near \'' + match[0].substring(0, 20) +
+                           '...\''
+                );
+
+                // Not a match, don't change the expression
+                return match[0];
+            }
+
+            const handler = Twig.expression.handler[type];
+
+            // Validate the token if a validation function is provided
+            if (handler.validate && !handler.validate(match, tokens)) {
+                return match[0];
+            }
+
+            invalidMatches = [];
+
+            tokens.push({
+                type,
+                value: match[0],
+                match
+            });
+
+            matchFound = true;
+            next = tokenNext;
+            expOffset += match[0].length;
+
+            // Does the token need to return output back to the expression string
+            // e.g. a function match of cycle( might return the '(' back to the expression
+            // This allows look-ahead to differentiate between token types (e.g. functions and variable names)
+            if (handler.transform) {
+                return handler.transform(match, tokens);
+            }
+
+            return '';
+        };
+
+        Twig.log.debug('Twig.expression.tokenize', 'Tokenizing expression ', expression);
+
+        while (expression.length > 0) {
+            expression = expression.trim();
+            for (type in Twig.expression.handler) {
+                if (Object.hasOwnProperty.call(Twig.expression.handler, type)) {
+                    tokenNext = Twig.expression.handler[type].next;
+                    regex = Twig.expression.handler[type].regex;
+                    Twig.log.trace('Checking type ', type, ' on ', expression);
+
+                    matchFound = false;
+
+                    if (Array.isArray(regex)) {
+                        regexI = regex.length;
+                        while (regexI-- > 0) {
+                            expression = expression.replace(regex[regexI], matchFunction);
+                        }
+                    } else {
+                        expression = expression.replace(regex, matchFunction);
+                    }
+
+                    // An expression token has been matched. Break the for loop and start trying to
+                    //  match the next template (if expression isn't empty.)
+                    if (matchFound) {
+                        break;
+                    }
+                }
+            }
+
+            if (!matchFound) {
+                if (invalidMatches.length > 0) {
+                    throw new Twig.Error(invalidMatches.join(' OR '));
+                } else {
+                    throw new Twig.Error('Unable to parse \'' + expression + '\' at template position' + expOffset);
+                }
+            }
+        }
+
+        Twig.log.trace('Twig.expression.tokenize', 'Tokenized to ', tokens);
+        return tokens;
+    };
+
+    /**
+     * Compile an expression token.
+     *
+     * @param {Object} rawToken The uncompiled token.
+     *
+     * @return {Object} The compiled token.
+     */
+    Twig.expression.compile = function (rawToken) {
+        const expression = rawToken.value;
+        // Tokenize expression
+        const tokens = Twig.expression.tokenize(expression);
+        let token = null;
+        const output = [];
+        const stack = [];
+        let tokenTemplate = null;
+
+        Twig.log.trace('Twig.expression.compile: ', 'Compiling ', expression);
+
+        // Push tokens into RPN stack using the Shunting-yard algorithm
+        // See http://en.wikipedia.org/wiki/Shunting_yard_algorithm
+
+        while (tokens.length > 0) {
+            token = tokens.shift();
+            tokenTemplate = Twig.expression.handler[token.type];
+
+            Twig.log.trace('Twig.expression.compile: ', 'Compiling ', token);
+
+            // Compile the template
+            tokenTemplate.compile(token, stack, output);
+
+            Twig.log.trace('Twig.expression.compile: ', 'Stack is', stack);
+            Twig.log.trace('Twig.expression.compile: ', 'Output is', output);
+        }
+
+        while (stack.length > 0) {
+            output.push(stack.pop());
+        }
+
+        Twig.log.trace('Twig.expression.compile: ', 'Final output is', output);
+
+        rawToken.stack = output;
+        delete rawToken.value;
+
+        return rawToken;
+    };
+
+    /**
+     * Parse an RPN expression stack within a context.
+     *
+     * @param {Array} tokens An array of compiled expression tokens.
+     * @param {Object} context The render context to parse the tokens with.
+     *
+     * @return {Object} The result of parsing all the tokens. The result
+     *                  can be anything, String, Array, Object, etc... based on
+     *                  the given expression.
+     */
+    Twig.expression.parse = function (tokens, context, tokensAreParameters, allowAsync) {
+        const state = this;
+
+        // If the token isn't an array, make it one.
+        if (!Array.isArray(tokens)) {
+            tokens = [tokens];
+        }
+
+        // The output stack
+        const stack = [];
+        const loopTokenFixups = [];
+        const binaryOperator = Twig.expression.type.operator.binary;
+
+        return Twig.async.potentiallyAsync(state, allowAsync, () => {
+            return Twig.async.forEach(tokens, (token, index) => {
+                let tokenTemplate = null;
+                let nextToken = null;
+                let result;
+
+                // If the token is marked for cleanup, we don't need to parse it
+                if (token.cleanup) {
+                    return;
+                }
+
+                // Determine the token that follows this one so that we can pass it to the parser
+                if (tokens.length > index + 1) {
+                    nextToken = tokens[index + 1];
+                }
+
+                tokenTemplate = Twig.expression.handler[token.type];
+
+                if (tokenTemplate.parse) {
+                    result = tokenTemplate.parse.call(state, token, stack, context, nextToken);
+                }
+
+                // Store any binary tokens for later if we are in a loop.
+                if (token.type === binaryOperator && context.loop) {
+                    loopTokenFixups.push(token);
+                }
+
+                return result;
+            })
+                .then(() => {
+                // Check every fixup and remove "key" as long as they still have "params". This covers the use case where
+                // a ":" operator is used in a loop with a "(expression):" statement. We need to be able to evaluate the expression
+                    let len = loopTokenFixups.length;
+                    let loopTokenFixup = null;
+
+                    while (len-- > 0) {
+                        loopTokenFixup = loopTokenFixups[len];
+                        if (loopTokenFixup.params && loopTokenFixup.key) {
+                            delete loopTokenFixup.key;
+                        }
+                    }
+
+                    // If parse has been called with a set of tokens that are parameters, we need to return the whole stack,
+                    // wrapped in an Array.
+                    if (tokensAreParameters) {
+                        const params = stack.splice(0);
+
+                        stack.push(params);
+                    }
+
+                    // Pop the final value off the stack
+                    return stack.pop();
+                });
+        });
+    };
+
+    return Twig;
+};
+
+
+/***/ }),
+/* 7 */
+/***/ (function(module, exports) {
+
+// ## twig.expression.operator.js
+//
+// This file handles operator lookups and parsing.
+module.exports = function (Twig) {
+    'use strict';
+
+    /**
+     * Operator associativity constants.
+     */
+    Twig.expression.operator = {
+        leftToRight: 'leftToRight',
+        rightToLeft: 'rightToLeft'
+    };
+
+    const containment = function (a, b) {
+        if (b === undefined || b === null) {
+            return null;
+        }
+
+        if (b.indexOf !== undefined) {
+            // String
+            return (a === b || a !== '') && b.indexOf(a) > -1;
+        }
+
+        let el;
+        for (el in b) {
+            if (Object.hasOwnProperty.call(b, el) && b[el] === a) {
+                return true;
+            }
+        }
+
+        return false;
+    };
+
+    /**
+     * Get the precidence and associativity of an operator. These follow the order that C/C++ use.
+     * See http://en.wikipedia.org/wiki/Operators_in_C_and_C++ for the table of values.
+     */
+    Twig.expression.operator.lookup = function (operator, token) {
+        switch (operator) {
+            case '..':
+                token.precidence = 20;
+                token.associativity = Twig.expression.operator.leftToRight;
+                break;
+
+            case ',':
+                token.precidence = 18;
+                token.associativity = Twig.expression.operator.leftToRight;
+                break;
+
+            // Ternary
+            case '?:':
+            case '?':
+            case ':':
+                token.precidence = 16;
+                token.associativity = Twig.expression.operator.rightToLeft;
+                break;
+
+            // Null-coalescing operator
+            case '??':
+                token.precidence = 15;
+                token.associativity = Twig.expression.operator.rightToLeft;
+                break;
+
+            case 'or':
+                token.precidence = 14;
+                token.associativity = Twig.expression.operator.leftToRight;
+                break;
+
+            case 'and':
+                token.precidence = 13;
+                token.associativity = Twig.expression.operator.leftToRight;
+                break;
+
+            case 'b-or':
+                token.precidence = 12;
+                token.associativity = Twig.expression.operator.leftToRight;
+                break;
+
+            case 'b-xor':
+                token.precidence = 11;
+                token.associativity = Twig.expression.operator.leftToRight;
+                break;
+
+            case 'b-and':
+                token.precidence = 10;
+                token.associativity = Twig.expression.operator.leftToRight;
+                break;
+
+            case '==':
+            case '!=':
+                token.precidence = 9;
+                token.associativity = Twig.expression.operator.leftToRight;
+                break;
+
+            case '<':
+            case '<=':
+            case '>':
+            case '>=':
+            case 'not in':
+            case 'in':
+                token.precidence = 8;
+                token.associativity = Twig.expression.operator.leftToRight;
+                break;
+
+            case '~': // String concatination
+            case '+':
+            case '-':
+                token.precidence = 6;
+                token.associativity = Twig.expression.operator.leftToRight;
+                break;
+
+            case '//':
+            case '**':
+            case '*':
+            case '/':
+            case '%':
+                token.precidence = 5;
+                token.associativity = Twig.expression.operator.leftToRight;
+                break;
+
+            case 'not':
+                token.precidence = 3;
+                token.associativity = Twig.expression.operator.rightToLeft;
+                break;
+
+            case 'matches':
+                token.precidence = 8;
+                token.associativity = Twig.expression.operator.leftToRight;
+                break;
+
+            case 'starts with':
+                token.precidence = 8;
+                token.associativity = Twig.expression.operator.leftToRight;
+                break;
+
+            case 'ends with':
+                token.precidence = 8;
+                token.associativity = Twig.expression.operator.leftToRight;
+                break;
+
+            default:
+                throw new Twig.Error('Failed to lookup operator: ' + operator + ' is an unknown operator.');
+        }
+
+        token.operator = operator;
+        return token;
+    };
+
+    /**
+     * Handle operations on the RPN stack.
+     *
+     * Returns the updated stack.
+     */
+    Twig.expression.operator.parse = function (operator, stack) {
+        Twig.log.trace('Twig.expression.operator.parse: ', 'Handling ', operator);
+        let a;
+        let b;
+        let c;
+
+        if (operator === '?') {
+            c = stack.pop();
+        }
+
+        b = stack.pop();
+        if (operator !== 'not') {
+            a = stack.pop();
+        }
+
+        if (operator !== 'in' && operator !== 'not in' && operator !== '??') {
+            if (a && Array.isArray(a)) {
+                a = a.length;
+            }
+
+            if (b && Array.isArray(b)) {
+                b = b.length;
+            }
+        }
+
+        if (operator === 'matches') {
+            if (b && typeof b === 'string') {
+                const reParts = b.match(/^\/(.*)\/([gims]?)$/);
+                const reBody = reParts[1];
+                const reFlags = reParts[2];
+                b = new RegExp(reBody, reFlags);
+            }
+        }
+
+        switch (operator) {
+            case ':':
+                // Ignore
+                break;
+
+            case '??':
+                if (a === undefined) {
+                    a = b;
+                    b = c;
+                    c = undefined;
+                }
+
+                if (a !== undefined && a !== null) {
+                    stack.push(a);
+                } else {
+                    stack.push(b);
+                }
+
+                break;
+            case '?:':
+                if (Twig.lib.boolval(a)) {
+                    stack.push(a);
+                } else {
+                    stack.push(b);
+                }
+
+                break;
+            case '?':
+                if (a === undefined) {
+                    // An extended ternary.
+                    a = b;
+                    b = c;
+                    c = undefined;
+                }
+
+                if (Twig.lib.boolval(a)) {
+                    stack.push(b);
+                } else {
+                    stack.push(c);
+                }
+
+                break;
+
+            case '+':
+                b = parseFloat(b);
+                a = parseFloat(a);
+                stack.push(a + b);
+                break;
+
+            case '-':
+                b = parseFloat(b);
+                a = parseFloat(a);
+                stack.push(a - b);
+                break;
+
+            case '*':
+                b = parseFloat(b);
+                a = parseFloat(a);
+                stack.push(a * b);
+                break;
+
+            case '/':
+                b = parseFloat(b);
+                a = parseFloat(a);
+                stack.push(a / b);
+                break;
+
+            case '//':
+                b = parseFloat(b);
+                a = parseFloat(a);
+                stack.push(Math.floor(a / b));
+                break;
+
+            case '%':
+                b = parseFloat(b);
+                a = parseFloat(a);
+                stack.push(a % b);
+                break;
+
+            case '~':
+                stack.push((typeof a !== 'undefined' && a !== null ? a.toString() : '') +
+                          (typeof b !== 'undefined' && b !== null ? b.toString() : ''));
+                break;
+
+            case 'not':
+            case '!':
+                stack.push(!Twig.lib.boolval(b));
+                break;
+
+            case '<':
+                stack.push(a < b);
+                break;
+
+            case '<=':
+                stack.push(a <= b);
+                break;
+
+            case '>':
+                stack.push(a > b);
+                break;
+
+            case '>=':
+                stack.push(a >= b);
+                break;
+
+            case '===':
+                stack.push(a === b);
+                break;
+
+            case '==':
+                /* eslint-disable-next-line eqeqeq */
+                stack.push(a == b);
+                break;
+
+            case '!==':
+                stack.push(a !== b);
+                break;
+
+            case '!=':
+                /* eslint-disable-next-line eqeqeq */
+                stack.push(a != b);
+                break;
+
+            case 'or':
+                stack.push(Twig.lib.boolval(a) || Twig.lib.boolval(b));
+                break;
+
+            case 'b-or':
+                stack.push(a | b);
+                break;
+
+            case 'b-xor':
+                stack.push(a ^ b);
+                break;
+
+            case 'and':
+                stack.push(Twig.lib.boolval(a) && Twig.lib.boolval(b));
+                break;
+
+            case 'b-and':
+                stack.push(a & b);
+                break;
+
+            case '**':
+                stack.push(a ** b);
+                break;
+
+            case 'not in':
+                stack.push(!containment(a, b));
+                break;
+
+            case 'in':
+                stack.push(containment(a, b));
+                break;
+
+            case 'matches':
+                stack.push(b.test(a));
+                break;
+
+            case 'starts with':
+                stack.push(typeof a === 'string' && a.indexOf(b) === 0);
+                break;
+
+            case 'ends with':
+                stack.push(typeof a === 'string' && a.indexOf(b, a.length - b.length) !== -1);
+                break;
+
+            case '..':
+                stack.push(Twig.functions.range(a, b));
+                break;
+
+            default:
+                throw new Twig.Error('Failed to parse operator: ' + operator + ' is an unknown operator.');
+        }
+    };
+
+    return Twig;
+};
+
+
+/***/ }),
+/* 8 */
+/***/ (function(module, exports) {
+
+// ## twig.filters.js
+//
+// This file handles parsing filters.
+module.exports = function (Twig) {
+    // Determine object type
+    function is(type, obj) {
+        const clas = Object.prototype.toString.call(obj).slice(8, -1);
+        return obj !== undefined && obj !== null && clas === type;
+    }
+
+    Twig.filters = {
+        // String Filters
+        upper(value) {
+            if (typeof value !== 'string') {
+                return value;
+            }
+
+            return value.toUpperCase();
+        },
+        lower(value) {
+            if (typeof value !== 'string') {
+                return value;
+            }
+
+            return value.toLowerCase();
+        },
+        capitalize(value) {
+            if (typeof value !== 'string') {
+                return value;
+            }
+
+            return value.substr(0, 1).toUpperCase() + value.toLowerCase().substr(1);
+        },
+        title(value) {
+            if (typeof value !== 'string') {
+                return value;
+            }
+
+            return value.toLowerCase().replace(/(^|\s)([a-z])/g, (m, p1, p2) => {
+                return p1 + p2.toUpperCase();
+            });
+        },
+        length(value) {
+            if (Twig.lib.is('Array', value) || typeof value === 'string') {
+                return value.length;
+            }
+
+            if (Twig.lib.is('Object', value)) {
+                if (value._keys === undefined) {
+                    return Object.keys(value).length;
+                }
+
+                return value._keys.length;
+            }
+
+            return 0;
+        },
+
+        // Array/Object Filters
+        reverse(value) {
+            if (is('Array', value)) {
+                return value.reverse();
+            }
+
+            if (is('String', value)) {
+                return value.split('').reverse().join('');
+            }
+
+            if (is('Object', value)) {
+                const keys = value._keys || Object.keys(value).reverse();
+                value._keys = keys;
+                return value;
+            }
+        },
+        sort(value) {
+            if (is('Array', value)) {
+                return value.sort();
+            }
+
+            if (is('Object', value)) {
+                // Sorting objects isn't obvious since the order of
+                // returned keys isn't guaranteed in JavaScript.
+                // Because of this we use a "hidden" key called _keys to
+                // store the keys in the order we want to return them.
+
+                delete value._keys;
+                const keys = Object.keys(value);
+                const sortedKeys = keys.sort((a, b) => {
+                    let a1;
+                    let b1;
+
+                    // If a and b are comparable, we're fine :-)
+                    if ((value[a] > value[b]) === !(value[a] <= value[b])) {
+                        return value[a] > value[b] ? 1 :
+                            (value[a] < value[b] ? -1 : 0);
+                    }
+
+                    // If a and b can be parsed as numbers, we can compare
+                    // their numeric value
+                    if (!isNaN(a1 = parseFloat(value[a])) &&
+                                !isNaN(b1 = parseFloat(value[b]))) {
+                        return a1 > b1 ? 1 : (a1 < b1 ? -1 : 0);
+                    }
+
+                    // If one of the values is a string, we convert the
+                    // other value to string as well
+                    if (typeof value[a] === 'string') {
+                        return value[a] > value[b].toString() ? 1 :
+                            (value[a] < value[b].toString() ? -1 : 0);
+                    }
+
+                    if (typeof value[b] === 'string') {
+                        return value[a].toString() > value[b] ? 1 :
+                            (value[a].toString() < value[b] ? -1 : 0);
+                    }
+                    // Everything failed - return 'null' as sign, that
+                    // the values are not comparable
+
+                    return null;
+                });
+                value._keys = sortedKeys;
+                return value;
+            }
+        },
+        keys(value) {
+            if (value === undefined || value === null) {
+                return;
+            }
+
+            const keyset = value._keys || Object.keys(value);
+            const output = [];
+
+            keyset.forEach(key => {
+                if (key === '_keys') {
+                    return;
+                } // Ignore the _keys property
+
+                if (Object.hasOwnProperty.call(value, key)) {
+                    output.push(key);
+                }
+            });
+            return output;
+        },
+        /* eslint-disable-next-line camelcase */
+        url_encode(value) {
+            if (value === undefined || value === null) {
+                return;
+            }
+
+            if (Twig.lib.is('Object', value)) {
+                const serialize = function (obj, prefix) {
+                    const result = [];
+                    const keyset = obj._keys || Object.keys(obj);
+
+                    keyset.forEach(key => {
+                        if (!Object.prototype.hasOwnProperty.call(obj, key)) {
+                            return;
+                        }
+
+                        const resultKey = prefix ? prefix + '[' + key + ']' : key;
+                        const resultValue = obj[key];
+
+                        result.push(
+                            (Twig.lib.is('Object', resultValue) || Array.isArray(resultValue)) ?
+                                serialize(resultValue, resultKey) :
+                                encodeURIComponent(resultKey) + '=' + encodeURIComponent(resultValue)
+                        );
+                    });
+
+                    return result.join('&amp;');
+                };
+
+                return serialize(value);
+            }
+
+            let result = encodeURIComponent(value);
+            result = result.replace('\'', '%27');
+            return result;
+        },
+        join(value, params) {
+            if (value === undefined || value === null) {
+                return;
+            }
+
+            let joinStr = '';
+            let output = [];
+            let keyset = null;
+
+            if (params && params[0]) {
+                joinStr = params[0];
+            }
+
+            if (is('Array', value)) {
+                output = value;
+            } else {
+                keyset = value._keys || Object.keys(value);
+                keyset.forEach(key => {
+                    if (key === '_keys') {
+                        return;
+                    } // Ignore the _keys property
+
+                    if (Object.hasOwnProperty.call(value, key)) {
+                        output.push(value[key]);
+                    }
+                });
+            }
+
+            return output.join(joinStr);
+        },
+        default(value, params) {
+            if (params !== undefined && params.length > 1) {
+                throw new Twig.Error('default filter expects one argument');
+            }
+
+            if (value === undefined || value === null || value === '') {
+                if (params === undefined) {
+                    return '';
+                }
+
+                return params[0];
+            }
+
+            return value;
+        },
+        /* eslint-disable-next-line camelcase */
+        json_encode(value) {
+            if (value === undefined || value === null) {
+                return 'null';
+            }
+
+            if ((typeof value === 'object') && (is('Array', value))) {
+                const output = [];
+
+                value.forEach(v => {
+                    output.push(Twig.filters.json_encode(v));
+                });
+
+                return '[' + output.join(',') + ']';
+            }
+
+            if ((typeof value === 'object') && (is('Date', value))) {
+                return '"' + value.toISOString() + '"';
+            }
+
+            if (typeof value === 'object') {
+                const keyset = value._keys || Object.keys(value);
+                const output = [];
+
+                keyset.forEach(key => {
+                    output.push(JSON.stringify(key) + ':' + Twig.filters.json_encode(value[key]));
+                });
+
+                return '{' + output.join(',') + '}';
+            }
+
+            return JSON.stringify(value);
+        },
+        merge(value, params) {
+            let obj = [];
+            let arrIndex = 0;
+            let keyset = [];
+
+            // Check to see if all the objects being merged are arrays
+            if (is('Array', value)) {
+                params.forEach(param => {
+                    if (!is('Array', param)) {
+                        obj = { };
+                    }
+                });
+            } else {
+                // Create obj as an Object
+                obj = { };
+            }
+
+            if (!is('Array', obj)) {
+                obj._keys = [];
+            }
+
+            if (is('Array', value)) {
+                value.forEach(val => {
+                    if (obj._keys) {
+                        obj._keys.push(arrIndex);
+                    }
+
+                    obj[arrIndex] = val;
+                    arrIndex++;
+                });
+            } else {
+                keyset = value._keys || Object.keys(value);
+                keyset.forEach(key => {
+                    obj[key] = value[key];
+                    obj._keys.push(key);
+
+                    // Handle edge case where a number index in an object is greater than
+                    //   the array counter. In such a case, the array counter is increased
+                    //   one past the index.
+                    //
+                    // Example {{ ["a", "b"]|merge({"4":"value"}, ["c", "d"])
+                    // Without this, d would have an index of "4" and overwrite the value
+                    //   of "value"
+                    const intKey = parseInt(key, 10);
+                    if (!isNaN(intKey) && intKey >= arrIndex) {
+                        arrIndex = intKey + 1;
+                    }
+                });
+            }
+
+            // Mixin the merge arrays
+            params.forEach(param => {
+                if (is('Array', param)) {
+                    param.forEach(val => {
+                        if (obj._keys) {
+                            obj._keys.push(arrIndex);
+                        }
+
+                        obj[arrIndex] = val;
+                        arrIndex++;
+                    });
+                } else {
+                    keyset = param._keys || Object.keys(param);
+                    keyset.forEach(key => {
+                        if (!obj[key]) {
+                            obj._keys.push(key);
+                        }
+
+                        obj[key] = param[key];
+
+                        const intKey = parseInt(key, 10);
+                        if (!isNaN(intKey) && intKey >= arrIndex) {
+                            arrIndex = intKey + 1;
+                        }
+                    });
+                }
+            });
+            if (params.length === 0) {
+                throw new Twig.Error('Filter merge expects at least one parameter');
+            }
+
+            return obj;
+        },
+
+        date(value, params) {
+            const date = Twig.functions.date(value);
+            const format = params && Boolean(params.length) ? params[0] : 'F j, Y H:i';
+            return Twig.lib.date(format.replace(/\\\\/g, '\\'), date);
+        },
+        /* eslint-disable-next-line camelcase */
+        date_modify(value, params) {
+            if (value === undefined || value === null) {
+                return;
+            }
+
+            if (params === undefined || params.length !== 1) {
+                throw new Twig.Error('date_modify filter expects 1 argument');
+            }
+
+            const modifyText = params[0];
+            let time;
+
+            if (Twig.lib.is('Date', value)) {
+                time = Twig.lib.strtotime(modifyText, value.getTime() / 1000);
+            }
+
+            if (Twig.lib.is('String', value)) {
+                time = Twig.lib.strtotime(modifyText, Twig.lib.strtotime(value));
+            }
+
+            if (Twig.lib.is('Number', value)) {
+                time = Twig.lib.strtotime(modifyText, value);
+            }
+
+            return new Date(time * 1000);
+        },
+
+        replace(value, params) {
+            if (value === undefined || value === null) {
+                return;
+            }
+
+            const pairs = params[0];
+            let tag;
+            for (tag in pairs) {
+                if (Object.hasOwnProperty.call(pairs, tag) && tag !== '_keys') {
+                    value = Twig.lib.replaceAll(value, tag, pairs[tag]);
+                }
+            }
+
+            return value;
+        },
+
+        format(value, params) {
+            if (value === undefined || value === null) {
+                return;
+            }
+
+            return Twig.lib.vsprintf(value, params);
+        },
+
+        striptags(value, allowed) {
+            if (value === undefined || value === null) {
+                return;
+            }
+
+            return Twig.lib.stripTags(value, allowed);
+        },
+
+        escape(value, params) {
+            if (value === undefined || value === null) {
+                return;
+            }
+
+            let strategy = 'html';
+            if (params && Boolean(params.length) && params[0] !== true) {
+                strategy = params[0];
+            }
+
+            if (strategy === 'html') {
+                const rawValue = value.toString().replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#039;');
+                return new Twig.Markup(rawValue, 'html');
+            }
+
+            if (strategy === 'js') {
+                const rawValue = value.toString();
+                let result = '';
+
+                for (let i = 0; i < rawValue.length; i++) {
+                    if (rawValue[i].match(/^[a-zA-Z0-9,._]$/)) {
+                        result += rawValue[i];
+                    } else {
+                        const charCode = rawValue.charCodeAt(i);
+
+                        if (charCode < 0x80) {
+                            result += '\\x' + charCode.toString(16).toUpperCase();
+                        } else {
+                            result += Twig.lib.sprintf('\\u%04s', charCode.toString(16).toUpperCase());
+                        }
+                    }
+                }
+
+                return new Twig.Markup(result, 'js');
+            }
+
+            if (strategy === 'css') {
+                const rawValue = value.toString();
+                let result = '';
+
+                for (let i = 0; i < rawValue.length; i++) {
+                    if (rawValue[i].match(/^[a-zA-Z0-9]$/)) {
+                        result += rawValue[i];
+                    } else {
+                        const charCode = rawValue.charCodeAt(i);
+                        result += '\\' + charCode.toString(16).toUpperCase() + ' ';
+                    }
+                }
+
+                return new Twig.Markup(result, 'css');
+            }
+
+            if (strategy === 'url') {
+                const result = Twig.filters.url_encode(value);
+                return new Twig.Markup(result, 'url');
+            }
+
+            if (strategy === 'html_attr') {
+                const rawValue = value.toString();
+                let result = '';
+
+                for (let i = 0; i < rawValue.length; i++) {
+                    if (rawValue[i].match(/^[a-zA-Z0-9,.\-_]$/)) {
+                        result += rawValue[i];
+                    } else if (rawValue[i].match(/^[&<>"]$/)) {
+                        result += rawValue[i].replace(/&/g, '&amp;')
+                            .replace(/</g, '&lt;')
+                            .replace(/>/g, '&gt;')
+                            .replace(/"/g, '&quot;');
+                    } else {
+                        const charCode = rawValue.charCodeAt(i);
+
+                        // The following replaces characters undefined in HTML with
+                        // the hex entity for the Unicode replacement character.
+                        if (charCode <= 0x1F && charCode !== 0x09 && charCode !== 0x0A && charCode !== 0x0D) {
+                            result += '&#xFFFD;';
+                        } else if (charCode < 0x80) {
+                            result += Twig.lib.sprintf('&#x%02s;', charCode.toString(16).toUpperCase());
+                        } else {
+                            result += Twig.lib.sprintf('&#x%04s;', charCode.toString(16).toUpperCase());
+                        }
+                    }
+                }
+
+                return new Twig.Markup(result, 'html_attr');
+            }
+
+            throw new Twig.Error('escape strategy unsupported');
+        },
+
+        /* Alias of escape */
+        e(value, params) {
+            return Twig.filters.escape(value, params);
+        },
+
+        nl2br(value) {
+            if (value === undefined || value === null) {
+                return;
+            }
+
+            const linebreakTag = 'BACKSLASH_n_replace';
+            const br = '<br />' + linebreakTag;
+
+            value = Twig.filters.escape(value)
+                .replace(/\r\n/g, br)
+                .replace(/\r/g, br)
+                .replace(/\n/g, br);
+
+            value = Twig.lib.replaceAll(value, linebreakTag, '\n');
+
+            return new Twig.Markup(value);
+        },
+
+        /**
+         * Adapted from: http://phpjs.org/functions/number_format:481
+         */
+        /* eslint-disable-next-line camelcase */
+        number_format(value, params) {
+            let number = value;
+            const decimals = (params && params[0]) ? params[0] : undefined;
+            const dec = (params && params[1] !== undefined) ? params[1] : '.';
+            const sep = (params && params[2] !== undefined) ? params[2] : ',';
+
+            number = (String(number)).replace(/[^0-9+\-Ee.]/g, '');
+            const n = isFinite(Number(number)) ? Number(number) : 0;
+            const prec = isFinite(Number(decimals)) ? Math.abs(decimals) : 0;
+            let s = '';
+            const toFixedFix = function (n, prec) {
+                const k = 10 ** prec;
+                return String(Math.round(n * k) / k);
+            };
+
+            // Fix for IE parseFloat(0.55).toFixed(0) = 0;
+            s = (prec ? toFixedFix(n, prec) : String(Math.round(n))).split('.');
+            if (s[0].length > 3) {
+                s[0] = s[0].replace(/\B(?=(?:\d{3})+(?!\d))/g, sep);
+            }
+
+            if ((s[1] || '').length < prec) {
+                s[1] = s[1] || '';
+                s[1] += new Array(prec - s[1].length + 1).join('0');
+            }
+
+            return s.join(dec);
+        },
+
+        trim(value, params) {
+            if (value === undefined || value === null) {
+                return;
+            }
+
+            let str = String(value);
+            let whitespace;
+            if (params && params[0]) {
+                whitespace = String(params[0]);
+            } else {
+                whitespace = ' \n\r\t\f\u000B\u00A0\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u200b\u2028\u2029\u3000';
+            }
+
+            for (let i = 0; i < str.length; i++) {
+                if (whitespace.indexOf(str.charAt(i)) === -1) {
+                    str = str.substring(i);
+                    break;
+                }
+            }
+
+            for (let i = str.length - 1; i >= 0; i--) {
+                if (whitespace.indexOf(str.charAt(i)) === -1) {
+                    str = str.substring(0, i + 1);
+                    break;
+                }
+            }
+
+            return whitespace.indexOf(str.charAt(0)) === -1 ? str : '';
+        },
+
+        truncate(value, params) {
+            let length = 30;
+            let preserve = false;
+            let separator = '...';
+
+            value = String(value);
+            if (params) {
+                if (params[0]) {
+                    length = params[0];
+                }
+
+                if (params[1]) {
+                    preserve = params[1];
+                }
+
+                if (params[2]) {
+                    separator = params[2];
+                }
+            }
+
+            if (value.length > length) {
+                if (preserve) {
+                    length = value.indexOf(' ', length);
+                    if (length === -1) {
+                        return value;
+                    }
+                }
+
+                value = value.substr(0, length) + separator;
+            }
+
+            return value;
+        },
+
+        slice(value, params) {
+            if (value === undefined || value === null) {
+                return;
+            }
+
+            if (params === undefined || params.length === 0) {
+                throw new Twig.Error('slice filter expects at least 1 argument');
+            }
+
+            // Default to start of string
+            const start = params[0] || 0;
+            // Default to length of string
+            const length = params.length > 1 ? params[1] : value.length;
+            // Handle negative start values
+            const startIndex = start >= 0 ? start : Math.max(value.length + start, 0);
+
+            if (Twig.lib.is('Array', value)) {
+                const output = [];
+                for (let i = startIndex; i < startIndex + length && i < value.length; i++) {
+                    output.push(value[i]);
+                }
+
+                return output;
+            }
+
+            if (Twig.lib.is('String', value)) {
+                return value.substr(startIndex, length);
+            }
+
+            throw new Twig.Error('slice filter expects value to be an array or string');
+        },
+
+        abs(value) {
+            if (value === undefined || value === null) {
+                return;
+            }
+
+            return Math.abs(value);
+        },
+
+        first(value) {
+            if (is('Array', value)) {
+                return value[0];
+            }
+
+            if (is('Object', value)) {
+                if ('_keys' in value) {
+                    return value[value._keys[0]];
+                }
+            } else if (typeof value === 'string') {
+                return value.substr(0, 1);
+            }
+        },
+
+        split(value, params) {
+            if (value === undefined || value === null) {
+                return;
+            }
+
+            if (params === undefined || params.length === 0 || params.length > 2) {
+                throw new Twig.Error('split filter expects 1 or 2 argument');
+            }
+
+            if (Twig.lib.is('String', value)) {
+                const delimiter = params[0];
+                const limit = params[1];
+                const split = value.split(delimiter);
+
+                if (limit === undefined) {
+                    return split;
+                }
+
+                if (limit < 0) {
+                    return value.split(delimiter, split.length + limit);
+                }
+
+                const limitedSplit = [];
+
+                if (delimiter === '') {
+                    // Empty delimiter
+                    // "aabbcc"|split('', 2)
+                    //     -> ['aa', 'bb', 'cc']
+
+                    while (split.length > 0) {
+                        let temp = '';
+                        for (let i = 0; i < limit && split.length > 0; i++) {
+                            temp += split.shift();
+                        }
+
+                        limitedSplit.push(temp);
+                    }
+                } else {
+                    // Non-empty delimiter
+                    // "one,two,three,four,five"|split(',', 3)
+                    //     -> ['one', 'two', 'three,four,five']
+
+                    for (let i = 0; i < limit - 1 && split.length > 0; i++) {
+                        limitedSplit.push(split.shift());
+                    }
+
+                    if (split.length > 0) {
+                        limitedSplit.push(split.join(delimiter));
+                    }
+                }
+
+                return limitedSplit;
+            }
+
+            throw new Twig.Error('split filter expects value to be a string');
+        },
+        last(value) {
+            if (Twig.lib.is('Object', value)) {
+                let keys;
+
+                if (value._keys === undefined) {
+                    keys = Object.keys(value);
+                } else {
+                    keys = value._keys;
+                }
+
+                return value[keys[keys.length - 1]];
+            }
+
+            // String|array
+            return value[value.length - 1];
+        },
+        raw(value) {
+            return new Twig.Markup(value);
+        },
+        batch(items, params) {
+            let size = params.shift();
+            const fill = params.shift();
+            let last;
+            let missing;
+
+            if (!Twig.lib.is('Array', items)) {
+                throw new Twig.Error('batch filter expects items to be an array');
+            }
+
+            if (!Twig.lib.is('Number', size)) {
+                throw new Twig.Error('batch filter expects size to be a number');
+            }
+
+            size = Math.ceil(size);
+
+            const result = Twig.lib.chunkArray(items, size);
+
+            if (fill && items.length % size !== 0) {
+                last = result.pop();
+                missing = size - last.length;
+
+                while (missing--) {
+                    last.push(fill);
+                }
+
+                result.push(last);
+            }
+
+            return result;
+        },
+        round(value, params) {
+            params = params || [];
+
+            const precision = params.length > 0 ? params[0] : 0;
+            const method = params.length > 1 ? params[1] : 'common';
+
+            value = parseFloat(value);
+
+            if (precision && !Twig.lib.is('Number', precision)) {
+                throw new Twig.Error('round filter expects precision to be a number');
+            }
+
+            if (method === 'common') {
+                return Twig.lib.round(value, precision);
+            }
+
+            if (!Twig.lib.is('Function', Math[method])) {
+                throw new Twig.Error('round filter expects method to be \'floor\', \'ceil\', or \'common\'');
+            }
+
+            return Math[method](value * (10 ** precision)) / (10 ** precision);
+        },
+        spaceless(value) {
+            return value.replace(/>\s+</g, '><').trim();
+        }
+    };
+
+    Twig.filter = function (filter, value, params) {
+        const state = this;
+
+        if (!Twig.filters[filter]) {
+            throw new Twig.Error('Unable to find filter ' + filter);
+        }
+
+        return Twig.filters[filter].call(state, value, params);
+    };
+
+    Twig.filter.extend = function (filter, definition) {
+        Twig.filters[filter] = definition;
+    };
+
+    return Twig;
+};
+
+
+/***/ }),
+/* 9 */
+/***/ (function(module, exports, __webpack_require__) {
+
+// ## twig.functions.js
+//
+// This file handles parsing filters.
+module.exports = function (Twig) {
+    /**
+     * @constant
+     * @type {string}
+     */
+    const TEMPLATE_NOT_FOUND_MESSAGE = 'Template "{name}" is not defined.';
+
+    Twig.functions = {
+        //  Attribute, block, constant, date, dump, parent, random,.
+
+        // Range function from http://phpjs.org/functions/range:499
+        // Used under an MIT License
+        range(low, high, step) {
+            // http://kevin.vanzonneveld.net
+            // +   original by: Waldo Malqui Silva
+            // *     example 1: range ( 0, 12 );
+            // *     returns 1: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+            // *     example 2: range( 0, 100, 10 );
+            // *     returns 2: [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
+            // *     example 3: range( 'a', 'i' );
+            // *     returns 3: ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i']
+            // *     example 4: range( 'c', 'a' );
+            // *     returns 4: ['c', 'b', 'a']
+            const matrix = [];
+            let inival;
+            let endval;
+            const walker = step || 1;
+            let chars = false;
+
+            if (!isNaN(low) && !isNaN(high)) {
+                inival = parseInt(low, 10);
+                endval = parseInt(high, 10);
+            } else if (isNaN(low) && isNaN(high)) {
+                chars = true;
+                inival = low.charCodeAt(0);
+                endval = high.charCodeAt(0);
+            } else {
+                inival = (isNaN(low) ? 0 : low);
+                endval = (isNaN(high) ? 0 : high);
+            }
+
+            const plus = (!((inival > endval)));
+            if (plus) {
+                while (inival <= endval) {
+                    matrix.push(((chars) ? String.fromCharCode(inival) : inival));
+                    inival += walker;
+                }
+            } else {
+                while (inival >= endval) {
+                    matrix.push(((chars) ? String.fromCharCode(inival) : inival));
+                    inival -= walker;
+                }
+            }
+
+            return matrix;
+        },
+        cycle(arr, i) {
+            const pos = i % arr.length;
+            return arr[pos];
+        },
+        dump(...args) {
+            // Don't pass arguments to `Array.slice`, that is a performance killer
+
+            const argsCopy = [...args];
+            const state = this;
+
+            const EOL = '\n';
+            const indentChar = '  ';
+            let indentTimes = 0;
+            let out = '';
+            const indent = function (times) {
+                let ind = '';
+                while (times > 0) {
+                    times--;
+                    ind += indentChar;
+                }
+
+                return ind;
+            };
+
+            const displayVar = function (variable) {
+                out += indent(indentTimes);
+                if (typeof (variable) === 'object') {
+                    dumpVar(variable);
+                } else if (typeof (variable) === 'function') {
+                    out += 'function()' + EOL;
+                } else if (typeof (variable) === 'string') {
+                    out += 'string(' + variable.length + ') "' + variable + '"' + EOL;
+                } else if (typeof (variable) === 'number') {
+                    out += 'number(' + variable + ')' + EOL;
+                } else if (typeof (variable) === 'boolean') {
+                    out += 'bool(' + variable + ')' + EOL;
+                }
+            };
+
+            const dumpVar = function (variable) {
+                let i;
+                if (variable === null) {
+                    out += 'NULL' + EOL;
+                } else if (variable === undefined) {
+                    out += 'undefined' + EOL;
+                } else if (typeof variable === 'object') {
+                    out += indent(indentTimes) + typeof (variable);
+                    indentTimes++;
+                    out += '(' + (function (obj) {
+                        let size = 0;
+                        let key;
+                        for (key in obj) {
+                            if (Object.hasOwnProperty.call(obj, key)) {
+                                size++;
+                            }
+                        }
+
+                        return size;
+                    })(variable) + ') {' + EOL;
+                    for (i in variable) {
+                        if (Object.hasOwnProperty.call(variable, i)) {
+                            out += indent(indentTimes) + '[' + i + ']=> ' + EOL;
+                            displayVar(variable[i]);
+                        }
+                    }
+
+                    indentTimes--;
+                    out += indent(indentTimes) + '}' + EOL;
+                } else {
+                    displayVar(variable);
+                }
+            };
+
+            // Handle no argument case by dumping the entire render context
+            if (argsCopy.length === 0) {
+                argsCopy.push(state.context);
+            }
+
+            argsCopy.forEach(variable => {
+                dumpVar(variable);
+            });
+
+            return out;
+        },
+        date(date) {
+            let dateObj;
+            if (date === undefined || date === null || date === '') {
+                dateObj = new Date();
+            } else if (Twig.lib.is('Date', date)) {
+                dateObj = date;
+            } else if (Twig.lib.is('String', date)) {
+                if (date.match(/^\d+$/)) {
+                    dateObj = new Date(date * 1000);
+                } else {
+                    dateObj = new Date(Twig.lib.strtotime(date) * 1000);
+                }
+            } else if (Twig.lib.is('Number', date)) {
+                // Timestamp
+                dateObj = new Date(date * 1000);
+            } else {
+                throw new Twig.Error('Unable to parse date ' + date);
+            }
+
+            return dateObj;
+        },
+        block(blockName) {
+            const state = this;
+
+            const block = state.getBlock(blockName);
+
+            if (block !== undefined) {
+                return block.render(state, state.context);
+            }
+        },
+        parent() {
+            const state = this;
+
+            return state.getBlock(state.getNestingStackToken(Twig.logic.type.block).blockName, true).render(state, state.context);
+        },
+        attribute(object, method, params) {
+            if (Twig.lib.is('Object', object)) {
+                if (Object.hasOwnProperty.call(object, method)) {
+                    if (typeof object[method] === 'function') {
+                        return object[method].apply(undefined, params);
+                    }
+
+                    return object[method];
+                }
+            }
+
+            // Array will return element 0-index
+            return object[method] || undefined;
+        },
+        max(values, ...args) {
+            if (Twig.lib.is('Object', values)) {
+                delete values._keys;
+                return Twig.lib.max(values);
+            }
+
+            return Twig.lib.max.apply(null, [values, ...args]);
+        },
+        min(values, ...args) {
+            if (Twig.lib.is('Object', values)) {
+                delete values._keys;
+                return Twig.lib.min(values);
+            }
+
+            return Twig.lib.min.apply(null, [values, ...args]);
+        },
+        /* eslint-disable-next-line camelcase */
+        template_from_string(template) {
+            const state = this;
+
+            if (template === undefined) {
+                template = '';
+            }
+
+            return Twig.Templates.parsers.twig({
+                options: state.template.options,
+                data: template
+            });
+        },
+        random(value) {
+            const LIMIT_INT31 = 0x80000000;
+
+            function getRandomNumber(n) {
+                const random = Math.floor(Math.random() * LIMIT_INT31);
+                const min = Math.min.call(null, 0, n);
+                const max = Math.max.call(null, 0, n);
+                return min + Math.floor((max - min + 1) * random / LIMIT_INT31);
+            }
+
+            if (Twig.lib.is('Number', value)) {
+                return getRandomNumber(value);
+            }
+
+            if (Twig.lib.is('String', value)) {
+                return value.charAt(getRandomNumber(value.length - 1));
+            }
+
+            if (Twig.lib.is('Array', value)) {
+                return value[getRandomNumber(value.length - 1)];
+            }
+
+            if (Twig.lib.is('Object', value)) {
+                const keys = Object.keys(value);
+                return value[keys[getRandomNumber(keys.length - 1)]];
+            }
+
+            return getRandomNumber(LIMIT_INT31 - 1);
+        },
+
+        /**
+         * Returns the content of a template without rendering it
+         * @param {string} name
+         * @param {boolean} [ignoreMissing=false]
+         * @returns {string}
+         */
+        source(name, ignoreMissing) {
+            let templateSource;
+            let templateFound = false;
+            const isNodeEnvironment =  true && typeof module.exports !== 'undefined' && typeof window === 'undefined';
+            let loader;
+            const path = name;
+
+            // If we are running in a node.js environment, set the loader to 'fs'.
+            if (isNodeEnvironment) {
+                loader = 'fs';
+            } else {
+                loader = 'ajax';
+            }
+
+            // Build the params object
+            const params = {
+                id: name,
+                path,
+                method: loader,
+                parser: 'source',
+                async: false,
+                fetchTemplateSource: true
+            };
+
+            // Default ignoreMissing to false
+            if (typeof ignoreMissing === 'undefined') {
+                ignoreMissing = false;
+            }
+
+            // Try to load the remote template
+            //
+            // on exception, log it
+            try {
+                templateSource = Twig.Templates.loadRemote(name, params);
+
+                // If the template is undefined or null, set the template to an empty string and do NOT flip the
+                // boolean indicating we found the template
+                //
+                // else, all is good! flip the boolean indicating we found the template
+                if (typeof templateSource === 'undefined' || templateSource === null) {
+                    templateSource = '';
+                } else {
+                    templateFound = true;
+                }
+            } catch (error) {
+                Twig.log.debug('Twig.functions.source: ', 'Problem loading template  ', error);
+            }
+
+            // If the template was NOT found AND we are not ignoring missing templates, return the same message
+            // that is returned by the PHP implementation of the twig source() function
+            //
+            // else, return the template source
+            if (!templateFound && !ignoreMissing) {
+                return TEMPLATE_NOT_FOUND_MESSAGE.replace('{name}', name);
+            }
+
+            return templateSource;
+        }
+    };
+
+    Twig._function = function (_function, value, params) {
+        if (!Twig.functions[_function]) {
+            throw new Twig.Error('Unable to find function ' + _function);
+        }
+
+        return Twig.functions[_function](value, params);
+    };
+
+    Twig._function.extend = function (_function, definition) {
+        Twig.functions[_function] = definition;
+    };
+
+    return Twig;
+};
+
+
+/***/ }),
+/* 10 */
+/***/ (function(module, exports, __webpack_require__) {
+
+// ## twig.lib.js
+//
+// This file contains 3rd party libraries used within twig.
+//
+// Copies of the licenses for the code included here can be found in the
+// LICENSES.md file.
+//
+
+module.exports = function (Twig) {
+    // Namespace for libraries
+    Twig.lib = { };
+
+    Twig.lib.sprintf = __webpack_require__(0);
+    Twig.lib.vsprintf = __webpack_require__(11);
+    Twig.lib.round = __webpack_require__(12);
+    Twig.lib.max = __webpack_require__(13);
+    Twig.lib.min = __webpack_require__(14);
+    Twig.lib.stripTags = __webpack_require__(15);
+    Twig.lib.strtotime = __webpack_require__(16);
+    Twig.lib.date = __webpack_require__(17);
+    Twig.lib.boolval = __webpack_require__(18);
+
+    Twig.lib.is = function (type, obj) {
+        if (typeof obj === 'undefined' || obj === null) {
+            return false;
+        }
+
+        switch (type) {
+            case 'Array':
+                return Array.isArray(obj);
+            case 'Date':
+                return obj instanceof Date;
+            case 'String':
+                return (typeof obj === 'string' || obj instanceof String);
+            case 'Number':
+                return (typeof obj === 'number' || obj instanceof Number);
+            case 'Function':
+                return (typeof obj === 'function');
+            case 'Object':
+                return obj instanceof Object;
+            default:
+                return false;
+        }
+    };
+
+    Twig.lib.replaceAll = function (string, search, replace) {
+        // Escape possible regular expression syntax
+        const searchEscaped = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+        return string.replace(new RegExp(searchEscaped, 'g'), replace);
+    };
+
+    // Chunk an array (arr) into arrays of (size) items, returns an array of arrays, or an empty array on invalid input
+    Twig.lib.chunkArray = function (arr, size) {
+        const returnVal = [];
+        let x = 0;
+        const len = arr.length;
+
+        if (size < 1 || !Array.isArray(arr)) {
+            return [];
+        }
+
+        while (x < len) {
+            returnVal.push(arr.slice(x, x += size));
+        }
+
+        return returnVal;
+    };
+
+    return Twig;
+};
+
+
+/***/ }),
+/* 11 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+
+module.exports = function vsprintf(format, args) {
+  //  discuss at: http://locutus.io/php/vsprintf/
+  // original by: ejsanders
+  //   example 1: vsprintf('%04d-%02d-%02d', [1988, 8, 1])
+  //   returns 1: '1988-08-01'
+
+  var sprintf = __webpack_require__(0);
+
+  return sprintf.apply(this, [format].concat(args));
+};
+
+
+/***/ }),
+/* 12 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+
+module.exports = function round(value, precision, mode) {
+  //  discuss at: http://locutus.io/php/round/
+  // original by: Philip Peterson
+  //  revised by: Onno Marsman (https://twitter.com/onnomarsman)
+  //  revised by: T.Wild
+  //  revised by: Rafał Kukawski (http://blog.kukawski.pl)
+  //    input by: Greenseed
+  //    input by: meo
+  //    input by: William
+  //    input by: Josep Sanz (http://www.ws3.es/)
+  // bugfixed by: Brett Zamir (http://brett-zamir.me)
+  //      note 1: Great work. Ideas for improvement:
+  //      note 1: - code more compliant with developer guidelines
+  //      note 1: - for implementing PHP constant arguments look at
+  //      note 1: the pathinfo() function, it offers the greatest
+  //      note 1: flexibility & compatibility possible
+  //   example 1: round(1241757, -3)
+  //   returns 1: 1242000
+  //   example 2: round(3.6)
+  //   returns 2: 4
+  //   example 3: round(2.835, 2)
+  //   returns 3: 2.84
+  //   example 4: round(1.1749999999999, 2)
+  //   returns 4: 1.17
+  //   example 5: round(58551.799999999996, 2)
+  //   returns 5: 58551.8
+
+  var m, f, isHalf, sgn; // helper variables
+  // making sure precision is integer
+  precision |= 0;
+  m = Math.pow(10, precision);
+  value *= m;
+  // sign of the number
+  sgn = value > 0 | -(value < 0);
+  isHalf = value % 1 === 0.5 * sgn;
+  f = Math.floor(value);
+
+  if (isHalf) {
+    switch (mode) {
+      case 'PHP_ROUND_HALF_DOWN':
+        // rounds .5 toward zero
+        value = f + (sgn < 0);
+        break;
+      case 'PHP_ROUND_HALF_EVEN':
+        // rouds .5 towards the next even integer
+        value = f + f % 2 * sgn;
+        break;
+      case 'PHP_ROUND_HALF_ODD':
+        // rounds .5 towards the next odd integer
+        value = f + !(f % 2);
+        break;
+      default:
+        // rounds .5 away from zero
+        value = f + (sgn > 0);
+    }
+  }
+
+  return (isHalf ? value : Math.round(value)) / m;
+};
+
+
+/***/ }),
+/* 13 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+
+var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol" ? function (obj) { return typeof obj; } : function (obj) { return obj && typeof Symbol === "function" && obj.constructor === Symbol ? "symbol" : typeof obj; };
+
+module.exports = function max() {
+  //  discuss at: http://locutus.io/php/max/
+  // original by: Onno Marsman (https://twitter.com/onnomarsman)
+  //  revised by: Onno Marsman (https://twitter.com/onnomarsman)
+  // improved by: Jack
+  //      note 1: Long code cause we're aiming for maximum PHP compatibility
+  //   example 1: max(1, 3, 5, 6, 7)
+  //   returns 1: 7
+  //   example 2: max([2, 4, 5])
+  //   returns 2: 5
+  //   example 3: max(0, 'hello')
+  //   returns 3: 0
+  //   example 4: max('hello', 0)
+  //   returns 4: 'hello'
+  //   example 5: max(-1, 'hello')
+  //   returns 5: 'hello'
+  //   example 6: max([2, 4, 8], [2, 5, 7])
+  //   returns 6: [2, 5, 7]
+
+  var ar;
+  var retVal;
+  var i = 0;
+  var n = 0;
+  var argv = arguments;
+  var argc = argv.length;
+  var _obj2Array = function _obj2Array(obj) {
+    if (Object.prototype.toString.call(obj) === '[object Array]') {
+      return obj;
+    } else {
+      var ar = [];
+      for (var i in obj) {
+        if (obj.hasOwnProperty(i)) {
+          ar.push(obj[i]);
+        }
+      }
+      return ar;
+    }
+  };
+  var _compare = function _compare(current, next) {
+    var i = 0;
+    var n = 0;
+    var tmp = 0;
+    var nl = 0;
+    var cl = 0;
+
+    if (current === next) {
+      return 0;
+    } else if ((typeof current === 'undefined' ? 'undefined' : _typeof(current)) === 'object') {
+      if ((typeof next === 'undefined' ? 'undefined' : _typeof(next)) === 'object') {
+        current = _obj2Array(current);
+        next = _obj2Array(next);
+        cl = current.length;
+        nl = next.length;
+        if (nl > cl) {
+          return 1;
+        } else if (nl < cl) {
+          return -1;
+        }
+        for (i = 0, n = cl; i < n; ++i) {
+          tmp = _compare(current[i], next[i]);
+          if (tmp === 1) {
+            return 1;
+          } else if (tmp === -1) {
+            return -1;
+          }
+        }
+        return 0;
+      }
+      return -1;
+    } else if ((typeof next === 'undefined' ? 'undefined' : _typeof(next)) === 'object') {
+      return 1;
+    } else if (isNaN(next) && !isNaN(current)) {
+      if (current === 0) {
+        return 0;
+      }
+      return current < 0 ? 1 : -1;
+    } else if (isNaN(current) && !isNaN(next)) {
+      if (next === 0) {
+        return 0;
+      }
+      return next > 0 ? 1 : -1;
+    }
+
+    if (next === current) {
+      return 0;
+    }
+
+    return next > current ? 1 : -1;
+  };
+
+  if (argc === 0) {
+    throw new Error('At least one value should be passed to max()');
+  } else if (argc === 1) {
+    if (_typeof(argv[0]) === 'object') {
+      ar = _obj2Array(argv[0]);
+    } else {
+      throw new Error('Wrong parameter count for max()');
+    }
+    if (ar.length === 0) {
+      throw new Error('Array must contain at least one element for max()');
+    }
+  } else {
+    ar = argv;
+  }
+
+  retVal = ar[0];
+  for (i = 1, n = ar.length; i < n; ++i) {
+    if (_compare(retVal, ar[i]) === 1) {
+      retVal = ar[i];
+    }
+  }
+
+  return retVal;
+};
+
+
+/***/ }),
+/* 14 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+
+var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol" ? function (obj) { return typeof obj; } : function (obj) { return obj && typeof Symbol === "function" && obj.constructor === Symbol ? "symbol" : typeof obj; };
+
+module.exports = function min() {
+  //  discuss at: http://locutus.io/php/min/
+  // original by: Onno Marsman (https://twitter.com/onnomarsman)
+  //  revised by: Onno Marsman (https://twitter.com/onnomarsman)
+  // improved by: Jack
+  //      note 1: Long code cause we're aiming for maximum PHP compatibility
+  //   example 1: min(1, 3, 5, 6, 7)
+  //   returns 1: 1
+  //   example 2: min([2, 4, 5])
+  //   returns 2: 2
+  //   example 3: min(0, 'hello')
+  //   returns 3: 0
+  //   example 4: min('hello', 0)
+  //   returns 4: 'hello'
+  //   example 5: min(-1, 'hello')
+  //   returns 5: -1
+  //   example 6: min([2, 4, 8], [2, 5, 7])
+  //   returns 6: [2, 4, 8]
+
+  var ar;
+  var retVal;
+  var i = 0;
+  var n = 0;
+  var argv = arguments;
+  var argc = argv.length;
+  var _obj2Array = function _obj2Array(obj) {
+    if (Object.prototype.toString.call(obj) === '[object Array]') {
+      return obj;
+    }
+    var ar = [];
+    for (var i in obj) {
+      if (obj.hasOwnProperty(i)) {
+        ar.push(obj[i]);
+      }
+    }
+    return ar;
+  };
+
+  var _compare = function _compare(current, next) {
+    var i = 0;
+    var n = 0;
+    var tmp = 0;
+    var nl = 0;
+    var cl = 0;
+
+    if (current === next) {
+      return 0;
+    } else if ((typeof current === 'undefined' ? 'undefined' : _typeof(current)) === 'object') {
+      if ((typeof next === 'undefined' ? 'undefined' : _typeof(next)) === 'object') {
+        current = _obj2Array(current);
+        next = _obj2Array(next);
+        cl = current.length;
+        nl = next.length;
+        if (nl > cl) {
+          return 1;
+        } else if (nl < cl) {
+          return -1;
+        }
+        for (i = 0, n = cl; i < n; ++i) {
+          tmp = _compare(current[i], next[i]);
+          if (tmp === 1) {
+            return 1;
+          } else if (tmp === -1) {
+            return -1;
+          }
+        }
+        return 0;
+      }
+      return -1;
+    } else if ((typeof next === 'undefined' ? 'undefined' : _typeof(next)) === 'object') {
+      return 1;
+    } else if (isNaN(next) && !isNaN(current)) {
+      if (current === 0) {
+        return 0;
+      }
+      return current < 0 ? 1 : -1;
+    } else if (isNaN(current) && !isNaN(next)) {
+      if (next === 0) {
+        return 0;
+      }
+      return next > 0 ? 1 : -1;
+    }
+
+    if (next === current) {
+      return 0;
+    }
+
+    return next > current ? 1 : -1;
+  };
+
+  if (argc === 0) {
+    throw new Error('At least one value should be passed to min()');
+  } else if (argc === 1) {
+    if (_typeof(argv[0]) === 'object') {
+      ar = _obj2Array(argv[0]);
+    } else {
+      throw new Error('Wrong parameter count for min()');
+    }
+
+    if (ar.length === 0) {
+      throw new Error('Array must contain at least one element for min()');
+    }
+  } else {
+    ar = argv;
+  }
+
+  retVal = ar[0];
+
+  for (i = 1, n = ar.length; i < n; ++i) {
+    if (_compare(retVal, ar[i]) === -1) {
+      retVal = ar[i];
+    }
+  }
+
+  return retVal;
+};
+
+
+/***/ }),
+/* 15 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+
+module.exports = function strip_tags(input, allowed) {
+  // eslint-disable-line camelcase
+  //  discuss at: http://locutus.io/php/strip_tags/
+  // original by: Kevin van Zonneveld (http://kvz.io)
+  // improved by: Luke Godfrey
+  // improved by: Kevin van Zonneveld (http://kvz.io)
+  //    input by: Pul
+  //    input by: Alex
+  //    input by: Marc Palau
+  //    input by: Brett Zamir (http://brett-zamir.me)
+  //    input by: Bobby Drake
+  //    input by: Evertjan Garretsen
+  // bugfixed by: Kevin van Zonneveld (http://kvz.io)
+  // bugfixed by: Onno Marsman (https://twitter.com/onnomarsman)
+  // bugfixed by: Kevin van Zonneveld (http://kvz.io)
+  // bugfixed by: Kevin van Zonneveld (http://kvz.io)
+  // bugfixed by: Eric Nagel
+  // bugfixed by: Kevin van Zonneveld (http://kvz.io)
+  // bugfixed by: Tomasz Wesolowski
+  //  revised by: Rafał Kukawski (http://blog.kukawski.pl)
+  //   example 1: strip_tags('<p>Kevin</p> <br /><b>van</b> <i>Zonneveld</i>', '<i><b>')
+  //   returns 1: 'Kevin <b>van</b> <i>Zonneveld</i>'
+  //   example 2: strip_tags('<p>Kevin <img src="someimage.png" onmouseover="someFunction()">van <i>Zonneveld</i></p>', '<p>')
+  //   returns 2: '<p>Kevin van Zonneveld</p>'
+  //   example 3: strip_tags("<a href='http://kvz.io'>Kevin van Zonneveld</a>", "<a>")
+  //   returns 3: "<a href='http://kvz.io'>Kevin van Zonneveld</a>"
+  //   example 4: strip_tags('1 < 5 5 > 1')
+  //   returns 4: '1 < 5 5 > 1'
+  //   example 5: strip_tags('1 <br/> 1')
+  //   returns 5: '1  1'
+  //   example 6: strip_tags('1 <br/> 1', '<br>')
+  //   returns 6: '1 <br/> 1'
+  //   example 7: strip_tags('1 <br/> 1', '<br><br/>')
+  //   returns 7: '1 <br/> 1'
+
+  // making sure the allowed arg is a string containing only tags in lowercase (<a><b><c>)
+  allowed = (((allowed || '') + '').toLowerCase().match(/<[a-z][a-z0-9]*>/g) || []).join('');
+
+  var tags = /<\/?([a-z][a-z0-9]*)\b[^>]*>/gi;
+  var commentsAndPhpTags = /<!--[\s\S]*?-->|<\?(?:php)?[\s\S]*?\?>/gi;
+
+  return input.replace(commentsAndPhpTags, '').replace(tags, function ($0, $1) {
+    return allowed.indexOf('<' + $1.toLowerCase() + '>') > -1 ? $0 : '';
+  });
+};
+
+
+/***/ }),
+/* 16 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+
+module.exports = function strtotime(text, now) {
+  //  discuss at: http://locutus.io/php/strtotime/
+  // original by: Caio Ariede (http://caioariede.com)
+  // improved by: Kevin van Zonneveld (http://kvz.io)
+  // improved by: Caio Ariede (http://caioariede.com)
+  // improved by: A. Matías Quezada (http://amatiasq.com)
+  // improved by: preuter
+  // improved by: Brett Zamir (http://brett-zamir.me)
+  // improved by: Mirko Faber
+  //    input by: David
+  // bugfixed by: Wagner B. Soares
+  // bugfixed by: Artur Tchernychev
+  // bugfixed by: Stephan Bösch-Plepelits (http://github.com/plepe)
+  //      note 1: Examples all have a fixed timestamp to prevent
+  //      note 1: tests to fail because of variable time(zones)
+  //   example 1: strtotime('+1 day', 1129633200)
+  //   returns 1: 1129719600
+  //   example 2: strtotime('+1 week 2 days 4 hours 2 seconds', 1129633200)
+  //   returns 2: 1130425202
+  //   example 3: strtotime('last month', 1129633200)
+  //   returns 3: 1127041200
+  //   example 4: strtotime('2009-05-04 08:30:00 GMT')
+  //   returns 4: 1241425800
+  //   example 5: strtotime('2009-05-04 08:30:00+00')
+  //   returns 5: 1241425800
+  //   example 6: strtotime('2009-05-04 08:30:00+02:00')
+  //   returns 6: 1241418600
+  //   example 7: strtotime('2009-05-04T08:30:00Z')
+  //   returns 7: 1241425800
+
+  var parsed;
+  var match;
+  var today;
+  var year;
+  var date;
+  var days;
+  var ranges;
+  var len;
+  var times;
+  var regex;
+  var i;
+  var fail = false;
+
+  if (!text) {
+    return fail;
+  }
+
+  // Unecessary spaces
+  text = text.replace(/^\s+|\s+$/g, '').replace(/\s{2,}/g, ' ').replace(/[\t\r\n]/g, '').toLowerCase();
+
+  // in contrast to php, js Date.parse function interprets:
+  // dates given as yyyy-mm-dd as in timezone: UTC,
+  // dates with "." or "-" as MDY instead of DMY
+  // dates with two-digit years differently
+  // etc...etc...
+  // ...therefore we manually parse lots of common date formats
+  var pattern = new RegExp(['^(\\d{1,4})', '([\\-\\.\\/:])', '(\\d{1,2})', '([\\-\\.\\/:])', '(\\d{1,4})', '(?:\\s(\\d{1,2}):(\\d{2})?:?(\\d{2})?)?', '(?:\\s([A-Z]+)?)?$'].join(''));
+  match = text.match(pattern);
+
+  if (match && match[2] === match[4]) {
+    if (match[1] > 1901) {
+      switch (match[2]) {
+        case '-':
+          // YYYY-M-D
+          if (match[3] > 12 || match[5] > 31) {
+            return fail;
+          }
+
+          return new Date(match[1], parseInt(match[3], 10) - 1, match[5], match[6] || 0, match[7] || 0, match[8] || 0, match[9] || 0) / 1000;
+        case '.':
+          // YYYY.M.D is not parsed by strtotime()
+          return fail;
+        case '/':
+          // YYYY/M/D
+          if (match[3] > 12 || match[5] > 31) {
+            return fail;
+          }
+
+          return new Date(match[1], parseInt(match[3], 10) - 1, match[5], match[6] || 0, match[7] || 0, match[8] || 0, match[9] || 0) / 1000;
+      }
+    } else if (match[5] > 1901) {
+      switch (match[2]) {
+        case '-':
+          // D-M-YYYY
+          if (match[3] > 12 || match[1] > 31) {
+            return fail;
+          }
+
+          return new Date(match[5], parseInt(match[3], 10) - 1, match[1], match[6] || 0, match[7] || 0, match[8] || 0, match[9] || 0) / 1000;
+        case '.':
+          // D.M.YYYY
+          if (match[3] > 12 || match[1] > 31) {
+            return fail;
+          }
+
+          return new Date(match[5], parseInt(match[3], 10) - 1, match[1], match[6] || 0, match[7] || 0, match[8] || 0, match[9] || 0) / 1000;
+        case '/':
+          // M/D/YYYY
+          if (match[1] > 12 || match[3] > 31) {
+            return fail;
+          }
+
+          return new Date(match[5], parseInt(match[1], 10) - 1, match[3], match[6] || 0, match[7] || 0, match[8] || 0, match[9] || 0) / 1000;
+      }
+    } else {
+      switch (match[2]) {
+        case '-':
+          // YY-M-D
+          if (match[3] > 12 || match[5] > 31 || match[1] < 70 && match[1] > 38) {
+            return fail;
+          }
+
+          year = match[1] >= 0 && match[1] <= 38 ? +match[1] + 2000 : match[1];
+          return new Date(year, parseInt(match[3], 10) - 1, match[5], match[6] || 0, match[7] || 0, match[8] || 0, match[9] || 0) / 1000;
+        case '.':
+          // D.M.YY or H.MM.SS
+          if (match[5] >= 70) {
+            // D.M.YY
+            if (match[3] > 12 || match[1] > 31) {
+              return fail;
+            }
+
+            return new Date(match[5], parseInt(match[3], 10) - 1, match[1], match[6] || 0, match[7] || 0, match[8] || 0, match[9] || 0) / 1000;
+          }
+          if (match[5] < 60 && !match[6]) {
+            // H.MM.SS
+            if (match[1] > 23 || match[3] > 59) {
+              return fail;
+            }
+
+            today = new Date();
+            return new Date(today.getFullYear(), today.getMonth(), today.getDate(), match[1] || 0, match[3] || 0, match[5] || 0, match[9] || 0) / 1000;
+          }
+
+          // invalid format, cannot be parsed
+          return fail;
+        case '/':
+          // M/D/YY
+          if (match[1] > 12 || match[3] > 31 || match[5] < 70 && match[5] > 38) {
+            return fail;
+          }
+
+          year = match[5] >= 0 && match[5] <= 38 ? +match[5] + 2000 : match[5];
+          return new Date(year, parseInt(match[1], 10) - 1, match[3], match[6] || 0, match[7] || 0, match[8] || 0, match[9] || 0) / 1000;
+        case ':':
+          // HH:MM:SS
+          if (match[1] > 23 || match[3] > 59 || match[5] > 59) {
+            return fail;
+          }
+
+          today = new Date();
+          return new Date(today.getFullYear(), today.getMonth(), today.getDate(), match[1] || 0, match[3] || 0, match[5] || 0) / 1000;
+      }
+    }
+  }
+
+  // other formats and "now" should be parsed by Date.parse()
+  if (text === 'now') {
+    return now === null || isNaN(now) ? new Date().getTime() / 1000 | 0 : now | 0;
+  }
+  if (!isNaN(parsed = Date.parse(text))) {
+    return parsed / 1000 | 0;
+  }
+  // Browsers !== Chrome have problems parsing ISO 8601 date strings, as they do
+  // not accept lower case characters, space, or shortened time zones.
+  // Therefore, fix these problems and try again.
+  // Examples:
+  //   2015-04-15 20:33:59+02
+  //   2015-04-15 20:33:59z
+  //   2015-04-15t20:33:59+02:00
+  pattern = new RegExp(['^([0-9]{4}-[0-9]{2}-[0-9]{2})', '[ t]', '([0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?)', '([\\+-][0-9]{2}(:[0-9]{2})?|z)'].join(''));
+  match = text.match(pattern);
+  if (match) {
+    // @todo: time zone information
+    if (match[4] === 'z') {
+      match[4] = 'Z';
+    } else if (match[4].match(/^([\+-][0-9]{2})$/)) {
+      match[4] = match[4] + ':00';
+    }
+
+    if (!isNaN(parsed = Date.parse(match[1] + 'T' + match[2] + match[4]))) {
+      return parsed / 1000 | 0;
+    }
+  }
+
+  date = now ? new Date(now * 1000) : new Date();
+  days = {
+    'sun': 0,
+    'mon': 1,
+    'tue': 2,
+    'wed': 3,
+    'thu': 4,
+    'fri': 5,
+    'sat': 6
+  };
+  ranges = {
+    'yea': 'FullYear',
+    'mon': 'Month',
+    'day': 'Date',
+    'hou': 'Hours',
+    'min': 'Minutes',
+    'sec': 'Seconds'
+  };
+
+  function lastNext(type, range, modifier) {
+    var diff;
+    var day = days[range];
+
+    if (typeof day !== 'undefined') {
+      diff = day - date.getDay();
+
+      if (diff === 0) {
+        diff = 7 * modifier;
+      } else if (diff > 0 && type === 'last') {
+        diff -= 7;
+      } else if (diff < 0 && type === 'next') {
+        diff += 7;
+      }
+
+      date.setDate(date.getDate() + diff);
+    }
+  }
+
+  function process(val) {
+    // @todo: Reconcile this with regex using \s, taking into account
+    // browser issues with split and regexes
+    var splt = val.split(' ');
+    var type = splt[0];
+    var range = splt[1].substring(0, 3);
+    var typeIsNumber = /\d+/.test(type);
+    var ago = splt[2] === 'ago';
+    var num = (type === 'last' ? -1 : 1) * (ago ? -1 : 1);
+
+    if (typeIsNumber) {
+      num *= parseInt(type, 10);
+    }
+
+    if (ranges.hasOwnProperty(range) && !splt[1].match(/^mon(day|\.)?$/i)) {
+      return date['set' + ranges[range]](date['get' + ranges[range]]() + num);
+    }
+
+    if (range === 'wee') {
+      return date.setDate(date.getDate() + num * 7);
+    }
+
+    if (type === 'next' || type === 'last') {
+      lastNext(type, range, num);
+    } else if (!typeIsNumber) {
+      return false;
+    }
+
+    return true;
+  }
+
+  times = '(years?|months?|weeks?|days?|hours?|minutes?|min|seconds?|sec' + '|sunday|sun\\.?|monday|mon\\.?|tuesday|tue\\.?|wednesday|wed\\.?' + '|thursday|thu\\.?|friday|fri\\.?|saturday|sat\\.?)';
+  regex = '([+-]?\\d+\\s' + times + '|' + '(last|next)\\s' + times + ')(\\sago)?';
+
+  match = text.match(new RegExp(regex, 'gi'));
+  if (!match) {
+    return fail;
+  }
+
+  for (i = 0, len = match.length; i < len; i++) {
+    if (!process(match[i])) {
+      return fail;
+    }
+  }
+
+  return date.getTime() / 1000;
+};
+
+
+/***/ }),
+/* 17 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+
+module.exports = function date(format, timestamp) {
+  //  discuss at: http://locutus.io/php/date/
+  // original by: Carlos R. L. Rodrigues (http://www.jsfromhell.com)
+  // original by: gettimeofday
+  //    parts by: Peter-Paul Koch (http://www.quirksmode.org/js/beat.html)
+  // improved by: Kevin van Zonneveld (http://kvz.io)
+  // improved by: MeEtc (http://yass.meetcweb.com)
+  // improved by: Brad Touesnard
+  // improved by: Tim Wiel
+  // improved by: Bryan Elliott
+  // improved by: David Randall
+  // improved by: Theriault (https://github.com/Theriault)
+  // improved by: Theriault (https://github.com/Theriault)
+  // improved by: Brett Zamir (http://brett-zamir.me)
+  // improved by: Theriault (https://github.com/Theriault)
+  // improved by: Thomas Beaucourt (http://www.webapp.fr)
+  // improved by: JT
+  // improved by: Theriault (https://github.com/Theriault)
+  // improved by: Rafał Kukawski (http://blog.kukawski.pl)
+  // improved by: Theriault (https://github.com/Theriault)
+  //    input by: Brett Zamir (http://brett-zamir.me)
+  //    input by: majak
+  //    input by: Alex
+  //    input by: Martin
+  //    input by: Alex Wilson
+  //    input by: Haravikk
+  // bugfixed by: Kevin van Zonneveld (http://kvz.io)
+  // bugfixed by: majak
+  // bugfixed by: Kevin van Zonneveld (http://kvz.io)
+  // bugfixed by: Brett Zamir (http://brett-zamir.me)
+  // bugfixed by: omid (http://locutus.io/php/380:380#comment_137122)
+  // bugfixed by: Chris (http://www.devotis.nl/)
+  //      note 1: Uses global: locutus to store the default timezone
+  //      note 1: Although the function potentially allows timezone info
+  //      note 1: (see notes), it currently does not set
+  //      note 1: per a timezone specified by date_default_timezone_set(). Implementers might use
+  //      note 1: $locutus.currentTimezoneOffset and
+  //      note 1: $locutus.currentTimezoneDST set by that function
+  //      note 1: in order to adjust the dates in this function
+  //      note 1: (or our other date functions!) accordingly
+  //   example 1: date('H:m:s \\m \\i\\s \\m\\o\\n\\t\\h', 1062402400)
+  //   returns 1: '07:09:40 m is month'
+  //   example 2: date('F j, Y, g:i a', 1062462400)
+  //   returns 2: 'September 2, 2003, 12:26 am'
+  //   example 3: date('Y W o', 1062462400)
+  //   returns 3: '2003 36 2003'
+  //   example 4: var $x = date('Y m d', (new Date()).getTime() / 1000)
+  //   example 4: $x = $x + ''
+  //   example 4: var $result = $x.length // 2009 01 09
+  //   returns 4: 10
+  //   example 5: date('W', 1104534000)
+  //   returns 5: '52'
+  //   example 6: date('B t', 1104534000)
+  //   returns 6: '999 31'
+  //   example 7: date('W U', 1293750000.82); // 2010-12-31
+  //   returns 7: '52 1293750000'
+  //   example 8: date('W', 1293836400); // 2011-01-01
+  //   returns 8: '52'
+  //   example 9: date('W Y-m-d', 1293974054); // 2011-01-02
+  //   returns 9: '52 2011-01-02'
+  //        test: skip-1 skip-2 skip-5
+
+  var jsdate, f;
+  // Keep this here (works, but for code commented-out below for file size reasons)
+  // var tal= [];
+  var txtWords = ['Sun', 'Mon', 'Tues', 'Wednes', 'Thurs', 'Fri', 'Satur', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  // trailing backslash -> (dropped)
+  // a backslash followed by any character (including backslash) -> the character
+  // empty string -> empty string
+  var formatChr = /\\?(.?)/gi;
+  var formatChrCb = function formatChrCb(t, s) {
+    return f[t] ? f[t]() : s;
+  };
+  var _pad = function _pad(n, c) {
+    n = String(n);
+    while (n.length < c) {
+      n = '0' + n;
+    }
+    return n;
+  };
+  f = {
+    // Day
+    d: function d() {
+      // Day of month w/leading 0; 01..31
+      return _pad(f.j(), 2);
+    },
+    D: function D() {
+      // Shorthand day name; Mon...Sun
+      return f.l().slice(0, 3);
+    },
+    j: function j() {
+      // Day of month; 1..31
+      return jsdate.getDate();
+    },
+    l: function l() {
+      // Full day name; Monday...Sunday
+      return txtWords[f.w()] + 'day';
+    },
+    N: function N() {
+      // ISO-8601 day of week; 1[Mon]..7[Sun]
+      return f.w() || 7;
+    },
+    S: function S() {
+      // Ordinal suffix for day of month; st, nd, rd, th
+      var j = f.j();
+      var i = j % 10;
+      if (i <= 3 && parseInt(j % 100 / 10, 10) === 1) {
+        i = 0;
+      }
+      return ['st', 'nd', 'rd'][i - 1] || 'th';
+    },
+    w: function w() {
+      // Day of week; 0[Sun]..6[Sat]
+      return jsdate.getDay();
+    },
+    z: function z() {
+      // Day of year; 0..365
+      var a = new Date(f.Y(), f.n() - 1, f.j());
+      var b = new Date(f.Y(), 0, 1);
+      return Math.round((a - b) / 864e5);
+    },
+
+    // Week
+    W: function W() {
+      // ISO-8601 week number
+      var a = new Date(f.Y(), f.n() - 1, f.j() - f.N() + 3);
+      var b = new Date(a.getFullYear(), 0, 4);
+      return _pad(1 + Math.round((a - b) / 864e5 / 7), 2);
+    },
+
+    // Month
+    F: function F() {
+      // Full month name; January...December
+      return txtWords[6 + f.n()];
+    },
+    m: function m() {
+      // Month w/leading 0; 01...12
+      return _pad(f.n(), 2);
+    },
+    M: function M() {
+      // Shorthand month name; Jan...Dec
+      return f.F().slice(0, 3);
+    },
+    n: function n() {
+      // Month; 1...12
+      return jsdate.getMonth() + 1;
+    },
+    t: function t() {
+      // Days in month; 28...31
+      return new Date(f.Y(), f.n(), 0).getDate();
+    },
+
+    // Year
+    L: function L() {
+      // Is leap year?; 0 or 1
+      var j = f.Y();
+      return j % 4 === 0 & j % 100 !== 0 | j % 400 === 0;
+    },
+    o: function o() {
+      // ISO-8601 year
+      var n = f.n();
+      var W = f.W();
+      var Y = f.Y();
+      return Y + (n === 12 && W < 9 ? 1 : n === 1 && W > 9 ? -1 : 0);
+    },
+    Y: function Y() {
+      // Full year; e.g. 1980...2010
+      return jsdate.getFullYear();
+    },
+    y: function y() {
+      // Last two digits of year; 00...99
+      return f.Y().toString().slice(-2);
+    },
+
+    // Time
+    a: function a() {
+      // am or pm
+      return jsdate.getHours() > 11 ? 'pm' : 'am';
+    },
+    A: function A() {
+      // AM or PM
+      return f.a().toUpperCase();
+    },
+    B: function B() {
+      // Swatch Internet time; 000..999
+      var H = jsdate.getUTCHours() * 36e2;
+      // Hours
+      var i = jsdate.getUTCMinutes() * 60;
+      // Minutes
+      // Seconds
+      var s = jsdate.getUTCSeconds();
+      return _pad(Math.floor((H + i + s + 36e2) / 86.4) % 1e3, 3);
+    },
+    g: function g() {
+      // 12-Hours; 1..12
+      return f.G() % 12 || 12;
+    },
+    G: function G() {
+      // 24-Hours; 0..23
+      return jsdate.getHours();
+    },
+    h: function h() {
+      // 12-Hours w/leading 0; 01..12
+      return _pad(f.g(), 2);
+    },
+    H: function H() {
+      // 24-Hours w/leading 0; 00..23
+      return _pad(f.G(), 2);
+    },
+    i: function i() {
+      // Minutes w/leading 0; 00..59
+      return _pad(jsdate.getMinutes(), 2);
+    },
+    s: function s() {
+      // Seconds w/leading 0; 00..59
+      return _pad(jsdate.getSeconds(), 2);
+    },
+    u: function u() {
+      // Microseconds; 000000-999000
+      return _pad(jsdate.getMilliseconds() * 1000, 6);
+    },
+
+    // Timezone
+    e: function e() {
+      // Timezone identifier; e.g. Atlantic/Azores, ...
+      // The following works, but requires inclusion of the very large
+      // timezone_abbreviations_list() function.
+      /*              return that.date_default_timezone_get();
+       */
+      var msg = 'Not supported (see source code of date() for timezone on how to add support)';
+      throw new Error(msg);
+    },
+    I: function I() {
+      // DST observed?; 0 or 1
+      // Compares Jan 1 minus Jan 1 UTC to Jul 1 minus Jul 1 UTC.
+      // If they are not equal, then DST is observed.
+      var a = new Date(f.Y(), 0);
+      // Jan 1
+      var c = Date.UTC(f.Y(), 0);
+      // Jan 1 UTC
+      var b = new Date(f.Y(), 6);
+      // Jul 1
+      // Jul 1 UTC
+      var d = Date.UTC(f.Y(), 6);
+      return a - c !== b - d ? 1 : 0;
+    },
+    O: function O() {
+      // Difference to GMT in hour format; e.g. +0200
+      var tzo = jsdate.getTimezoneOffset();
+      var a = Math.abs(tzo);
+      return (tzo > 0 ? '-' : '+') + _pad(Math.floor(a / 60) * 100 + a % 60, 4);
+    },
+    P: function P() {
+      // Difference to GMT w/colon; e.g. +02:00
+      var O = f.O();
+      return O.substr(0, 3) + ':' + O.substr(3, 2);
+    },
+    T: function T() {
+      // The following works, but requires inclusion of the very
+      // large timezone_abbreviations_list() function.
+      /*              var abbr, i, os, _default;
+      if (!tal.length) {
+        tal = that.timezone_abbreviations_list();
+      }
+      if ($locutus && $locutus.default_timezone) {
+        _default = $locutus.default_timezone;
+        for (abbr in tal) {
+          for (i = 0; i < tal[abbr].length; i++) {
+            if (tal[abbr][i].timezone_id === _default) {
+              return abbr.toUpperCase();
+            }
+          }
+        }
+      }
+      for (abbr in tal) {
+        for (i = 0; i < tal[abbr].length; i++) {
+          os = -jsdate.getTimezoneOffset() * 60;
+          if (tal[abbr][i].offset === os) {
+            return abbr.toUpperCase();
+          }
+        }
+      }
+      */
+      return 'UTC';
+    },
+    Z: function Z() {
+      // Timezone offset in seconds (-43200...50400)
+      return -jsdate.getTimezoneOffset() * 60;
+    },
+
+    // Full Date/Time
+    c: function c() {
+      // ISO-8601 date.
+      return 'Y-m-d\\TH:i:sP'.replace(formatChr, formatChrCb);
+    },
+    r: function r() {
+      // RFC 2822
+      return 'D, d M Y H:i:s O'.replace(formatChr, formatChrCb);
+    },
+    U: function U() {
+      // Seconds since UNIX epoch
+      return jsdate / 1000 | 0;
+    }
+  };
+
+  var _date = function _date(format, timestamp) {
+    jsdate = timestamp === undefined ? new Date() // Not provided
+    : timestamp instanceof Date ? new Date(timestamp) // JS Date()
+    : new Date(timestamp * 1000) // UNIX timestamp (auto-convert to int)
+    ;
+    return format.replace(formatChr, formatChrCb);
+  };
+
+  return _date(format, timestamp);
+};
+
+
+/***/ }),
+/* 18 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+
+module.exports = function boolval(mixedVar) {
+  // original by: Will Rowe
+  //   example 1: boolval(true)
+  //   returns 1: true
+  //   example 2: boolval(false)
+  //   returns 2: false
+  //   example 3: boolval(0)
+  //   returns 3: false
+  //   example 4: boolval(0.0)
+  //   returns 4: false
+  //   example 5: boolval('')
+  //   returns 5: false
+  //   example 6: boolval('0')
+  //   returns 6: false
+  //   example 7: boolval([])
+  //   returns 7: false
+  //   example 8: boolval('')
+  //   returns 8: false
+  //   example 9: boolval(null)
+  //   returns 9: false
+  //   example 10: boolval(undefined)
+  //   returns 10: false
+  //   example 11: boolval('true')
+  //   returns 11: true
+
+  if (mixedVar === false) {
+    return false;
+  }
+
+  if (mixedVar === 0 || mixedVar === 0.0) {
+    return false;
+  }
+
+  if (mixedVar === '' || mixedVar === '0') {
+    return false;
+  }
+
+  if (Array.isArray(mixedVar) && mixedVar.length === 0) {
+    return false;
+  }
+
+  if (mixedVar === null || mixedVar === undefined) {
+    return false;
+  }
+
+  return true;
+};
+
+
+/***/ }),
+/* 19 */
+/***/ (function(module, exports) {
+
+module.exports = function (Twig) {
+    'use strict';
+
+    Twig.Templates.registerLoader('ajax', function (location, params, callback, errorCallback) {
+        let template;
+        const {precompiled} = params;
+        const parser = this.parsers[params.parser] || this.parser.twig;
+
+        if (typeof XMLHttpRequest === 'undefined') {
+            throw new Twig.Error('Unsupported platform: Unable to do ajax requests ' +
+                                 'because there is no "XMLHTTPRequest" implementation');
+        }
+
+        const xmlhttp = new XMLHttpRequest();
+        xmlhttp.onreadystatechange = function () {
+            let data = null;
+
+            if (xmlhttp.readyState === 4) {
+                if (xmlhttp.status === 200 || (window.cordova && xmlhttp.status === 0)) {
+                    Twig.log.debug('Got template ', xmlhttp.responseText);
+
+                    if (precompiled === true) {
+                        data = JSON.parse(xmlhttp.responseText);
+                    } else {
+                        data = xmlhttp.responseText;
+                    }
+
+                    params.url = location;
+                    params.data = data;
+
+                    template = parser.call(this, params);
+
+                    if (typeof callback === 'function') {
+                        callback(template);
+                    }
+                } else if (typeof errorCallback === 'function') {
+                    errorCallback(xmlhttp);
+                }
+            }
+        };
+
+        xmlhttp.open('GET', location, Boolean(params.async));
+        xmlhttp.send();
+
+        if (params.async) {
+            // TODO: return deferred promise
+            return true;
+        }
+
+        return template;
+    });
+};
+
+
+/***/ }),
+/* 20 */
+/***/ (function(module, exports, __webpack_require__) {
+
+module.exports = function (Twig) {
+    'use strict';
+
+    let fs;
+    let path;
+
+    try {
+        // Require lib dependencies at runtime
+        fs = __webpack_require__(21);
+        path = __webpack_require__(1);
+    } catch (error) {
+        // NOTE: this is in a try/catch to avoid errors cross platform
+    }
+
+    Twig.Templates.registerLoader('fs', function (location, params, callback, errorCallback) {
+        let template;
+        let data = null;
+        const {precompiled} = params;
+        const parser = this.parsers[params.parser] || this.parser.twig;
+
+        if (!fs || !path) {
+            throw new Twig.Error('Unsupported platform: Unable to load from file ' +
+                                 'because there is no "fs" or "path" implementation');
+        }
+
+        const loadTemplateFn = function (err, data) {
+            if (err) {
+                if (typeof errorCallback === 'function') {
+                    errorCallback(err);
+                }
+
+                return;
+            }
+
+            if (precompiled === true) {
+                data = JSON.parse(data);
+            }
+
+            params.data = data;
+            params.path = params.path || location;
+
+            // Template is in data
+            template = parser.call(this, params);
+
+            if (typeof callback === 'function') {
+                callback(template);
+            }
+        };
+
+        params.path = params.path || location;
+
+        if (params.async) {
+            fs.stat(params.path, (err, stats) => {
+                if (err || !stats.isFile()) {
+                    if (typeof errorCallback === 'function') {
+                        errorCallback(new Twig.Error('Unable to find template file ' + params.path));
+                    }
+
+                    return;
+                }
+
+                fs.readFile(params.path, 'utf8', loadTemplateFn);
+            });
+            // TODO: return deferred promise
+            return true;
+        }
+
+        try {
+            if (!fs.statSync(params.path).isFile()) {
+                throw new Twig.Error('Unable to find template file ' + params.path);
+            }
+        } catch (error) {
+            throw new Twig.Error('Unable to find template file ' + params.path);
+        }
+
+        data = fs.readFileSync(params.path, 'utf8');
+        loadTemplateFn(undefined, data);
+        return template;
+    });
+};
+
+
+/***/ }),
+/* 21 */
+/***/ (function(module, exports) {
+
+module.exports = require("fs");
+
+/***/ }),
+/* 22 */
+/***/ (function(module, exports) {
+
+// ## twig.logic.js
+//
+// This file handles tokenizing, compiling and parsing logic tokens. {% ... %}
+module.exports = function (Twig) {
+    'use strict';
+
+    /**
+     * Namespace for logic handling.
+     */
+    Twig.logic = {};
+
+    /**
+     * Logic token types.
+     */
+    Twig.logic.type = {
+        if_: 'Twig.logic.type.if',
+        endif: 'Twig.logic.type.endif',
+        for_: 'Twig.logic.type.for',
+        endfor: 'Twig.logic.type.endfor',
+        else_: 'Twig.logic.type.else',
+        elseif: 'Twig.logic.type.elseif',
+        set: 'Twig.logic.type.set',
+        setcapture: 'Twig.logic.type.setcapture',
+        endset: 'Twig.logic.type.endset',
+        filter: 'Twig.logic.type.filter',
+        endfilter: 'Twig.logic.type.endfilter',
+        apply: 'Twig.logic.type.apply',
+        endapply: 'Twig.logic.type.endapply',
+        shortblock: 'Twig.logic.type.shortblock',
+        block: 'Twig.logic.type.block',
+        endblock: 'Twig.logic.type.endblock',
+        extends_: 'Twig.logic.type.extends',
+        use: 'Twig.logic.type.use',
+        include: 'Twig.logic.type.include',
+        spaceless: 'Twig.logic.type.spaceless',
+        endspaceless: 'Twig.logic.type.endspaceless',
+        macro: 'Twig.logic.type.macro',
+        endmacro: 'Twig.logic.type.endmacro',
+        import_: 'Twig.logic.type.import',
+        from: 'Twig.logic.type.from',
+        embed: 'Twig.logic.type.embed',
+        endembed: 'Twig.logic.type.endembed',
+        with: 'Twig.logic.type.with',
+        endwith: 'Twig.logic.type.endwith',
+        deprecated: 'Twig.logic.type.deprecated'
+    };
+
+    // Regular expressions for handling logic tokens.
+    //
+    // Properties:
+    //
+    //      type:  The type of expression this matches
+    //
+    //      regex: A regular expression that matches the format of the token
+    //
+    //      next:  What logic tokens (if any) pop this token off the logic stack. If empty, the
+    //             logic token is assumed to not require an end tag and isn't push onto the stack.
+    //
+    //      open:  Does this tag open a logic expression or is it standalone. For example,
+    //             {% endif %} cannot exist without an opening {% if ... %} tag, so open = false.
+    //
+    //  Functions:
+    //
+    //      compile: A function that handles compiling the token into an output token ready for
+    //               parsing with the parse function.
+    //
+    //      parse:   A function that parses the compiled token into output (HTML / whatever the
+    //               template represents).
+    Twig.logic.definitions = [
+        {
+            /**
+             * If type logic tokens.
+             *
+             *  Format: {% if expression %}
+             */
+            type: Twig.logic.type.if_,
+            regex: /^if\s?([\s\S]+)$/,
+            next: [
+                Twig.logic.type.else_,
+                Twig.logic.type.elseif,
+                Twig.logic.type.endif
+            ],
+            open: true,
+            compile(token) {
+                const expression = token.match[1];
+                // Compile the expression.
+                token.stack = Twig.expression.compile.call(this, {
+                    type: Twig.expression.type.expression,
+                    value: expression
+                }).stack;
+                delete token.match;
+                return token;
+            },
+            parse(token, context, chain) {
+                const state = this;
+
+                return Twig.expression.parseAsync.call(state, token.stack, context)
+                    .then(result => {
+                        chain = true;
+
+                        if (Twig.lib.boolval(result)) {
+                            chain = false;
+
+                            return state.parseAsync(token.output, context);
+                        }
+
+                        return '';
+                    })
+                    .then(output => {
+                        return {
+                            chain,
+                            output
+                        };
+                    });
+            }
+        },
+        {
+            /**
+             * Else if type logic tokens.
+             *
+             *  Format: {% elseif expression %}
+             */
+            type: Twig.logic.type.elseif,
+            regex: /^elseif\s?([^\s].*)$/,
+            next: [
+                Twig.logic.type.else_,
+                Twig.logic.type.elseif,
+                Twig.logic.type.endif
+            ],
+            open: false,
+            compile(token) {
+                const expression = token.match[1];
+                // Compile the expression.
+                token.stack = Twig.expression.compile.call(this, {
+                    type: Twig.expression.type.expression,
+                    value: expression
+                }).stack;
+                delete token.match;
+                return token;
+            },
+            parse(token, context, chain) {
+                const state = this;
+
+                return Twig.expression.parseAsync.call(state, token.stack, context)
+                    .then(result => {
+                        if (chain && Twig.lib.boolval(result)) {
+                            chain = false;
+
+                            return state.parseAsync(token.output, context);
+                        }
+
+                        return '';
+                    })
+                    .then(output => {
+                        return {
+                            chain,
+                            output
+                        };
+                    });
+            }
+        },
+        {
+            /**
+             * Else type logic tokens.
+             *
+             *  Format: {% else %}
+             */
+            type: Twig.logic.type.else_,
+            regex: /^else$/,
+            next: [
+                Twig.logic.type.endif,
+                Twig.logic.type.endfor
+            ],
+            open: false,
+            parse(token, context, chain) {
+                let promise = Twig.Promise.resolve('');
+                const state = this;
+
+                if (chain) {
+                    promise = state.parseAsync(token.output, context);
+                }
+
+                return promise.then(output => {
+                    return {
+                        chain,
+                        output
+                    };
+                });
+            }
+        },
+        {
+            /**
+             * End if type logic tokens.
+             *
+             *  Format: {% endif %}
+             */
+            type: Twig.logic.type.endif,
+            regex: /^endif$/,
+            next: [],
+            open: false
+        },
+        {
+            /**
+             * For type logic tokens.
+             *
+             *  Format: {% for expression %}
+             */
+            type: Twig.logic.type.for_,
+            regex: /^for\s+([a-zA-Z0-9_,\s]+)\s+in\s+([\S\s]+?)(?:\s+if\s+([^\s].*))?$/,
+            next: [
+                Twig.logic.type.else_,
+                Twig.logic.type.endfor
+            ],
+            open: true,
+            compile(token) {
+                const keyValue = token.match[1];
+                const expression = token.match[2];
+                const conditional = token.match[3];
+                let kvSplit = null;
+
+                token.keyVar = null;
+                token.valueVar = null;
+
+                if (keyValue.indexOf(',') >= 0) {
+                    kvSplit = keyValue.split(',');
+                    if (kvSplit.length === 2) {
+                        token.keyVar = kvSplit[0].trim();
+                        token.valueVar = kvSplit[1].trim();
+                    } else {
+                        throw new Twig.Error('Invalid expression in for loop: ' + keyValue);
+                    }
+                } else {
+                    token.valueVar = keyValue.trim();
+                }
+
+                // Valid expressions for a for loop
+                //   for item     in expression
+                //   for key,item in expression
+
+                // Compile the expression.
+                token.expression = Twig.expression.compile.call(this, {
+                    type: Twig.expression.type.expression,
+                    value: expression
+                }).stack;
+
+                // Compile the conditional (if available)
+                if (conditional) {
+                    token.conditional = Twig.expression.compile.call(this, {
+                        type: Twig.expression.type.expression,
+                        value: conditional
+                    }).stack;
+                }
+
+                delete token.match;
+                return token;
+            },
+            parse(token, context, continueChain) {
+                // Parse expression
+                const output = [];
+                let len;
+                let index = 0;
+                let keyset;
+                const state = this;
+                const {conditional} = token;
+                const buildLoop = function (index, len) {
+                    const isConditional = conditional !== undefined;
+                    return {
+                        index: index + 1,
+                        index0: index,
+                        revindex: isConditional ? undefined : len - index,
+                        revindex0: isConditional ? undefined : len - index - 1,
+                        first: (index === 0),
+                        last: isConditional ? undefined : (index === len - 1),
+                        length: isConditional ? undefined : len,
+                        parent: context
+                    };
+                };
+
+                // Run once for each iteration of the loop
+                const loop = function (key, value) {
+                    const innerContext = {...context};
+
+                    innerContext[token.valueVar] = value;
+
+                    if (token.keyVar) {
+                        innerContext[token.keyVar] = key;
+                    }
+
+                    // Loop object
+                    innerContext.loop = buildLoop(index, len);
+
+                    const promise = conditional === undefined ?
+                        Twig.Promise.resolve(true) :
+                        Twig.expression.parseAsync.call(state, conditional, innerContext);
+
+                    return promise.then(condition => {
+                        if (!condition) {
+                            return;
+                        }
+
+                        return state.parseAsync(token.output, innerContext)
+                            .then(tokenOutput => {
+                                output.push(tokenOutput);
+                                index += 1;
+                            });
+                    })
+                        .then(() => {
+                            // Delete loop-related variables from the context
+                            delete innerContext.loop;
+                            delete innerContext[token.valueVar];
+                            delete innerContext[token.keyVar];
+
+                            // Merge in values that exist in context but have changed
+                            // in inner_context.
+                            Twig.merge(context, innerContext, true);
+                        });
+                };
+
+                return Twig.expression.parseAsync.call(state, token.expression, context)
+                    .then(result => {
+                        if (Array.isArray(result)) {
+                            len = result.length;
+                            return Twig.async.forEach(result, value => {
+                                const key = index;
+
+                                return loop(key, value);
+                            });
+                        }
+
+                        if (Twig.lib.is('Object', result)) {
+                            if (result._keys === undefined) {
+                                keyset = Object.keys(result);
+                            } else {
+                                keyset = result._keys;
+                            }
+
+                            len = keyset.length;
+                            return Twig.async.forEach(keyset, key => {
+                            // Ignore the _keys property, it's internal to twig.js
+                                if (key === '_keys') {
+                                    return;
+                                }
+
+                                return loop(key, result[key]);
+                            });
+                        }
+                    })
+                    .then(() => {
+                    // Only allow else statements if no output was generated
+                        continueChain = (output.length === 0);
+
+                        return {
+                            chain: continueChain,
+                            context,
+                            output: Twig.output.call(state.template, output)
+                        };
+                    });
+            }
+        },
+        {
+            /**
+             * End for type logic tokens.
+             *
+             *  Format: {% endfor %}
+             */
+            type: Twig.logic.type.endfor,
+            regex: /^endfor$/,
+            next: [],
+            open: false
+        },
+        {
+            /**
+             * Set type logic tokens.
+             *
+             *  Format: {% set key = expression %}
+             */
+            type: Twig.logic.type.set,
+            regex: /^set\s+([a-zA-Z0-9_,\s]+)\s*=\s*([\s\S]+)$/,
+            next: [],
+            open: true,
+            compile(token) { //
+                const key = token.match[1].trim();
+                const expression = token.match[2];
+                // Compile the expression.
+                const expressionStack = Twig.expression.compile.call(this, {
+                    type: Twig.expression.type.expression,
+                    value: expression
+                }).stack;
+
+                token.key = key;
+                token.expression = expressionStack;
+
+                delete token.match;
+                return token;
+            },
+            parse(token, context, continueChain) {
+                const {key} = token;
+                const state = this;
+
+                return Twig.expression.parseAsync.call(state, token.expression, context)
+                    .then(value => {
+                        if (value === context) {
+                        /*  If storing the context in a variable, it needs to be a clone of the current state of context.
+                            Otherwise we have a context with infinite recursion.
+                            Fixes #341
+                        */
+                            value = {...value};
+                        }
+
+                        context[key] = value;
+
+                        return {
+                            chain: continueChain,
+                            context
+                        };
+                    });
+            }
+        },
+        {
+            /**
+             * Set capture type logic tokens.
+             *
+             *  Format: {% set key %}
+             */
+            type: Twig.logic.type.setcapture,
+            regex: /^set\s+([a-zA-Z0-9_,\s]+)$/,
+            next: [
+                Twig.logic.type.endset
+            ],
+            open: true,
+            compile(token) {
+                const key = token.match[1].trim();
+
+                token.key = key;
+
+                delete token.match;
+                return token;
+            },
+            parse(token, context, continueChain) {
+                const state = this;
+                const {key} = token;
+
+                return state.parseAsync(token.output, context)
+                    .then(output => {
+                    // Set on both the global and local context
+                        state.context[key] = output;
+                        context[key] = output;
+
+                        return {
+                            chain: continueChain,
+                            context
+                        };
+                    });
+            }
+        },
+        {
+            /**
+             * End set type block logic tokens.
+             *
+             *  Format: {% endset %}
+             */
+            type: Twig.logic.type.endset,
+            regex: /^endset$/,
+            next: [],
+            open: false
+        },
+        {
+            /**
+             * Filter logic tokens.
+             *
+             *  Format: {% filter upper %} or {% filter lower|escape %}
+             */
+            type: Twig.logic.type.filter,
+            regex: /^filter\s+(.+)$/,
+            next: [
+                Twig.logic.type.endfilter
+            ],
+            open: true,
+            compile(token) {
+                const expression = '|' + token.match[1].trim();
+                // Compile the expression.
+                token.stack = Twig.expression.compile.call(this, {
+                    type: Twig.expression.type.expression,
+                    value: expression
+                }).stack;
+                delete token.match;
+                return token;
+            },
+            parse(token, context, chain) {
+                const state = this;
+
+                return state.parseAsync(token.output, context)
+                    .then(output => {
+                        const stack = [{
+                            type: Twig.expression.type.string,
+                            value: output
+                        }].concat(token.stack);
+
+                        return Twig.expression.parseAsync.call(state, stack, context);
+                    })
+                    .then(output => {
+                        return {
+                            chain,
+                            output
+                        };
+                    });
+            }
+        },
+        {
+            /**
+             * End filter logic tokens.
+             *
+             *  Format: {% endfilter %}
+             */
+            type: Twig.logic.type.endfilter,
+            regex: /^endfilter$/,
+            next: [],
+            open: false
+        },
+        {
+            /**
+             * Apply logic tokens.
+             *
+             *  Format: {% apply upper %} or {% apply lower|escape %}
+             */
+            type: Twig.logic.type.apply,
+            regex: /^apply\s+(.+)$/,
+            next: [
+                Twig.logic.type.endapply
+            ],
+            open: true,
+            compile(token) {
+                const expression = '|' + token.match[1].trim();
+                // Compile the expression.
+                token.stack = Twig.expression.compile.call(this, {
+                    type: Twig.expression.type.expression,
+                    value: expression
+                }).stack;
+                delete token.match;
+                return token;
+            },
+            parse(token, context, chain) {
+                const state = this;
+
+                return state.parseAsync(token.output, context)
+                    .then(output => {
+                        const stack = [{
+                            type: Twig.expression.type.string,
+                            value: output
+                        }].concat(token.stack);
+
+                        return Twig.expression.parseAsync.call(state, stack, context);
+                    })
+                    .then(output => {
+                        return {
+                            chain,
+                            output
+                        };
+                    });
+            }
+        },
+        {
+            /**
+             * End apply logic tokens.
+             *
+             *  Format: {% endapply %}
+             */
+            type: Twig.logic.type.endapply,
+            regex: /^endapply$/,
+            next: [],
+            open: false
+        },
+        {
+            /**
+             * Block logic tokens.
+             *
+             *  Format: {% block title %}
+             */
+            type: Twig.logic.type.block,
+            regex: /^block\s+(\w+)$/,
+            next: [
+                Twig.logic.type.endblock
+            ],
+            open: true,
+            compile(token) {
+                token.blockName = token.match[1].trim();
+                delete token.match;
+
+                return token;
+            },
+            parse(token, context, chain) {
+                const state = this;
+                let promise = Twig.Promise.resolve();
+
+                state.template.blocks.defined[token.blockName] = new Twig.Block(state.template, token);
+
+                if (
+                    state.template.parentTemplate === null ||
+                    state.template.parentTemplate instanceof Twig.Template
+                ) {
+                    promise = state.getBlock(token.blockName).render(state, context);
+                }
+
+                return promise.then(output => {
+                    return {
+                        chain,
+                        output
+                    };
+                });
+            }
+        },
+        {
+            /**
+             * Block shorthand logic tokens.
+             *
+             *  Format: {% block title expression %}
+             */
+            type: Twig.logic.type.shortblock,
+            regex: /^block\s+(\w+)\s+(.+)$/,
+            next: [],
+            open: true,
+            compile(token) {
+                const template = this;
+
+                token.expression = token.match[2].trim();
+                token.output = Twig.expression.compile({
+                    type: Twig.expression.type.expression,
+                    value: token.expression
+                }).stack;
+
+                return Twig.logic.handler[Twig.logic.type.block].compile.apply(template, [token]);
+            },
+            parse(...args) {
+                const state = this;
+
+                return Twig.logic.handler[Twig.logic.type.block].parse.apply(state, args);
+            }
+        },
+        {
+            /**
+             * End block logic tokens.
+             *
+             *  Format: {% endblock %}
+             */
+            type: Twig.logic.type.endblock,
+            regex: /^endblock(?:\s+(\w+))?$/,
+            next: [],
+            open: false
+        },
+        {
+            /**
+             * Block logic tokens.
+             *
+             *  Format: {% extends "template.twig" %}
+             */
+            type: Twig.logic.type.extends_,
+            regex: /^extends\s+(.+)$/,
+            next: [],
+            open: true,
+            compile(token) {
+                const expression = token.match[1].trim();
+                delete token.match;
+
+                token.stack = Twig.expression.compile.call(this, {
+                    type: Twig.expression.type.expression,
+                    value: expression
+                }).stack;
+
+                return token;
+            },
+            parse(token, context, chain) {
+                const state = this;
+
+                return Twig.expression.parseAsync.call(state, token.stack, context)
+                    .then(fileName => {
+                        state.template.parentTemplate = fileName;
+
+                        return {
+                            chain,
+                            output: ''
+                        };
+                    });
+            }
+        },
+        {
+            /**
+             * Block logic tokens.
+             *
+             *  Format: {% use "template.twig" %}
+             */
+            type: Twig.logic.type.use,
+            regex: /^use\s+(.+)$/,
+            next: [],
+            open: true,
+            compile(token) {
+                const expression = token.match[1].trim();
+                delete token.match;
+
+                token.stack = Twig.expression.compile.call(this, {
+                    type: Twig.expression.type.expression,
+                    value: expression
+                }).stack;
+
+                return token;
+            },
+            parse(token, context, chain) {
+                const state = this;
+
+                return Twig.expression.parseAsync.call(state, token.stack, context)
+                    .then(filePath => {
+                        // Create a new state instead of using the current state
+                        // any defined blocks will be created in isolation
+
+                        const useTemplate = state.template.importFile(filePath);
+
+                        const useState = new Twig.ParseState(useTemplate);
+                        return useState.parseAsync(useTemplate.tokens)
+                            .then(() => {
+                                state.template.blocks.imported = {
+                                    ...state.template.blocks.imported,
+                                    ...useState.getBlocks()
+                                };
+                            });
+                    })
+                    .then(() => {
+                        return {
+                            chain,
+                            output: ''
+                        };
+                    });
+            }
+        },
+        {
+            /**
+             * Block logic tokens.
+             *
+             *  Format: {% includes "template.twig" [with {some: 'values'} only] %}
+             */
+            type: Twig.logic.type.include,
+            regex: /^include\s+(.+?)(?:\s|$)(ignore missing(?:\s|$))?(?:with\s+([\S\s]+?))?(?:\s|$)(only)?$/,
+            next: [],
+            open: true,
+            compile(token) {
+                const {match} = token;
+                const expression = match[1].trim();
+                const ignoreMissing = match[2] !== undefined;
+                const withContext = match[3];
+                const only = ((match[4] !== undefined) && match[4].length);
+
+                delete token.match;
+
+                token.only = only;
+                token.ignoreMissing = ignoreMissing;
+
+                token.stack = Twig.expression.compile.call(this, {
+                    type: Twig.expression.type.expression,
+                    value: expression
+                }).stack;
+
+                if (withContext !== undefined) {
+                    token.withStack = Twig.expression.compile.call(this, {
+                        type: Twig.expression.type.expression,
+                        value: withContext.trim()
+                    }).stack;
+                }
+
+                return token;
+            },
+            parse(token, context, chain) {
+                // Resolve filename
+                let innerContext = token.only ? {} : {...context};
+                const {ignoreMissing} = token;
+                const state = this;
+                let promise = null;
+                const result = {chain, output: ''};
+
+                if (typeof token.withStack === 'undefined') {
+                    promise = Twig.Promise.resolve();
+                } else {
+                    promise = Twig.expression.parseAsync.call(state, token.withStack, context)
+                        .then(withContext => {
+                            innerContext = {
+                                ...innerContext,
+                                ...withContext
+                            };
+                        });
+                }
+
+                return promise
+                    .then(() => {
+                        return Twig.expression.parseAsync.call(state, token.stack, context);
+                    })
+                    .then(file => {
+                        if (file instanceof Twig.Template) {
+                            return file.renderAsync(
+                                innerContext,
+                                {
+                                    isInclude: true
+                                }
+                            );
+                        }
+
+                        try {
+                            return state.template.importFile(file).renderAsync(
+                                innerContext,
+                                {
+                                    isInclude: true
+                                }
+                            );
+                        } catch (error) {
+                            if (ignoreMissing) {
+                                return '';
+                            }
+
+                            throw error;
+                        }
+                    })
+                    .then(output => {
+                        if (output !== '') {
+                            result.output = output;
+                        }
+
+                        return result;
+                    });
+            }
+        },
+        {
+            type: Twig.logic.type.spaceless,
+            regex: /^spaceless$/,
+            next: [
+                Twig.logic.type.endspaceless
+            ],
+            open: true,
+
+            // Parse the html and return it without any spaces between tags
+            parse(token, context, chain) {
+                const state = this;
+
+                // Parse the output without any filter
+                return state.parseAsync(token.output, context)
+                    .then(tokenOutput => {
+                        const // A regular expression to find closing and opening tags with spaces between them
+                            rBetweenTagSpaces = />\s+</g;
+                        // Replace all space between closing and opening html tags
+                        let output = tokenOutput.replace(rBetweenTagSpaces, '><').trim();
+                        // Rewrap output as a Twig.Markup
+                        output = new Twig.Markup(output);
+                        return {
+                            chain,
+                            output
+                        };
+                    });
+            }
+        },
+
+        // Add the {% endspaceless %} token
+        {
+            type: Twig.logic.type.endspaceless,
+            regex: /^endspaceless$/,
+            next: [],
+            open: false
+        },
+        {
+            /**
+             * Macro logic tokens.
+             *
+             * Format: {% macro input(name = default, value, type, size) %}
+             *
+             */
+            type: Twig.logic.type.macro,
+            regex: /^macro\s+(\w+)\s*\(\s*((?:\w+(?:\s*=\s*([\s\S]+))?(?:,\s*)?)*)\s*\)$/,
+            next: [
+                Twig.logic.type.endmacro
+            ],
+            open: true,
+            compile(token) {
+                const macroName = token.match[1];
+                const rawParameters = token.match[2].split(/\s*,\s*/);
+                const parameters = rawParameters.map(rawParameter => {
+                    return rawParameter.split(/\s*=\s*/)[0];
+                });
+                const parametersCount = parameters.length;
+
+                // Duplicate check
+                if (parametersCount > 1) {
+                    const uniq = {};
+                    for (let i = 0; i < parametersCount; i++) {
+                        const parameter = parameters[i];
+                        if (uniq[parameter]) {
+                            throw new Twig.Error('Duplicate arguments for parameter: ' + parameter);
+                        } else {
+                            uniq[parameter] = 1;
+                        }
+                    }
+                }
+
+                token.macroName = macroName;
+                token.parameters = parameters;
+                token.defaults = rawParameters.reduce(function (defaults, rawParameter) {
+                    const pair = rawParameter.split(/\s*=\s*/);
+                    const key = pair[0];
+                    const expression = pair[1];
+
+                    if (expression) {
+                        defaults[key] = Twig.expression.compile.call(this, {
+                            type: Twig.expression.type.expression,
+                            value: expression
+                        }).stack;
+                    } else {
+                        defaults[key] = undefined;
+                    }
+
+                    return defaults;
+                }, {});
+
+                delete token.match;
+                return token;
+            },
+            parse(token, context, chain) {
+                const state = this;
+
+                state.macros[token.macroName] = function (...args) {
+                    // Pass global context and other macros
+                    const macroContext = {
+                        _self: state.macros
+                    };
+                    // Save arguments
+
+                    return Twig.async.forEach(token.parameters, function (prop, i) {
+                        // Add parameters from context to macroContext
+                        if (typeof args[i] !== 'undefined') {
+                            macroContext[prop] = args[i];
+                            return true;
+                        }
+
+                        if (typeof token.defaults[prop] !== 'undefined') {
+                            return Twig.expression.parseAsync.call(this, token.defaults[prop], context)
+                                .then(value => {
+                                    macroContext[prop] = value;
+                                    return Twig.Promise.resolve();
+                                });
+                        }
+
+                        macroContext[prop] = undefined;
+                        return true;
+                    }).then(() => {
+                        // Render
+                        return state.parseAsync(token.output, macroContext);
+                    });
+                };
+
+                return {
+                    chain,
+                    output: ''
+                };
+            }
+        },
+        {
+            /**
+             * End macro logic tokens.
+             *
+             * Format: {% endmacro %}
+             */
+            type: Twig.logic.type.endmacro,
+            regex: /^endmacro$/,
+            next: [],
+            open: false
+        },
+        {
+            /*
+            * Import logic tokens.
+            *
+            * Format: {% import "template.twig" as form %}
+            */
+            type: Twig.logic.type.import_,
+            regex: /^import\s+(.+)\s+as\s+(\w+)$/,
+            next: [],
+            open: true,
+            compile(token) {
+                const expression = token.match[1].trim();
+                const contextName = token.match[2].trim();
+                delete token.match;
+
+                token.expression = expression;
+                token.contextName = contextName;
+
+                token.stack = Twig.expression.compile.call(this, {
+                    type: Twig.expression.type.expression,
+                    value: expression
+                }).stack;
+
+                return token;
+            },
+            parse(token, context, chain) {
+                const state = this;
+                const output = {
+                    chain,
+                    output: ''
+                };
+
+                if (token.expression === '_self') {
+                    context[token.contextName] = state.macros;
+                    return output;
+                }
+
+                return Twig.expression.parseAsync.call(state, token.stack, context)
+                    .then(filePath => {
+                        return state.template.importFile(filePath || token.expression);
+                    })
+                    .then(importTemplate => {
+                        const importState = new Twig.ParseState(importTemplate);
+
+                        return importState.parseAsync(importTemplate.tokens).then(() => {
+                            context[token.contextName] = importState.macros;
+
+                            return output;
+                        });
+                    });
+            }
+        },
+        {
+            /*
+            * From logic tokens.
+            *
+            * Format: {% from "template.twig" import func as form %}
+            */
+            type: Twig.logic.type.from,
+            regex: /^from\s+(.+)\s+import\s+([a-zA-Z0-9_, ]+)$/,
+            next: [],
+            open: true,
+            compile(token) {
+                const expression = token.match[1].trim();
+                const macroExpressions = token.match[2].trim().split(/\s*,\s*/);
+                const macroNames = {};
+
+                for (let i = 0; i < macroExpressions.length; i++) {
+                    const res = macroExpressions[i];
+
+                    // Match function as variable
+                    const macroMatch = res.match(/^(\w+)\s+as\s+(\w+)$/);
+                    if (macroMatch) {
+                        macroNames[macroMatch[1].trim()] = macroMatch[2].trim();
+                    } else if (res.match(/^(\w+)$/)) {
+                        macroNames[res] = res;
+                    } else {
+                        // ignore import
+                    }
+                }
+
+                delete token.match;
+
+                token.expression = expression;
+                token.macroNames = macroNames;
+
+                token.stack = Twig.expression.compile.call(this, {
+                    type: Twig.expression.type.expression,
+                    value: expression
+                }).stack;
+
+                return token;
+            },
+            parse(token, context, chain) {
+                const state = this;
+                let promise;
+
+                if (token.expression === '_self') {
+                    promise = Twig.Promise.resolve(state.macros);
+                } else {
+                    promise = Twig.expression.parseAsync.call(state, token.stack, context)
+                        .then(filePath => {
+                            return state.template.importFile(filePath || token.expression);
+                        })
+                        .then(importTemplate => {
+                            const importState = new Twig.ParseState(importTemplate);
+
+                            return importState.parseAsync(importTemplate.tokens).then(() => {
+                                return importState.macros;
+                            });
+                        });
+                }
+
+                return promise
+                    .then(macros => {
+                        for (const macroName in token.macroNames) {
+                            if (macros[macroName] !== undefined) {
+                                context[token.macroNames[macroName]] = macros[macroName];
+                            }
+                        }
+
+                        return {
+                            chain,
+                            output: ''
+                        };
+                    });
+            }
+        },
+        {
+            /**
+             * The embed tag combines the behaviour of include and extends.
+             * It allows you to include another template's contents, just like include does.
+             *
+             *  Format: {% embed "template.twig" [with {some: 'values'} only] %}
+             */
+            type: Twig.logic.type.embed,
+            regex: /^embed\s+(.+?)(?:\s+(ignore missing))?(?:\s+with\s+([\S\s]+?))?(?:\s+(only))?$/,
+            next: [
+                Twig.logic.type.endembed
+            ],
+            open: true,
+            compile(token) {
+                const {match} = token;
+                const expression = match[1].trim();
+                const ignoreMissing = match[2] !== undefined;
+                const withContext = match[3];
+                const only = ((match[4] !== undefined) && match[4].length);
+
+                delete token.match;
+
+                token.only = only;
+                token.ignoreMissing = ignoreMissing;
+
+                token.stack = Twig.expression.compile.call(this, {
+                    type: Twig.expression.type.expression,
+                    value: expression
+                }).stack;
+
+                if (withContext !== undefined) {
+                    token.withStack = Twig.expression.compile.call(this, {
+                        type: Twig.expression.type.expression,
+                        value: withContext.trim()
+                    }).stack;
+                }
+
+                return token;
+            },
+            parse(token, context, chain) {
+                let embedContext = {};
+                let promise = Twig.Promise.resolve();
+                let state = this;
+
+                if (!token.only) {
+                    embedContext = {...context};
+                }
+
+                if (token.withStack !== undefined) {
+                    promise = Twig.expression.parseAsync.call(state, token.withStack, context).then(withContext => {
+                        embedContext = {...embedContext, ...withContext};
+                    });
+                }
+
+                return promise
+                    .then(() => {
+                        return Twig.expression.parseAsync.call(state, token.stack, embedContext);
+                    })
+                    .then(fileName => {
+                        const embedOverrideTemplate = new Twig.Template({
+                            data: token.output,
+                            id: state.template.id,
+                            base: state.template.base,
+                            path: state.template.path,
+                            url: state.template.url,
+                            name: state.template.name,
+                            method: state.template.method,
+                            options: state.template.options
+                        });
+
+                        try {
+                            embedOverrideTemplate.importFile(fileName);
+                        } catch (error) {
+                            if (token.ignoreMissing) {
+                                return '';
+                            }
+
+                            // Errors preserve references to variables in scope,
+                            // this removes `this` from the scope.
+                            state = null;
+
+                            throw error;
+                        }
+
+                        embedOverrideTemplate.parentTemplate = fileName;
+
+                        return embedOverrideTemplate.renderAsync(
+                            embedContext,
+                            {
+                                isInclude: true
+                            }
+                        );
+                    })
+                    .then(output => {
+                        return {
+                            chain,
+                            output
+                        };
+                    });
+            }
+        },
+        /* Add the {% endembed %} token
+         *
+         */
+        {
+            type: Twig.logic.type.endembed,
+            regex: /^endembed$/,
+            next: [],
+            open: false
+        },
+        {
+            /**
+             * Block logic tokens.
+             *
+             *  Format: {% with {some: 'values'} [only] %}
+             */
+            type: Twig.logic.type.with,
+            regex: /^(?:with\s+([\S\s]+?))(?:\s|$)(only)?$/,
+            next: [
+                Twig.logic.type.endwith
+            ],
+            open: true,
+            compile(token) {
+                const {match} = token;
+                const withContext = match[1];
+                const only = ((match[2] !== undefined) && match[2].length);
+
+                delete token.match;
+
+                token.only = only;
+
+                if (withContext !== undefined) {
+                    token.withStack = Twig.expression.compile.call(this, {
+                        type: Twig.expression.type.expression,
+                        value: withContext.trim()
+                    }).stack;
+                }
+
+                return token;
+            },
+            parse(token, context, chain) {
+                // Resolve filename
+                let innerContext = {};
+                let i;
+                const state = this;
+                let promise = Twig.Promise.resolve();
+
+                if (!token.only) {
+                    innerContext = {...context};
+                }
+
+                if (token.withStack !== undefined) {
+                    promise = Twig.expression.parseAsync.call(state, token.withStack, context)
+                        .then(withContext => {
+                            for (i in withContext) {
+                                if (Object.hasOwnProperty.call(withContext, i)) {
+                                    innerContext[i] = withContext[i];
+                                }
+                            }
+                        });
+                }
+
+                return promise
+                    .then(() => {
+                        return state.parseAsync(token.output, innerContext);
+                    })
+                    .then(output => {
+                        return {
+                            chain,
+                            output
+                        };
+                    });
+            }
+        },
+        {
+            type: Twig.logic.type.endwith,
+            regex: /^endwith$/,
+            next: [],
+            open: false
+        },
+        {
+            /**
+             * Deprecated type logic tokens.
+             *
+             *  Format: {% deprecated 'Description' %}
+             */
+            type: Twig.logic.type.deprecated,
+            regex: /^deprecated\s+(.+)$/,
+            next: [],
+            open: true,
+            compile(token) {
+                console.warn('Deprecation notice: ' + token.match[1]);
+
+                return token;
+            },
+            parse() {
+                return {};
+            }
+        }
+
+    ];
+
+    /**
+     * Registry for logic handlers.
+     */
+    Twig.logic.handler = {};
+
+    /**
+     * Define a new token type, available at Twig.logic.type.{type}
+     */
+    Twig.logic.extendType = function (type, value) {
+        value = value || ('Twig.logic.type' + type);
+        Twig.logic.type[type] = value;
+    };
+
+    /**
+     * Extend the logic parsing functionality with a new token definition.
+     *
+     * // Define a new tag
+     * Twig.logic.extend({
+     *     type: Twig.logic.type.{type},
+     *     // The pattern to match for this token
+     *     regex: ...,
+     *     // What token types can follow this token, leave blank if any.
+     *     next: [ ... ]
+     *     // Create and return compiled version of the token
+     *     compile: function(token) { ... }
+     *     // Parse the compiled token with the context provided by the render call
+     *     //   and whether this token chain is complete.
+     *     parse: function(token, context, chain) { ... }
+     * });
+     *
+     * @param {Object} definition The new logic expression.
+     */
+    Twig.logic.extend = function (definition) {
+        if (definition.type) {
+            Twig.logic.extendType(definition.type);
+        } else {
+            throw new Twig.Error('Unable to extend logic definition. No type provided for ' + definition);
+        }
+
+        Twig.logic.handler[definition.type] = definition;
+    };
+
+    // Extend with built-in expressions
+    while (Twig.logic.definitions.length > 0) {
+        Twig.logic.extend(Twig.logic.definitions.shift());
+    }
+
+    /**
+     * Compile a logic token into an object ready for parsing.
+     *
+     * @param {Object} rawToken An uncompiled logic token.
+     *
+     * @return {Object} A compiled logic token, ready for parsing.
+     */
+    Twig.logic.compile = function (rawToken) {
+        const expression = rawToken.value.trim();
+        let token = Twig.logic.tokenize.call(this, expression);
+        const tokenTemplate = Twig.logic.handler[token.type];
+
+        // Check if the token needs compiling
+        if (tokenTemplate.compile) {
+            token = tokenTemplate.compile.call(this, token);
+            Twig.log.trace('Twig.logic.compile: ', 'Compiled logic token to ', token);
+        }
+
+        return token;
+    };
+
+    /**
+     * Tokenize logic expressions. This function matches token expressions against regular
+     * expressions provided in token definitions provided with Twig.logic.extend.
+     *
+     * @param {string} expression the logic token expression to tokenize
+     *                (i.e. what's between {% and %})
+     *
+     * @return {Object} The matched token with type set to the token type and match to the regex match.
+     */
+    Twig.logic.tokenize = function (expression) {
+        let tokenTemplateType = null;
+        let tokenType = null;
+        let tokenRegex = null;
+        let regexArray = null;
+        let regexLen = null;
+        let regexI = null;
+        let match = null;
+
+        // Ignore whitespace around expressions.
+        expression = expression.trim();
+
+        for (tokenTemplateType in Twig.logic.handler) {
+            if (Object.hasOwnProperty.call(Twig.logic.handler, tokenTemplateType)) {
+                // Get the type and regex for this template type
+                tokenType = Twig.logic.handler[tokenTemplateType].type;
+                tokenRegex = Twig.logic.handler[tokenTemplateType].regex;
+
+                // Handle multiple regular expressions per type.
+                regexArray = tokenRegex;
+                if (!Array.isArray(tokenRegex)) {
+                    regexArray = [tokenRegex];
+                }
+
+                regexLen = regexArray.length;
+                // Check regular expressions in the order they were specified in the definition.
+                for (regexI = 0; regexI < regexLen; regexI++) {
+                    match = regexArray[regexI].exec(expression);
+                    if (match !== null) {
+                        Twig.log.trace('Twig.logic.tokenize: ', 'Matched a ', tokenType, ' regular expression of ', match);
+                        return {
+                            type: tokenType,
+                            match
+                        };
+                    }
+                }
+            }
+        }
+
+        // No regex matches
+        throw new Twig.Error('Unable to parse \'' + expression.trim() + '\'');
+    };
+
+    /**
+     * Parse a logic token within a given context.
+     *
+     * What are logic chains?
+     *      Logic chains represent a series of tokens that are connected,
+     *          for example:
+     *          {% if ... %} {% else %} {% endif %}
+     *
+     *      The chain parameter is used to signify if a chain is open of closed.
+     *      open:
+     *          More tokens in this chain should be parsed.
+     *      closed:
+     *          This token chain has completed parsing and any additional
+     *          tokens (else, elseif, etc...) should be ignored.
+     *
+     * @param {Object} token The compiled token.
+     * @param {Object} context The render context.
+     * @param {boolean} chain Is this an open logic chain. If false, that means a
+     *                        chain is closed and no further cases should be parsed.
+     */
+    Twig.logic.parse = function (token, context, chain, allowAsync) {
+        return Twig.async.potentiallyAsync(this, allowAsync, function () {
+            Twig.log.debug('Twig.logic.parse: ', 'Parsing logic token ', token);
+
+            const tokenTemplate = Twig.logic.handler[token.type];
+            let result;
+            const state = this;
+
+            if (!tokenTemplate.parse) {
+                return '';
+            }
+
+            state.nestingStack.unshift(token);
+            result = tokenTemplate.parse.call(state, token, context || {}, chain);
+
+            if (Twig.isPromise(result)) {
+                result = result.then(result => {
+                    state.nestingStack.shift();
+
+                    return result;
+                });
+            } else {
+                state.nestingStack.shift();
+            }
+
+            return result;
+        });
+    };
+
+    return Twig;
+};
+
+
+/***/ }),
+/* 23 */
+/***/ (function(module, exports) {
+
+module.exports = function (Twig) {
+    'use strict';
+
+    Twig.Templates.registerParser('source', params => {
+        return params.data || '';
+    });
+};
+
+
+/***/ }),
+/* 24 */
+/***/ (function(module, exports) {
+
+module.exports = function (Twig) {
+    'use strict';
+
+    Twig.Templates.registerParser('twig', params => {
+        return new Twig.Template(params);
+    });
+};
+
+
+/***/ }),
+/* 25 */
+/***/ (function(module, exports, __webpack_require__) {
+
+// ## twig.path.js
+//
+// This file handles path parsing
+module.exports = function (Twig) {
+    'use strict';
+
+    /**
+     * Namespace for path handling.
+     */
+    Twig.path = {};
+
+    /**
+     * Generate the canonical version of a url based on the given base path and file path and in
+     * the previously registered namespaces.
+     *
+     * @param  {string} template The Twig Template
+     * @param  {string} _file    The file path, may be relative and may contain namespaces.
+     *
+     * @return {string}          The canonical version of the path
+     */
+    Twig.path.parsePath = function (template, _file) {
+        let k = null;
+        const {namespaces} = template.options;
+        let file = _file || '';
+        const hasNamespaces = namespaces && typeof namespaces === 'object';
+
+        if (hasNamespaces) {
+            for (k in namespaces) {
+                if (file.indexOf(k) === -1) {
+                    continue;
+                }
+
+                // Check if keyed namespace exists at path's start
+                const colon = new RegExp('^' + k + '::');
+                const atSign = new RegExp('^@' + k + '/');
+                // Add slash to the end of path
+                const namespacePath = namespaces[k].replace(/([^/])$/, '$1/');
+
+                if (colon.test(file)) {
+                    file = file.replace(colon, namespacePath);
+                    return file;
+                }
+
+                if (atSign.test(file)) {
+                    file = file.replace(atSign, namespacePath);
+                    return file;
+                }
+            }
+        }
+
+        return Twig.path.relativePath(template, file);
+    };
+
+    /**
+     * Generate the relative canonical version of a url based on the given base path and file path.
+     *
+     * @param {Twig.Template} template The Twig.Template.
+     * @param {string} _file The file path, relative to the base path.
+     *
+     * @return {string} The canonical version of the path.
+     */
+    Twig.path.relativePath = function (template, _file) {
+        let base;
+        let basePath;
+        let sepChr = '/';
+        const newPath = [];
+        let file = _file || '';
+        let val;
+
+        if (template.url) {
+            if (typeof template.base === 'undefined') {
+                base = template.url;
+            } else {
+                // Add slash to the end of path
+                base = template.base.replace(/([^/])$/, '$1/');
+            }
+        } else if (template.path) {
+            // Get the system-specific path separator
+            const path = __webpack_require__(1);
+            const sep = path.sep || sepChr;
+            const relative = new RegExp('^\\.{1,2}' + sep.replace('\\', '\\\\'));
+            file = file.replace(/\//g, sep);
+
+            if (template.base !== undefined && file.match(relative) === null) {
+                file = file.replace(template.base, '');
+                base = template.base + sep;
+            } else {
+                base = path.normalize(template.path);
+            }
+
+            base = base.replace(sep + sep, sep);
+            sepChr = sep;
+        } else if ((template.name || template.id) && template.method && template.method !== 'fs' && template.method !== 'ajax') {
+            // Custom registered loader
+            base = template.base || template.name || template.id;
+        } else {
+            throw new Twig.Error('Cannot extend an inline template.');
+        }
+
+        basePath = base.split(sepChr);
+
+        // Remove file from url
+        basePath.pop();
+        basePath = basePath.concat(file.split(sepChr));
+
+        while (basePath.length > 0) {
+            val = basePath.shift();
+            if (val === '.') {
+                // Ignore
+            } else if (val === '..' && newPath.length > 0 && newPath[newPath.length - 1] !== '..') {
+                newPath.pop();
+            } else {
+                newPath.push(val);
+            }
+        }
+
+        return newPath.join(sepChr);
+    };
+
+    return Twig;
+};
+
+
+/***/ }),
+/* 26 */
+/***/ (function(module, exports) {
+
+// ## twig.tests.js
+//
+// This file handles expression tests. (is empty, is not defined, etc...)
+module.exports = function (Twig) {
+    'use strict';
+    Twig.tests = {
+        empty(value) {
+            if (value === null || value === undefined) {
+                return true;
+            }
+
+            // Handler numbers
+            if (typeof value === 'number') {
+                return false;
+            } // Numbers are never "empty"
+
+            // Handle strings and arrays
+            if (value.length > 0) {
+                return false;
+            }
+
+            // Handle objects
+            for (const key in value) {
+                if (Object.hasOwnProperty.call(value, key)) {
+                    return false;
+                }
+            }
+
+            return true;
+        },
+        odd(value) {
+            return value % 2 === 1;
+        },
+        even(value) {
+            return value % 2 === 0;
+        },
+        divisibleby(value, params) {
+            return value % params[0] === 0;
+        },
+        defined(value) {
+            return value !== undefined;
+        },
+        none(value) {
+            return value === null;
+        },
+        null(value) {
+            return this.none(value); // Alias of none
+        },
+        'same as'(value, params) {
+            return value === params[0];
+        },
+        sameas(value, params) {
+            console.warn('`sameas` is deprecated use `same as`');
+            return Twig.tests['same as'](value, params);
+        },
+        iterable(value) {
+            return value && (Twig.lib.is('Array', value) || Twig.lib.is('Object', value));
+        }
+        /*
+        Constant ?
+         */
+    };
+
+    Twig.test = function (test, value, params) {
+        if (!Twig.tests[test]) {
+            throw Twig.Error('Test ' + test + ' is not defined.');
+        }
+
+        return Twig.tests[test](value, params);
+    };
+
+    Twig.test.extend = function (test, definition) {
+        Twig.tests[test] = definition;
+    };
+
+    return Twig;
+};
+
+
+/***/ }),
+/* 27 */
+/***/ (function(module, exports) {
+
+// ## twig.async.js
+//
+// This file handles asynchronous tasks within twig.
+module.exports = function (Twig) {
+    'use strict';
+
+    const STATE_UNKNOWN = 0;
+    const STATE_RESOLVED = 1;
+    const STATE_REJECTED = 2;
+
+    Twig.ParseState.prototype.parseAsync = function (tokens, context) {
+        return this.parse(tokens, context, true);
+    };
+
+    Twig.expression.parseAsync = function (tokens, context, tokensAreParameters) {
+        const state = this;
+
+        return Twig.expression.parse.call(state, tokens, context, tokensAreParameters, true);
+    };
+
+    Twig.logic.parseAsync = function (token, context, chain) {
+        const state = this;
+
+        return Twig.logic.parse.call(state, token, context, chain, true);
+    };
+
+    Twig.Template.prototype.renderAsync = function (context, params) {
+        return this.render(context, params, true);
+    };
+
+    Twig.async = {};
+
+    /**
+     * Checks for `thenable` objects
+     */
+    Twig.isPromise = function (obj) {
+        return obj && obj.then && (typeof obj.then === 'function');
+    };
+
+    /**
+     * Handling of code paths that might either return a promise
+     * or a value depending on whether async code is used.
+     *
+     * @see https://github.com/twigjs/twig.js/blob/master/ASYNC.md#detecting-asynchronous-behaviour
+     */
+    function potentiallyAsyncSlow(that, allowAsync, action) {
+        let result = action.call(that);
+        let err = null;
+        let isAsync = true;
+
+        if (!Twig.isPromise(result)) {
+            return result;
+        }
+
+        result.then(res => {
+            result = res;
+            isAsync = false;
+        }).catch(error => {
+            err = error;
+        });
+
+        if (err !== null) {
+            throw err;
+        }
+
+        if (isAsync) {
+            throw new Twig.Error('You are using Twig.js in sync mode in combination with async extensions.');
+        }
+
+        return result;
+    }
+
+    Twig.async.potentiallyAsync = function (that, allowAsync, action) {
+        if (allowAsync) {
+            return Twig.Promise.resolve(action.call(that));
+        }
+
+        return potentiallyAsyncSlow(that, allowAsync, action);
+    };
+
+    function run(fn, resolve, reject) {
+        try {
+            fn(resolve, reject);
+        } catch (error) {
+            reject(error);
+        }
+    }
+
+    function pending(handlers, onResolved, onRejected) {
+        const h = [onResolved, onRejected, -2];
+
+        // The promise has yet to be rejected or resolved.
+        if (!handlers) {
+            handlers = h;
+        } else if (handlers[2] === -2) {
+            // Only allocate an array when there are multiple handlers
+            handlers = [handlers, h];
+        } else {
+            handlers.push(h);
+        }
+
+        return handlers;
+    }
+
+    /**
+     * Really small thenable to represent promises that resolve immediately.
+     *
+     */
+    Twig.Thenable = function (then, value, state) {
+        this.then = then;
+        this._value = state ? value : null;
+        this._state = state || STATE_UNKNOWN;
+    };
+
+    Twig.Thenable.prototype.catch = function (onRejected) {
+        // THe promise will not throw, it has already resolved.
+        if (this._state === STATE_RESOLVED) {
+            return this;
+        }
+
+        return this.then(null, onRejected);
+    };
+
+    /**
+     * The `then` method attached to a Thenable when it has resolved.
+     *
+     */
+    Twig.Thenable.resolvedThen = function (onResolved) {
+        try {
+            return Twig.Promise.resolve(onResolved(this._value));
+        } catch (error) {
+            return Twig.Promise.reject(error);
+        }
+    };
+
+    /**
+     * The `then` method attached to a Thenable when it has rejected.
+     *
+     */
+    Twig.Thenable.rejectedThen = function (onResolved, onRejected) {
+        // Shortcut for rejected twig promises
+        if (!onRejected || typeof onRejected !== 'function') {
+            return this;
+        }
+
+        const value = this._value;
+
+        let result;
+        try {
+            result = onRejected(value);
+        } catch (error) {
+            result = Twig.Promise.reject(error);
+        }
+
+        return Twig.Promise.resolve(result);
+    };
+
+    /**
+     * An alternate implementation of a Promise that does not fully follow
+     * the spec, but instead works fully synchronous while still being
+     * thenable.
+     *
+     * These promises can be mixed with regular promises at which point
+     * the synchronous behaviour is lost.
+     */
+    Twig.Promise = function (executor) {
+        let state = STATE_UNKNOWN;
+        let value = null;
+
+        let changeState = function (nextState, nextValue) {
+            state = nextState;
+            value = nextValue;
+        };
+
+        function onReady(v) {
+            changeState(STATE_RESOLVED, v);
+        }
+
+        function onReject(e) {
+            changeState(STATE_REJECTED, e);
+        }
+
+        run(executor, onReady, onReject);
+
+        // If the promise settles right after running the executor we can
+        // return a Promise with it's state already set.
+        //
+        // Twig.Promise.resolve and Twig.Promise.reject both use the more
+        // efficient `Twig.Thenable` for this purpose.
+        if (state === STATE_RESOLVED) {
+            return Twig.Promise.resolve(value);
+        }
+
+        if (state === STATE_REJECTED) {
+            return Twig.Promise.reject(value);
+        }
+        // If we managed to get here our promise is going to resolve asynchronous.
+
+        changeState = new Twig.FullPromise();
+
+        return changeState.promise;
+    };
+
+    /**
+     * Promise implementation that can handle being resolved at any later time.
+     *
+     */
+    Twig.FullPromise = function () {
+        let handlers = null;
+
+        // The state has been changed to either resolve, or reject
+        // which means we should call the handler.
+        function resolved(onResolved) {
+            onResolved(p._value);
+        }
+
+        function rejected(onResolved, onRejected) {
+            onRejected(p._value);
+        }
+
+        let append = function (onResolved, onRejected) {
+            handlers = pending(handlers, onResolved, onRejected);
+        };
+
+        function changeState(newState, v) {
+            if (p._state) {
+                return;
+            }
+
+            p._value = v;
+            p._state = newState;
+
+            append = newState === STATE_RESOLVED ? resolved : rejected;
+
+            if (!handlers) {
+                return;
+            }
+
+            if (handlers[2] === -2) {
+                append(handlers[0], handlers[1]);
+                handlers = null;
+            }
+
+            handlers.forEach(h => {
+                append(h[0], h[1]);
+            });
+            handlers = null;
+        }
+
+        const p = new Twig.Thenable((onResolved, onRejected) => {
+            const hasResolved = typeof onResolved === 'function';
+
+            // Shortcut for resolved twig promises
+            if (p._state === STATE_RESOLVED && !hasResolved) {
+                return Twig.Promise.resolve(p._value);
+            }
+
+            if (p._state === STATE_RESOLVED) {
+                try {
+                    return Twig.Promise.resolve(onResolved(p._value));
+                } catch (error) {
+                    return Twig.Promise.reject(error);
+                }
+            }
+
+            const hasRejected = typeof onRejected === 'function';
+
+            return new Twig.Promise((resolve, reject) => {
+                append(
+                    hasResolved ? result => {
+                        try {
+                            resolve(onResolved(result));
+                        } catch (error) {
+                            reject(error);
+                        }
+                    } : resolve,
+                    hasRejected ? err => {
+                        try {
+                            resolve(onRejected(err));
+                        } catch (error) {
+                            reject(error);
+                        }
+                    } : reject
+                );
+            });
+        });
+
+        changeState.promise = p;
+
+        return changeState;
+    };
+
+    Twig.Promise.defaultResolved = new Twig.Thenable(Twig.Thenable.resolvedThen, undefined, STATE_RESOLVED);
+    Twig.Promise.emptyStringResolved = new Twig.Thenable(Twig.Thenable.resolvedThen, '', STATE_RESOLVED);
+
+    Twig.Promise.resolve = function (value) {
+        if (arguments.length === 0 || typeof value === 'undefined') {
+            return Twig.Promise.defaultResolved;
+        }
+
+        if (Twig.isPromise(value)) {
+            return value;
+        }
+
+        // Twig often resolves with an empty string, we optimize for this
+        // scenario by returning a fixed promise. This reduces the load on
+        // garbage collection.
+        if (value === '') {
+            return Twig.Promise.emptyStringResolved;
+        }
+
+        return new Twig.Thenable(Twig.Thenable.resolvedThen, value, STATE_RESOLVED);
+    };
+
+    Twig.Promise.reject = function (e) {
+        // `e` should never be a promise.
+        return new Twig.Thenable(Twig.Thenable.rejectedThen, e, STATE_REJECTED);
+    };
+
+    Twig.Promise.all = function (promises) {
+        const results = new Array(promises.length);
+
+        return Twig.async.forEach(promises, (p, index) => {
+            if (!Twig.isPromise(p)) {
+                results[index] = p;
+                return;
+            }
+
+            if (p._state === STATE_RESOLVED) {
+                results[index] = p._value;
+                return;
+            }
+
+            return p.then(v => {
+                results[index] = v;
+            });
+        }).then(() => {
+            return results;
+        });
+    };
+
+    /**
+    * Go over each item in a fashion compatible with Twig.forEach,
+    * allow the function to return a promise or call the third argument
+    * to signal it is finished.
+    *
+    * Each item in the array will be called sequentially.
+    */
+    Twig.async.forEach = function (arr, callback) {
+        const len = arr.length;
+        let index = 0;
+
+        function next() {
+            let resp = null;
+
+            do {
+                if (index === len) {
+                    return Twig.Promise.resolve();
+                }
+
+                resp = callback(arr[index], index);
+                index++;
+
+            // While the result of the callback is not a promise or it is
+            // a promise that has settled we can use a regular loop which
+            // is much faster.
+            } while (!resp || !Twig.isPromise(resp) || resp._state === STATE_RESOLVED);
+
+            return resp.then(next);
+        }
+
+        return next();
+    };
+
+    return Twig;
+};
+
+
+/***/ }),
+/* 28 */
+/***/ (function(module, exports) {
+
+// ## twig.exports.js
+//
+// This file provides extension points and other hooks into the twig functionality.
+
+module.exports = function (Twig) {
+    'use strict';
+    Twig.exports = {
+        VERSION: Twig.VERSION
+    };
+
+    /**
+     * Create and compile a twig.js template.
+     *
+     * @param {Object} param Paramteres for creating a Twig template.
+     *
+     * @return {Twig.Template} A Twig template ready for rendering.
+     */
+    Twig.exports.twig = function (params) {
+        'use strict';
+        const {id} = params;
+        const options = {
+            strictVariables: params.strict_variables || false,
+            // TODO: turn autoscape on in the next major version
+            autoescape: (params.autoescape !== null && params.autoescape) || false,
+            allowInlineIncludes: params.allowInlineIncludes || false,
+            rethrow: params.rethrow || false,
+            namespaces: params.namespaces
+        };
+
+        if (Twig.cache && id) {
+            Twig.validateId(id);
+        }
+
+        if (params.debug !== undefined) {
+            Twig.debug = params.debug;
+        }
+
+        if (params.trace !== undefined) {
+            Twig.trace = params.trace;
+        }
+
+        if (params.data !== undefined) {
+            return Twig.Templates.parsers.twig({
+                data: params.data,
+                path: Object.hasOwnProperty.call(params, 'path') ? params.path : undefined,
+                module: params.module,
+                id,
+                options
+            });
+        }
+
+        if (params.ref !== undefined) {
+            if (params.id !== undefined) {
+                throw new Twig.Error('Both ref and id cannot be set on a twig.js template.');
+            }
+
+            return Twig.Templates.load(params.ref);
+        }
+
+        if (params.method !== undefined) {
+            if (!Twig.Templates.isRegisteredLoader(params.method)) {
+                throw new Twig.Error('Loader for "' + params.method + '" is not defined.');
+            }
+
+            return Twig.Templates.loadRemote(params.name || params.href || params.path || id || undefined, {
+                id,
+                method: params.method,
+                parser: params.parser || 'twig',
+                base: params.base,
+                module: params.module,
+                precompiled: params.precompiled,
+                async: params.async,
+                options
+
+            }, params.load, params.error);
+        }
+
+        if (params.href !== undefined) {
+            return Twig.Templates.loadRemote(params.href, {
+                id,
+                method: 'ajax',
+                parser: params.parser || 'twig',
+                base: params.base,
+                module: params.module,
+                precompiled: params.precompiled,
+                async: params.async,
+                options
+
+            }, params.load, params.error);
+        }
+
+        if (params.path !== undefined) {
+            return Twig.Templates.loadRemote(params.path, {
+                id,
+                method: 'fs',
+                parser: params.parser || 'twig',
+                base: params.base,
+                module: params.module,
+                precompiled: params.precompiled,
+                async: params.async,
+                options
+            }, params.load, params.error);
+        }
+    };
+
+    // Extend Twig with a new filter.
+    Twig.exports.extendFilter = function (filter, definition) {
+        Twig.filter.extend(filter, definition);
+    };
+
+    // Extend Twig with a new function.
+    Twig.exports.extendFunction = function (fn, definition) {
+        Twig._function.extend(fn, definition);
+    };
+
+    // Extend Twig with a new test.
+    Twig.exports.extendTest = function (test, definition) {
+        Twig.test.extend(test, definition);
+    };
+
+    // Extend Twig with a new definition.
+    Twig.exports.extendTag = function (definition) {
+        Twig.logic.extend(definition);
+    };
+
+    // Provide an environment for extending Twig core.
+    // Calls fn with the internal Twig object.
+    Twig.exports.extend = function (fn) {
+        fn(Twig);
+    };
+
+    /**
+     * Provide an extension for use with express 2.
+     *
+     * @param {string} markup The template markup.
+     * @param {array} options The express options.
+     *
+     * @return {string} The rendered template.
+     */
+    Twig.exports.compile = function (markup, options) {
+        const id = options.filename;
+        const path = options.filename;
+
+        // Try to load the template from the cache
+        const template = new Twig.Template({
+            data: markup,
+            path,
+            id,
+            options: options.settings['twig options']
+        }); // Twig.Templates.load(id) ||
+
+        return function (context) {
+            return template.render(context);
+        };
+    };
+
+    /**
+     * Provide an extension for use with express 3.
+     *
+     * @param {string} path The location of the template file on disk.
+     * @param {Object|Function} The options or callback.
+     * @param {Function} fn callback.
+     *
+     * @throws Twig.Error
+     */
+    Twig.exports.renderFile = function (path, options, fn) {
+        // Handle callback in options
+        if (typeof options === 'function') {
+            fn = options;
+            options = {};
+        }
+
+        options = options || {};
+
+        const settings = options.settings || {};
+
+        // Mixin any options provided to the express app.
+        const viewOptions = settings['twig options'];
+
+        const params = {
+            path,
+            base: settings.views,
+            load(template) {
+                // Render and return template as a simple string, see https://github.com/twigjs/twig.js/pull/348 for more information
+                if (!viewOptions || !viewOptions.allowAsync) {
+                    fn(null, String(template.render(options)));
+                    return;
+                }
+
+                template.renderAsync(options)
+                    .then(out => fn(null, out), fn);
+            }
+        };
+
+        if (viewOptions) {
+            for (const option in viewOptions) {
+                if (Object.hasOwnProperty.call(viewOptions, option)) {
+                    params[option] = viewOptions[option];
+                }
+            }
+        }
+
+        Twig.exports.twig(params);
+    };
+
+    // Express 3 handler
+    Twig.exports.__express = Twig.exports.renderFile;
+
+    /**
+     * Shoud Twig.js cache templates.
+     * Disable during development to see changes to templates without
+     * reloading, and disable in production to improve performance.
+     *
+     * @param {boolean} cache
+     */
+    Twig.exports.cache = function (cache) {
+        Twig.cache = cache;
+    };
+
+    // We need to export the path module so we can effectively test it
+    Twig.exports.path = Twig.path;
+
+    // Export our filters.
+    // Resolves #307
+    Twig.exports.filters = Twig.filters;
+
+    // Export our tests.
+    Twig.exports.tests = Twig.tests;
+
+    Twig.exports.Promise = Twig.Promise;
+
+    return Twig;
+};
+
+
+/***/ })
+/******/ ]);
+});
+}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
+},{"fs":214,"path":238}],244:[function(require,module,exports){
+arguments[4][165][0].apply(exports,arguments)
+},{"../prototype/is":247,"dup":165}],245:[function(require,module,exports){
+arguments[4][166][0].apply(exports,arguments)
+},{"../value/is":248,"dup":166}],246:[function(require,module,exports){
+arguments[4][167][0].apply(exports,arguments)
+},{"../function/is":244,"dup":167}],247:[function(require,module,exports){
+arguments[4][168][0].apply(exports,arguments)
+},{"../object/is":245,"dup":168}],248:[function(require,module,exports){
+arguments[4][169][0].apply(exports,arguments)
+},{"dup":169}],249:[function(require,module,exports){
 /* global L */
 
 const isTrue = require('./isTrue')
 const styleToLeaflet = require('./styleToLeaflet')
+const parseLength = require('./parseLength')
 
 class DecoratorPattern {
   constructor (layer) {
@@ -36902,13 +45555,14 @@ class DecoratorPattern {
     this.layer.on('remove', this.removeObject.bind(this))
   }
 
-  parseType (key, value) {
+  parseType (key, value, twigData) {
     switch (key) {
       case 'polygon':
       case 'rotate':
         return isTrue(value)
-      case 'angleCorrection':
       case 'pixelSize':
+        return parseLength(value, twigData.map.metersPerPixel)
+      case 'angleCorrection':
       case 'headAngle':
         return parseFloat(value)
       default:
@@ -36922,25 +45576,25 @@ class DecoratorPattern {
     }
 
     for (var k in data.features) {
-      let def = k === 'default' ? data.data.style : data.data['style:' + k]
+      const def = k === 'default' ? data.data.style : data.data['style:' + k]
 
       if (def.pattern && data.styles.includes(k)) {
         let symbol
         let symbolOptions = {}
-        let options = {}
+        const options = {}
 
-        for (let k in def) {
-          let m1 = k.match(/^pattern-path-(.*)$/)
-          let m2 = k.match(/^pattern-(.*)$/)
+        for (const k in def) {
+          const m1 = k.match(/^pattern-path-(.*)$/)
+          const m2 = k.match(/^pattern-(.*)$/)
 
           if (m1) {
             symbolOptions[m1[1]] = def[k]
           } else if (m2) {
-            options[m2[1]] = this.parseType(m2[1], def[k])
+            options[m2[1]] = this.parseType(m2[1], def[k], data.twigData)
           }
         }
 
-        symbolOptions = styleToLeaflet(symbolOptions)
+        symbolOptions = styleToLeaflet(symbolOptions, data.twigData)
 
         switch (def.pattern.toString()) {
           case 'dash':
@@ -36966,7 +45620,7 @@ class DecoratorPattern {
           data.patternFeatures[k].addTo(this.layer.map)
         }
 
-        data.patternFeatures[k].setPatterns([ options ])
+        data.patternFeatures[k].setPatterns([options])
 
         if (this.layer._shallBindPopupToStyle(k)) {
           data.patternFeatures[k].bindPopup(data.popup)
@@ -36996,7 +45650,7 @@ class DecoratorPattern {
 
 module.exports = DecoratorPattern
 
-},{"./isTrue":248,"./styleToLeaflet":250}],240:[function(require,module,exports){
+},{"./isTrue":258,"./parseLength":259,"./styleToLeaflet":261}],250:[function(require,module,exports){
 const Sublayer = require('./Sublayer')
 
 class Memberlayer extends Sublayer {
@@ -37031,10 +45685,10 @@ class Memberlayer extends Sublayer {
   }
 
   twigData (ob, data) {
-    let result = super.twigData(ob, data)
+    const result = super.twigData(ob, data)
 
     for (var k in this.masterlayer.visibleFeatures) {
-      let feature = this.masterlayer.visibleFeatures[k]
+      const feature = this.masterlayer.visibleFeatures[k]
       if (feature.object.members) {
         feature.object.members.forEach((member, sequence) => {
           if (member.id === ob.id) {
@@ -37066,9 +45720,9 @@ class Memberlayer extends Sublayer {
 
 module.exports = Memberlayer
 
-},{"./Sublayer":245}],241:[function(require,module,exports){
+},{"./Sublayer":255}],251:[function(require,module,exports){
 var css = ".leaflet-popup-content {\n  max-height: 250px;\n  overflow: auto;\n}\n.leaflet-popup-content pre {\n  font-size: 8px;\n}\n.overpass-layer-icon > img,\n.overpass-layer-icon > svg {\n  display: block;\n}\n.overpass-layer-icon div.sign {\n  position: relative;\n  font-size: 12px;\n  text-align: center;\n  transform: translate(-50%, -50%);\n  display: flex;\n  justify-content: center;\n}\n/*  top: -37px; */\n"; (require("browserify-css").createStyle(css, { "href": "src/OverpassLayer.css" }, { "insertAt": "bottom" })); module.exports = css;
-},{"browserify-css":215}],242:[function(require,module,exports){
+},{"browserify-css":215}],252:[function(require,module,exports){
 /* global overpassFrontend:false */
 /* eslint camelcase: 0 */
 require('./OverpassLayer.css')
@@ -37123,7 +45777,7 @@ class OverpassLayer {
       this.options.queryOptions.memberProperties = OverpassFrontend.ALL
       this.options.queryOptions.members = true
 
-      let memberOptions = {
+      const memberOptions = {
         id: this.options.id,
         sublayer_id: 'member',
         minZoom: this.options.minZoom,
@@ -37160,7 +45814,7 @@ class OverpassLayer {
   addTo (map) {
     this.map = map
     this.map.on('moveend', this.check_update_map, this)
-    for (let k in this.subLayers) {
+    for (const k in this.subLayers) {
       this.subLayers[k].addTo(map)
     }
     this.check_update_map()
@@ -37170,7 +45824,7 @@ class OverpassLayer {
   }
 
   remove () {
-    for (let k in this.subLayers) {
+    for (const k in this.subLayers) {
       this.subLayers[k].hideAll(true)
       this.subLayers[k].remove()
     }
@@ -37204,17 +45858,27 @@ class OverpassLayer {
     this.check_update_map()
   }
 
+  calcGlobalTwigData () {
+    this.globalTwigData = {
+      map: {
+        zoom: this.map.getZoom(),
+        // from: https://stackoverflow.com/a/31266377
+        metersPerPixel: 40075016.686 * Math.abs(Math.cos(this.map.getCenter().lat / 180 * Math.PI)) / Math.pow(2, this.map.getZoom() + 8)
+      }
+    }
+  }
+
   check_update_map () {
-    if (!this.map) {
+    if (!this.map || !this.map._loaded) {
       return
     }
 
-    let queryOptions = JSON.parse(JSON.stringify(this.options.queryOptions))
+    const queryOptions = JSON.parse(JSON.stringify(this.options.queryOptions))
     var bounds = new BoundingBox(this.map.getBounds())
 
     if (this.map.getZoom() < this.options.minZoom ||
        (this.options.maxZoom !== undefined && this.map.getZoom() > this.options.maxZoom)) {
-      for (let k in this.subLayers) {
+      for (const k in this.subLayers) {
         this.subLayers[k].hideAll()
       }
 
@@ -37224,7 +45888,7 @@ class OverpassLayer {
       return
     }
 
-    for (let k in this.subLayers) {
+    for (const k in this.subLayers) {
       this.subLayers[k].hideNonVisible(bounds)
     }
 
@@ -37234,21 +45898,22 @@ class OverpassLayer {
     }
 
     if (query !== this.lastQuery) {
-      let filter = new OverpassFrontend.Filter(query)
+      const filter = new OverpassFrontend.Filter(query)
       this.mainlayer.hideNonVisibleFilter(filter)
       this.lastQuery = query
     }
 
     queryOptions.filter = this.filter
     if (this.filter !== this.lastFilter) {
-      let filter = new OverpassFrontend.Filter(this.filter)
+      const filter = new OverpassFrontend.Filter(this.filter)
       this.mainlayer.hideNonVisibleFilter(filter)
       this.lastFilter = this.filter
     }
 
     // When zoom level changed, update visible objects
     if (this.lastZoom !== this.map.getZoom()) {
-      for (let k in this.subLayers) {
+      this.calcGlobalTwigData()
+      for (const k in this.subLayers) {
         this.subLayers[k].zoomChange()
       }
       this.lastZoom = this.map.getZoom()
@@ -37262,7 +45927,7 @@ class OverpassLayer {
       return
     }
 
-    for (let k in this.subLayers) {
+    for (const k in this.subLayers) {
       this.subLayers[k].startAdding()
     }
 
@@ -37294,7 +45959,7 @@ class OverpassLayer {
           })
         }
 
-        for (let k in this.subLayers) {
+        for (const k in this.subLayers) {
           this.subLayers[k].finishAdding()
         }
 
@@ -37310,19 +45975,20 @@ class OverpassLayer {
   }
 
   recalc () {
-    for (let k in this.subLayers) {
+    this.calcGlobalTwigData()
+    for (const k in this.subLayers) {
       this.subLayers[k].recalc()
     }
   }
 
   scheduleReprocess (id) {
-    for (let k in this.subLayers) {
+    for (const k in this.subLayers) {
       this.subLayers[k].scheduleReprocess(id)
     }
   }
 
   updateAssets (div, objectData) {
-    for (let k in this.subLayers) {
+    for (const k in this.subLayers) {
       this.subLayers[k].updateAssets(div, objectData)
     }
   }
@@ -37355,8 +46021,8 @@ class OverpassLayer {
       sublayer = this.subLayers[options.sublayer_id]
     }
 
-    let request = sublayer.show(id, options, callback)
-    let result = {
+    const request = sublayer.show(id, options, callback)
+    const result = {
       id: id,
       sublayer_id: options.sublayer_id,
       options: options,
@@ -37393,9 +46059,9 @@ OverpassLayer.twig = twig
 
 module.exports = OverpassLayer
 
-},{"./Memberlayer":240,"./OverpassLayer.css":241,"./Sublayer":245,"./compileFeature":247,"boundingbox":1,"event-emitter":233,"html-escape":234,"overpass-frontend":189,"twig":238}],243:[function(require,module,exports){
+},{"./Memberlayer":250,"./OverpassLayer.css":251,"./Sublayer":255,"./compileFeature":257,"boundingbox":213,"event-emitter":232,"html-escape":236,"overpass-frontend":176,"twig":243}],253:[function(require,module,exports){
 var css = "ul.overpass-layer-list {\n  margin-top: 0;\n  margin-bottom: 0;\n}\nul.overpass-layer-list > li {\n  position: relative;\n  list-style: none;\n  min-height: 30px;\n}\nul.overpass-layer-list > li > .markerParent {\n  position: absolute;\n  margin-left: -35px;\n  width: 30px;\n  height: 30px;\n  text-align: center;\n  display: block;\n  color: black;\n  text-decoration: none;\n}\n\nul.overpass-layer-list > li > .markerParent > .icon {\n  text-align: center;\n  position: absolute;\n  top: 3px;\n  font-size: 15px;\n  left: 0;\n  right: 0;\n  z-index: 1;\n  display: inline-block;\n}\nul.overpass-layer-list > li > a.title {\n  display: inline-block;\n  color: black;\n  text-decoration: none;\n}\nul.overpass-layer-list > li > a.title:hover,\nul.overpass-layer-list > li > a.title:active {\n  text-decoration: underline;\n}\nul.overpass-layer-list > li > div.description {\n  font-style: italic;\n  color: #707070;\n  float: right;\n  text-align: right;\n}\nul.overpass-layer-list > li:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n.hoverable {\n  cursor: pointer;\n}\n"; (require("browserify-css").createStyle(css, { "href": "src/OverpassLayerList.css" }, { "insertAt": "bottom" })); module.exports = css;
-},{"browserify-css":215}],244:[function(require,module,exports){
+},{"browserify-css":215}],254:[function(require,module,exports){
 /* eslint camelcase: 0 */
 
 require('./OverpassLayerList.css')
@@ -37505,7 +46171,7 @@ class OverpassLayerList {
     a.innerHTML = html
     a.currentHTML = html
     div.appendChild(a)
-    let title = a
+    const title = a
 
     // DESCRIPTION
     a = document.createElement('div')
@@ -37537,8 +46203,8 @@ class OverpassLayerList {
 
       this.currentHover = this.layer.show(id,
         {
-          styles: [ 'hover' ],
-          flags: [ 'hover' ],
+          styles: ['hover'],
+          flags: ['hover'],
           sublayer_id
         },
         () => {}
@@ -37593,7 +46259,7 @@ class OverpassLayerList {
 
       // TITLE
       if (p.className === 'title') {
-        let html = ob.data[this.options.prefix + 'Title'] || ob.data.title || ''
+        const html = ob.data[this.options.prefix + 'Title'] || ob.data.title || ''
         if (p.currentHTML !== html) {
           p.innerHTML = html
           ob.sublayer.updateAssets(div, ob.data)
@@ -37602,7 +46268,7 @@ class OverpassLayerList {
 
       // TITLE
       if (p.className === 'description') {
-        let html = ob.data[this.options.prefix + 'Description'] || ob.data.description || ''
+        const html = ob.data[this.options.prefix + 'Description'] || ob.data.description || ''
         if (p.currentHTML !== html) {
           p.innerHTML = html
           ob.sublayer.updateAssets(div, ob.data)
@@ -37639,7 +46305,7 @@ class OverpassLayerList {
 
 module.exports = OverpassLayerList
 
-},{"./OverpassLayerList.css":243,"./isTrue":248}],245:[function(require,module,exports){
+},{"./OverpassLayerList.css":253,"./isTrue":258}],255:[function(require,module,exports){
 /* global L */
 
 const ee = require('event-emitter')
@@ -37682,12 +46348,12 @@ class Sublayer {
     if (options.styleNoBindPopup) {
       options.styleNoBindPopup.push('hover')
     } else {
-      options.styleNoBindPopup = [ 'hover' ]
+      options.styleNoBindPopup = ['hover']
     }
     if (options.stylesNoAutoShow) {
       options.stylesNoAutoShow.push('hover')
     } else {
-      options.stylesNoAutoShow = [ 'hover' ]
+      options.stylesNoAutoShow = ['hover']
     }
 
     decorators.forEach(Ext => new Ext(this))
@@ -37707,17 +46373,17 @@ class Sublayer {
 
   domUpdateHooks (node) {
     if (node.getAttribute) {
-      let id = node.getAttribute('data-object')
+      const id = node.getAttribute('data-object')
 
       if (id) {
-        let sublayerId = node.getAttribute('data-sublayer') || 'main'
+        const sublayerId = node.getAttribute('data-sublayer') || 'main'
         node.classList.add('hoverable')
 
         // check if referenced object is loaded - if not, request load
-        let ofOptions = {
+        const ofOptions = {
           properties: OverpassFrontend.ALL
         }
-        let subObject = this.master.overpassFrontend.getCached(id, ofOptions)
+        const subObject = this.master.overpassFrontend.getCached(id, ofOptions)
 
         if (!subObject) {
           this.master.overpassFrontend.get(id, ofOptions,
@@ -37731,7 +46397,7 @@ class Sublayer {
             this.currentHover.hide()
           }
 
-          this.currentHover = this.master.subLayers[sublayerId].show(id, { styles: [ 'hover' ] }, function () {})
+          this.currentHover = this.master.subLayers[sublayerId].show(id, { styles: ['hover'] }, function () {})
         }
         node.onmouseout = () => {
           if (this.currentHover) {
@@ -37805,8 +46471,8 @@ class Sublayer {
   }
 
   hideAll (force) {
-    for (let k in this.visibleFeatures) {
-      let ob = this.visibleFeatures[k]
+    for (const k in this.visibleFeatures) {
+      const ob = this.visibleFeatures[k]
 
       if (force || !(ob.id in this.shownFeatures)) {
         this._hide(ob)
@@ -37818,8 +46484,8 @@ class Sublayer {
 
   // Hide loaded but non-visible objects
   hideNonVisible (bounds) {
-    for (let k in this.visibleFeatures) {
-      let ob = this.visibleFeatures[k]
+    for (const k in this.visibleFeatures) {
+      const ob = this.visibleFeatures[k]
 
       if (!ob.object.intersects(bounds)) {
         if (!(ob.id in this.shownFeatures)) {
@@ -37836,8 +46502,8 @@ class Sublayer {
    * @param {OverpassFrontend.Filter} filter A filter, e.g. new OverpassFrontend.Filter('nwr[amenity=restaurant]')
    */
   hideNonVisibleFilter (filter) {
-    for (let k in this.visibleFeatures) {
-      let ob = this.visibleFeatures[k]
+    for (const k in this.visibleFeatures) {
+      const ob = this.visibleFeatures[k]
 
       if (!filter.match(ob.object)) {
         if (!(ob.id in this.shownFeatures)) {
@@ -37853,7 +46519,7 @@ class Sublayer {
     let isAborted = false
     let isDone = false
 
-    let result = {
+    const result = {
       id,
       options,
       abort: () => {
@@ -37921,7 +46587,7 @@ class Sublayer {
   }
 
   show (data, options, callback) {
-    let show1 = () => {
+    const show1 = () => {
       id = data.id
       result.id = id
 
@@ -37944,7 +46610,7 @@ class Sublayer {
 
     let id = typeof data === 'string' ? data : data.id
     let isHidden = false
-    let result = {
+    const result = {
       options,
       hide: () => {
         if (isHidden) {
@@ -38009,7 +46675,7 @@ class Sublayer {
     }
 
     if (id in this.shownFeatures) {
-      let data = this.shownFeatures[id]
+      const data = this.shownFeatures[id]
       delete this.shownFeatures[id]
       delete this.shownFeatureOptions[id]
 
@@ -38024,8 +46690,8 @@ class Sublayer {
   zoomChange () {
     this.recalc()
 
-    for (let k in this.visibleFeatures) {
-      let data = this.visibleFeatures[k]
+    for (const k in this.visibleFeatures) {
+      const data = this.visibleFeatures[k]
 
       this.master.emit('zoomChange', data.object, data)
       this.emit('zoomChange', data.object, data)
@@ -38050,7 +46716,7 @@ class Sublayer {
     var showOptions = {
       styles: []
     }
-    let leafletFeatureOptions = {
+    const leafletFeatureOptions = {
       shiftWorld: this.master.getShiftWorld()
     }
 
@@ -38077,7 +46743,7 @@ class Sublayer {
       var m = k.match(/^style(|:(.*))$/)
       if (m) {
         var styleId = typeof m[2] === 'undefined' ? 'default' : m[2]
-        var style = styleToLeaflet(objectData[k])
+        var style = styleToLeaflet(objectData[k], this.master.globalTwigData)
 
         if (data.features[styleId]) {
           data.features[styleId].setStyle(style)
@@ -38092,7 +46758,7 @@ class Sublayer {
             offset: style.textOffset,
             below: style.textBelow,
             attributes: {
-              'fill': style.textFill,
+              fill: style.textFill,
               'fill-opacity': style.textFillOpacity,
               'font-weight': style.textFontWeight,
               'font-size': style.textFontSize,
@@ -38113,10 +46779,10 @@ class Sublayer {
 
     objectData.marker = {
       html: '',
-      iconAnchor: [ 0, 0 ],
-      iconSize: [ 0, 0 ],
-      signAnchor: [ 0, 0 ],
-      popupAnchor: [ 0, 0 ]
+      iconAnchor: [0, 0],
+      iconSize: [0, 0],
+      signAnchor: [0, 0],
+      popupAnchor: [0, 0]
     }
     if (objectData.markerSymbol) {
       objectData.marker.html += objectData.markerSymbol
@@ -38127,7 +46793,7 @@ class Sublayer {
       if (div.firstChild) {
         var c = div.firstChild
 
-        objectData.marker.iconSize = [ c.offsetWidth, c.offsetHeight ]
+        objectData.marker.iconSize = [c.offsetWidth, c.offsetHeight]
         if (c.hasAttribute('width')) {
           objectData.marker.iconSize[0] = parseFloat(c.getAttribute('width'))
         }
@@ -38135,7 +46801,7 @@ class Sublayer {
           objectData.marker.iconSize[1] = parseFloat(c.getAttribute('height'))
         }
 
-        objectData.marker.iconAnchor = [ objectData.marker.iconSize[0] / 2, objectData.marker.iconSize[1] / 2 ]
+        objectData.marker.iconAnchor = [objectData.marker.iconSize[0] / 2, objectData.marker.iconSize[1] / 2]
         if (c.hasAttribute('anchorx')) {
           objectData.marker.iconAnchor[0] = parseFloat(c.getAttribute('anchorx'))
         }
@@ -38162,8 +46828,8 @@ class Sublayer {
     }
 
     if (objectData.markerSign) {
-      let x = objectData.marker.iconAnchor[0] + objectData.marker.signAnchor[0]
-      let y = -objectData.marker.iconSize[1] + objectData.marker.iconAnchor[1] + objectData.marker.signAnchor[1]
+      const x = objectData.marker.iconAnchor[0] + objectData.marker.signAnchor[0]
+      const y = -objectData.marker.iconSize[1] + objectData.marker.iconAnchor[1] + objectData.marker.signAnchor[1]
       objectData.marker.html += '<div class="sign" style="margin-left: ' + x + 'px; margin-top: ' + y + 'px;">' + objectData.markerSign + '</div>'
     }
 
@@ -38177,7 +46843,7 @@ class Sublayer {
           this.updateAssets(data.featureMarker._icon)
         }
       } else {
-        let center = { lat: ob.center.lat, lon: ob.center.lon + leafletFeatureOptions.shiftWorld[ob.center.lon < 0 ? 0 : 1] }
+        const center = { lat: ob.center.lat, lon: ob.center.lon + leafletFeatureOptions.shiftWorld[ob.center.lon < 0 ? 0 : 1] }
         data.featureMarker = L.marker(center, { icon: icon })
       }
     }
@@ -38308,12 +46974,12 @@ class Sublayer {
       meta: ob.meta,
       flags: data.flags,
       members: [],
-      'const': this.options.const
+      const: this.options.const
     }
 
     if (ob.memberFeatures) {
       ob.memberFeatures.forEach((member, sequence) => {
-        let r = {
+        const r = {
           id: member.id,
           sequence,
           type: member.type,
@@ -38330,10 +46996,8 @@ class Sublayer {
       })
     }
 
-    if (this.map) {
-      result.map = {
-        zoom: this.map.getZoom()
-      }
+    for (const k in this.master.globalTwigData) {
+      result[k] = this.master.globalTwigData[k]
     }
 
     this.emit('twigData', ob, data, result)
@@ -38425,16 +47089,16 @@ class Sublayer {
     }
 
     // When object is quite smaller than current view, show popup on feature
-    let viewBounds = new BoundingBox(this.map.getBounds())
-    let obBounds = new BoundingBox(ob.object.bounds)
+    const viewBounds = new BoundingBox(this.map.getBounds())
+    const obBounds = new BoundingBox(ob.object.bounds)
     if (obBounds.diagonalLength() * 0.75 < viewBounds.diagonalLength()) {
       return ob.feature.openPopup()
     }
 
     // otherwise, try to find point on geometry closest to center of view
-    let pt = this.map.getCenter()
-    let geom = ob.object.GeoJSON()
-    let pos = nearestPointOnGeometry(geom, { type: 'Feature', geometry: { type: 'Point', coordinates: [ pt.lng, pt.lat ] } })
+    const pt = this.map.getCenter()
+    const geom = ob.object.GeoJSON()
+    let pos = nearestPointOnGeometry(geom, { type: 'Feature', geometry: { type: 'Point', coordinates: [pt.lng, pt.lat] } })
     if (pos) {
       pos = pos.geometry.coordinates
       return ob.feature.openPopup([pos[1], pos[0]])
@@ -38449,7 +47113,7 @@ ee(Sublayer.prototype)
 
 module.exports = Sublayer
 
-},{"./DecoratorPattern":239,"./SublayerFeature":246,"./strToStyle":249,"./styleToLeaflet":250,"boundingbox":1,"event-emitter":233,"nearest-point-on-geometry":18,"overpass-frontend":189}],246:[function(require,module,exports){
+},{"./DecoratorPattern":249,"./SublayerFeature":256,"./strToStyle":260,"./styleToLeaflet":261,"boundingbox":213,"event-emitter":232,"nearest-point-on-geometry":237,"overpass-frontend":176}],256:[function(require,module,exports){
 class SublayerFeature {
   constructor (object, sublayer) {
     this.object = object
@@ -38460,7 +47124,7 @@ class SublayerFeature {
   }
 
   updateFlags () {
-    let shownFeatureOptions = this.sublayer.shownFeatureOptions[this.id]
+    const shownFeatureOptions = this.sublayer.shownFeatureOptions[this.id]
 
     this.flags = {}
     shownFeatureOptions.forEach(options => {
@@ -38475,7 +47139,7 @@ class SublayerFeature {
 
 module.exports = SublayerFeature
 
-},{}],247:[function(require,module,exports){
+},{}],257:[function(require,module,exports){
 function compileFeature (feature, twig) {
   for (var k in feature) {
     if (typeof feature[k] === 'string' && feature[k].search('{') !== -1) {
@@ -38526,7 +47190,7 @@ function compileFeature (feature, twig) {
 
 module.exports = compileFeature
 
-},{}],248:[function(require,module,exports){
+},{}],258:[function(require,module,exports){
 function isTrue (value) {
   if (value === null || typeof value === 'undefined') {
     return false
@@ -38556,7 +47220,23 @@ function isTrue (value) {
 window.isTrue = isTrue
 module.exports = isTrue
 
-},{}],249:[function(require,module,exports){
+},{}],259:[function(require,module,exports){
+module.exports = function parseLength (value, metersPerPixel) {
+  const m = ('' + value).trim().match(/^([+-]?[0-9]+(?:\.[0-9]+)?)\s*(px|m)$/)
+  if (m) {
+    switch (m[2]) {
+      case 'm':
+        return parseFloat(m[1]) / metersPerPixel
+      case 'px':
+      default:
+        return parseFloat(m[1])
+    }
+  }
+
+  return parseFloat(value)
+}
+
+},{}],260:[function(require,module,exports){
 function strToStyle (style) {
   var str = style.split('\n')
   style = {}
@@ -38579,8 +47259,9 @@ function strToStyle (style) {
 
 module.exports = strToStyle
 
-},{}],250:[function(require,module,exports){
+},{}],261:[function(require,module,exports){
 const isTrue = require('./isTrue')
+const parseLength = require('./parseLength')
 
 const transforms = {
   stroke: {
@@ -38600,24 +47281,27 @@ const transforms = {
   },
   width: {
     rename: 'weight',
-    type: 'float'
+    type: 'length'
   },
   opacity: {
     type: 'float'
   },
   fillOpacity: {
     type: 'float'
+  },
+  offset: {
+    type: 'length'
   }
 }
 
-function styleToLeaflet (style) {
-  let ret = JSON.parse(JSON.stringify(style))
+function styleToLeaflet (style, twigData) {
+  const ret = JSON.parse(JSON.stringify(style))
 
   for (let k in ret) {
     let value = ret[k]
 
     if (k in transforms) {
-      let transform = transforms[k]
+      const transform = transforms[k]
 
       switch (transform.type) {
         case 'boolean':
@@ -38625,6 +47309,9 @@ function styleToLeaflet (style) {
           break
         case 'float':
           value = parseFloat(ret[k])
+          break
+        case 'length':
+          value = parseLength(ret[k], twigData.map.metersPerPixel)
           break
       }
 
@@ -38642,31 +47329,4 @@ function styleToLeaflet (style) {
 
 module.exports = styleToLeaflet
 
-},{"./isTrue":248}],251:[function(require,module,exports){
-module.exports = function strsearch2regexp (str) {
-  return str
-    .replace('.', '\\.')
-    .replace(' ', '.*')
-    .replace('a', '[aàáâãäå]')
-    .replace('A', '[AÀÁÂÃÄÅ]')
-    .replace('C', '[CÇ]')
-    .replace('c', '[cç]')
-    .replace('E', '[EÉÊË]')
-    .replace('I', '[IÌÍÎÏ]')
-    .replace('D', '[DÐ]')
-    .replace('N', '[NÑ]')
-    .replace('O', '[OÒÓÔÕÖØ]')
-    .replace('X', '[X×]')
-    .replace('U', '[UÙÚÛÜ]')
-    .replace('Y', '[YÝ]')
-    .replace('s', '[sß]')
-    .replace('e', '[eèeéêëė]')
-    .replace('i', '[iìíîï]')
-    .replace('d', '[dð]')
-    .replace('n', '[nñ]')
-    .replace('o', '[oòóôõöø]')
-    .replace('u', '[uùúûü]')
-    .replace('y', '[yýÿ]')
-}
-
-},{}]},{},[213]);
+},{"./isTrue":258,"./parseLength":259}]},{},[201]);
