@@ -1,3 +1,10 @@
+Version 2.5.0, 2019-01-03
+=========================
+* Add a title for each demo
+* New demo, showing railway tracks (with the gauge in correct distance)
+* Define `map.metersPerPixel` for TwigJS templates (size of a pixel at the map center)
+* Allow units for some style parameters (e.g. width, offset). You can now use 'px' (default) or 'm' (meters in world coordinate system).
+
 Version 2.4.0, 2018-03-01
 =========================
 * Add option 'filter'
