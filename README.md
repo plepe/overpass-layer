@@ -3,16 +3,27 @@ Show a Leaflet layer using OpenStreetMap data from Overpass API via overpass-fro
 
 # Usage
 ```js
+// Connect to Overpass API - you can also use a (small) .osm file as data source
 var overpassFrontend = new OverpassFrontend('//overpass-api.de/api/interpreter')
 
+// Create the layer
 var layer = new OverpassLayer({
-  query: 'nwr[building]'
+  query: 'nwr[building]',
+  minZoom: 16,
+  feature: {
+    title: '{{ tags.name }}',
+    style: { width: 1, color: 'black' }
+  }
 })
 
-var map = L.map('map')
+// Create a LeafletJS map
+var map = L.map('map').setView([ 51.5, 0.0 ], 16)
 
-var layerControl = L.control({}, { 'Buildings': layer })
-layerControl.addTo(map)
+// Add the layer to the map
+layer.addTo(map)
+// ... or use a control
+//var layerControl = L.control({}, { 'Buildings': layer })
+//layerControl.addTo(map)
 ```
 
 # API
