@@ -49,7 +49,11 @@ function styleToLeaflet (style, twigData) {
           value = parseFloat(ret[k])
           break
         case 'length':
-          value = parseLength(ret[k], twigData.map.metersPerPixel)
+          if (twigData && twigData.map) {
+            value = parseLength(ret[k], twigData.map.metersPerPixel)
+          } else {
+            value = parseFloat(ret[k])
+          }
           break
       }
 
