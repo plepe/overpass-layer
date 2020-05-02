@@ -246,25 +246,25 @@ Include script:
 <script src="node_modules/leaflet-polylinedecorator/dist/leaflet.polylineDecorator.js"></script>
 ```
 
-Each style can have these additional values:
+Each style can have several patterns with this additional options (where X identifies the pattern. X is an arbitrary string without dashes, e.g. '', '0', 'A', 'foobar'):
 
-* pattern: false/empty: no pattern, 'arrowHead', 'dash', 'marker'
-* pattern-offset: Offset of the first pattern symbol, from the start point of the line (type `length`). Default: 0.
-* pattern-endOffset: Minimum offset of the last pattern symbol, from the end point of the line (type `length`). Default: 0.
-* pattern-repeat: Repetition interval of the pattern symbols (type `length`). Defines the distance between each consecutive symbol's anchor point.
+* patternX: false/empty: no pattern, 'arrowHead', 'dash', 'marker'
+* patternX-offset: Offset of the first pattern symbol, from the start point of the line (type `length`). Default: 0.
+* patternX-endOffset: Minimum offset of the last pattern symbol, from the end point of the line (type `length`). Default: 0.
+* patternX-repeat: Repetition interval of the pattern symbols (type `length`). Defines the distance between each consecutive symbol's anchor point.
 
 Depending on the type of pattern, the following options are available:
 * arrowHead:
- * pattern-polygon: true/false
- * pattern-pixelSize: size of pattern (type `length`, you may specify units)
- * pattern-headAngle: Angle of the digits
- * pattern-angleCorrection: degrees ([see #88](https://github.com/bbecquet/Leaflet.PolylineDecorator/pull/88))
+ * patternX-polygon: true/false
+ * patternX-pixelSize: size of pattern (type `length`, you may specify units)
+ * patternX-headAngle: Angle of the digits
+ * patternX-angleCorrection: degrees ([see #88](https://github.com/bbecquet/Leaflet.PolylineDecorator/pull/88))
 
 * dash:
- * pattern-pixelSize: size of pattern (type `length`, you may specify units)
+ * patternX-pixelSize: size of pattern (type `length`, you may specify units)
 
 * marker:
- * pattern-rotate: false
- * pattern-angleCorrection: degrees
+ * patternX-rotate: false
+ * patternX-angleCorrection: degrees
 
-To set path options use the prefix `pattern-path-`, e.g. `pattern-path-width` or `pattern-path-color`.
+To set path options use the prefix `patternX-path-`, e.g. `patternX-path-width` or `patternX-path-color`.

@@ -38,49 +38,62 @@ class DecoratorPattern {
     for (var k in data.features) {
       const def = k === 'default' ? data.data.style : data.data['style:' + k]
 
-      if (def.pattern && data.styles.includes(k)) {
-        let symbol
+      if (data.styles.includes(k)) {
+        let patternTypes = {}
+        let patternOptions = []
         let symbolOptions = {}
-        const options = {}
 
         for (const k in def) {
-          const m1 = k.match(/^pattern-path-(.*)$/)
-          const m2 = k.match(/^pattern-(.*)$/)
-
-          if (m1) {
-            symbolOptions[m1[1]] = def[k]
-          } else if (m2) {
-            options[m2[1]] = this.parseType(m2[1], def[k], data.twigData)
+          const m = k.match(/^pattern([^-]*)$/)
+          if (m) {
+            patternTypes[m[1]] = def[k]
+            patternOptions[m[1]] = {}
+            symbolOptions[m[1]] = {}
           }
         }
 
-        symbolOptions = styleToLeaflet(symbolOptions, data.twigData)
+        for (const k in def) {
+          const m1 = k.match(/^pattern([^-]*)-path-(.*)$/)
+          const m2 = k.match(/^pattern([^-]*)-(.*)$/)
 
-        switch (def.pattern.toString()) {
-          case 'dash':
-            options.pathOptions = symbolOptions
-            symbol = L.Symbol.dash(options)
-            break
-          case 'arrowHead':
-            options.pathOptions = symbolOptions
-            symbol = L.Symbol.arrowHead(options)
-            break
-          case 'marker':
-            options.markerOptions = symbolOptions
-            symbol = L.Symbol.marker(options)
-            break
-          default:
-            // TODO
+          if (m1) {
+            symbolOptions[m1[1]][m1[2]] = def[k]
+          } else if (m2) {
+            patternOptions[m2[1]][m2[2]] = this.parseType(m2[2], def[k], data.twigData)
+          }
         }
 
-        options.symbol = symbol
+        let patternIds = Object.keys(patternTypes)
+        let patterns = []
+        patternIds.forEach(patternId => {
+          let symbol
+          let options = patternOptions[patternId]
+          options.pathOptions = styleToLeaflet(symbolOptions[patternId], data.twigData)
+
+          switch (patternTypes[patternId]) {
+            case 'dash':
+              symbol = L.Symbol.dash(options)
+              break
+            case 'arrowHead':
+              symbol = L.Symbol.arrowHead(options)
+              break
+            case 'marker':
+              symbol = L.Symbol.marker(options)
+              break
+            default:
+              // TODO
+          }
+
+          patternOptions[patternId].symbol = symbol
+          patterns.push(patternOptions[patternId])
+        })
 
         if (!data.patternFeatures[k]) {
           data.patternFeatures[k] = L.polylineDecorator(data.features[k])
           data.patternFeatures[k].addTo(this.layer.map)
         }
 
-        data.patternFeatures[k].setPatterns([options])
+        data.patternFeatures[k].setPatterns(patterns)
 
         if (this.layer._shallBindPopupToStyle(k)) {
           data.patternFeatures[k].bindPopup(data.popup)
