@@ -252,6 +252,7 @@ Each style can have several patterns with this additional options (where X ident
 * patternX-offset: Offset of the first pattern symbol, from the start point of the line (type `length`). Default: 0.
 * patternX-endOffset: Minimum offset of the last pattern symbol, from the end point of the line (type `length`). Default: 0.
 * patternX-repeat: Repetition interval of the pattern symbols (type `length`). Defines the distance between each consecutive symbol's anchor point.
+* patternX-lineOffset: Left (negative) or Right (positive) offset (type `length`). Default: 0.
 
 Depending on the type of pattern, the following options are available:
 * arrowHead:

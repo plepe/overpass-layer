@@ -21,6 +21,7 @@ class DecoratorPattern {
       case 'repeat':
       case 'offset':
       case 'endOffset':
+      case 'lineOffset':
         return parseLength(value, twigData.map.metersPerPixel)
       case 'angleCorrection':
       case 'headAngle':
