@@ -649,7 +649,7 @@ class Sublayer {
       if (styles === '') {
         objectData.styles = []
       } else {
-        objectData.styles = styles.split(/,/)
+        objectData.styles = styles.split(/,/).map(style => style.trim())
       }
     }
 
