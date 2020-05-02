@@ -23,7 +23,11 @@ function compileFeature (feature, twig) {
       var templates = {}
       for (var k1 in feature[k]) {
         if (typeof feature[k][k1] === 'string' && feature[k][k1].search('{') !== -1) {
-          templates[k1] = twig.twig({ data: feature[k][k1], autoescape: true })
+          try {
+            templates[k1] = twig.twig({ data: feature[k][k1], autoescape: true, rethrow: true })
+          } catch (e) {
+            console.error("Can't compile template:\n" + feature[k][k1] + "\n\n", e.message)
+          }
         } else {
           templates[k1] = feature[k][k1]
         }
