@@ -84,8 +84,10 @@ class DecoratorPattern {
               // TODO
           }
 
-          patternOptions[patternId].symbol = symbol
-          patterns.push(patternOptions[patternId])
+          if (symbol) {
+            patternOptions[patternId].symbol = symbol
+            patterns.push(patternOptions[patternId])
+          }
         })
 
         if (!data.patternFeatures[k]) {
