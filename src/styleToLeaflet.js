@@ -29,6 +29,12 @@ const transforms = {
   },
   offset: {
     type: 'length'
+  },
+  dashArray: {
+    type: 'multiple-length'
+  },
+  dashOffset: {
+    type: 'length'
   }
 }
 
@@ -55,6 +61,8 @@ function styleToLeaflet (style, twigData) {
             value = parseFloat(ret[k])
           }
           break
+        case 'multiple-length':
+          value = ret[k].split(/,/g).map(v => parseLength(v, twigData.map.metersPerPixel)).join(',')
       }
 
       if (transform.rename) {

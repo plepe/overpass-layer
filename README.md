@@ -78,8 +78,8 @@ width     | length | 3
 opacity   | float  | 1.0
 lineCap   | string | round
 lineJoin  | string | round
-dashArray | string | ''
-dashOffset | string | ''
+dashArray | mutiple values of length | ''
+dashOffset | length | ''
 fill      | boolean | depends
 fillColor | color  | depends
 fillOpacity | float | 0.2
@@ -249,9 +249,9 @@ Include script:
 Each style can have these additional values:
 
 * pattern: false/empty: no pattern, 'arrowHead', 'dash', 'marker'
-* pattern-offset: Offset of the first pattern symbol, from the start point of the line. Default: 0.
-* pattern-endOffset: Minimum offset of the last pattern symbol, from the end point of the line. Default: 0.
-* pattern-repeat: Repetition interval of the pattern symbols. Defines the distance between each consecutive symbol's anchor point.
+* pattern-offset: Offset of the first pattern symbol, from the start point of the line (type `length`). Default: 0.
+* pattern-endOffset: Minimum offset of the last pattern symbol, from the end point of the line (type `length`). Default: 0.
+* pattern-repeat: Repetition interval of the pattern symbols (type `length`). Defines the distance between each consecutive symbol's anchor point.
 
 Depending on the type of pattern, the following options are available:
 * arrowHead:

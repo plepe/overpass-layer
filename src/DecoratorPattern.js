@@ -18,6 +18,9 @@ class DecoratorPattern {
       case 'rotate':
         return isTrue(value)
       case 'pixelSize':
+      case 'repeat':
+      case 'offset':
+      case 'endOffset':
         return parseLength(value, twigData.map.metersPerPixel)
       case 'angleCorrection':
       case 'headAngle':
