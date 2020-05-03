@@ -1,3 +1,9 @@
+Version 2.6.0, 2020-05-03
+=========================
+* Allow several patterns for polylines and polygons
+* Add lineOffset for patterns
+* More style parameters accept a length
+
 Version 2.5.0, 2019-01-03
 =========================
 * Add a title for each demo
