@@ -40,9 +40,9 @@ class DecoratorPattern {
       const def = k === 'default' ? data.data.style : data.data['style:' + k]
 
       if (data.styles.includes(k)) {
-        let patternTypes = {}
-        let patternOptions = []
-        let symbolOptions = {}
+        const patternTypes = {}
+        const patternOptions = []
+        const symbolOptions = {}
 
         for (const k in def) {
           const m = k.match(/^pattern([^-]*)$/)
@@ -64,11 +64,11 @@ class DecoratorPattern {
           }
         }
 
-        let patternIds = Object.keys(patternTypes)
-        let patterns = []
+        const patternIds = Object.keys(patternTypes)
+        const patterns = []
         patternIds.forEach(patternId => {
           let symbol
-          let options = patternOptions[patternId]
+          const options = patternOptions[patternId]
           options.pathOptions = styleToLeaflet(symbolOptions[patternId], data.twigData)
 
           switch (patternTypes[patternId]) {

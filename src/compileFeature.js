@@ -26,7 +26,7 @@ function compileFeature (feature, twig) {
           try {
             templates[k1] = twig.twig({ data: feature[k][k1], autoescape: true, rethrow: true })
           } catch (e) {
-            console.error("Can't compile template:\n" + feature[k][k1] + "\n\n", e.message)
+            console.error("Can't compile template:\n" + feature[k][k1] + '\n\n', e.message)
           }
         } else {
           templates[k1] = feature[k][k1]
