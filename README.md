@@ -107,6 +107,7 @@ The templates will be rendered when the object becomes visible and when the zoom
 * `osm_id` (the numerical id of the object)
 * `sublayer_id` (the id of the sub layer)
 * `type` ('node', 'way' or 'relation')
+* `geometry` (Geometry from GeoJSON object if available)
 * `tags.*` (all tags are available with the prefix `tags.`, e.g. `tags.amenity`)
 * `meta.timestamp` (timestamp of last modification)
 * `meta.version` (version of the object)
