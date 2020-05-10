@@ -33,6 +33,34 @@ class DecoratorPattern {
     }
   }
 
+  parsePatterns (def, data) {
+    const result = {}
+
+    for (const k in def) {
+      const m = k.match(/^pattern([^-]*)$/)
+      if (m) {
+        result[m[1]] = {
+          type: def[k],
+          options: {},
+          symbolOptions: {}
+        }
+      }
+    }
+
+    for (const k in def) {
+      const m1 = k.match(/^pattern([^-]*)-path-(.*)$/)
+      const m2 = k.match(/^pattern([^-]*)-(.*)$/)
+
+      if (m1) {
+        result[m1[1]].symbolOptions[m1[2]] = def[k]
+      } else if (m2) {
+        result[m2[1]].options[m2[2]] = this.parseType(m2[2], def[k], data.twigData)
+      }
+    }
+
+    return result
+  }
+
   processObject (object, data) {
     if (!data.patternFeatures) {
       data.patternFeatures = {}
@@ -42,38 +70,17 @@ class DecoratorPattern {
       const def = k === 'default' ? data.data.style : data.data['style:' + k]
 
       if (data.styles.includes(k)) {
-        const patternTypes = {}
-        const patternOptions = []
-        const symbolOptions = {}
+        let patternDefs = this.parsePatterns(def, data)
+        console.log(patternDefs)
 
-        for (const k in def) {
-          const m = k.match(/^pattern([^-]*)$/)
-          if (m) {
-            patternTypes[m[1]] = def[k]
-            patternOptions[m[1]] = {}
-            symbolOptions[m[1]] = {}
-          }
-        }
-
-        for (const k in def) {
-          const m1 = k.match(/^pattern([^-]*)-path-(.*)$/)
-          const m2 = k.match(/^pattern([^-]*)-(.*)$/)
-
-          if (m1) {
-            symbolOptions[m1[1]][m1[2]] = def[k]
-          } else if (m2) {
-            patternOptions[m2[1]][m2[2]] = this.parseType(m2[2], def[k], data.twigData)
-          }
-        }
-
-        const patternIds = Object.keys(patternTypes)
+        const patternIds = Object.keys(patternDefs)
         const patterns = []
         patternIds.forEach(patternId => {
           let symbol
-          const options = patternOptions[patternId]
-          options.pathOptions = styleToLeaflet(symbolOptions[patternId], data.twigData)
+          let {type, options, symbolOptions} = patternDefs[patternId]
+          options.pathOptions = styleToLeaflet(symbolOptions, data.twigData)
 
-          switch (patternTypes[patternId]) {
+          switch (type) {
             case 'dash':
               symbol = L.Symbol.dash(options)
               break
@@ -88,8 +95,8 @@ class DecoratorPattern {
           }
 
           if (symbol) {
-            patternOptions[patternId].symbol = symbol
-            patterns.push(patternOptions[patternId])
+            options.symbol = symbol
+            patterns.push(options)
           }
         })
 
