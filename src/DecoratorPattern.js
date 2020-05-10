@@ -58,6 +58,12 @@ class DecoratorPattern {
       }
     }
 
+    for (const k in result) {
+      if (['arrowHead', 'dash'].includes(result[k].type)) {
+        result[k].symbolOptions = styleToLeaflet(result[k].symbolOptions, data.twigData)
+      }
+    }
+
     return result
   }
 
@@ -81,11 +87,11 @@ class DecoratorPattern {
 
           switch (type) {
             case 'dash':
-              options.pathOptions = styleToLeaflet(symbolOptions, data.twigData)
+              options.pathOptions = symbolOptions
               symbol = L.Symbol.dash(options)
               break
             case 'arrowHead':
-              options.pathOptions = styleToLeaflet(symbolOptions, data.twigData)
+              options.pathOptions = symbolOptions
               symbol = L.Symbol.arrowHead(options)
               break
             case 'marker':
