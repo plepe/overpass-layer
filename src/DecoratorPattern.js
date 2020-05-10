@@ -71,16 +71,18 @@ class DecoratorPattern {
         patternIds.forEach(patternId => {
           let symbol
           const options = patternOptions[patternId]
-          options.pathOptions = styleToLeaflet(symbolOptions[patternId], data.twigData)
 
           switch (patternTypes[patternId]) {
             case 'dash':
+              options.pathOptions = styleToLeaflet(symbolOptions[patternId], data.twigData)
               symbol = L.Symbol.dash(options)
               break
             case 'arrowHead':
+              options.pathOptions = styleToLeaflet(symbolOptions[patternId], data.twigData)
               symbol = L.Symbol.arrowHead(options)
               break
             case 'marker':
+              options.markerOptions = symbolOptions[patternId]
               symbol = L.Symbol.marker(options)
               break
             default:
