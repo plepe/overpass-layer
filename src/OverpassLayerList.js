@@ -198,7 +198,6 @@ class OverpassLayerList {
         const html = ob.data[this.options.prefix + 'Title'] || ob.data.title || ''
         if (p.currentHTML !== html) {
           p.innerHTML = html
-          ob.sublayer.updateAssets(div, ob.data)
         }
       }
 
@@ -207,12 +206,13 @@ class OverpassLayerList {
         const html = ob.data[this.options.prefix + 'Description'] || ob.data.description || ''
         if (p.currentHTML !== html) {
           p.innerHTML = html
-          ob.sublayer.updateAssets(div, ob.data)
         }
       }
 
       p = p.nextSibling
     }
+
+    ob.sublayer.updateAssets(div, ob.data)
   }
 
   delObject (ob) {
