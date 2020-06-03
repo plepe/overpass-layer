@@ -46318,8 +46318,10 @@ class DecoratorPattern {
   constructor (layer) {
     this.layer = layer
 
-    this.layer.on('update', this.processObject.bind(this))
-    this.layer.on('remove', this.removeObject.bind(this))
+    if (L.polylineDecorator) {
+      this.layer.on('update', this.processObject.bind(this))
+      this.layer.on('remove', this.removeObject.bind(this))
+    }
   }
 
   parseType (key, value, twigData) {
@@ -46379,16 +46381,18 @@ class DecoratorPattern {
         patternIds.forEach(patternId => {
           let symbol
           const options = patternOptions[patternId]
-          options.pathOptions = styleToLeaflet(symbolOptions[patternId], data.twigData)
 
           switch (patternTypes[patternId]) {
             case 'dash':
+              options.pathOptions = styleToLeaflet(symbolOptions[patternId], data.twigData)
               symbol = L.Symbol.dash(options)
               break
             case 'arrowHead':
+              options.pathOptions = styleToLeaflet(symbolOptions[patternId], data.twigData)
               symbol = L.Symbol.arrowHead(options)
               break
             case 'marker':
+              options.markerOptions = symbolOptions[patternId]
               symbol = L.Symbol.marker(options)
               break
             default:
@@ -47048,7 +47052,6 @@ class OverpassLayerList {
         const html = ob.data[this.options.prefix + 'Title'] || ob.data.title || ''
         if (p.currentHTML !== html) {
           p.innerHTML = html
-          ob.sublayer.updateAssets(div, ob.data)
         }
       }
 
@@ -47057,12 +47060,13 @@ class OverpassLayerList {
         const html = ob.data[this.options.prefix + 'Description'] || ob.data.description || ''
         if (p.currentHTML !== html) {
           p.innerHTML = html
-          ob.sublayer.updateAssets(div, ob.data)
         }
       }
 
       p = p.nextSibling
     }
+
+    ob.sublayer.updateAssets(div, ob.data)
   }
 
   delObject (ob) {
