@@ -9,6 +9,8 @@ const styleToLeaflet = require('./styleToLeaflet')
 const strToStyle = require('./strToStyle')
 const SublayerFeature = require('./SublayerFeature')
 
+const pointOnFeature = require('./pointOnFeature')
+
 // Extensions:
 const decorators = [
   require('./DecoratorPattern')
@@ -535,8 +537,11 @@ class Sublayer {
           this.updateAssets(data.featureMarker._icon)
         }
       } else {
-        const center = { lat: ob.center.lat, lon: ob.center.lon + leafletFeatureOptions.shiftWorld[ob.center.lon < 0 ? 0 : 1] }
-        data.featureMarker = L.marker(center, { icon: icon })
+        if (!data.pointOnFeature) {
+          data.pointOnFeature = pointOnFeature(ob, leafletFeatureOptions)
+        }
+
+        data.featureMarker = L.marker(data.pointOnFeature, { icon: icon })
       }
     }
 
