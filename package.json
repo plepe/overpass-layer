@@ -36,7 +36,7 @@
     "url": "git+https://github.com/plepe/overpass-layer.git"
   },
   "author": "Stephan Bösch-Plepelits",
-  "license": "GPL-3.0",
+  "license": "MIT",
   "bugs": {
     "url": "https://github.com/plepe/overpass-layer/issues"
   },
