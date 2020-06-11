@@ -35710,26 +35710,20 @@ module.exports = function (Twig) {
               if (prevOutput) {
                 // If the previous output is raw, pop it off
                 if (prevOutput.type === Twig.token.type.raw) {
-                  output.pop(); // If the previous output is not just whitespace, trim it
+                  output.pop();
+                  prevOutput.value = prevOutput.value.trimEnd(); // Repush the previous output
 
-                  if (prevOutput.value.match(/^\s*$/) === null) {
-                    prevOutput.value = prevOutput.value.trim(); // Repush the previous output
-
-                    output.push(prevOutput);
-                  }
+                  output.push(prevOutput);
                 }
               }
 
               if (prevIntermediateOutput) {
                 // If the previous intermediate output is raw, pop it off
                 if (prevIntermediateOutput.type === Twig.token.type.raw) {
-                  intermediateOutput.pop(); // If the previous output is not just whitespace, trim it
+                  intermediateOutput.pop();
+                  prevIntermediateOutput.value = prevIntermediateOutput.value.trimEnd(); // Repush the previous intermediate output
 
-                  if (prevIntermediateOutput.value.match(/^\s*$/) === null) {
-                    prevIntermediateOutput.value = prevIntermediateOutput.value.trim(); // Repush the previous intermediate output
-
-                    intermediateOutput.push(prevIntermediateOutput);
-                  }
+                  intermediateOutput.push(prevIntermediateOutput);
                 }
               }
             } // Compile this token
@@ -35756,13 +35750,10 @@ module.exports = function (Twig) {
               if (nextToken) {
                 // If the next token is raw, shift it out
                 if (nextToken.type === Twig.token.type.raw) {
-                  tokens.shift(); // If the next token is not just whitespace, trim it
+                  tokens.shift();
+                  nextToken.value = nextToken.value.trimStart(); // Unshift the next token
 
-                  if (nextToken.value.match(/^\s*$/) === null) {
-                    nextToken.value = nextToken.value.trim(); // Unshift the next token
-
-                    tokens.unshift(nextToken);
-                  }
+                  tokens.unshift(nextToken);
                 }
               }
             }
@@ -37234,7 +37225,7 @@ module.exports = function (Twig) {
       while (stack.length > 0) {
         value = stack.pop(); // Push values into the array until the start of the array
 
-        if (value.type && value.type === Twig.expression.type.array.start) {
+        if (value && value.type && value.type === Twig.expression.type.array.start) {
           arrayEnded = true;
           break;
         }
@@ -38750,10 +38741,25 @@ module.exports = function (Twig) {
           if (_rawValue[i].match(/^[a-zA-Z0-9,._]$/)) {
             result += _rawValue[i];
           } else {
-            var charCode = _rawValue.charCodeAt(i);
+            var _char = _rawValue.charAt(i);
 
-            if (charCode < 0x80) {
-              result += '\\x' + charCode.toString(16).toUpperCase();
+            var charCode = _rawValue.charCodeAt(i); // A few characters have short escape sequences in JSON and JavaScript.
+            // Escape sequences supported only by JavaScript, not JSON, are ommitted.
+            // \" is also supported but omitted, because the resulting string is not HTML safe.
+
+
+            var shortMap = {
+              '\\': '\\\\',
+              '/': '\\/',
+              "\b": '\\b',
+              "\f": '\\f',
+              "\n": '\\n',
+              "\r": '\\r',
+              "\t": '\\t'
+            };
+
+            if (shortMap[_char]) {
+              result += shortMap[_char];
             } else {
               result += Twig.lib.sprintf("\\u%04s", charCode.toString(16).toUpperCase());
             }
@@ -39050,6 +39056,10 @@ module.exports = function (Twig) {
         }
 
         return value[keys[keys.length - 1]];
+      }
+
+      if (Twig.lib.is('Number', value)) {
+        return value.toString().slice(-1);
       } // String|array
 
 
