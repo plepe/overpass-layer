@@ -1,3 +1,11 @@
+Version 2.6.3, 2020-06-14
+=========================
+* Markers are now always on the feature (not the centroid)
+
+Version 2.6.2, 2020-06-11
+=========================
+* License is now MIT
+
 Version 2.6.0, 2020-05-03
 =========================
 * Allow several patterns for polylines and polygons
