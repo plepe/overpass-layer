@@ -29,16 +29,16 @@ ul.overpass-layer-list > li > .markerParent > .icon {
   z-index: 1;
   display: inline-block;
 }
-ul.overpass-layer-list > li > a.title {
+ul.overpass-layer-list > li > .content > a.title {
   display: inline-block;
   color: black;
   text-decoration: none;
 }
-ul.overpass-layer-list > li > a.title:hover,
-ul.overpass-layer-list > li > a.title:active {
+ul.overpass-layer-list > li > .content > a.title:hover,
+ul.overpass-layer-list > li > .content > a.title:active {
   text-decoration: underline;
 }
-ul.overpass-layer-list > li > div.description {
+ul.overpass-layer-list > li > .content > div.description {
   font-style: italic;
   color: #707070;
   float: right;

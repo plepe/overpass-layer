@@ -91,27 +91,13 @@ class OverpassLayerList {
     a.currentHTML = html
     p.appendChild(a)
 
-    // TITLE
-    a = document.createElement('a')
-    a.className = 'title'
-    a.href = 'appUrl' in ob.data ? ob.data.appUrl : '#'
-    a.onclick = function (ob) {
-      this.layer.openPopupOnObject(ob)
-      return false
-    }.bind(this, ob)
-    html = ob.data[this.options.prefix + 'Title'] || ob.data.title
-    a.innerHTML = html
-    a.currentHTML = html
-    div.appendChild(a)
-    const title = a
-
-    // DESCRIPTION
-    a = document.createElement('div')
-    a.className = 'description'
-    html = ob.data[this.options.prefix + 'Description'] || ob.data.description || ''
-    a.innerHTML = html
-    a.currentHTML = html
-    div.appendChild(a)
+    // CONTENT
+    let content = document.createElement('div')
+    content.className = 'content'
+    html = ob.layouts[this.options.prefix + 'List'] || ob.layouts.list || ''
+    content.innerHTML = html
+    content.currentHTML = html
+    div.appendChild(content)
 
     div.priority = 'priority' in ob.data ? parseFloat(ob.data.priority) : 0
 
@@ -194,19 +180,12 @@ class OverpassLayerList {
         }
       }
 
-      // TITLE
-      if (p.className === 'title') {
-        const html = ob.data[this.options.prefix + 'Title'] || ob.data.title || ''
+      // CONTENT
+      if (p.className === 'content') {
+        let html = ob.layouts[this.options.prefix + 'List'] || ob.layouts.list || ''
         if (p.currentHTML !== html) {
           p.innerHTML = html
-        }
-      }
-
-      // TITLE
-      if (p.className === 'description') {
-        const html = ob.data[this.options.prefix + 'Description'] || ob.data.description || ''
-        if (p.currentHTML !== html) {
-          p.innerHTML = html
+          p.currentHTML = html
         }
       }
 

@@ -558,15 +558,16 @@ class Sublayer {
     }
     data.styles = objectData.styles
 
-    var popupContent = ''
-    popupContent += '<h1>' + objectData.title + '</h1>'
-    var popupDescription = objectData.popupDescription || objectData.description
-    if (popupDescription) {
-      popupContent += '<div class="description">' + popupDescription + '</div>'
+    data.layouts = {}
+    for (let k in this.options.layouts) {
+      if (typeof this.options.layouts[k] === 'function') {
+        data.layouts[k] = this.options.layouts[k]({object: objectData})
+      } else {
+        data.layouts[k] = this.options.layouts[k]
+      }
     }
-    if (objectData.body) {
-      popupContent += '<div class="body">' + objectData.body + '</div>'
-    }
+
+    var popupContent = data.layouts.popup
 
     if (data.popup) {
       if (data.popup._contentNode) {
