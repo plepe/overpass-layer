@@ -558,7 +558,7 @@ class Sublayer {
     }
     data.styles = objectData.styles
 
-    var popupContent = ''
+    var popupContent = this.options.templates.popup(
     popupContent += '<h1>' + objectData.title + '</h1>'
     var popupDescription = objectData.popupDescription || objectData.description
     if (popupDescription) {

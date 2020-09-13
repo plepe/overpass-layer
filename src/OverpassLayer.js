@@ -35,8 +35,14 @@ class OverpassLayer {
     }
     this.options.styleNoBindPopup = this.options.styleNoBindPopup || []
     this.options.stylesNoAutoShow = this.options.stylesNoAutoShow || []
+    this.options.templates = this.options.templates || {}
+    this.options.templates.popup = this.options.templates.popup ||
+      '<h1>{{ object.title }}</h1>' + 
+      '{% if object.popupDescription || object.description %}<div class="description">{{ object.popupDescription|default(object.description) }}</div>{% endif %}' +
+      '{% if object.popupBody || object.body %}<div class="body">{{ object.popupBody|default(object.body) }}</div>{% endif %}'
 
     compileFeature(this.options.feature, twig)
+    compileFeature(this.options.templates, twig)
 
     this.currentRequest = null
     this.lastZoom = null
