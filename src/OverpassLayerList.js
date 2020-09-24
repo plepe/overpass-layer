@@ -75,10 +75,6 @@ class OverpassLayerList {
     var p = document.createElement('a')
     p.className = 'markerParent'
     p.href = 'appUrl' in ob.data ? ob.data.appUrl : '#'
-    p.onclick = function (ob) {
-      this.layer.openPopupOnObject(ob)
-      return false
-    }.bind(this, ob)
     div.appendChild(p)
 
     // MARKER
@@ -132,7 +128,7 @@ class OverpassLayerList {
 
     ob.sublayer.updateAssets(div, ob.data)
 
-    title.onmouseover = function (id, sublayer_id) {
+    div.onmouseover = function (id, sublayer_id) {
       if (this.currentHover) {
         this.currentHover.hide()
       }
@@ -147,13 +143,18 @@ class OverpassLayerList {
       )
     }.bind(this, ob.id, ob.sublayer_id)
 
-    title.onmouseout = function (id, sublayer_id) {
+    div.onmouseout = function (id, sublayer_id) {
       if (this.currentHover) {
         this.currentHover.hide()
       }
 
       this.currentHover = null
     }.bind(this, ob.id, ob.sublayer_id)
+
+    div.onclick = function (ob) {
+      this.layer.openPopupOnObject(ob)
+      return false
+    }.bind(this, ob)
   }
 
   updateObject (ob) {
