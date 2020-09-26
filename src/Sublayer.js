@@ -57,10 +57,25 @@ class Sublayer {
     this.map = map
 
     this.map.on('popupopen', this._popupOpen.bind(this))
+    this.map.on('popupclose', this._popupClose.bind(this))
   }
 
   _popupOpen (e) {
     if (e.popup.sublayer === this) {
+      let ob = e.popup.object
+      this.emit('selectObject', ob.object, ob)
+      this.master.emit('selectObject', ob.object, ob)
+
+      this.updateAssets(e.popup._contentNode)
+    }
+  }
+
+  _popupClose (e) {
+    if (e.popup.sublayer === this) {
+      let ob = e.popup.object
+      this.emit('unselectObject', ob.object, ob)
+      this.master.emit('unselectObject', ob.object, ob)
+
       this.updateAssets(e.popup._contentNode)
     }
   }
