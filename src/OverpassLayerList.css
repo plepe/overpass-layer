@@ -1,11 +1,16 @@
 ul.overpass-layer-list {
   margin-top: 0;
   margin-bottom: 0;
+  padding-left: 0;
 }
 ul.overpass-layer-list > li {
   position: relative;
   list-style: none;
   min-height: 30px;
+  padding-left: 40px;
+}
+ul.overpass-layer-list > li.selected {
+  background: #e0e0e0;
 }
 ul.overpass-layer-list > li > .markerParent {
   position: absolute;

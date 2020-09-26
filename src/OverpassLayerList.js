@@ -20,10 +20,19 @@ class OverpassLayerList {
     this.layer = layer
     this.options = options || {}
     this.options.prefix = this.options.prefix || 'list'
+    this.selectedId = null
 
     this.layer.on('add', (ob, data) => this.addObject(data))
     this.layer.on('update', (ob, data) => this.updateObject(data))
     this.layer.on('remove', (ob, data) => this.delObject(data))
+    this.layer.on('selectObject', (ob, data) => {
+      this.selectedId = ob.id
+      this.updateObject(data)
+    })
+    this.layer.on('unselectObject', (ob, data) => {
+      this.selectedId = null
+      this.updateObject(data)
+    })
 
     this.items = {}
 
@@ -67,6 +76,10 @@ class OverpassLayerList {
 
     var div = document.createElement('li')
     var a
+
+    if (this.selectedId === ob.id) {
+      div.classList.add('selected')
+    }
 
     this.items[ob.id] = div
     ob[this.options.prefix + 'Item'] = div
@@ -155,6 +168,13 @@ class OverpassLayerList {
     }
 
     var div = this.items[ob.id]
+
+    if (this.selectedId === ob.id) {
+      div.classList.add('selected')
+    } else {
+      div.classList.remove('selected')
+    }
+
     var p = div.firstChild
     while (p) {
       if (p.className === 'markerParent') {
