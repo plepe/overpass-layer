@@ -25,14 +25,14 @@ class OverpassLayerList {
     let prefix = this.options.prefix
     if (!(prefix in this.layer.options.layouts)) {
       this.layer.setLayout(prefix,
-        '<div class="markerParent">' +
+        '<div class="marker">' +
         '{% if object.' + prefix + 'MarkerSymbol or object.markerSymbol %}' +
-        '<div class="marker">{{ object.' + prefix + 'MarkerSymbol|default(object.markerSymbol) }}</div>' +
+        '<div class="symbol">{{ object.' + prefix + 'MarkerSymbol|default(object.markerSymbol) }}</div>' +
         '{% elseif object.marker and object.marker.iconUrl %}' +
-        '<img src="{{ object.marker.iconUrl|e }}">' +
+        '<img class="symbol" src="{{ object.marker.iconUrl|e }}">' +
         '{% endif %}' +
         '{% if object.' + prefix + 'MarkerSign or object.markerSign %}' +
-        '<div class="icon">{{ object.' + prefix + 'MarkerSign|default(object.markerSign) }}</div>' +
+        '<div class="sign">{{ object.' + prefix + 'MarkerSign|default(object.markerSign) }}</div>' +
         '{% endif %}' +
         '</div>' +
         '<div class="content">' +
