@@ -22,6 +22,10 @@ class OverpassLayerList {
     this.options.prefix = this.options.prefix || 'list'
     this.selectedId = null
 
+    this.layer.setLayout(this.options.prefix,
+        '<a class="title" href="{{ object.appUrl|default("#") }}">{{ object.' + this.options.prefix + 'Title|default(object.title) }}</a>' +
+        '{% if object.' + this.options.prefix + 'Description or object.description %}<div class="description">{{ object.' + this.options.prefix + 'Description|default(object.description) }}</div>{% endif %}')
+
     this.layer.on('add', (ob, data) => this.addObject(data))
     this.layer.on('update', (ob, data) => this.updateObject(data))
     this.layer.on('remove', (ob, data) => this.delObject(data))
