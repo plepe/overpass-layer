@@ -1,3 +1,5 @@
+const compileTemplate = require('./compileTemplate')
+
 function compileFeature (feature, twig, options={}) {
   if (!('autoescape' in options)) {
     options.autoescape = true
@@ -5,24 +7,7 @@ function compileFeature (feature, twig, options={}) {
 
   for (var k in feature) {
     if (typeof feature[k] === 'string' && feature[k].search('{') !== -1) {
-      let template
-
-      try {
-        template = twig.twig({ data: feature[k], autoescape: options.autoescape })
-      } catch (err) {
-        console.log('Error compiling twig template ' + this.id + '/' + k + ':', err)
-        break
-      }
-
-      feature[k] = function (template, k, ob) {
-        try {
-          return template.render(ob)
-        } catch (err) {
-          console.log('Error rendering twig template ' + this.id + '/' + k + ': ', err)
-        }
-
-        return null
-      }.bind(this, template, k)
+      feature[k] = compileTemplate(feature[k], twig, options)
     } else if (typeof feature[k] === 'object' && (['style'].indexOf(k) !== -1 || k.match(/^style:/))) {
       var templates = {}
       for (var k1 in feature[k]) {
