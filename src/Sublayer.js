@@ -5,11 +5,8 @@ const OverpassFrontend = require('overpass-frontend')
 const nearestPointOnGeometry = require('nearest-point-on-geometry')
 const BoundingBox = require('boundingbox')
 
-const styleToLeaflet = require('./styleToLeaflet')
 const strToStyle = require('./strToStyle')
 const SublayerFeature = require('./SublayerFeature')
-
-const pointOnFeature = require('./pointOnFeature')
 
 // Extensions:
 const decorators = [
@@ -62,9 +59,9 @@ class Sublayer {
 
   _popupOpen (e) {
     if (e.popup.sublayer === this) {
-      let ob = e.popup.object
-      this.emit('selectObject', ob.object, ob)
-      this.master.emit('selectObject', ob.object, ob)
+      let feature = e.popup.feature
+      this.emit('selectObject', feature.object, feature)
+      this.master.emit('selectObject', feature.object, feature)
 
       this.updateAssets(e.popup._contentNode)
     }
@@ -72,9 +69,9 @@ class Sublayer {
 
   _popupClose (e) {
     if (e.popup.sublayer === this) {
-      let ob = e.popup.object
-      this.emit('unselectObject', ob.object, ob)
-      this.master.emit('unselectObject', ob.object, ob)
+      let feature = e.popup.feature
+      this.emit('unselectObject', feature.object, feature)
+      this.master.emit('unselectObject', feature.object, feature)
 
       this.updateAssets(e.popup._contentNode)
     }
@@ -146,24 +143,24 @@ class Sublayer {
     this.currentRequestFeatures[ob.id] = true
 
     if (!(ob.id in this.visibleFeatures)) {
-      var data = new SublayerFeature(ob, this)
+      var feature = new SublayerFeature(ob, this)
 
       if (ob.id in this.shownFeatures) {
-        data = this.shownFeatures[ob.id]
+        feature = this.shownFeatures[ob.id]
       } else {
-        this._processObject(data)
+        this._processObject(feature)
 
-        this._show(data)
+        this._show(feature)
       }
 
-      this.visibleFeatures[ob.id] = data
+      this.visibleFeatures[ob.id] = feature
 
       if (this.master.onAppear) {
-        this.master.onAppear(data)
+        this.master.onAppear(feature)
       }
 
-      this.master.emit('add', ob, data)
-      this.emit('add', ob, data)
+      this.master.emit('add', ob, feature)
+      this.emit('add', ob, feature)
     }
   }
 
@@ -181,10 +178,10 @@ class Sublayer {
 
   hideAll (force) {
     for (const k in this.visibleFeatures) {
-      const ob = this.visibleFeatures[k]
+      const feature = this.visibleFeatures[k]
 
-      if (force || !(ob.id in this.shownFeatures)) {
-        this._hide(ob)
+      if (force || !(feature.id in this.shownFeatures)) {
+        this._hide(feature)
       }
     }
 
@@ -194,11 +191,11 @@ class Sublayer {
   // Hide loaded but non-visible objects
   hideNonVisible (bounds) {
     for (const k in this.visibleFeatures) {
-      const ob = this.visibleFeatures[k]
+      const feature = this.visibleFeatures[k]
 
-      if (!ob.object.intersects(bounds)) {
-        if (!(ob.id in this.shownFeatures)) {
-          this._hide(ob)
+      if (!feature.object.intersects(bounds)) {
+        if (!(feature.id in this.shownFeatures)) {
+          this._hide(feature)
         }
 
         delete this.visibleFeatures[k]
@@ -212,11 +209,11 @@ class Sublayer {
    */
   hideNonVisibleFilter (filter) {
     for (const k in this.visibleFeatures) {
-      const ob = this.visibleFeatures[k]
+      const feature = this.visibleFeatures[k]
 
-      if (!filter.match(ob.object)) {
-        if (!(ob.id in this.shownFeatures)) {
-          this._hide(ob)
+      if (!filter.match(feature.object)) {
+        if (!(feature.id in this.shownFeatures)) {
+          this._hide(feature)
         }
 
         delete this.visibleFeatures[k]
@@ -280,44 +277,44 @@ class Sublayer {
         return console.log('object does not exist', id)
       }
 
-      let data
+      let feature
       if (id in this.visibleFeatures) {
-        data = this.visibleFeatures[id]
+        feature = this.visibleFeatures[id]
       } else if (id in this.shownFeatures) {
-        data = this.shownFeatures[id]
+        feature = this.shownFeatures[id]
       } else {
-        data = new SublayerFeature(ob, this)
+        feature = new SublayerFeature(ob, this)
       }
 
-      callback(null, data)
+      callback(null, feature)
     })
 
     return result
   }
 
-  show (data, options, callback) {
+  show (feature, options, callback) {
     const show1 = () => {
-      id = data.id
+      id = feature.id
       result.id = id
 
-      this.shownFeatures[id] = data
+      this.shownFeatures[id] = feature
       if (!(id in this.shownFeatureOptions)) {
         this.shownFeatureOptions[id] = []
       }
 
       this.shownFeatureOptions[id].push(options)
-      data.isShown = true
+      feature.isShown = true
 
-      data.updateFlags()
+      feature.updateFlags()
 
-      this._processObject(data)
+      this._processObject(feature)
 
-      this._show(data)
+      this._show(feature)
 
-      callback(null, data.object, data)
+      callback(null, feature.object, feature)
     }
 
-    let id = typeof data === 'string' ? data : data.id
+    let id = typeof feature === 'string' ? feature : feature.id
     let isHidden = false
     const result = {
       options,
@@ -340,10 +337,10 @@ class Sublayer {
             this.shownFeatureOptions[id].splice(i, 1)
           }
 
-          data.updateFlags()
+          feature.updateFlags()
 
           if (this.shownFeatureOptions[id].length === 0) {
-            this.hide(data)
+            this.hide(feature)
           } else {
             this._processObject(this.shownFeatures[id])
           }
@@ -354,8 +351,8 @@ class Sublayer {
     options.priority = -1
     options.properties = OverpassFrontend.ALL
 
-    if (typeof data === 'string') {
-      result.request = this.get(data, options, (err, _data) => {
+    if (typeof feature === 'string') {
+      result.request = this.get(feature, options, (err, _feature) => {
         delete result.request
 
         if (isHidden) {
@@ -367,7 +364,7 @@ class Sublayer {
           return
         }
 
-        data = _data
+        feature = _feature
 
         show1()
       })
@@ -384,14 +381,14 @@ class Sublayer {
     }
 
     if (id in this.shownFeatures) {
-      const data = this.shownFeatures[id]
+      const feature = this.shownFeatures[id]
       delete this.shownFeatures[id]
       delete this.shownFeatureOptions[id]
 
       if (id in this.visibleFeatures) {
-        this._processObject(data)
+        this._processObject(feature)
       } else {
-        this._hide(data)
+        this._hide(feature)
       }
     }
   }
@@ -400,13 +397,13 @@ class Sublayer {
     this.recalc()
 
     for (const k in this.visibleFeatures) {
-      const data = this.visibleFeatures[k]
+      const feature = this.visibleFeatures[k]
 
-      this.master.emit('zoomChange', data.object, data)
-      this.emit('zoomChange', data.object, data)
+      this.master.emit('zoomChange', feature.object, feature)
+      this.emit('zoomChange', feature.object, feature)
 
       if (this.master.onZoomChange) {
-        this.master.onZoomChange(data)
+        this.master.onZoomChange(feature)
       }
     }
 
@@ -419,304 +416,19 @@ class Sublayer {
     }
   }
 
-  _processObject (data) {
-    var k
-    var ob = data.object
-    var showOptions = {
-      styles: []
-    }
-    const leafletFeatureOptions = {
-      shiftWorld: this.master.getShiftWorld()
-    }
-
-    if (ob.id in this.shownFeatureOptions) {
-      this.shownFeatureOptions[ob.id].forEach(function (opt) {
-        if ('styles' in opt) {
-          showOptions.styles = showOptions.styles.concat(opt.styles)
-        }
-      })
-    }
-
-    var objectData = this.evaluate(data)
-
-    if (!data.feature) {
-      data.feature = ob.leafletFeature(Object.assign({
-        weight: 0,
-        opacity: 0,
-        fillOpacity: 0,
-        radius: 0
-      }, leafletFeatureOptions))
-    }
-
-    for (k in objectData) {
-      var m = k.match(/^style(|:(.*))$/)
-      if (m) {
-        var styleId = typeof m[2] === 'undefined' ? 'default' : m[2]
-        var style = styleToLeaflet(objectData[k], this.master.globalTwigData)
-
-        if (data.features[styleId]) {
-          data.features[styleId].setStyle(style)
-        } else {
-          data.features[styleId] = ob.leafletFeature(Object.assign(style, leafletFeatureOptions))
-        }
-
-        if ('text' in style && 'setText' in data.features[styleId]) {
-          data.features[styleId].setText(null)
-          data.features[styleId].setText(style.text, {
-            repeat: style.textRepeat,
-            offset: style.textOffset,
-            below: style.textBelow,
-            attributes: {
-              fill: style.textFill,
-              'fill-opacity': style.textFillOpacity,
-              'font-weight': style.textFontWeight,
-              'font-size': style.textFontSize,
-              'letter-spacing': style.textLetterSpacing
-            }
-          })
-        }
-
-        if ('offset' in style && 'setOffset' in data.features[styleId]) {
-          data.features[styleId].setOffset(style.offset)
-        }
-      }
-    }
-
-    if ('styles' in showOptions) {
-      objectData.styles = objectData.styles.concat(showOptions.styles)
-    }
-
-    objectData.marker = {
-      html: '',
-      iconAnchor: [0, 0],
-      iconSize: [0, 0],
-      signAnchor: [0, 0],
-      popupAnchor: [0, 0]
-    }
-    if (objectData.markerSymbol) {
-      objectData.marker.html += objectData.markerSymbol
-
-      var div = document.createElement('div')
-      div.innerHTML = objectData.markerSymbol
-
-      if (div.firstChild) {
-        var c = div.firstChild
-
-        objectData.marker.iconSize = [c.offsetWidth, c.offsetHeight]
-        if (c.hasAttribute('width')) {
-          objectData.marker.iconSize[0] = parseFloat(c.getAttribute('width'))
-        }
-        if (c.hasAttribute('height')) {
-          objectData.marker.iconSize[1] = parseFloat(c.getAttribute('height'))
-        }
-
-        objectData.marker.iconAnchor = [objectData.marker.iconSize[0] / 2, objectData.marker.iconSize[1] / 2]
-        if (c.hasAttribute('anchorx')) {
-          objectData.marker.iconAnchor[0] = parseFloat(c.getAttribute('anchorx'))
-        }
-        if (c.hasAttribute('anchory')) {
-          objectData.marker.iconAnchor[1] = parseFloat(c.getAttribute('anchory'))
-        }
-
-        if (c.hasAttribute('signanchorx')) {
-          objectData.marker.signAnchor[0] = parseFloat(c.getAttribute('signanchorx'))
-        }
-        if (c.hasAttribute('signanchory')) {
-          objectData.marker.signAnchor[1] = parseFloat(c.getAttribute('signanchory'))
-        }
-
-        if (c.hasAttribute('popupanchory')) {
-          objectData.marker.popupAnchor[0] = parseFloat(c.getAttribute('popupanchorx'))
-        }
-        if (c.hasAttribute('popupanchory')) {
-          objectData.marker.popupAnchor[1] = parseFloat(c.getAttribute('popupanchory'))
-        }
-      }
-
-      this.updateAssets(div, objectData)
-    }
-
-    if (objectData.markerSign) {
-      const x = objectData.marker.iconAnchor[0] + objectData.marker.signAnchor[0]
-      const y = -objectData.marker.iconSize[1] + objectData.marker.iconAnchor[1] + objectData.marker.signAnchor[1]
-      objectData.marker.html += '<div class="sign" style="margin-left: ' + x + 'px; margin-top: ' + y + 'px;">' + objectData.markerSign + '</div>'
-    }
-
-    if (objectData.marker.html) {
-      objectData.marker.className = 'overpass-layer-icon'
-      var icon = L.divIcon(objectData.marker)
-
-      if (data.featureMarker) {
-        data.featureMarker.setIcon(icon)
-        if (data.featureMarker._icon) {
-          this.updateAssets(data.featureMarker._icon)
-        }
-      } else {
-        if (!data.pointOnFeature) {
-          data.pointOnFeature = pointOnFeature(ob, leafletFeatureOptions)
-        }
-
-        data.featureMarker = L.marker(data.pointOnFeature, { icon: icon })
-      }
-    }
-
-    if (data.isShown) {
-      for (k in data.features) {
-        data.feature.addTo(this.map)
-        if (objectData.styles && objectData.styles.indexOf(k) !== -1 && data.styles && data.styles.indexOf(k) === -1) {
-          data.features[k].addTo(this.map)
-        }
-        if (objectData.styles && objectData.styles.indexOf(k) === -1 && data.styles && data.styles.indexOf(k) !== -1) {
-          this.map.removeLayer(data.features[k])
-        }
-      }
-    }
-    data.styles = objectData.styles
-
-    data.layouts = {}
-    for (let k in this.options.layouts) {
-      if (typeof this.options.layouts[k] === 'function') {
-        data.layouts[k] = this.options.layouts[k]({object: objectData})
-      } else {
-        data.layouts[k] = this.options.layouts[k]
-      }
-    }
-
-    var popupContent = data.layouts.popup
-
-    if (data.popup) {
-      if (data.popup._contentNode) {
-        if (data.popup.currentHTML !== popupContent) {
-          data.popup._contentNode.innerHTML = popupContent
-          this.updateAssets(data.popup._contentNode, objectData)
-        }
-      } else {
-        data.popup.setContent(popupContent)
-      }
-
-      data.popup.currentHTML = popupContent
-    } else {
-      data.popup = L.popup().setContent(popupContent)
-      data.popup.object = data
-      data.popup.sublayer = this
-
-      data.feature.bindPopup(data.popup)
-      for (k in data.features) {
-        if (this._shallBindPopupToStyle(k)) {
-          data.features[k].bindPopup(data.popup)
-        }
-      }
-
-      if (data.featureMarker) {
-        data.featureMarker.bindPopup(data.popup)
-      }
-    }
-
-    data.id = ob.id
-    data.layer_id = this.options.id
-    data.sublayer_id = this.options.sublayer_id
-    data.data = objectData
-
-    if (this.master.onUpdate) {
-      this.master.onUpdate(data)
-    }
-
-    this.master.emit('update', data.object, data)
-    this.emit('update', data.object, data)
+  _processObject (feature) {
+    console.log('sublayer._processObject')
+    feature._processObject()
   }
 
-  evaluate (data) {
-    var k
-    var ob = data.object
-
-    data.twigData = this.twigData(ob, data)
-
-    var objectData = {}
-    for (k in this.options.feature) {
-      if (typeof this.options.feature[k] === 'function') {
-        objectData[k] = this.options.feature[k](data.twigData)
-      } else {
-        objectData[k] = this.options.feature[k]
-      }
-    }
-
-    var styleIds = []
-    for (k in objectData) {
-      var m = k.match(/^style(|:(.*))$/)
-      if (m) {
-        var style = objectData[k]
-        var styleId = typeof m[2] === 'undefined' ? 'default' : m[2]
-
-        if (typeof style === 'string' || 'twig_markup' in style) {
-          objectData[k] = strToStyle(style)
-        }
-
-        if (this.options.stylesNoAutoShow.indexOf(styleId) === -1) {
-          styleIds.push(styleId)
-        }
-      }
-    }
-
-    if (!('features' in data)) {
-      data.features = {}
-    }
-
-    objectData.styles =
-      'styles' in objectData ? objectData.styles
-        : 'styles' in this.options ? this.options.styles
-          : styleIds
-    if (typeof objectData.styles === 'string' || 'twig_markup' in objectData.styles) {
-      var styles = objectData.styles.trim()
-      if (styles === '') {
-        objectData.styles = []
-      } else {
-        objectData.styles = styles.split(/,/).map(style => style.trim())
-      }
-    }
-
-    return objectData
+  evaluate (feature) {
+    console.log('sublayer.evaluate')
+    feature.evaluate()
   }
 
-  twigData (ob, data) {
-    var result = {
-      id: ob.id,
-      sublayer_id: this.options.sublayer_id,
-      osm_id: ob.osm_id,
-      type: ob.type,
-      tags: ob.tags,
-      meta: ob.meta,
-      flags: data.flags,
-      members: [],
-      const: this.options.const
-    }
-
-    if (ob.memberFeatures) {
-      ob.memberFeatures.forEach((member, sequence) => {
-        const r = {
-          id: member.id,
-          sequence,
-          type: member.type,
-          osm_id: member.osm_id,
-          role: ob.members[sequence].role,
-          tags: member.tags,
-          meta: member.meta,
-          dir: member.dir,
-          connectedPrev: member.connectedPrev,
-          connectedNext: member.connectedNext
-        }
-
-        result.members.push(r)
-      })
-    }
-
-    for (const k in this.master.globalTwigData) {
-      result[k] = this.master.globalTwigData[k]
-    }
-
-    this.emit('twigData', ob, data, result)
-    this.master.emit('twigData', ob, data, result)
-
-    return result
+  twigData (ob, feature) {
+    console.log('sublayer twigData')
+    feature.twigData()
   }
 
   _shallBindPopupToStyle (styleId) {
@@ -724,48 +436,13 @@ class Sublayer {
   }
 
   _show (data) {
-    if (!this.map) {
-      return
-    }
-
-    data.feature.addTo(this.map)
-    for (var i = 0; i < data.styles.length; i++) {
-      var k = data.styles[i]
-      if (k in data.features) {
-        data.features[k].addTo(this.map)
-      }
-    }
-
-    if (data.featureMarker) {
-      data.featureMarker.addTo(this.map)
-      this.updateAssets(data.featureMarker._icon)
-    }
-
-    data.object.on('update', this.scheduleReprocess.bind(this, data.id))
-
-    data.isShown = true
+    console.log('sublayer._show')
+    data._show()
   }
 
   _hide (data) {
-    this.master.emit('remove', data.object, data)
-    this.emit('remove', data.object, data)
-
-    this.map.removeLayer(data.feature)
-    for (var k in data.features) {
-      this.map.removeLayer(data.features[k])
-    }
-
-    if (data.featureMarker) {
-      this.map.removeLayer(data.featureMarker)
-    }
-
-    if (this.master.onDisappear) {
-      this.master.onDisappear(data)
-    }
-
-    data.object.off('update', this.scheduleReprocess.bind(this, data.id))
-
-    data.isShown = false
+    console.log('sublayer._hide')
+    data._hide()
   }
 
   scheduleReprocess (id) {
