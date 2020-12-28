@@ -42,8 +42,8 @@ class OverpassLayer {
       '{% if object.popupDescription or object.description %}<div class="description">{{ object.popupDescription|default(object.description) }}</div>{% endif %}' +
       '{% if object.popupBody or object.body %}<div class="body">{{ object.popupBody|default(object.body) }}</div>{% endif %}'
 
-    compileFeature(this.options.feature, twig, {autoescape: true})
-    compileFeature(this.options.layouts, twig, {autoescape: false})
+    compileFeature(this.options.feature, twig, { autoescape: true })
+    compileFeature(this.options.layouts, twig, { autoescape: false })
 
     this.currentRequest = null
     this.lastZoom = null
@@ -80,8 +80,8 @@ class OverpassLayer {
     }
   }
 
-  setLayout(id, layout) {
-    this.options.layouts[id] = compileTemplate(layout, twig, {autoescape: false})
+  setLayout (id, layout) {
+    this.options.layouts[id] = compileTemplate(layout, twig, { autoescape: false })
   }
 
   // compatibilty Leaflet Layerswitcher
@@ -161,7 +161,7 @@ class OverpassLayer {
     }
 
     const queryOptions = JSON.parse(JSON.stringify(this.options.queryOptions))
-    var bounds = new BoundingBox(this.map.getBounds())
+    const bounds = new BoundingBox(this.map.getBounds())
 
     if (this.map.getZoom() < this.options.minZoom ||
        (this.options.maxZoom !== undefined && this.map.getZoom() > this.options.maxZoom)) {
@@ -281,7 +281,7 @@ class OverpassLayer {
   }
 
   get (id, callback) {
-    var done = false
+    let done = false
 
     this.overpassFrontend.get(id,
       {

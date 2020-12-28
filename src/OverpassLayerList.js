@@ -22,7 +22,7 @@ class OverpassLayerList {
     this.options.prefix = this.options.prefix || 'list'
     this.selectedId = null
 
-    let prefix = this.options.prefix
+    const prefix = this.options.prefix
     if (!(prefix in this.layer.options.layouts)) {
       this.layer.setLayout(prefix,
         '<div class="marker">' +
@@ -74,8 +74,8 @@ class OverpassLayerList {
       return
     }
 
-    var div = document.createElement('li')
-    var a
+    const div = document.createElement('li')
+    let a
 
     if (this.selectedId === ob.id) {
       div.classList.add('selected')
@@ -85,13 +85,13 @@ class OverpassLayerList {
     ob[this.options.prefix + 'Item'] = div
 
     // CONTENT
-    let html = ob.layouts[this.options.prefix] || ob.layouts.list || ''
+    const html = ob.layouts[this.options.prefix] || ob.layouts.list || ''
     div.innerHTML = html
     div.currentHTML = html
 
     div.priority = 'priority' in ob.data ? parseFloat(ob.data.priority) : 0
 
-    var current = this.dom.firstChild
+    let current = this.dom.firstChild
     while (current && current.priority <= div.priority) {
       current = current.nextSibling
     }
@@ -134,7 +134,7 @@ class OverpassLayerList {
   }
 
   updateObject (ob) {
-    var listExclude = isTrue(ob.data[this.options.prefix + 'Exclude'])
+    const listExclude = isTrue(ob.data[this.options.prefix + 'Exclude'])
 
     if (!(ob.id in this.items) && !listExclude) {
       return
@@ -144,7 +144,7 @@ class OverpassLayerList {
       return this.delObject(ob)
     }
 
-    var div = this.items[ob.id]
+    const div = this.items[ob.id]
 
     if (this.selectedId === ob.id) {
       div.classList.add('selected')
@@ -154,7 +154,7 @@ class OverpassLayerList {
 
     // CONTENT
     if (div.className === 'content') {
-      let html = ob.layouts[this.options.prefix] || ob.layouts.list || ''
+      const html = ob.layouts[this.options.prefix] || ob.layouts.list || ''
       if (div.currentHTML !== html) {
         div.innerHTML = html
         div.currentHTML = html
@@ -165,7 +165,7 @@ class OverpassLayerList {
   }
 
   delObject (ob) {
-    var div = this.items[ob.id]
+    const div = this.items[ob.id]
 
     if (div) {
       this.dom.removeChild(div)
@@ -180,7 +180,7 @@ class OverpassLayerList {
       this.dom.removeChild(this.dom.lastChild)
     }
 
-    for (var k in this.items) {
+    for (const k in this.items) {
       delete this.items[k][this.options.prefix + 'Item']
     }
 

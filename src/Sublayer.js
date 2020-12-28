@@ -62,7 +62,7 @@ class Sublayer {
 
   _popupOpen (e) {
     if (e.popup.sublayer === this) {
-      let ob = e.popup.object
+      const ob = e.popup.object
       this.emit('selectObject', ob.object, ob)
       this.master.emit('selectObject', ob.object, ob)
 
@@ -72,7 +72,7 @@ class Sublayer {
 
   _popupClose (e) {
     if (e.popup.sublayer === this) {
-      let ob = e.popup.object
+      const ob = e.popup.object
       this.emit('unselectObject', ob.object, ob)
       this.master.emit('unselectObject', ob.object, ob)
 
@@ -146,7 +146,7 @@ class Sublayer {
     this.currentRequestFeatures[ob.id] = true
 
     if (!(ob.id in this.visibleFeatures)) {
-      var data = new SublayerFeature(ob, this)
+      let data = new SublayerFeature(ob, this)
 
       if (ob.id in this.shownFeatures) {
         data = this.shownFeatures[ob.id]
@@ -168,7 +168,7 @@ class Sublayer {
   }
 
   finishAdding () {
-    for (var k in this.visibleFeatures) {
+    for (const k in this.visibleFeatures) {
       if (!(k in this.currentRequestFeatures)) {
         if (!(k in this.shownFeatures)) {
           this._hide(this.visibleFeatures[k])
@@ -335,7 +335,7 @@ class Sublayer {
         }
 
         if (id in this.shownFeatures) {
-          var i = this.shownFeatureOptions[id].indexOf(options)
+          const i = this.shownFeatureOptions[id].indexOf(options)
           if (i !== -1) {
             this.shownFeatureOptions[id].splice(i, 1)
           }
@@ -414,15 +414,15 @@ class Sublayer {
   }
 
   recalc () {
-    for (var k in this.visibleFeatures) {
+    for (const k in this.visibleFeatures) {
       this._processObject(this.visibleFeatures[k])
     }
   }
 
   _processObject (data) {
-    var k
-    var ob = data.object
-    var showOptions = {
+    let k
+    const ob = data.object
+    const showOptions = {
       styles: []
     }
     const leafletFeatureOptions = {
@@ -437,7 +437,7 @@ class Sublayer {
       })
     }
 
-    var objectData = this.evaluate(data)
+    const objectData = this.evaluate(data)
 
     if (!data.feature) {
       data.feature = ob.leafletFeature(Object.assign({
@@ -449,10 +449,10 @@ class Sublayer {
     }
 
     for (k in objectData) {
-      var m = k.match(/^style(|:(.*))$/)
+      const m = k.match(/^style(|:(.*))$/)
       if (m) {
-        var styleId = typeof m[2] === 'undefined' ? 'default' : m[2]
-        var style = styleToLeaflet(objectData[k], this.master.globalTwigData)
+        const styleId = typeof m[2] === 'undefined' ? 'default' : m[2]
+        const style = styleToLeaflet(objectData[k], this.master.globalTwigData)
 
         if (data.features[styleId]) {
           data.features[styleId].setStyle(style)
@@ -496,11 +496,11 @@ class Sublayer {
     if (objectData.markerSymbol) {
       objectData.marker.html += objectData.markerSymbol
 
-      var div = document.createElement('div')
+      const div = document.createElement('div')
       div.innerHTML = objectData.markerSymbol
 
       if (div.firstChild) {
-        var c = div.firstChild
+        const c = div.firstChild
 
         objectData.marker.iconSize = [c.offsetWidth, c.offsetHeight]
         if (c.hasAttribute('width')) {
@@ -544,7 +544,7 @@ class Sublayer {
 
     if (objectData.marker.html) {
       objectData.marker.className = 'overpass-layer-icon'
-      var icon = L.divIcon(objectData.marker)
+      const icon = L.divIcon(objectData.marker)
 
       if (data.featureMarker) {
         data.featureMarker.setIcon(icon)
@@ -574,15 +574,15 @@ class Sublayer {
     data.styles = objectData.styles
 
     data.layouts = {}
-    for (let k in this.options.layouts) {
+    for (const k in this.options.layouts) {
       if (typeof this.options.layouts[k] === 'function') {
-        data.layouts[k] = this.options.layouts[k]({object: objectData})
+        data.layouts[k] = this.options.layouts[k]({ object: objectData })
       } else {
         data.layouts[k] = this.options.layouts[k]
       }
     }
 
-    var popupContent = data.layouts.popup
+    const popupContent = data.layouts.popup
 
     if (data.popup) {
       if (data.popup._contentNode) {
@@ -626,12 +626,12 @@ class Sublayer {
   }
 
   evaluate (data) {
-    var k
-    var ob = data.object
+    let k
+    const ob = data.object
 
     data.twigData = this.twigData(ob, data)
 
-    var objectData = {}
+    const objectData = {}
     for (k in this.options.feature) {
       if (typeof this.options.feature[k] === 'function') {
         objectData[k] = this.options.feature[k](data.twigData)
@@ -640,12 +640,12 @@ class Sublayer {
       }
     }
 
-    var styleIds = []
+    const styleIds = []
     for (k in objectData) {
-      var m = k.match(/^style(|:(.*))$/)
+      const m = k.match(/^style(|:(.*))$/)
       if (m) {
-        var style = objectData[k]
-        var styleId = typeof m[2] === 'undefined' ? 'default' : m[2]
+        const style = objectData[k]
+        const styleId = typeof m[2] === 'undefined' ? 'default' : m[2]
 
         if (typeof style === 'string' || 'twig_markup' in style) {
           objectData[k] = strToStyle(style)
@@ -666,7 +666,7 @@ class Sublayer {
         : 'styles' in this.options ? this.options.styles
           : styleIds
     if (typeof objectData.styles === 'string' || 'twig_markup' in objectData.styles) {
-      var styles = objectData.styles.trim()
+      const styles = objectData.styles.trim()
       if (styles === '') {
         objectData.styles = []
       } else {
@@ -678,7 +678,7 @@ class Sublayer {
   }
 
   twigData (ob, data) {
-    var result = {
+    const result = {
       id: ob.id,
       sublayer_id: this.options.sublayer_id,
       osm_id: ob.osm_id,
@@ -729,8 +729,8 @@ class Sublayer {
     }
 
     data.feature.addTo(this.map)
-    for (var i = 0; i < data.styles.length; i++) {
-      var k = data.styles[i]
+    for (let i = 0; i < data.styles.length; i++) {
+      const k = data.styles[i]
       if (k in data.features) {
         data.features[k].addTo(this.map)
       }
@@ -751,7 +751,7 @@ class Sublayer {
     this.emit('remove', data.object, data)
 
     this.map.removeLayer(data.feature)
-    for (var k in data.features) {
+    for (const k in data.features) {
       this.map.removeLayer(data.features[k])
     }
 

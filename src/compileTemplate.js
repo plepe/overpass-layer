@@ -1,4 +1,4 @@
-module.exports = function compileTemplate (template, twig, options={}) {
+module.exports = function compileTemplate (template, twig, options = {}) {
   if (typeof template === 'string' && template.search('{') !== -1) {
     let result
 
