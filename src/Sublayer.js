@@ -541,7 +541,9 @@ class Sublayer {
           data.pointOnFeature = pointOnFeature(ob, leafletFeatureOptions)
         }
 
-        data.featureMarker = L.marker(data.pointOnFeature, { icon: icon })
+        if (data.pointOnFeature) {
+          data.featureMarker = L.marker(data.pointOnFeature, { icon: icon })
+        }
       }
     }
 

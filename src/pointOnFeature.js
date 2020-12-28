@@ -10,6 +10,8 @@ module.exports = function pointOnFeature (ob, leafletFeatureOptions) {
 
   if (geojson.geometry.type === 'LineString') {
     poi = turf.along(geojson, turf.length(geojson) / 2)
+  } else if (geojson.geometry.type === 'GeometryCollection' && geojson.geometry.geometries.length === 0) {
+    return null
   } else {
     poi = turf.pointOnFeature(geojson)
   }
