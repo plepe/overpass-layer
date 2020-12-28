@@ -67,6 +67,7 @@ class OverpassLayer {
         feature: this.options.memberFeature,
         styleNoBindPopup: this.options.styleNoBindPopup || [],
         stylesNoAutoShow: this.options.stylesNoAutoShow || [],
+        layouts: this.options.layouts,
         const: this.options.const
       }
       if (this.options.updateAssets) {
