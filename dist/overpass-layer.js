@@ -33602,6 +33602,7 @@ class OverpassRelation extends OverpassObject {
           geometries: this.memberFeatures
             .map(member => member.GeoJSON().geometry) // .geometry may be undefined
             .filter(member => member)
+            .filter(member => member.type !== 'GeometryCollection' || member.geometries.length)
         }
       }
     }
@@ -49149,7 +49150,7 @@ class DecoratorPattern {
       data.patternFeatures = {}
     }
 
-    for (var k in data.features) {
+    for (const k in data.features) {
       const def = k === 'default' ? data.data.style : data.data['style:' + k]
 
       if (data.styles.includes(k)) {
@@ -49230,7 +49231,7 @@ class DecoratorPattern {
       return
     }
 
-    for (var k in data.features) {
+    for (const k in data.features) {
       if (data.patternFeatures[k]) {
         this.layer.map.removeLayer(data.patternFeatures[k])
         delete data.patternFeatures[k]
@@ -49278,7 +49279,7 @@ class Memberlayer extends Sublayer {
   twigData (ob, data) {
     const result = super.twigData(ob, data)
 
-    for (var k in this.masterlayer.visibleFeatures) {
+    for (const k in this.masterlayer.visibleFeatures) {
       const feature = this.masterlayer.visibleFeatures[k]
       if (feature.object.members) {
         feature.object.members.forEach((member, sequence) => {
@@ -49465,7 +49466,7 @@ class OverpassLayer {
     }
 
     const queryOptions = JSON.parse(JSON.stringify(this.options.queryOptions))
-    var bounds = new BoundingBox(this.map.getBounds())
+    const bounds = new BoundingBox(this.map.getBounds())
 
     if (this.map.getZoom() < this.options.minZoom ||
        (this.options.maxZoom !== undefined && this.map.getZoom() > this.options.maxZoom)) {
@@ -49585,7 +49586,7 @@ class OverpassLayer {
   }
 
   get (id, callback) {
-    var done = false
+    let done = false
 
     this.overpassFrontend.get(id,
       {
@@ -49692,7 +49693,7 @@ class OverpassLayerList {
   }
 
   _getMarker (ob) {
-    var a
+    let a
 
     if (ob.data[this.options.prefix + 'MarkerSymbol']) {
       a = document.createElement('div')
@@ -49720,14 +49721,14 @@ class OverpassLayerList {
       return
     }
 
-    var div = document.createElement('li')
-    var a
+    const div = document.createElement('li')
+    let a
 
     this.items[ob.id] = div
     ob[this.options.prefix + 'Item'] = div
 
     // MARKER&ICON PARENT
-    var p = document.createElement('a')
+    const p = document.createElement('a')
     p.className = 'markerParent'
     p.href = 'appUrl' in ob.data ? ob.data.appUrl : '#'
     p.onclick = function (ob) {
@@ -49774,7 +49775,7 @@ class OverpassLayerList {
 
     div.priority = 'priority' in ob.data ? parseFloat(ob.data.priority) : 0
 
-    var current = this.dom.firstChild
+    let current = this.dom.firstChild
     while (current && current.priority <= div.priority) {
       current = current.nextSibling
     }
@@ -49812,7 +49813,7 @@ class OverpassLayerList {
   }
 
   updateObject (ob) {
-    var listExclude = isTrue(ob.data[this.options.prefix + 'Exclude'])
+    const listExclude = isTrue(ob.data[this.options.prefix + 'Exclude'])
 
     if (!(ob.id in this.items) && !listExclude) {
       return
@@ -49822,11 +49823,11 @@ class OverpassLayerList {
       return this.delObject(ob)
     }
 
-    var div = this.items[ob.id]
-    var p = div.firstChild
+    const div = this.items[ob.id]
+    let p = div.firstChild
     while (p) {
       if (p.className === 'markerParent') {
-        var a = p.firstChild
+        let a = p.firstChild
         while (a) {
           // MARKER
           if (a.className === 'marker') {
@@ -49871,7 +49872,7 @@ class OverpassLayerList {
   }
 
   delObject (ob) {
-    var div = this.items[ob.id]
+    const div = this.items[ob.id]
 
     if (div) {
       this.dom.removeChild(div)
@@ -49886,7 +49887,7 @@ class OverpassLayerList {
       this.dom.removeChild(this.dom.lastChild)
     }
 
-    for (var k in this.items) {
+    for (const k in this.items) {
       delete this.items[k][this.options.prefix + 'Item']
     }
 
@@ -50030,7 +50031,7 @@ class Sublayer {
     this.currentRequestFeatures[ob.id] = true
 
     if (!(ob.id in this.visibleFeatures)) {
-      var data = new SublayerFeature(ob, this)
+      let data = new SublayerFeature(ob, this)
 
       if (ob.id in this.shownFeatures) {
         data = this.shownFeatures[ob.id]
@@ -50052,7 +50053,7 @@ class Sublayer {
   }
 
   finishAdding () {
-    for (var k in this.visibleFeatures) {
+    for (const k in this.visibleFeatures) {
       if (!(k in this.currentRequestFeatures)) {
         if (!(k in this.shownFeatures)) {
           this._hide(this.visibleFeatures[k])
@@ -50219,7 +50220,7 @@ class Sublayer {
         }
 
         if (id in this.shownFeatures) {
-          var i = this.shownFeatureOptions[id].indexOf(options)
+          const i = this.shownFeatureOptions[id].indexOf(options)
           if (i !== -1) {
             this.shownFeatureOptions[id].splice(i, 1)
           }
@@ -50298,15 +50299,15 @@ class Sublayer {
   }
 
   recalc () {
-    for (var k in this.visibleFeatures) {
+    for (const k in this.visibleFeatures) {
       this._processObject(this.visibleFeatures[k])
     }
   }
 
   _processObject (data) {
-    var k
-    var ob = data.object
-    var showOptions = {
+    let k
+    const ob = data.object
+    const showOptions = {
       styles: []
     }
     const leafletFeatureOptions = {
@@ -50321,7 +50322,7 @@ class Sublayer {
       })
     }
 
-    var objectData = this.evaluate(data)
+    const objectData = this.evaluate(data)
 
     if (!data.feature) {
       data.feature = ob.leafletFeature(Object.assign({
@@ -50333,10 +50334,10 @@ class Sublayer {
     }
 
     for (k in objectData) {
-      var m = k.match(/^style(|:(.*))$/)
+      const m = k.match(/^style(|:(.*))$/)
       if (m) {
-        var styleId = typeof m[2] === 'undefined' ? 'default' : m[2]
-        var style = styleToLeaflet(objectData[k], this.master.globalTwigData)
+        const styleId = typeof m[2] === 'undefined' ? 'default' : m[2]
+        const style = styleToLeaflet(objectData[k], this.master.globalTwigData)
 
         if (data.features[styleId]) {
           data.features[styleId].setStyle(style)
@@ -50380,11 +50381,11 @@ class Sublayer {
     if (objectData.markerSymbol) {
       objectData.marker.html += objectData.markerSymbol
 
-      var div = document.createElement('div')
+      const div = document.createElement('div')
       div.innerHTML = objectData.markerSymbol
 
       if (div.firstChild) {
-        var c = div.firstChild
+        const c = div.firstChild
 
         objectData.marker.iconSize = [c.offsetWidth, c.offsetHeight]
         if (c.hasAttribute('width')) {
@@ -50428,7 +50429,7 @@ class Sublayer {
 
     if (objectData.marker.html) {
       objectData.marker.className = 'overpass-layer-icon'
-      var icon = L.divIcon(objectData.marker)
+      const icon = L.divIcon(objectData.marker)
 
       if (data.featureMarker) {
         data.featureMarker.setIcon(icon)
@@ -50440,7 +50441,9 @@ class Sublayer {
           data.pointOnFeature = pointOnFeature(ob, leafletFeatureOptions)
         }
 
-        data.featureMarker = L.marker(data.pointOnFeature, { icon: icon })
+        if (data.pointOnFeature) {
+          data.featureMarker = L.marker(data.pointOnFeature, { icon: icon })
+        }
       }
     }
 
@@ -50457,9 +50460,9 @@ class Sublayer {
     }
     data.styles = objectData.styles
 
-    var popupContent = ''
+    let popupContent = ''
     popupContent += '<h1>' + objectData.title + '</h1>'
-    var popupDescription = objectData.popupDescription || objectData.description
+    const popupDescription = objectData.popupDescription || objectData.description
     if (popupDescription) {
       popupContent += '<div class="description">' + popupDescription + '</div>'
     }
@@ -50509,12 +50512,12 @@ class Sublayer {
   }
 
   evaluate (data) {
-    var k
-    var ob = data.object
+    let k
+    const ob = data.object
 
     data.twigData = this.twigData(ob, data)
 
-    var objectData = {}
+    const objectData = {}
     for (k in this.options.feature) {
       if (typeof this.options.feature[k] === 'function') {
         objectData[k] = this.options.feature[k](data.twigData)
@@ -50523,12 +50526,12 @@ class Sublayer {
       }
     }
 
-    var styleIds = []
+    const styleIds = []
     for (k in objectData) {
-      var m = k.match(/^style(|:(.*))$/)
+      const m = k.match(/^style(|:(.*))$/)
       if (m) {
-        var style = objectData[k]
-        var styleId = typeof m[2] === 'undefined' ? 'default' : m[2]
+        const style = objectData[k]
+        const styleId = typeof m[2] === 'undefined' ? 'default' : m[2]
 
         if (typeof style === 'string' || 'twig_markup' in style) {
           objectData[k] = strToStyle(style)
@@ -50545,11 +50548,13 @@ class Sublayer {
     }
 
     objectData.styles =
-      'styles' in objectData ? objectData.styles
-        : 'styles' in this.options ? this.options.styles
+      'styles' in objectData
+        ? objectData.styles
+        : 'styles' in this.options
+          ? this.options.styles
           : styleIds
     if (typeof objectData.styles === 'string' || 'twig_markup' in objectData.styles) {
-      var styles = objectData.styles.trim()
+      const styles = objectData.styles.trim()
       if (styles === '') {
         objectData.styles = []
       } else {
@@ -50561,7 +50566,7 @@ class Sublayer {
   }
 
   twigData (ob, data) {
-    var result = {
+    const result = {
       id: ob.id,
       sublayer_id: this.options.sublayer_id,
       osm_id: ob.osm_id,
@@ -50612,8 +50617,8 @@ class Sublayer {
     }
 
     data.feature.addTo(this.map)
-    for (var i = 0; i < data.styles.length; i++) {
-      var k = data.styles[i]
+    for (let i = 0; i < data.styles.length; i++) {
+      const k = data.styles[i]
       if (k in data.features) {
         data.features[k].addTo(this.map)
       }
@@ -50634,7 +50639,7 @@ class Sublayer {
     this.emit('remove', data.object, data)
 
     this.map.removeLayer(data.feature)
-    for (var k in data.features) {
+    for (const k in data.features) {
       this.map.removeLayer(data.features[k])
     }
 
@@ -50737,7 +50742,7 @@ module.exports = SublayerFeature
 
 },{}],249:[function(require,module,exports){
 function compileFeature (feature, twig) {
-  for (var k in feature) {
+  for (const k in feature) {
     if (typeof feature[k] === 'string' && feature[k].search('{') !== -1) {
       let template
 
@@ -50758,8 +50763,8 @@ function compileFeature (feature, twig) {
         return null
       }.bind(this, template, k)
     } else if (typeof feature[k] === 'object' && (['style'].indexOf(k) !== -1 || k.match(/^style:/))) {
-      var templates = {}
-      for (var k1 in feature[k]) {
+      const templates = {}
+      for (const k1 in feature[k]) {
         if (typeof feature[k][k1] === 'string' && feature[k][k1].search('{') !== -1) {
           try {
             templates[k1] = twig.twig({ data: feature[k][k1], autoescape: true, rethrow: true })
@@ -50772,8 +50777,8 @@ function compileFeature (feature, twig) {
       }
 
       feature[k] = function (templates, ob) {
-        var ret = {}
-        for (var k1 in templates) {
+        const ret = {}
+        for (const k1 in templates) {
           if (typeof templates[k1] === 'object' && templates[k1] !== null && 'render' in templates[k1]) {
             ret[k1] = templates[k1].render(ob)
           } else {
@@ -50849,6 +50854,8 @@ module.exports = function pointOnFeature (ob, leafletFeatureOptions) {
 
   if (geojson.geometry.type === 'LineString') {
     poi = turf.along(geojson, turf.length(geojson) / 2)
+  } else if (geojson.geometry.type === 'GeometryCollection' && geojson.geometry.geometries.length === 0) {
+    return null
   } else {
     poi = turf.pointOnFeature(geojson)
   }
@@ -50861,13 +50868,13 @@ module.exports = function pointOnFeature (ob, leafletFeatureOptions) {
 
 },{"@turf/along":4,"@turf/length":25,"@turf/point-on-feature":35}],253:[function(require,module,exports){
 function strToStyle (style) {
-  var str = style.split('\n')
+  const str = style.split('\n')
   style = {}
 
-  for (var i = 0; i < str.length; i++) {
-    var m
-    if ((m = str[i].match(/^\s*([a-zA-Z0-9_]+)\s*:\s*(.*)\s*$/))) {
-      var v = m[2].trim()
+  for (let i = 0; i < str.length; i++) {
+    const m = str[i].match(/^\s*([a-zA-Z0-9_]+)\s*:\s*(.*)\s*$/)
+    if (m) {
+      let v = m[2].trim()
 
       if (v.match(/^-?[0-9]+(\.[0-9]+)?/)) {
         v = parseFloat(v)
