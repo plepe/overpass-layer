@@ -1,4 +1,4 @@
-var overpassLayer = new OverpassLayer({
+const overpassLayer = new OverpassLayer({
   query: 'node[natural=tree];',
   minZoom: 17,
   feature: {

@@ -1,8 +1,8 @@
 /* global L:false OverpassLayer:false OverpassFrontend:false */
-var map
-var overpassFrontend
-var overpassForm
-var overpassLayer
+let map
+let overpassFrontend
+let overpassForm
+let overpassLayer
 
 function updateMap () {
   if (overpassLayer) {
@@ -31,7 +31,7 @@ window.onload = function () {
     effortPerRequest: 100
   })
 
-  var osmMapnik = L.tileLayer('//{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+  const osmMapnik = L.tileLayer('//{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
     {
       maxZoom: 19,
       attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'

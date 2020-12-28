@@ -38,7 +38,7 @@ class DecoratorPattern {
       data.patternFeatures = {}
     }
 
-    for (var k in data.features) {
+    for (const k in data.features) {
       const def = k === 'default' ? data.data.style : data.data['style:' + k]
 
       if (data.styles.includes(k)) {
@@ -119,7 +119,7 @@ class DecoratorPattern {
       return
     }
 
-    for (var k in data.features) {
+    for (const k in data.features) {
       if (data.patternFeatures[k]) {
         this.layer.map.removeLayer(data.patternFeatures[k])
         delete data.patternFeatures[k]

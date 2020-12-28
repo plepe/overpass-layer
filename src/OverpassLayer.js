@@ -149,7 +149,7 @@ class OverpassLayer {
     }
 
     const queryOptions = JSON.parse(JSON.stringify(this.options.queryOptions))
-    var bounds = new BoundingBox(this.map.getBounds())
+    const bounds = new BoundingBox(this.map.getBounds())
 
     if (this.map.getZoom() < this.options.minZoom ||
        (this.options.maxZoom !== undefined && this.map.getZoom() > this.options.maxZoom)) {
@@ -269,7 +269,7 @@ class OverpassLayer {
   }
 
   get (id, callback) {
-    var done = false
+    let done = false
 
     this.overpassFrontend.get(id,
       {

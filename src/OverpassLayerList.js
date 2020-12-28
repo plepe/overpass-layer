@@ -37,7 +37,7 @@ class OverpassLayerList {
   }
 
   _getMarker (ob) {
-    var a
+    let a
 
     if (ob.data[this.options.prefix + 'MarkerSymbol']) {
       a = document.createElement('div')
@@ -65,14 +65,14 @@ class OverpassLayerList {
       return
     }
 
-    var div = document.createElement('li')
-    var a
+    const div = document.createElement('li')
+    let a
 
     this.items[ob.id] = div
     ob[this.options.prefix + 'Item'] = div
 
     // MARKER&ICON PARENT
-    var p = document.createElement('a')
+    const p = document.createElement('a')
     p.className = 'markerParent'
     p.href = 'appUrl' in ob.data ? ob.data.appUrl : '#'
     p.onclick = function (ob) {
@@ -119,7 +119,7 @@ class OverpassLayerList {
 
     div.priority = 'priority' in ob.data ? parseFloat(ob.data.priority) : 0
 
-    var current = this.dom.firstChild
+    let current = this.dom.firstChild
     while (current && current.priority <= div.priority) {
       current = current.nextSibling
     }
@@ -157,7 +157,7 @@ class OverpassLayerList {
   }
 
   updateObject (ob) {
-    var listExclude = isTrue(ob.data[this.options.prefix + 'Exclude'])
+    const listExclude = isTrue(ob.data[this.options.prefix + 'Exclude'])
 
     if (!(ob.id in this.items) && !listExclude) {
       return
@@ -167,11 +167,11 @@ class OverpassLayerList {
       return this.delObject(ob)
     }
 
-    var div = this.items[ob.id]
-    var p = div.firstChild
+    const div = this.items[ob.id]
+    let p = div.firstChild
     while (p) {
       if (p.className === 'markerParent') {
-        var a = p.firstChild
+        let a = p.firstChild
         while (a) {
           // MARKER
           if (a.className === 'marker') {
@@ -216,7 +216,7 @@ class OverpassLayerList {
   }
 
   delObject (ob) {
-    var div = this.items[ob.id]
+    const div = this.items[ob.id]
 
     if (div) {
       this.dom.removeChild(div)
@@ -231,7 +231,7 @@ class OverpassLayerList {
       this.dom.removeChild(this.dom.lastChild)
     }
 
-    for (var k in this.items) {
+    for (const k in this.items) {
       delete this.items[k][this.options.prefix + 'Item']
     }
 

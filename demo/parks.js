@@ -1,6 +1,6 @@
 document.body.classList.add('hasInfo')
 
-var overpassLayer = new OverpassLayer({
+const overpassLayer = new OverpassLayer({
   query: '(way[leisure=park];relation[leisure=park];);',
   minZoom: 14,
   feature: {
@@ -28,5 +28,5 @@ overpassLayer.onLoadEnd = function (ev) {
 }
 overpassLayer.addTo(map)
 
-var overpassLayerList = new OverpassLayerList(overpassLayer)
+const overpassLayerList = new OverpassLayerList(overpassLayer)
 overpassLayerList.addTo(document.getElementById('info'))

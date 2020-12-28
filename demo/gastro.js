@@ -1,6 +1,6 @@
 document.body.classList.add('hasInfo')
 
-var overpassLayer = new OverpassLayer({
+const overpassLayer = new OverpassLayer({
   query: '(node[amenity~"^(restaurant|cafe)$"];way[amenity~"^(restaurant|cafe)$"];relation[amenity~"^(restaurant|cafe)$"];);',
   minZoom: 16,
   feature: {
@@ -48,5 +48,5 @@ window.setTimeout(function () {
   overpassLayer.hide('n597342965')
 }, 5000)
 
-var overpassLayerList = new OverpassLayerList(overpassLayer)
+const overpassLayerList = new OverpassLayerList(overpassLayer)
 overpassLayerList.addTo(document.getElementById('info'))

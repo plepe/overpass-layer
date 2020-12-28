@@ -1,11 +1,11 @@
 function strToStyle (style) {
-  var str = style.split('\n')
+  const str = style.split('\n')
   style = {}
 
-  for (var i = 0; i < str.length; i++) {
-    var m
-    if ((m = str[i].match(/^\s*([a-zA-Z0-9_]+)\s*:\s*(.*)\s*$/))) {
-      var v = m[2].trim()
+  for (let i = 0; i < str.length; i++) {
+    const m = str[i].match(/^\s*([a-zA-Z0-9_]+)\s*:\s*(.*)\s*$/)
+    if (m) {
+      let v = m[2].trim()
 
       if (v.match(/^-?[0-9]+(\.[0-9]+)?/)) {
         v = parseFloat(v)
