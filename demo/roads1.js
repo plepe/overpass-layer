@@ -1,7 +1,7 @@
 map.createPane('casing')
 map.getPane('casing').style.zIndex = 399
 
-var overpassLayer = new OverpassLayer({
+const overpassLayer = new OverpassLayer({
   query: 'way[highway];',
   minZoom: 15,
   feature: {

@@ -3,8 +3,8 @@ function strToStyle (style) {
   style = {}
 
   for (let i = 0; i < str.length; i++) {
-    var m
-    if ((m = str[i].match(/^\s*([a-zA-Z0-9_]+)\s*:\s*(.*)\s*$/))) {
+    const m = str[i].match(/^\s*([a-zA-Z0-9_]+)\s*:\s*(.*)\s*$/)
+    if (m) {
       let v = m[2].trim()
 
       if (v.match(/^-?[0-9]+(\.[0-9]+)?/)) {

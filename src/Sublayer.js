@@ -556,7 +556,9 @@ class Sublayer {
           data.pointOnFeature = pointOnFeature(ob, leafletFeatureOptions)
         }
 
-        data.featureMarker = L.marker(data.pointOnFeature, { icon: icon })
+        if (data.pointOnFeature) {
+          data.featureMarker = L.marker(data.pointOnFeature, { icon: icon })
+        }
       }
     }
 
@@ -572,6 +574,7 @@ class Sublayer {
       }
     }
     data.styles = objectData.styles
+
 
     data.layouts = {}
     for (const k in this.options.layouts) {
@@ -662,8 +665,10 @@ class Sublayer {
     }
 
     objectData.styles =
-      'styles' in objectData ? objectData.styles
-        : 'styles' in this.options ? this.options.styles
+      'styles' in objectData
+        ? objectData.styles
+        : 'styles' in this.options
+          ? this.options.styles
           : styleIds
     if (typeof objectData.styles === 'string' || 'twig_markup' in objectData.styles) {
       const styles = objectData.styles.trim()

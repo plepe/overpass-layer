@@ -1,6 +1,6 @@
 document.body.classList.add('hasInfo')
 
-var def = {
+const def = {
   query: {
     11: '(relation[type=route][route~"^(subway|trolley|tram|bus)$"];)'
   },
@@ -35,21 +35,21 @@ var def = {
 
 /* enable for list of stops */
 
-var overpassLayer = new OverpassLayer(def)
+const overpassLayer = new OverpassLayer(def)
 overpassLayer.addTo(map)
 
-var listStops = document.createElement('div')
+const listStops = document.createElement('div')
 document.getElementById('info').appendChild(listStops)
 
-var overpassLayerStopsList = new OverpassLayerList(overpassLayer, {
+const overpassLayerStopsList = new OverpassLayerList(overpassLayer, {
   prefix: 'listStops'
 })
 overpassLayerStopsList.addTo(listStops)
 
-var listRoutes = document.createElement('div')
+const listRoutes = document.createElement('div')
 document.getElementById('info').appendChild(listRoutes)
 
-var overpassLayerRoutesList = new OverpassLayerList(overpassLayer, {
+const overpassLayerRoutesList = new OverpassLayerList(overpassLayer, {
   prefix: 'listRoutes'
 })
 overpassLayerRoutesList.addTo(listRoutes)

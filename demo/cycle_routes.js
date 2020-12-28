@@ -1,6 +1,6 @@
 document.body.classList.add('hasInfo')
 
-var overpassLayer = new OverpassLayer({
+const overpassLayer = new OverpassLayer({
   query: {
     11: '(relation[type=route][route=bicycle][network~"^(icn|ncn)$"];)',
     13: '(relation[type=route][route=bicycle][network~"^(icn|ncn|rcn)$"];)',
@@ -28,5 +28,5 @@ var overpassLayer = new OverpassLayer({
 })
 overpassLayer.addTo(map)
 
-var overpassLayerList = new OverpassLayerList(overpassLayer)
+const overpassLayerList = new OverpassLayerList(overpassLayer)
 overpassLayerList.addTo(document.getElementById('info'))

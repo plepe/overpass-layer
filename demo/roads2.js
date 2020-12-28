@@ -1,7 +1,7 @@
 map.createPane('casing')
 map.getPane('casing').style.zIndex = 399
 
-var highwayStylesLow = {
+const highwayStylesLow = {
   motorway: { width: 8, color: '#ff0000' },
   motorway_link: { width: 4, color: '#ff0000' },
   trunk: { width: 6, color: '#ff3f00' },
@@ -15,7 +15,7 @@ var highwayStylesLow = {
   default: { width: 3, color: '#ffffff' }
 }
 
-var highwayStylesHigh = {
+const highwayStylesHigh = {
   motorway: { width: 12, color: '#ff0000' },
   motorway_link: { width: 8, color: '#ff0000' },
   trunk: { width: 10, color: '#ff3f00' },
@@ -33,7 +33,7 @@ var highwayStylesHigh = {
   default: { width: 4, color: '#ffffff' }
 }
 
-var overpassLayer = new OverpassLayer({
+const overpassLayer = new OverpassLayer({
   // different queries for different zoom levels
   minZoom: 12,
   query: {
@@ -45,7 +45,7 @@ var overpassLayer = new OverpassLayer({
     // the 'pre' function will be called before other scripts
     // in this case, we assign 'current' a style from highwayStyles
     pre: function (v) {
-      var highwayStyles = v.map.zoom < 16 ? highwayStylesLow : highwayStylesHigh
+      const highwayStyles = v.map.zoom < 16 ? highwayStylesLow : highwayStylesHigh
 
       if (v.tags.highway in highwayStyles) {
         v.current = highwayStyles[v.tags.highway]
