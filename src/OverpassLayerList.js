@@ -85,7 +85,7 @@ class OverpassLayerList {
     ob[this.options.prefix + 'Item'] = div
 
     // CONTENT
-    let html = ob.layouts[this.options.prefix + 'List'] || ob.layouts.list || ''
+    let html = ob.layouts[this.options.prefix] || ob.layouts.list || ''
     div.innerHTML = html
     div.currentHTML = html
 
@@ -154,7 +154,7 @@ class OverpassLayerList {
 
     // CONTENT
     if (div.className === 'content') {
-      let html = ob.layouts[this.options.prefix + 'List'] || ob.layouts.list || ''
+      let html = ob.layouts[this.options.prefix] || ob.layouts.list || ''
       if (div.currentHTML !== html) {
         div.innerHTML = html
         div.currentHTML = html
