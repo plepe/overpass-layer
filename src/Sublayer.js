@@ -575,7 +575,6 @@ class Sublayer {
     }
     data.styles = objectData.styles
 
-
     data.layouts = {}
     for (const k in this.options.layouts) {
       if (typeof this.options.layouts[k] === 'function') {

@@ -75,7 +75,6 @@ class OverpassLayerList {
     }
 
     const div = document.createElement('li')
-    let a
 
     if (this.selectedId === ob.id) {
       div.classList.add('selected')
