@@ -172,6 +172,13 @@ Return twig data for object (for rendering).
 ## method setFilter(filter)
 Set an additional filter. Will intiate a check_update_map(). See OverpassFrontend.Filter for details.
 
+## method setLayout(id, layout)
+You can define several layouts, which will be rendered for each object. The rendered objects can be accessed from the `layouts` attribute of the `data` parameter of the events (e.g. add, update, ...).
+
+The layout parameter is a string in TwigJS template language. In contrast to the feature-templates, the result of the feature evaluation is available with the 'object' prefix. Also, autoescapeing is disabled (because feature templates render to HTML).
+
+Example: `{{ object.title }}`.
+
 ## method getShiftWorld()
 get the degrees by which the world should be shifted, to show map features at the current view port (e.g. when you wrap over -180 or 180 longitude). E.g. near lon 180, the Eastern hemisphere (lon 0 .. 180) does not have to be shifted, the Western hemisphere (lon -180 .. 0) has to be shifted by 360 degrees.
 
@@ -188,6 +195,7 @@ Parameter:
 * `data.features`: an object with all leaflet feature which show the object. Index is the id of the style (e.g. 'highlight' for 'style:highlight'. 'default' for 'style').
 * `data.feature`: the first leaflet feature (of the styles array). it will be used for binding popups to.
 * `data.featureMarker`: the leaflet marker, if a marker is shown on the object
+* `data.layouts`: The rendered version of all layouts as object (indexed by the layout id)
 * `data.popup`: the popup, which is attached to the object (even if it is not shown)
 * `data.styles`: array of style-ids which are currently active
 * `data.isShown`: whether the object is currently shown on the map (boolean)
