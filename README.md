@@ -151,7 +151,7 @@ Calculates the object data for each visible feature and call the update event.
 ## method get(id, callback)
 Load the given object, even if it should not be shown in the given layer / at the current zoom level.
 
-The callback will be called with the following parameters: err, ob (see event onAppear).
+The callback will be called with the following parameters: err, ob (see event `add`).
 
 ## method show(id, options, callback)
 Show the given object, even if it should not be shown in the given layer / at the current zoom level.
@@ -161,7 +161,7 @@ The options parameter influences how the object should be shown. (Consecutive ca
 Available options:
 * styles: Aside from the styles which are shown from the general options, show additional styles. (Array)
 
-The callback will be called with the following parameters: err, ob, data (see event 'appear').
+The callback will be called with the following parameters: err, ob, data (see event `add`).
 
 ## method hide(id)
 Hide the given object, resp. remove show options. If it is shown due to layer definition, it will still be visible.
@@ -196,22 +196,22 @@ Parameter:
 ## event 'remove', Parameters: ob, data
 Will be called when an object disappears from the map (e.g. zoom out, pan out, ...)
 
-See `appear` for the description of parameters.
+See `add` for the description of parameters.
 
 ## event 'zoomChange', Parameters: ob, data
 Will be called every time when the zoom level changes. Occurs instantly after zoom level change for each object, before assessing if the object is visible at the current zoom level.
 
-See `appear` for the description of parameters.
+See `add` for the description of parameters.
 
 ## event 'update', Parameters: ob, data
 Called every time, when the object is being re-calculated (also when zoom level changes).
 
-See `appear` for the description of parameters.
+See `add` for the description of parameters.
 
 ## event 'twigData', Parameters: ob, data, result
 Called for every object on re-calculation. Result is the twigData which will used for evaluating each object. Any listeners may modify this result object.
 
-See `appear` for the description of other parameters.
+See `add` for the description of other parameters.
 
 # Optional features
 ## Text along lines
