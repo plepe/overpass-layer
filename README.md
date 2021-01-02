@@ -177,6 +177,8 @@ You can define several layouts, which will be rendered for each object. The rend
 
 The layout parameter is a string in TwigJS template language. In contrast to the feature-templates, the result of the feature evaluation is available with the 'object' prefix. Also, autoescapeing is disabled (because feature templates render to HTML).
 
+The layout paramter could also be a function, which will be called with an object with the `object` property. If the function returns `null`, the content of the popup will not be updated.
+
 Example: `{{ object.title }}`.
 
 ## method getShiftWorld()
