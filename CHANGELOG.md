@@ -1,3 +1,8 @@
+Version 3.0.0, 2021-01-06
+=========================
+* Popup-Content and other layouts are now rendered via Twig
+* New setLayout() function
+
 Version 2.6.3, 2020-06-14
 =========================
 * Markers are now always on the feature (not the centroid)
