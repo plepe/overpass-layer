@@ -20,10 +20,39 @@ class OverpassLayerList {
     this.layer = layer
     this.options = options || {}
     this.options.prefix = this.options.prefix || 'list'
+    this.selectedId = null
+
+    const prefix = this.options.prefix
+    if (!(prefix in this.layer.options.layouts)) {
+      this.layer.setLayout(prefix,
+        '<div class="marker">' +
+        '{% if object.' + prefix + 'MarkerSymbol or object.markerSymbol %}' +
+        '<div class="symbol">{{ object.' + prefix + 'MarkerSymbol|default(object.markerSymbol) }}</div>' +
+        '{% elseif object.marker and object.marker.iconUrl %}' +
+        '<img class="symbol" src="{{ object.marker.iconUrl|e }}">' +
+        '{% endif %}' +
+        '{% if object.' + prefix + 'MarkerSign or object.markerSign %}' +
+        '<div class="sign">{{ object.' + prefix + 'MarkerSign|default(object.markerSign) }}</div>' +
+        '{% endif %}' +
+        '</div>' +
+        '<div class="content">' +
+        '<a class="title" href="{{ object.appUrl|default("#") }}">{{ object.' + prefix + 'Title|default(object.title) }}</a>' +
+        '{% if object.' + prefix + 'Description or object.description %}<div class="description">{{ object.' + prefix + 'Description|default(object.description) }}</div>{% endif %}' +
+        '</div>'
+      )
+    }
 
     this.layer.on('add', (ob, data) => this.addObject(data))
     this.layer.on('update', (ob, data) => this.updateObject(data))
     this.layer.on('remove', (ob, data) => this.delObject(data))
+    this.layer.on('selectObject', (ob, data) => {
+      this.selectedId = ob.id
+      this.updateObject(data)
+    })
+    this.layer.on('unselectObject', (ob, data) => {
+      this.selectedId = null
+      this.updateObject(data)
+    })
 
     this.items = {}
 
@@ -36,26 +65,6 @@ class OverpassLayerList {
     parentDom.appendChild(this.dom)
   }
 
-  _getMarker (ob) {
-    let a
-
-    if (ob.data[this.options.prefix + 'MarkerSymbol']) {
-      a = document.createElement('div')
-      a.className = 'marker'
-      a.innerHTML = ob.data[this.options.prefix + 'MarkerSymbol']
-    } else if (ob.data.markerSymbol) {
-      a = document.createElement('div')
-      a.className = 'marker'
-      a.innerHTML = ob.data.markerSymbol
-    } else if (ob.data.marker && ob.data.marker.iconUrl) {
-      a = document.createElement('img')
-      a.className = 'marker'
-      a.src = ob.data.marker.iconUrl
-    }
-
-    return a
-  }
-
   addObject (ob) {
     if (isTrue(ob.data[this.options.prefix + 'Exclude'])) {
       return
@@ -66,56 +75,18 @@ class OverpassLayerList {
     }
 
     const div = document.createElement('li')
-    let a
+
+    if (this.selectedId === ob.id) {
+      div.classList.add('selected')
+    }
 
     this.items[ob.id] = div
     ob[this.options.prefix + 'Item'] = div
 
-    // MARKER&ICON PARENT
-    const p = document.createElement('a')
-    p.className = 'markerParent'
-    p.href = 'appUrl' in ob.data ? ob.data.appUrl : '#'
-    p.onclick = function (ob) {
-      this.layer.openPopupOnObject(ob)
-      return false
-    }.bind(this, ob)
-    div.appendChild(p)
-
-    // MARKER
-    a = this._getMarker(ob)
-    if (a) {
-      p.appendChild(a)
-    }
-
-    // ICON
-    a = document.createElement('div')
-    a.className = 'icon'
-    let html = ob.data[this.options.prefix + 'MarkerSign'] || ob.data.markerSign || ''
-    a.innerHTML = html
-    a.currentHTML = html
-    p.appendChild(a)
-
-    // TITLE
-    a = document.createElement('a')
-    a.className = 'title'
-    a.href = 'appUrl' in ob.data ? ob.data.appUrl : '#'
-    a.onclick = function (ob) {
-      this.layer.openPopupOnObject(ob)
-      return false
-    }.bind(this, ob)
-    html = ob.data[this.options.prefix + 'Title'] || ob.data.title
-    a.innerHTML = html
-    a.currentHTML = html
-    div.appendChild(a)
-    const title = a
-
-    // DESCRIPTION
-    a = document.createElement('div')
-    a.className = 'description'
-    html = ob.data[this.options.prefix + 'Description'] || ob.data.description || ''
-    a.innerHTML = html
-    a.currentHTML = html
-    div.appendChild(a)
+    // CONTENT
+    const html = ob.layouts[this.options.prefix] || ob.layouts.list || ''
+    div.innerHTML = html
+    div.currentHTML = html
 
     div.priority = 'priority' in ob.data ? parseFloat(ob.data.priority) : 0
 
@@ -132,7 +103,7 @@ class OverpassLayerList {
 
     ob.sublayer.updateAssets(div, ob.data)
 
-    title.onmouseover = function (id, sublayer_id) {
+    div.onmouseover = function (id, sublayer_id) {
       if (this.currentHover) {
         this.currentHover.hide()
       }
@@ -147,13 +118,18 @@ class OverpassLayerList {
       )
     }.bind(this, ob.id, ob.sublayer_id)
 
-    title.onmouseout = function (id, sublayer_id) {
+    div.onmouseout = function (id, sublayer_id) {
       if (this.currentHover) {
         this.currentHover.hide()
       }
 
       this.currentHover = null
     }.bind(this, ob.id, ob.sublayer_id)
+
+    div.onclick = function (ob) {
+      this.layer.openPopupOnObject(ob)
+      return false
+    }.bind(this, ob)
   }
 
   updateObject (ob) {
@@ -168,48 +144,20 @@ class OverpassLayerList {
     }
 
     const div = this.items[ob.id]
-    let p = div.firstChild
-    while (p) {
-      if (p.className === 'markerParent') {
-        let a = p.firstChild
-        while (a) {
-          // MARKER
-          if (a.className === 'marker') {
-            while (p.lastChild) {
-              p.removeChild(p.lastChild)
-            }
 
-            a = this._getMarker(ob)
-            p.appendChild(a)
-          }
+    if (this.selectedId === ob.id) {
+      div.classList.add('selected')
+    } else {
+      div.classList.remove('selected')
+    }
 
-          // ICON
-          a = document.createElement('div')
-          a.className = 'icon'
-          a.innerHTML = ob.data[this.options.prefix + 'MarkerSign'] || ob.data.markerSign || ''
-          p.appendChild(a)
-
-          a = a.nextSibling
-        }
+    // CONTENT
+    if (div.className === 'content') {
+      const html = ob.layouts[this.options.prefix] || ob.layouts.list || ''
+      if (div.currentHTML !== html) {
+        div.innerHTML = html
+        div.currentHTML = html
       }
-
-      // TITLE
-      if (p.className === 'title') {
-        const html = ob.data[this.options.prefix + 'Title'] || ob.data.title || ''
-        if (p.currentHTML !== html) {
-          p.innerHTML = html
-        }
-      }
-
-      // TITLE
-      if (p.className === 'description') {
-        const html = ob.data[this.options.prefix + 'Description'] || ob.data.description || ''
-        if (p.currentHTML !== html) {
-          p.innerHTML = html
-        }
-      }
-
-      p = p.nextSibling
     }
 
     ob.sublayer.updateAssets(div, ob.data)

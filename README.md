@@ -151,7 +151,7 @@ Calculates the object data for each visible feature and call the update event.
 ## method get(id, callback)
 Load the given object, even if it should not be shown in the given layer / at the current zoom level.
 
-The callback will be called with the following parameters: err, ob (see event onAppear).
+The callback will be called with the following parameters: err, ob (see event `add`).
 
 ## method show(id, options, callback)
 Show the given object, even if it should not be shown in the given layer / at the current zoom level.
@@ -161,7 +161,7 @@ The options parameter influences how the object should be shown. (Consecutive ca
 Available options:
 * styles: Aside from the styles which are shown from the general options, show additional styles. (Array)
 
-The callback will be called with the following parameters: err, ob, data (see event 'appear').
+The callback will be called with the following parameters: err, ob, data (see event `add`).
 
 ## method hide(id)
 Hide the given object, resp. remove show options. If it is shown due to layer definition, it will still be visible.
@@ -171,6 +171,15 @@ Return twig data for object (for rendering).
 
 ## method setFilter(filter)
 Set an additional filter. Will intiate a check_update_map(). See OverpassFrontend.Filter for details.
+
+## method setLayout(id, layout)
+You can define several layouts, which will be rendered for each object. The rendered objects can be accessed from the `layouts` attribute of the `data` parameter of the events (e.g. add, update, ...).
+
+The layout parameter is a string in TwigJS template language. In contrast to the feature-templates, the result of the feature evaluation is available with the 'object' prefix. Also, autoescapeing is disabled (because feature templates render to HTML).
+
+The layout paramter could also be a function, which will be called with an object with the `object` property. If the function returns `null`, the content of the popup will not be updated.
+
+Example: `{{ object.title }}`.
 
 ## method getShiftWorld()
 get the degrees by which the world should be shifted, to show map features at the current view port (e.g. when you wrap over -180 or 180 longitude). E.g. near lon 180, the Eastern hemisphere (lon 0 .. 180) does not have to be shifted, the Western hemisphere (lon -180 .. 0) has to be shifted by 360 degrees.
@@ -188,6 +197,7 @@ Parameter:
 * `data.features`: an object with all leaflet feature which show the object. Index is the id of the style (e.g. 'highlight' for 'style:highlight'. 'default' for 'style').
 * `data.feature`: the first leaflet feature (of the styles array). it will be used for binding popups to.
 * `data.featureMarker`: the leaflet marker, if a marker is shown on the object
+* `data.layouts`: The rendered version of all layouts as object (indexed by the layout id)
 * `data.popup`: the popup, which is attached to the object (even if it is not shown)
 * `data.styles`: array of style-ids which are currently active
 * `data.isShown`: whether the object is currently shown on the map (boolean)
@@ -196,22 +206,22 @@ Parameter:
 ## event 'remove', Parameters: ob, data
 Will be called when an object disappears from the map (e.g. zoom out, pan out, ...)
 
-See `appear` for the description of parameters.
+See `add` for the description of parameters.
 
 ## event 'zoomChange', Parameters: ob, data
 Will be called every time when the zoom level changes. Occurs instantly after zoom level change for each object, before assessing if the object is visible at the current zoom level.
 
-See `appear` for the description of parameters.
+See `add` for the description of parameters.
 
 ## event 'update', Parameters: ob, data
 Called every time, when the object is being re-calculated (also when zoom level changes).
 
-See `appear` for the description of parameters.
+See `add` for the description of parameters.
 
 ## event 'twigData', Parameters: ob, data, result
 Called for every object on re-calculation. Result is the twigData which will used for evaluating each object. Any listeners may modify this result object.
 
-See `appear` for the description of other parameters.
+See `add` for the description of other parameters.
 
 # Optional features
 ## Text along lines

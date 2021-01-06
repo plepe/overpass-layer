@@ -11,6 +11,7 @@ const escapeHtml = require('html-escape')
 const Sublayer = require('./Sublayer')
 const Memberlayer = require('./Memberlayer')
 const compileFeature = require('./compileFeature')
+const compileTemplate = require('./compileTemplate')
 
 class OverpassLayer {
   constructor (options) {
@@ -35,8 +36,14 @@ class OverpassLayer {
     }
     this.options.styleNoBindPopup = this.options.styleNoBindPopup || []
     this.options.stylesNoAutoShow = this.options.stylesNoAutoShow || []
+    this.options.layouts = this.options.layouts || {}
+    this.options.layouts.popup = this.options.layouts.popup ||
+      '<h1>{{ object.popupTitle|default(object.title) }}</h1>' +
+      '{% if object.popupDescription or object.description %}<div class="description">{{ object.popupDescription|default(object.description) }}</div>{% endif %}' +
+      '{% if object.popupBody or object.body %}<div class="body">{{ object.popupBody|default(object.body) }}</div>{% endif %}'
 
-    compileFeature(this.options.feature, twig)
+    compileFeature(this.options.feature, twig, { autoescape: true })
+    compileFeature(this.options.layouts, twig, { autoescape: false })
 
     this.currentRequest = null
     this.lastZoom = null
@@ -60,6 +67,7 @@ class OverpassLayer {
         feature: this.options.memberFeature,
         styleNoBindPopup: this.options.styleNoBindPopup || [],
         stylesNoAutoShow: this.options.stylesNoAutoShow || [],
+        layouts: this.options.layouts,
         const: this.options.const
       }
       if (this.options.updateAssets) {
@@ -70,6 +78,10 @@ class OverpassLayer {
       this.memberlayer = new Memberlayer(this, memberOptions)
       this.subLayers.member = this.memberlayer
     }
+  }
+
+  setLayout (id, layout) {
+    this.options.layouts[id] = compileTemplate(layout, twig, { autoescape: false })
   }
 
   // compatibilty Leaflet Layerswitcher

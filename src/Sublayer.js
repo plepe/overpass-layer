@@ -57,10 +57,25 @@ class Sublayer {
     this.map = map
 
     this.map.on('popupopen', this._popupOpen.bind(this))
+    this.map.on('popupclose', this._popupClose.bind(this))
   }
 
   _popupOpen (e) {
     if (e.popup.sublayer === this) {
+      const ob = e.popup.object
+      this.emit('selectObject', ob.object, ob)
+      this.master.emit('selectObject', ob.object, ob)
+
+      this.updateAssets(e.popup._contentNode)
+    }
+  }
+
+  _popupClose (e) {
+    if (e.popup.sublayer === this) {
+      const ob = e.popup.object
+      this.emit('unselectObject', ob.object, ob)
+      this.master.emit('unselectObject', ob.object, ob)
+
       this.updateAssets(e.popup._contentNode)
     }
   }
@@ -560,31 +575,38 @@ class Sublayer {
     }
     data.styles = objectData.styles
 
-    let popupContent = ''
-    popupContent += '<h1>' + objectData.title + '</h1>'
-    const popupDescription = objectData.popupDescription || objectData.description
-    if (popupDescription) {
-      popupContent += '<div class="description">' + popupDescription + '</div>'
+    data.layouts = {}
+    for (const k in this.options.layouts) {
+      if (typeof this.options.layouts[k] === 'function') {
+        data.layouts[k] = this.options.layouts[k]({ object: objectData })
+      } else {
+        data.layouts[k] = this.options.layouts[k]
+      }
     }
-    if (objectData.body) {
-      popupContent += '<div class="body">' + objectData.body + '</div>'
-    }
+
+    const popupContent = data.layouts.popup
 
     if (data.popup) {
       if (data.popup._contentNode) {
-        if (data.popup.currentHTML !== popupContent) {
+        if (popupContent === null) {
+          // disable
+        } else if (data.popup.currentHTML !== popupContent) {
           data.popup._contentNode.innerHTML = popupContent
           this.updateAssets(data.popup._contentNode, objectData)
         }
-      } else {
+      } else if (popupContent !== null) {
         data.popup.setContent(popupContent)
       }
 
       data.popup.currentHTML = popupContent
     } else {
-      data.popup = L.popup().setContent(popupContent)
+      data.popup = L.popup()
       data.popup.object = data
       data.popup.sublayer = this
+
+      if (popupContent !== null) {
+        data.popup.setContent(popupContent)
+      }
 
       data.feature.bindPopup(data.popup)
       for (k in data.features) {

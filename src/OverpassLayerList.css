@@ -1,13 +1,18 @@
 ul.overpass-layer-list {
   margin-top: 0;
   margin-bottom: 0;
+  padding-left: 0;
 }
 ul.overpass-layer-list > li {
   position: relative;
   list-style: none;
   min-height: 30px;
+  padding-left: 40px;
 }
-ul.overpass-layer-list > li > .markerParent {
+ul.overpass-layer-list > li.selected {
+  background: #e0e0e0;
+}
+ul.overpass-layer-list > li > .marker {
   position: absolute;
   margin-left: -35px;
   width: 30px;
@@ -17,9 +22,9 @@ ul.overpass-layer-list > li > .markerParent {
   color: black;
   text-decoration: none;
 }
-ul.overpass-layer-list > li > .markerParent > .marker {
+ul.overpass-layer-list > li > .marker > .symbol {
 }
-ul.overpass-layer-list > li > .markerParent > .icon {
+ul.overpass-layer-list > li > .marker > .sign {
   text-align: center;
   position: absolute;
   top: 3px;
@@ -29,16 +34,16 @@ ul.overpass-layer-list > li > .markerParent > .icon {
   z-index: 1;
   display: inline-block;
 }
-ul.overpass-layer-list > li > a.title {
+ul.overpass-layer-list > li > .content > a.title {
   display: inline-block;
   color: black;
   text-decoration: none;
 }
-ul.overpass-layer-list > li > a.title:hover,
-ul.overpass-layer-list > li > a.title:active {
+ul.overpass-layer-list > li > .content > a.title:hover,
+ul.overpass-layer-list > li > .content > a.title:active {
   text-decoration: underline;
 }
-ul.overpass-layer-list > li > div.description {
+ul.overpass-layer-list > li > .content > div.description {
   font-style: italic;
   color: #707070;
   float: right;
