@@ -49242,7 +49242,7 @@ class DecoratorPattern {
 
 module.exports = DecoratorPattern
 
-},{"./isTrue":250,"./parseLength":251,"./styleToLeaflet":254}],242:[function(require,module,exports){
+},{"./isTrue":251,"./parseLength":252,"./styleToLeaflet":255}],242:[function(require,module,exports){
 const Sublayer = require('./Sublayer')
 
 class Memberlayer extends Sublayer {
@@ -49328,6 +49328,7 @@ const escapeHtml = require('html-escape')
 const Sublayer = require('./Sublayer')
 const Memberlayer = require('./Memberlayer')
 const compileFeature = require('./compileFeature')
+const compileTemplate = require('./compileTemplate')
 
 class OverpassLayer {
   constructor (options) {
@@ -49352,8 +49353,14 @@ class OverpassLayer {
     }
     this.options.styleNoBindPopup = this.options.styleNoBindPopup || []
     this.options.stylesNoAutoShow = this.options.stylesNoAutoShow || []
+    this.options.layouts = this.options.layouts || {}
+    this.options.layouts.popup = this.options.layouts.popup ||
+      '<h1>{{ object.popupTitle|default(object.title) }}</h1>' +
+      '{% if object.popupDescription or object.description %}<div class="description">{{ object.popupDescription|default(object.description) }}</div>{% endif %}' +
+      '{% if object.popupBody or object.body %}<div class="body">{{ object.popupBody|default(object.body) }}</div>{% endif %}'
 
-    compileFeature(this.options.feature, twig)
+    compileFeature(this.options.feature, twig, { autoescape: true })
+    compileFeature(this.options.layouts, twig, { autoescape: false })
 
     this.currentRequest = null
     this.lastZoom = null
@@ -49377,6 +49384,7 @@ class OverpassLayer {
         feature: this.options.memberFeature,
         styleNoBindPopup: this.options.styleNoBindPopup || [],
         stylesNoAutoShow: this.options.stylesNoAutoShow || [],
+        layouts: this.options.layouts,
         const: this.options.const
       }
       if (this.options.updateAssets) {
@@ -49387,6 +49395,10 @@ class OverpassLayer {
       this.memberlayer = new Memberlayer(this, memberOptions)
       this.subLayers.member = this.memberlayer
     }
+  }
+
+  setLayout (id, layout) {
+    this.options.layouts[id] = compileTemplate(layout, twig, { autoescape: false })
   }
 
   // compatibilty Leaflet Layerswitcher
@@ -49651,8 +49663,8 @@ OverpassLayer.twig = twig
 
 module.exports = OverpassLayer
 
-},{"./Memberlayer":242,"./OverpassLayer.css":243,"./Sublayer":247,"./compileFeature":249,"boundingbox":40,"event-emitter":60,"html-escape":64,"overpass-frontend":199,"twig":230}],245:[function(require,module,exports){
-var css = "ul.overpass-layer-list {\n  margin-top: 0;\n  margin-bottom: 0;\n}\nul.overpass-layer-list > li {\n  position: relative;\n  list-style: none;\n  min-height: 30px;\n}\nul.overpass-layer-list > li > .markerParent {\n  position: absolute;\n  margin-left: -35px;\n  width: 30px;\n  height: 30px;\n  text-align: center;\n  display: block;\n  color: black;\n  text-decoration: none;\n}\n\nul.overpass-layer-list > li > .markerParent > .icon {\n  text-align: center;\n  position: absolute;\n  top: 3px;\n  font-size: 15px;\n  left: 0;\n  right: 0;\n  z-index: 1;\n  display: inline-block;\n}\nul.overpass-layer-list > li > a.title {\n  display: inline-block;\n  color: black;\n  text-decoration: none;\n}\nul.overpass-layer-list > li > a.title:hover,\nul.overpass-layer-list > li > a.title:active {\n  text-decoration: underline;\n}\nul.overpass-layer-list > li > div.description {\n  font-style: italic;\n  color: #707070;\n  float: right;\n  text-align: right;\n}\nul.overpass-layer-list > li:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n.hoverable {\n  cursor: pointer;\n}\n"; (require("browserify-css").createStyle(css, { "href": "src/OverpassLayerList.css" }, { "insertAt": "bottom" })); module.exports = css;
+},{"./Memberlayer":242,"./OverpassLayer.css":243,"./Sublayer":247,"./compileFeature":249,"./compileTemplate":250,"boundingbox":40,"event-emitter":60,"html-escape":64,"overpass-frontend":199,"twig":230}],245:[function(require,module,exports){
+var css = "ul.overpass-layer-list {\n  margin-top: 0;\n  margin-bottom: 0;\n  padding-left: 0;\n}\nul.overpass-layer-list > li {\n  position: relative;\n  list-style: none;\n  min-height: 30px;\n  padding-left: 40px;\n}\nul.overpass-layer-list > li.selected {\n  background: #e0e0e0;\n}\nul.overpass-layer-list > li > .marker {\n  position: absolute;\n  margin-left: -35px;\n  width: 30px;\n  height: 30px;\n  text-align: center;\n  display: block;\n  color: black;\n  text-decoration: none;\n}\n\nul.overpass-layer-list > li > .marker > .sign {\n  text-align: center;\n  position: absolute;\n  top: 3px;\n  font-size: 15px;\n  left: 0;\n  right: 0;\n  z-index: 1;\n  display: inline-block;\n}\nul.overpass-layer-list > li > .content > a.title {\n  display: inline-block;\n  color: black;\n  text-decoration: none;\n}\nul.overpass-layer-list > li > .content > a.title:hover,\nul.overpass-layer-list > li > .content > a.title:active {\n  text-decoration: underline;\n}\nul.overpass-layer-list > li > .content > div.description {\n  font-style: italic;\n  color: #707070;\n  float: right;\n  text-align: right;\n}\nul.overpass-layer-list > li:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n.hoverable {\n  cursor: pointer;\n}\n"; (require("browserify-css").createStyle(css, { "href": "src/OverpassLayerList.css" }, { "insertAt": "bottom" })); module.exports = css;
 },{"browserify-css":42}],246:[function(require,module,exports){
 /* eslint camelcase: 0 */
 
@@ -49676,10 +49688,39 @@ class OverpassLayerList {
     this.layer = layer
     this.options = options || {}
     this.options.prefix = this.options.prefix || 'list'
+    this.selectedId = null
+
+    const prefix = this.options.prefix
+    if (!(prefix in this.layer.options.layouts)) {
+      this.layer.setLayout(prefix,
+        '<div class="marker">' +
+        '{% if object.' + prefix + 'MarkerSymbol or object.markerSymbol %}' +
+        '<div class="symbol">{{ object.' + prefix + 'MarkerSymbol|default(object.markerSymbol) }}</div>' +
+        '{% elseif object.marker and object.marker.iconUrl %}' +
+        '<img class="symbol" src="{{ object.marker.iconUrl|e }}">' +
+        '{% endif %}' +
+        '{% if object.' + prefix + 'MarkerSign or object.markerSign %}' +
+        '<div class="sign">{{ object.' + prefix + 'MarkerSign|default(object.markerSign) }}</div>' +
+        '{% endif %}' +
+        '</div>' +
+        '<div class="content">' +
+        '<a class="title" href="{{ object.appUrl|default("#") }}">{{ object.' + prefix + 'Title|default(object.title) }}</a>' +
+        '{% if object.' + prefix + 'Description or object.description %}<div class="description">{{ object.' + prefix + 'Description|default(object.description) }}</div>{% endif %}' +
+        '</div>'
+      )
+    }
 
     this.layer.on('add', (ob, data) => this.addObject(data))
     this.layer.on('update', (ob, data) => this.updateObject(data))
     this.layer.on('remove', (ob, data) => this.delObject(data))
+    this.layer.on('selectObject', (ob, data) => {
+      this.selectedId = ob.id
+      this.updateObject(data)
+    })
+    this.layer.on('unselectObject', (ob, data) => {
+      this.selectedId = null
+      this.updateObject(data)
+    })
 
     this.items = {}
 
@@ -49692,26 +49733,6 @@ class OverpassLayerList {
     parentDom.appendChild(this.dom)
   }
 
-  _getMarker (ob) {
-    let a
-
-    if (ob.data[this.options.prefix + 'MarkerSymbol']) {
-      a = document.createElement('div')
-      a.className = 'marker'
-      a.innerHTML = ob.data[this.options.prefix + 'MarkerSymbol']
-    } else if (ob.data.markerSymbol) {
-      a = document.createElement('div')
-      a.className = 'marker'
-      a.innerHTML = ob.data.markerSymbol
-    } else if (ob.data.marker && ob.data.marker.iconUrl) {
-      a = document.createElement('img')
-      a.className = 'marker'
-      a.src = ob.data.marker.iconUrl
-    }
-
-    return a
-  }
-
   addObject (ob) {
     if (isTrue(ob.data[this.options.prefix + 'Exclude'])) {
       return
@@ -49722,56 +49743,18 @@ class OverpassLayerList {
     }
 
     const div = document.createElement('li')
-    let a
+
+    if (this.selectedId === ob.id) {
+      div.classList.add('selected')
+    }
 
     this.items[ob.id] = div
     ob[this.options.prefix + 'Item'] = div
 
-    // MARKER&ICON PARENT
-    const p = document.createElement('a')
-    p.className = 'markerParent'
-    p.href = 'appUrl' in ob.data ? ob.data.appUrl : '#'
-    p.onclick = function (ob) {
-      this.layer.openPopupOnObject(ob)
-      return false
-    }.bind(this, ob)
-    div.appendChild(p)
-
-    // MARKER
-    a = this._getMarker(ob)
-    if (a) {
-      p.appendChild(a)
-    }
-
-    // ICON
-    a = document.createElement('div')
-    a.className = 'icon'
-    let html = ob.data[this.options.prefix + 'MarkerSign'] || ob.data.markerSign || ''
-    a.innerHTML = html
-    a.currentHTML = html
-    p.appendChild(a)
-
-    // TITLE
-    a = document.createElement('a')
-    a.className = 'title'
-    a.href = 'appUrl' in ob.data ? ob.data.appUrl : '#'
-    a.onclick = function (ob) {
-      this.layer.openPopupOnObject(ob)
-      return false
-    }.bind(this, ob)
-    html = ob.data[this.options.prefix + 'Title'] || ob.data.title
-    a.innerHTML = html
-    a.currentHTML = html
-    div.appendChild(a)
-    const title = a
-
-    // DESCRIPTION
-    a = document.createElement('div')
-    a.className = 'description'
-    html = ob.data[this.options.prefix + 'Description'] || ob.data.description || ''
-    a.innerHTML = html
-    a.currentHTML = html
-    div.appendChild(a)
+    // CONTENT
+    const html = ob.layouts[this.options.prefix] || ob.layouts.list || ''
+    div.innerHTML = html
+    div.currentHTML = html
 
     div.priority = 'priority' in ob.data ? parseFloat(ob.data.priority) : 0
 
@@ -49788,7 +49771,7 @@ class OverpassLayerList {
 
     ob.sublayer.updateAssets(div, ob.data)
 
-    title.onmouseover = function (id, sublayer_id) {
+    div.onmouseover = function (id, sublayer_id) {
       if (this.currentHover) {
         this.currentHover.hide()
       }
@@ -49803,13 +49786,18 @@ class OverpassLayerList {
       )
     }.bind(this, ob.id, ob.sublayer_id)
 
-    title.onmouseout = function (id, sublayer_id) {
+    div.onmouseout = function (id, sublayer_id) {
       if (this.currentHover) {
         this.currentHover.hide()
       }
 
       this.currentHover = null
     }.bind(this, ob.id, ob.sublayer_id)
+
+    div.onclick = function (ob) {
+      this.layer.openPopupOnObject(ob)
+      return false
+    }.bind(this, ob)
   }
 
   updateObject (ob) {
@@ -49824,48 +49812,20 @@ class OverpassLayerList {
     }
 
     const div = this.items[ob.id]
-    let p = div.firstChild
-    while (p) {
-      if (p.className === 'markerParent') {
-        let a = p.firstChild
-        while (a) {
-          // MARKER
-          if (a.className === 'marker') {
-            while (p.lastChild) {
-              p.removeChild(p.lastChild)
-            }
 
-            a = this._getMarker(ob)
-            p.appendChild(a)
-          }
+    if (this.selectedId === ob.id) {
+      div.classList.add('selected')
+    } else {
+      div.classList.remove('selected')
+    }
 
-          // ICON
-          a = document.createElement('div')
-          a.className = 'icon'
-          a.innerHTML = ob.data[this.options.prefix + 'MarkerSign'] || ob.data.markerSign || ''
-          p.appendChild(a)
-
-          a = a.nextSibling
-        }
+    // CONTENT
+    if (div.className === 'content') {
+      const html = ob.layouts[this.options.prefix] || ob.layouts.list || ''
+      if (div.currentHTML !== html) {
+        div.innerHTML = html
+        div.currentHTML = html
       }
-
-      // TITLE
-      if (p.className === 'title') {
-        const html = ob.data[this.options.prefix + 'Title'] || ob.data.title || ''
-        if (p.currentHTML !== html) {
-          p.innerHTML = html
-        }
-      }
-
-      // TITLE
-      if (p.className === 'description') {
-        const html = ob.data[this.options.prefix + 'Description'] || ob.data.description || ''
-        if (p.currentHTML !== html) {
-          p.innerHTML = html
-        }
-      }
-
-      p = p.nextSibling
     }
 
     ob.sublayer.updateAssets(div, ob.data)
@@ -49897,7 +49857,7 @@ class OverpassLayerList {
 
 module.exports = OverpassLayerList
 
-},{"./OverpassLayerList.css":245,"./isTrue":250}],247:[function(require,module,exports){
+},{"./OverpassLayerList.css":245,"./isTrue":251}],247:[function(require,module,exports){
 /* global L */
 
 const ee = require('event-emitter')
@@ -49957,10 +49917,25 @@ class Sublayer {
     this.map = map
 
     this.map.on('popupopen', this._popupOpen.bind(this))
+    this.map.on('popupclose', this._popupClose.bind(this))
   }
 
   _popupOpen (e) {
     if (e.popup.sublayer === this) {
+      const ob = e.popup.object
+      this.emit('selectObject', ob.object, ob)
+      this.master.emit('selectObject', ob.object, ob)
+
+      this.updateAssets(e.popup._contentNode)
+    }
+  }
+
+  _popupClose (e) {
+    if (e.popup.sublayer === this) {
+      const ob = e.popup.object
+      this.emit('unselectObject', ob.object, ob)
+      this.master.emit('unselectObject', ob.object, ob)
+
       this.updateAssets(e.popup._contentNode)
     }
   }
@@ -50460,31 +50435,38 @@ class Sublayer {
     }
     data.styles = objectData.styles
 
-    let popupContent = ''
-    popupContent += '<h1>' + objectData.title + '</h1>'
-    const popupDescription = objectData.popupDescription || objectData.description
-    if (popupDescription) {
-      popupContent += '<div class="description">' + popupDescription + '</div>'
+    data.layouts = {}
+    for (const k in this.options.layouts) {
+      if (typeof this.options.layouts[k] === 'function') {
+        data.layouts[k] = this.options.layouts[k]({ object: objectData })
+      } else {
+        data.layouts[k] = this.options.layouts[k]
+      }
     }
-    if (objectData.body) {
-      popupContent += '<div class="body">' + objectData.body + '</div>'
-    }
+
+    const popupContent = data.layouts.popup
 
     if (data.popup) {
       if (data.popup._contentNode) {
-        if (data.popup.currentHTML !== popupContent) {
+        if (popupContent === null) {
+          // disable
+        } else if (data.popup.currentHTML !== popupContent) {
           data.popup._contentNode.innerHTML = popupContent
           this.updateAssets(data.popup._contentNode, objectData)
         }
-      } else {
+      } else if (popupContent !== null) {
         data.popup.setContent(popupContent)
       }
 
       data.popup.currentHTML = popupContent
     } else {
-      data.popup = L.popup().setContent(popupContent)
+      data.popup = L.popup()
       data.popup.object = data
       data.popup.sublayer = this
+
+      if (popupContent !== null) {
+        data.popup.setContent(popupContent)
+      }
 
       data.feature.bindPopup(data.popup)
       for (k in data.features) {
@@ -50714,7 +50696,7 @@ ee(Sublayer.prototype)
 
 module.exports = Sublayer
 
-},{"./DecoratorPattern":241,"./SublayerFeature":248,"./pointOnFeature":252,"./strToStyle":253,"./styleToLeaflet":254,"boundingbox":40,"event-emitter":60,"nearest-point-on-geometry":68,"overpass-frontend":199}],248:[function(require,module,exports){
+},{"./DecoratorPattern":241,"./SublayerFeature":248,"./pointOnFeature":253,"./strToStyle":254,"./styleToLeaflet":255,"boundingbox":40,"event-emitter":60,"nearest-point-on-geometry":68,"overpass-frontend":199}],248:[function(require,module,exports){
 class SublayerFeature {
   constructor (object, sublayer) {
     this.object = object
@@ -50741,33 +50723,22 @@ class SublayerFeature {
 module.exports = SublayerFeature
 
 },{}],249:[function(require,module,exports){
-function compileFeature (feature, twig) {
+const compileTemplate = require('./compileTemplate')
+
+function compileFeature (feature, twig, options = {}) {
+  if (!('autoescape' in options)) {
+    options.autoescape = true
+  }
+
   for (const k in feature) {
     if (typeof feature[k] === 'string' && feature[k].search('{') !== -1) {
-      let template
-
-      try {
-        template = twig.twig({ data: feature[k], autoescape: true })
-      } catch (err) {
-        console.log('Error compiling twig template ' + this.id + '/' + k + ':', err)
-        break
-      }
-
-      feature[k] = function (template, k, ob) {
-        try {
-          return template.render(ob)
-        } catch (err) {
-          console.log('Error rendering twig template ' + this.id + '/' + k + ': ', err)
-        }
-
-        return null
-      }.bind(this, template, k)
+      feature[k] = compileTemplate(feature[k], twig, options)
     } else if (typeof feature[k] === 'object' && (['style'].indexOf(k) !== -1 || k.match(/^style:/))) {
       const templates = {}
       for (const k1 in feature[k]) {
         if (typeof feature[k][k1] === 'string' && feature[k][k1].search('{') !== -1) {
           try {
-            templates[k1] = twig.twig({ data: feature[k][k1], autoescape: true, rethrow: true })
+            templates[k1] = twig.twig({ data: feature[k][k1], autoescape: options.autoescape, rethrow: true })
           } catch (e) {
             console.error("Can't compile template:\n" + feature[k][k1] + '\n\n', e.message)
           }
@@ -50795,7 +50766,33 @@ function compileFeature (feature, twig) {
 
 module.exports = compileFeature
 
-},{}],250:[function(require,module,exports){
+},{"./compileTemplate":250}],250:[function(require,module,exports){
+module.exports = function compileTemplate (template, twig, options = {}) {
+  if (typeof template === 'string' && template.search('{') !== -1) {
+    let result
+
+    try {
+      result = twig.twig({ data: template, autoescape: options.autoescape })
+    } catch (err) {
+      console.log('Error compiling twig template', template, err)
+      return template
+    }
+
+    return (ob) => {
+      try {
+        return result.render(ob)
+      } catch (err) {
+        console.log('Error rendering twig template', template, err)
+      }
+
+      return null
+    }
+  }
+
+  return template
+}
+
+},{}],251:[function(require,module,exports){
 function isTrue (value) {
   if (value === null || typeof value === 'undefined') {
     return false
@@ -50825,7 +50822,7 @@ function isTrue (value) {
 window.isTrue = isTrue
 module.exports = isTrue
 
-},{}],251:[function(require,module,exports){
+},{}],252:[function(require,module,exports){
 module.exports = function parseLength (value, metersPerPixel) {
   const m = ('' + value).trim().match(/^([+-]?[0-9]+(?:\.[0-9]+)?)\s*(px|m)$/)
   if (m) {
@@ -50841,7 +50838,7 @@ module.exports = function parseLength (value, metersPerPixel) {
   return parseFloat(value)
 }
 
-},{}],252:[function(require,module,exports){
+},{}],253:[function(require,module,exports){
 const turf = {
   along: require('@turf/along').default,
   length: require('@turf/length').default,
@@ -50866,7 +50863,7 @@ module.exports = function pointOnFeature (ob, leafletFeatureOptions) {
   }
 }
 
-},{"@turf/along":4,"@turf/length":25,"@turf/point-on-feature":35}],253:[function(require,module,exports){
+},{"@turf/along":4,"@turf/length":25,"@turf/point-on-feature":35}],254:[function(require,module,exports){
 function strToStyle (style) {
   const str = style.split('\n')
   style = {}
@@ -50889,7 +50886,7 @@ function strToStyle (style) {
 
 module.exports = strToStyle
 
-},{}],254:[function(require,module,exports){
+},{}],255:[function(require,module,exports){
 const isTrue = require('./isTrue')
 const parseLength = require('./parseLength')
 
@@ -50971,4 +50968,4 @@ function styleToLeaflet (style, twigData) {
 
 module.exports = styleToLeaflet
 
-},{"./isTrue":250,"./parseLength":251}]},{},[1]);
+},{"./isTrue":251,"./parseLength":252}]},{},[1]);
