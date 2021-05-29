@@ -77,6 +77,10 @@ class DecoratorPattern {
               options.pathOptions = styleToLeaflet(symbolOptions[patternId], data.twigData)
               symbol = L.Symbol.dash(options)
               break
+            case 'streak':
+              options.pathOptions = styleToLeaflet(symbolOptions[patternId], data.twigData)
+              symbol = L.Symbol.streak(options)
+              break
             case 'arrowHead':
               options.pathOptions = styleToLeaflet(symbolOptions[patternId], data.twigData)
               symbol = L.Symbol.arrowHead(options)

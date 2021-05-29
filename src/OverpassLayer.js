@@ -153,6 +153,8 @@ class OverpassLayer {
         metersPerPixel: 40075016.686 * Math.abs(Math.cos(this.map.getCenter().lat / 180 * Math.PI)) / Math.pow(2, this.map.getZoom() + 8)
       }
     }
+
+    this.emit('globalTwigData', this.globalTwigData)
   }
 
   check_update_map () {
