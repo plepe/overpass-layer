@@ -13,7 +13,7 @@ if (typeof window !== 'undefined') {
 OverpassLayer.List = OverpassLayerList
 module.exports = OverpassLayer
 
-},{"./src/OverpassLayer":244,"./src/OverpassLayerList":246,"overpass-frontend":199}],2:[function(require,module,exports){
+},{"./src/OverpassLayer":260,"./src/OverpassLayerList":262,"overpass-frontend":214}],2:[function(require,module,exports){
 var wgs84 = require('wgs84');
 
 module.exports.geometry = geometry;
@@ -103,7 +103,7 @@ function ringArea(coords) {
 function rad(_) {
     return _ * Math.PI / 180;
 }
-},{"wgs84":237}],3:[function(require,module,exports){
+},{"wgs84":253}],3:[function(require,module,exports){
 var geojsonArea = require('@mapbox/geojson-area');
 
 module.exports = rewind;
@@ -161,7 +161,7 @@ function cw(_) {
 "use strict";
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
-}
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 var bearing_1 = __importDefault(require("@turf/bearing"));
 var destination_1 = __importDefault(require("@turf/destination"));
@@ -215,135 +215,1130 @@ function along(line, distance, options) {
 }
 exports.default = along;
 
-},{"@turf/bearing":9,"@turf/destination":16,"@turf/distance":18,"@turf/helpers":22,"@turf/invariant":24}],5:[function(require,module,exports){
+},{"@turf/bearing":5,"@turf/destination":6,"@turf/distance":7,"@turf/helpers":8,"@turf/invariant":9}],5:[function(require,module,exports){
 "use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-var meta_1 = require("@turf/meta");
-// Note: change RADIUS => earthRadius
-var RADIUS = 6378137;
-/**
- * Takes one or more features and returns their area in square meters.
- *
- * @name area
- * @param {GeoJSON} geojson input GeoJSON feature(s)
- * @returns {number} area in square meters
- * @example
- * var polygon = turf.polygon([[[125, -15], [113, -22], [154, -27], [144, -15], [125, -15]]]);
- *
- * var area = turf.area(polygon);
- *
- * //addToMap
- * var addToMap = [polygon]
- * polygon.properties.area = area
- */
-function area(geojson) {
-    return meta_1.geomReduce(geojson, function (value, geom) {
-        return value + calculateArea(geom);
-    }, 0);
-}
-exports.default = area;
-/**
- * Calculate Area
- *
- * @private
- * @param {Geometry} geom GeoJSON Geometries
- * @returns {number} area
- */
-function calculateArea(geom) {
-    var total = 0;
-    var i;
-    switch (geom.type) {
-        case "Polygon":
-            return polygonArea(geom.coordinates);
-        case "MultiPolygon":
-            for (i = 0; i < geom.coordinates.length; i++) {
-                total += polygonArea(geom.coordinates[i]);
-            }
-            return total;
-        case "Point":
-        case "MultiPoint":
-        case "LineString":
-        case "MultiLineString":
-            return 0;
-    }
-    return 0;
-}
-function polygonArea(coords) {
-    var total = 0;
-    if (coords && coords.length > 0) {
-        total += Math.abs(ringArea(coords[0]));
-        for (var i = 1; i < coords.length; i++) {
-            total -= Math.abs(ringArea(coords[i]));
-        }
-    }
-    return total;
-}
-/**
- * @private
- * Calculate the approximate area of the polygon were it projected onto the earth.
- * Note that this area will be positive if ring is oriented clockwise, otherwise it will be negative.
- *
- * Reference:
- * Robert. G. Chamberlain and William H. Duquette, "Some Algorithms for Polygons on a Sphere",
- * JPL Publication 07-03, Jet Propulsion
- * Laboratory, Pasadena, CA, June 2007 http://trs-new.jpl.nasa.gov/dspace/handle/2014/40409
- *
- * @param {Array<Array<number>>} coords Ring Coordinates
- * @returns {number} The approximate signed geodesic area of the polygon in square meters.
- */
-function ringArea(coords) {
-    var p1;
-    var p2;
-    var p3;
-    var lowerIndex;
-    var middleIndex;
-    var upperIndex;
-    var i;
-    var total = 0;
-    var coordsLength = coords.length;
-    if (coordsLength > 2) {
-        for (i = 0; i < coordsLength; i++) {
-            if (i === coordsLength - 2) {
-                lowerIndex = coordsLength - 2;
-                middleIndex = coordsLength - 1;
-                upperIndex = 0;
-            }
-            else if (i === coordsLength - 1) {
-                lowerIndex = coordsLength - 1;
-                middleIndex = 0;
-                upperIndex = 1;
-            }
-            else {
-                lowerIndex = i;
-                middleIndex = i + 1;
-                upperIndex = i + 2;
-            }
-            p1 = coords[lowerIndex];
-            p2 = coords[middleIndex];
-            p3 = coords[upperIndex];
-            total += (rad(p3[0]) - rad(p1[0])) * Math.sin(rad(p2[1]));
-        }
-        total = total * RADIUS * RADIUS / 2;
-    }
-    return total;
-}
-function rad(num) {
-    return num * Math.PI / 180;
-}
-
-},{"@turf/meta":28}],6:[function(require,module,exports){
-"use strict";
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (Object.hasOwnProperty.call(mod, k)) result[k] = mod[k];
-    result["default"] = mod;
-    return result;
-}
 Object.defineProperty(exports, "__esModule", { value: true });
 var helpers_1 = require("@turf/helpers");
 var invariant_1 = require("@turf/invariant");
-var lineclip = __importStar(require("./lib/lineclip"));
+// http://en.wikipedia.org/wiki/Haversine_formula
+// http://www.movable-type.co.uk/scripts/latlong.html
+/**
+ * Takes two {@link Point|points} and finds the geographic bearing between them,
+ * i.e. the angle measured in degrees from the north line (0 degrees)
+ *
+ * @name bearing
+ * @param {Coord} start starting Point
+ * @param {Coord} end ending Point
+ * @param {Object} [options={}] Optional parameters
+ * @param {boolean} [options.final=false] calculates the final bearing if true
+ * @returns {number} bearing in decimal degrees, between -180 and 180 degrees (positive clockwise)
+ * @example
+ * var point1 = turf.point([-75.343, 39.984]);
+ * var point2 = turf.point([-75.534, 39.123]);
+ *
+ * var bearing = turf.bearing(point1, point2);
+ *
+ * //addToMap
+ * var addToMap = [point1, point2]
+ * point1.properties['marker-color'] = '#f00'
+ * point2.properties['marker-color'] = '#0f0'
+ * point1.properties.bearing = bearing
+ */
+function bearing(start, end, options) {
+    if (options === void 0) { options = {}; }
+    // Reverse calculation
+    if (options.final === true) {
+        return calculateFinalBearing(start, end);
+    }
+    var coordinates1 = invariant_1.getCoord(start);
+    var coordinates2 = invariant_1.getCoord(end);
+    var lon1 = helpers_1.degreesToRadians(coordinates1[0]);
+    var lon2 = helpers_1.degreesToRadians(coordinates2[0]);
+    var lat1 = helpers_1.degreesToRadians(coordinates1[1]);
+    var lat2 = helpers_1.degreesToRadians(coordinates2[1]);
+    var a = Math.sin(lon2 - lon1) * Math.cos(lat2);
+    var b = Math.cos(lat1) * Math.sin(lat2) -
+        Math.sin(lat1) * Math.cos(lat2) * Math.cos(lon2 - lon1);
+    return helpers_1.radiansToDegrees(Math.atan2(a, b));
+}
+exports.default = bearing;
+/**
+ * Calculates Final Bearing
+ *
+ * @private
+ * @param {Coord} start starting Point
+ * @param {Coord} end ending Point
+ * @returns {number} bearing
+ */
+function calculateFinalBearing(start, end) {
+    // Swap start & end
+    var bear = bearing(end, start);
+    bear = (bear + 180) % 360;
+    return bear;
+}
+
+},{"@turf/helpers":8,"@turf/invariant":9}],6:[function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+// http://en.wikipedia.org/wiki/Haversine_formula
+// http://www.movable-type.co.uk/scripts/latlong.html
+var helpers_1 = require("@turf/helpers");
+var invariant_1 = require("@turf/invariant");
+/**
+ * Takes a {@link Point} and calculates the location of a destination point given a distance in
+ * degrees, radians, miles, or kilometers; and bearing in degrees.
+ * This uses the [Haversine formula](http://en.wikipedia.org/wiki/Haversine_formula) to account for global curvature.
+ *
+ * @name destination
+ * @param {Coord} origin starting point
+ * @param {number} distance distance from the origin point
+ * @param {number} bearing ranging from -180 to 180
+ * @param {Object} [options={}] Optional parameters
+ * @param {string} [options.units='kilometers'] miles, kilometers, degrees, or radians
+ * @param {Object} [options.properties={}] Translate properties to Point
+ * @returns {Feature<Point>} destination point
+ * @example
+ * var point = turf.point([-75.343, 39.984]);
+ * var distance = 50;
+ * var bearing = 90;
+ * var options = {units: 'miles'};
+ *
+ * var destination = turf.destination(point, distance, bearing, options);
+ *
+ * //addToMap
+ * var addToMap = [point, destination]
+ * destination.properties['marker-color'] = '#f00';
+ * point.properties['marker-color'] = '#0f0';
+ */
+function destination(origin, distance, bearing, options) {
+    if (options === void 0) { options = {}; }
+    // Handle input
+    var coordinates1 = invariant_1.getCoord(origin);
+    var longitude1 = helpers_1.degreesToRadians(coordinates1[0]);
+    var latitude1 = helpers_1.degreesToRadians(coordinates1[1]);
+    var bearingRad = helpers_1.degreesToRadians(bearing);
+    var radians = helpers_1.lengthToRadians(distance, options.units);
+    // Main
+    var latitude2 = Math.asin(Math.sin(latitude1) * Math.cos(radians) +
+        Math.cos(latitude1) * Math.sin(radians) * Math.cos(bearingRad));
+    var longitude2 = longitude1 +
+        Math.atan2(Math.sin(bearingRad) * Math.sin(radians) * Math.cos(latitude1), Math.cos(radians) - Math.sin(latitude1) * Math.sin(latitude2));
+    var lng = helpers_1.radiansToDegrees(longitude2);
+    var lat = helpers_1.radiansToDegrees(latitude2);
+    return helpers_1.point([lng, lat], options.properties);
+}
+exports.default = destination;
+
+},{"@turf/helpers":8,"@turf/invariant":9}],7:[function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+var invariant_1 = require("@turf/invariant");
+var helpers_1 = require("@turf/helpers");
+//http://en.wikipedia.org/wiki/Haversine_formula
+//http://www.movable-type.co.uk/scripts/latlong.html
+/**
+ * Calculates the distance between two {@link Point|points} in degrees, radians, miles, or kilometers.
+ * This uses the [Haversine formula](http://en.wikipedia.org/wiki/Haversine_formula) to account for global curvature.
+ *
+ * @name distance
+ * @param {Coord} from origin point
+ * @param {Coord} to destination point
+ * @param {Object} [options={}] Optional parameters
+ * @param {string} [options.units='kilometers'] can be degrees, radians, miles, or kilometers
+ * @returns {number} distance between the two points
+ * @example
+ * var from = turf.point([-75.343, 39.984]);
+ * var to = turf.point([-75.534, 39.123]);
+ * var options = {units: 'miles'};
+ *
+ * var distance = turf.distance(from, to, options);
+ *
+ * //addToMap
+ * var addToMap = [from, to];
+ * from.properties.distance = distance;
+ * to.properties.distance = distance;
+ */
+function distance(from, to, options) {
+    if (options === void 0) { options = {}; }
+    var coordinates1 = invariant_1.getCoord(from);
+    var coordinates2 = invariant_1.getCoord(to);
+    var dLat = helpers_1.degreesToRadians(coordinates2[1] - coordinates1[1]);
+    var dLon = helpers_1.degreesToRadians(coordinates2[0] - coordinates1[0]);
+    var lat1 = helpers_1.degreesToRadians(coordinates1[1]);
+    var lat2 = helpers_1.degreesToRadians(coordinates2[1]);
+    var a = Math.pow(Math.sin(dLat / 2), 2) +
+        Math.pow(Math.sin(dLon / 2), 2) * Math.cos(lat1) * Math.cos(lat2);
+    return helpers_1.radiansToLength(2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)), options.units);
+}
+exports.default = distance;
+
+},{"@turf/helpers":8,"@turf/invariant":9}],8:[function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+/**
+ * @module helpers
+ */
+/**
+ * Earth Radius used with the Harvesine formula and approximates using a spherical (non-ellipsoid) Earth.
+ *
+ * @memberof helpers
+ * @type {number}
+ */
+exports.earthRadius = 6371008.8;
+/**
+ * Unit of measurement factors using a spherical (non-ellipsoid) earth radius.
+ *
+ * @memberof helpers
+ * @type {Object}
+ */
+exports.factors = {
+    centimeters: exports.earthRadius * 100,
+    centimetres: exports.earthRadius * 100,
+    degrees: exports.earthRadius / 111325,
+    feet: exports.earthRadius * 3.28084,
+    inches: exports.earthRadius * 39.37,
+    kilometers: exports.earthRadius / 1000,
+    kilometres: exports.earthRadius / 1000,
+    meters: exports.earthRadius,
+    metres: exports.earthRadius,
+    miles: exports.earthRadius / 1609.344,
+    millimeters: exports.earthRadius * 1000,
+    millimetres: exports.earthRadius * 1000,
+    nauticalmiles: exports.earthRadius / 1852,
+    radians: 1,
+    yards: exports.earthRadius / 1.0936,
+};
+/**
+ * Units of measurement factors based on 1 meter.
+ *
+ * @memberof helpers
+ * @type {Object}
+ */
+exports.unitsFactors = {
+    centimeters: 100,
+    centimetres: 100,
+    degrees: 1 / 111325,
+    feet: 3.28084,
+    inches: 39.37,
+    kilometers: 1 / 1000,
+    kilometres: 1 / 1000,
+    meters: 1,
+    metres: 1,
+    miles: 1 / 1609.344,
+    millimeters: 1000,
+    millimetres: 1000,
+    nauticalmiles: 1 / 1852,
+    radians: 1 / exports.earthRadius,
+    yards: 1 / 1.0936,
+};
+/**
+ * Area of measurement factors based on 1 square meter.
+ *
+ * @memberof helpers
+ * @type {Object}
+ */
+exports.areaFactors = {
+    acres: 0.000247105,
+    centimeters: 10000,
+    centimetres: 10000,
+    feet: 10.763910417,
+    hectares: 0.0001,
+    inches: 1550.003100006,
+    kilometers: 0.000001,
+    kilometres: 0.000001,
+    meters: 1,
+    metres: 1,
+    miles: 3.86e-7,
+    millimeters: 1000000,
+    millimetres: 1000000,
+    yards: 1.195990046,
+};
+/**
+ * Wraps a GeoJSON {@link Geometry} in a GeoJSON {@link Feature}.
+ *
+ * @name feature
+ * @param {Geometry} geometry input geometry
+ * @param {Object} [properties={}] an Object of key-value pairs to add as properties
+ * @param {Object} [options={}] Optional Parameters
+ * @param {Array<number>} [options.bbox] Bounding Box Array [west, south, east, north] associated with the Feature
+ * @param {string|number} [options.id] Identifier associated with the Feature
+ * @returns {Feature} a GeoJSON Feature
+ * @example
+ * var geometry = {
+ *   "type": "Point",
+ *   "coordinates": [110, 50]
+ * };
+ *
+ * var feature = turf.feature(geometry);
+ *
+ * //=feature
+ */
+function feature(geom, properties, options) {
+    if (options === void 0) { options = {}; }
+    var feat = { type: "Feature" };
+    if (options.id === 0 || options.id) {
+        feat.id = options.id;
+    }
+    if (options.bbox) {
+        feat.bbox = options.bbox;
+    }
+    feat.properties = properties || {};
+    feat.geometry = geom;
+    return feat;
+}
+exports.feature = feature;
+/**
+ * Creates a GeoJSON {@link Geometry} from a Geometry string type & coordinates.
+ * For GeometryCollection type use `helpers.geometryCollection`
+ *
+ * @name geometry
+ * @param {string} type Geometry Type
+ * @param {Array<any>} coordinates Coordinates
+ * @param {Object} [options={}] Optional Parameters
+ * @returns {Geometry} a GeoJSON Geometry
+ * @example
+ * var type = "Point";
+ * var coordinates = [110, 50];
+ * var geometry = turf.geometry(type, coordinates);
+ * // => geometry
+ */
+function geometry(type, coordinates, _options) {
+    if (_options === void 0) { _options = {}; }
+    switch (type) {
+        case "Point":
+            return point(coordinates).geometry;
+        case "LineString":
+            return lineString(coordinates).geometry;
+        case "Polygon":
+            return polygon(coordinates).geometry;
+        case "MultiPoint":
+            return multiPoint(coordinates).geometry;
+        case "MultiLineString":
+            return multiLineString(coordinates).geometry;
+        case "MultiPolygon":
+            return multiPolygon(coordinates).geometry;
+        default:
+            throw new Error(type + " is invalid");
+    }
+}
+exports.geometry = geometry;
+/**
+ * Creates a {@link Point} {@link Feature} from a Position.
+ *
+ * @name point
+ * @param {Array<number>} coordinates longitude, latitude position (each in decimal degrees)
+ * @param {Object} [properties={}] an Object of key-value pairs to add as properties
+ * @param {Object} [options={}] Optional Parameters
+ * @param {Array<number>} [options.bbox] Bounding Box Array [west, south, east, north] associated with the Feature
+ * @param {string|number} [options.id] Identifier associated with the Feature
+ * @returns {Feature<Point>} a Point feature
+ * @example
+ * var point = turf.point([-75.343, 39.984]);
+ *
+ * //=point
+ */
+function point(coordinates, properties, options) {
+    if (options === void 0) { options = {}; }
+    if (!coordinates) {
+        throw new Error("coordinates is required");
+    }
+    if (!Array.isArray(coordinates)) {
+        throw new Error("coordinates must be an Array");
+    }
+    if (coordinates.length < 2) {
+        throw new Error("coordinates must be at least 2 numbers long");
+    }
+    if (!isNumber(coordinates[0]) || !isNumber(coordinates[1])) {
+        throw new Error("coordinates must contain numbers");
+    }
+    var geom = {
+        type: "Point",
+        coordinates: coordinates,
+    };
+    return feature(geom, properties, options);
+}
+exports.point = point;
+/**
+ * Creates a {@link Point} {@link FeatureCollection} from an Array of Point coordinates.
+ *
+ * @name points
+ * @param {Array<Array<number>>} coordinates an array of Points
+ * @param {Object} [properties={}] Translate these properties to each Feature
+ * @param {Object} [options={}] Optional Parameters
+ * @param {Array<number>} [options.bbox] Bounding Box Array [west, south, east, north]
+ * associated with the FeatureCollection
+ * @param {string|number} [options.id] Identifier associated with the FeatureCollection
+ * @returns {FeatureCollection<Point>} Point Feature
+ * @example
+ * var points = turf.points([
+ *   [-75, 39],
+ *   [-80, 45],
+ *   [-78, 50]
+ * ]);
+ *
+ * //=points
+ */
+function points(coordinates, properties, options) {
+    if (options === void 0) { options = {}; }
+    return featureCollection(coordinates.map(function (coords) {
+        return point(coords, properties);
+    }), options);
+}
+exports.points = points;
+/**
+ * Creates a {@link Polygon} {@link Feature} from an Array of LinearRings.
+ *
+ * @name polygon
+ * @param {Array<Array<Array<number>>>} coordinates an array of LinearRings
+ * @param {Object} [properties={}] an Object of key-value pairs to add as properties
+ * @param {Object} [options={}] Optional Parameters
+ * @param {Array<number>} [options.bbox] Bounding Box Array [west, south, east, north] associated with the Feature
+ * @param {string|number} [options.id] Identifier associated with the Feature
+ * @returns {Feature<Polygon>} Polygon Feature
+ * @example
+ * var polygon = turf.polygon([[[-5, 52], [-4, 56], [-2, 51], [-7, 54], [-5, 52]]], { name: 'poly1' });
+ *
+ * //=polygon
+ */
+function polygon(coordinates, properties, options) {
+    if (options === void 0) { options = {}; }
+    for (var _i = 0, coordinates_1 = coordinates; _i < coordinates_1.length; _i++) {
+        var ring = coordinates_1[_i];
+        if (ring.length < 4) {
+            throw new Error("Each LinearRing of a Polygon must have 4 or more Positions.");
+        }
+        for (var j = 0; j < ring[ring.length - 1].length; j++) {
+            // Check if first point of Polygon contains two numbers
+            if (ring[ring.length - 1][j] !== ring[0][j]) {
+                throw new Error("First and last Position are not equivalent.");
+            }
+        }
+    }
+    var geom = {
+        type: "Polygon",
+        coordinates: coordinates,
+    };
+    return feature(geom, properties, options);
+}
+exports.polygon = polygon;
+/**
+ * Creates a {@link Polygon} {@link FeatureCollection} from an Array of Polygon coordinates.
+ *
+ * @name polygons
+ * @param {Array<Array<Array<Array<number>>>>} coordinates an array of Polygon coordinates
+ * @param {Object} [properties={}] an Object of key-value pairs to add as properties
+ * @param {Object} [options={}] Optional Parameters
+ * @param {Array<number>} [options.bbox] Bounding Box Array [west, south, east, north] associated with the Feature
+ * @param {string|number} [options.id] Identifier associated with the FeatureCollection
+ * @returns {FeatureCollection<Polygon>} Polygon FeatureCollection
+ * @example
+ * var polygons = turf.polygons([
+ *   [[[-5, 52], [-4, 56], [-2, 51], [-7, 54], [-5, 52]]],
+ *   [[[-15, 42], [-14, 46], [-12, 41], [-17, 44], [-15, 42]]],
+ * ]);
+ *
+ * //=polygons
+ */
+function polygons(coordinates, properties, options) {
+    if (options === void 0) { options = {}; }
+    return featureCollection(coordinates.map(function (coords) {
+        return polygon(coords, properties);
+    }), options);
+}
+exports.polygons = polygons;
+/**
+ * Creates a {@link LineString} {@link Feature} from an Array of Positions.
+ *
+ * @name lineString
+ * @param {Array<Array<number>>} coordinates an array of Positions
+ * @param {Object} [properties={}] an Object of key-value pairs to add as properties
+ * @param {Object} [options={}] Optional Parameters
+ * @param {Array<number>} [options.bbox] Bounding Box Array [west, south, east, north] associated with the Feature
+ * @param {string|number} [options.id] Identifier associated with the Feature
+ * @returns {Feature<LineString>} LineString Feature
+ * @example
+ * var linestring1 = turf.lineString([[-24, 63], [-23, 60], [-25, 65], [-20, 69]], {name: 'line 1'});
+ * var linestring2 = turf.lineString([[-14, 43], [-13, 40], [-15, 45], [-10, 49]], {name: 'line 2'});
+ *
+ * //=linestring1
+ * //=linestring2
+ */
+function lineString(coordinates, properties, options) {
+    if (options === void 0) { options = {}; }
+    if (coordinates.length < 2) {
+        throw new Error("coordinates must be an array of two or more positions");
+    }
+    var geom = {
+        type: "LineString",
+        coordinates: coordinates,
+    };
+    return feature(geom, properties, options);
+}
+exports.lineString = lineString;
+/**
+ * Creates a {@link LineString} {@link FeatureCollection} from an Array of LineString coordinates.
+ *
+ * @name lineStrings
+ * @param {Array<Array<Array<number>>>} coordinates an array of LinearRings
+ * @param {Object} [properties={}] an Object of key-value pairs to add as properties
+ * @param {Object} [options={}] Optional Parameters
+ * @param {Array<number>} [options.bbox] Bounding Box Array [west, south, east, north]
+ * associated with the FeatureCollection
+ * @param {string|number} [options.id] Identifier associated with the FeatureCollection
+ * @returns {FeatureCollection<LineString>} LineString FeatureCollection
+ * @example
+ * var linestrings = turf.lineStrings([
+ *   [[-24, 63], [-23, 60], [-25, 65], [-20, 69]],
+ *   [[-14, 43], [-13, 40], [-15, 45], [-10, 49]]
+ * ]);
+ *
+ * //=linestrings
+ */
+function lineStrings(coordinates, properties, options) {
+    if (options === void 0) { options = {}; }
+    return featureCollection(coordinates.map(function (coords) {
+        return lineString(coords, properties);
+    }), options);
+}
+exports.lineStrings = lineStrings;
+/**
+ * Takes one or more {@link Feature|Features} and creates a {@link FeatureCollection}.
+ *
+ * @name featureCollection
+ * @param {Feature[]} features input features
+ * @param {Object} [options={}] Optional Parameters
+ * @param {Array<number>} [options.bbox] Bounding Box Array [west, south, east, north] associated with the Feature
+ * @param {string|number} [options.id] Identifier associated with the Feature
+ * @returns {FeatureCollection} FeatureCollection of Features
+ * @example
+ * var locationA = turf.point([-75.343, 39.984], {name: 'Location A'});
+ * var locationB = turf.point([-75.833, 39.284], {name: 'Location B'});
+ * var locationC = turf.point([-75.534, 39.123], {name: 'Location C'});
+ *
+ * var collection = turf.featureCollection([
+ *   locationA,
+ *   locationB,
+ *   locationC
+ * ]);
+ *
+ * //=collection
+ */
+function featureCollection(features, options) {
+    if (options === void 0) { options = {}; }
+    var fc = { type: "FeatureCollection" };
+    if (options.id) {
+        fc.id = options.id;
+    }
+    if (options.bbox) {
+        fc.bbox = options.bbox;
+    }
+    fc.features = features;
+    return fc;
+}
+exports.featureCollection = featureCollection;
+/**
+ * Creates a {@link Feature<MultiLineString>} based on a
+ * coordinate array. Properties can be added optionally.
+ *
+ * @name multiLineString
+ * @param {Array<Array<Array<number>>>} coordinates an array of LineStrings
+ * @param {Object} [properties={}] an Object of key-value pairs to add as properties
+ * @param {Object} [options={}] Optional Parameters
+ * @param {Array<number>} [options.bbox] Bounding Box Array [west, south, east, north] associated with the Feature
+ * @param {string|number} [options.id] Identifier associated with the Feature
+ * @returns {Feature<MultiLineString>} a MultiLineString feature
+ * @throws {Error} if no coordinates are passed
+ * @example
+ * var multiLine = turf.multiLineString([[[0,0],[10,10]]]);
+ *
+ * //=multiLine
+ */
+function multiLineString(coordinates, properties, options) {
+    if (options === void 0) { options = {}; }
+    var geom = {
+        type: "MultiLineString",
+        coordinates: coordinates,
+    };
+    return feature(geom, properties, options);
+}
+exports.multiLineString = multiLineString;
+/**
+ * Creates a {@link Feature<MultiPoint>} based on a
+ * coordinate array. Properties can be added optionally.
+ *
+ * @name multiPoint
+ * @param {Array<Array<number>>} coordinates an array of Positions
+ * @param {Object} [properties={}] an Object of key-value pairs to add as properties
+ * @param {Object} [options={}] Optional Parameters
+ * @param {Array<number>} [options.bbox] Bounding Box Array [west, south, east, north] associated with the Feature
+ * @param {string|number} [options.id] Identifier associated with the Feature
+ * @returns {Feature<MultiPoint>} a MultiPoint feature
+ * @throws {Error} if no coordinates are passed
+ * @example
+ * var multiPt = turf.multiPoint([[0,0],[10,10]]);
+ *
+ * //=multiPt
+ */
+function multiPoint(coordinates, properties, options) {
+    if (options === void 0) { options = {}; }
+    var geom = {
+        type: "MultiPoint",
+        coordinates: coordinates,
+    };
+    return feature(geom, properties, options);
+}
+exports.multiPoint = multiPoint;
+/**
+ * Creates a {@link Feature<MultiPolygon>} based on a
+ * coordinate array. Properties can be added optionally.
+ *
+ * @name multiPolygon
+ * @param {Array<Array<Array<Array<number>>>>} coordinates an array of Polygons
+ * @param {Object} [properties={}] an Object of key-value pairs to add as properties
+ * @param {Object} [options={}] Optional Parameters
+ * @param {Array<number>} [options.bbox] Bounding Box Array [west, south, east, north] associated with the Feature
+ * @param {string|number} [options.id] Identifier associated with the Feature
+ * @returns {Feature<MultiPolygon>} a multipolygon feature
+ * @throws {Error} if no coordinates are passed
+ * @example
+ * var multiPoly = turf.multiPolygon([[[[0,0],[0,10],[10,10],[10,0],[0,0]]]]);
+ *
+ * //=multiPoly
+ *
+ */
+function multiPolygon(coordinates, properties, options) {
+    if (options === void 0) { options = {}; }
+    var geom = {
+        type: "MultiPolygon",
+        coordinates: coordinates,
+    };
+    return feature(geom, properties, options);
+}
+exports.multiPolygon = multiPolygon;
+/**
+ * Creates a {@link Feature<GeometryCollection>} based on a
+ * coordinate array. Properties can be added optionally.
+ *
+ * @name geometryCollection
+ * @param {Array<Geometry>} geometries an array of GeoJSON Geometries
+ * @param {Object} [properties={}] an Object of key-value pairs to add as properties
+ * @param {Object} [options={}] Optional Parameters
+ * @param {Array<number>} [options.bbox] Bounding Box Array [west, south, east, north] associated with the Feature
+ * @param {string|number} [options.id] Identifier associated with the Feature
+ * @returns {Feature<GeometryCollection>} a GeoJSON GeometryCollection Feature
+ * @example
+ * var pt = turf.geometry("Point", [100, 0]);
+ * var line = turf.geometry("LineString", [[101, 0], [102, 1]]);
+ * var collection = turf.geometryCollection([pt, line]);
+ *
+ * // => collection
+ */
+function geometryCollection(geometries, properties, options) {
+    if (options === void 0) { options = {}; }
+    var geom = {
+        type: "GeometryCollection",
+        geometries: geometries,
+    };
+    return feature(geom, properties, options);
+}
+exports.geometryCollection = geometryCollection;
+/**
+ * Round number to precision
+ *
+ * @param {number} num Number
+ * @param {number} [precision=0] Precision
+ * @returns {number} rounded number
+ * @example
+ * turf.round(120.4321)
+ * //=120
+ *
+ * turf.round(120.4321, 2)
+ * //=120.43
+ */
+function round(num, precision) {
+    if (precision === void 0) { precision = 0; }
+    if (precision && !(precision >= 0)) {
+        throw new Error("precision must be a positive number");
+    }
+    var multiplier = Math.pow(10, precision || 0);
+    return Math.round(num * multiplier) / multiplier;
+}
+exports.round = round;
+/**
+ * Convert a distance measurement (assuming a spherical Earth) from radians to a more friendly unit.
+ * Valid units: miles, nauticalmiles, inches, yards, meters, metres, kilometers, centimeters, feet
+ *
+ * @name radiansToLength
+ * @param {number} radians in radians across the sphere
+ * @param {string} [units="kilometers"] can be degrees, radians, miles, inches, yards, metres,
+ * meters, kilometres, kilometers.
+ * @returns {number} distance
+ */
+function radiansToLength(radians, units) {
+    if (units === void 0) { units = "kilometers"; }
+    var factor = exports.factors[units];
+    if (!factor) {
+        throw new Error(units + " units is invalid");
+    }
+    return radians * factor;
+}
+exports.radiansToLength = radiansToLength;
+/**
+ * Convert a distance measurement (assuming a spherical Earth) from a real-world unit into radians
+ * Valid units: miles, nauticalmiles, inches, yards, meters, metres, kilometers, centimeters, feet
+ *
+ * @name lengthToRadians
+ * @param {number} distance in real units
+ * @param {string} [units="kilometers"] can be degrees, radians, miles, inches, yards, metres,
+ * meters, kilometres, kilometers.
+ * @returns {number} radians
+ */
+function lengthToRadians(distance, units) {
+    if (units === void 0) { units = "kilometers"; }
+    var factor = exports.factors[units];
+    if (!factor) {
+        throw new Error(units + " units is invalid");
+    }
+    return distance / factor;
+}
+exports.lengthToRadians = lengthToRadians;
+/**
+ * Convert a distance measurement (assuming a spherical Earth) from a real-world unit into degrees
+ * Valid units: miles, nauticalmiles, inches, yards, meters, metres, centimeters, kilometres, feet
+ *
+ * @name lengthToDegrees
+ * @param {number} distance in real units
+ * @param {string} [units="kilometers"] can be degrees, radians, miles, inches, yards, metres,
+ * meters, kilometres, kilometers.
+ * @returns {number} degrees
+ */
+function lengthToDegrees(distance, units) {
+    return radiansToDegrees(lengthToRadians(distance, units));
+}
+exports.lengthToDegrees = lengthToDegrees;
+/**
+ * Converts any bearing angle from the north line direction (positive clockwise)
+ * and returns an angle between 0-360 degrees (positive clockwise), 0 being the north line
+ *
+ * @name bearingToAzimuth
+ * @param {number} bearing angle, between -180 and +180 degrees
+ * @returns {number} angle between 0 and 360 degrees
+ */
+function bearingToAzimuth(bearing) {
+    var angle = bearing % 360;
+    if (angle < 0) {
+        angle += 360;
+    }
+    return angle;
+}
+exports.bearingToAzimuth = bearingToAzimuth;
+/**
+ * Converts an angle in radians to degrees
+ *
+ * @name radiansToDegrees
+ * @param {number} radians angle in radians
+ * @returns {number} degrees between 0 and 360 degrees
+ */
+function radiansToDegrees(radians) {
+    var degrees = radians % (2 * Math.PI);
+    return (degrees * 180) / Math.PI;
+}
+exports.radiansToDegrees = radiansToDegrees;
+/**
+ * Converts an angle in degrees to radians
+ *
+ * @name degreesToRadians
+ * @param {number} degrees angle between 0 and 360 degrees
+ * @returns {number} angle in radians
+ */
+function degreesToRadians(degrees) {
+    var radians = degrees % 360;
+    return (radians * Math.PI) / 180;
+}
+exports.degreesToRadians = degreesToRadians;
+/**
+ * Converts a length to the requested unit.
+ * Valid units: miles, nauticalmiles, inches, yards, meters, metres, kilometers, centimeters, feet
+ *
+ * @param {number} length to be converted
+ * @param {Units} [originalUnit="kilometers"] of the length
+ * @param {Units} [finalUnit="kilometers"] returned unit
+ * @returns {number} the converted length
+ */
+function convertLength(length, originalUnit, finalUnit) {
+    if (originalUnit === void 0) { originalUnit = "kilometers"; }
+    if (finalUnit === void 0) { finalUnit = "kilometers"; }
+    if (!(length >= 0)) {
+        throw new Error("length must be a positive number");
+    }
+    return radiansToLength(lengthToRadians(length, originalUnit), finalUnit);
+}
+exports.convertLength = convertLength;
+/**
+ * Converts a area to the requested unit.
+ * Valid units: kilometers, kilometres, meters, metres, centimetres, millimeters, acres, miles, yards, feet, inches, hectares
+ * @param {number} area to be converted
+ * @param {Units} [originalUnit="meters"] of the distance
+ * @param {Units} [finalUnit="kilometers"] returned unit
+ * @returns {number} the converted area
+ */
+function convertArea(area, originalUnit, finalUnit) {
+    if (originalUnit === void 0) { originalUnit = "meters"; }
+    if (finalUnit === void 0) { finalUnit = "kilometers"; }
+    if (!(area >= 0)) {
+        throw new Error("area must be a positive number");
+    }
+    var startFactor = exports.areaFactors[originalUnit];
+    if (!startFactor) {
+        throw new Error("invalid original units");
+    }
+    var finalFactor = exports.areaFactors[finalUnit];
+    if (!finalFactor) {
+        throw new Error("invalid final units");
+    }
+    return (area / startFactor) * finalFactor;
+}
+exports.convertArea = convertArea;
+/**
+ * isNumber
+ *
+ * @param {*} num Number to validate
+ * @returns {boolean} true/false
+ * @example
+ * turf.isNumber(123)
+ * //=true
+ * turf.isNumber('foo')
+ * //=false
+ */
+function isNumber(num) {
+    return !isNaN(num) && num !== null && !Array.isArray(num);
+}
+exports.isNumber = isNumber;
+/**
+ * isObject
+ *
+ * @param {*} input variable to validate
+ * @returns {boolean} true/false
+ * @example
+ * turf.isObject({elevation: 10})
+ * //=true
+ * turf.isObject('foo')
+ * //=false
+ */
+function isObject(input) {
+    return !!input && input.constructor === Object;
+}
+exports.isObject = isObject;
+/**
+ * Validate BBox
+ *
+ * @private
+ * @param {Array<number>} bbox BBox to validate
+ * @returns {void}
+ * @throws Error if BBox is not valid
+ * @example
+ * validateBBox([-180, -40, 110, 50])
+ * //=OK
+ * validateBBox([-180, -40])
+ * //=Error
+ * validateBBox('Foo')
+ * //=Error
+ * validateBBox(5)
+ * //=Error
+ * validateBBox(null)
+ * //=Error
+ * validateBBox(undefined)
+ * //=Error
+ */
+function validateBBox(bbox) {
+    if (!bbox) {
+        throw new Error("bbox is required");
+    }
+    if (!Array.isArray(bbox)) {
+        throw new Error("bbox must be an Array");
+    }
+    if (bbox.length !== 4 && bbox.length !== 6) {
+        throw new Error("bbox must be an Array of 4 or 6 numbers");
+    }
+    bbox.forEach(function (num) {
+        if (!isNumber(num)) {
+            throw new Error("bbox must only contain numbers");
+        }
+    });
+}
+exports.validateBBox = validateBBox;
+/**
+ * Validate Id
+ *
+ * @private
+ * @param {string|number} id Id to validate
+ * @returns {void}
+ * @throws Error if Id is not valid
+ * @example
+ * validateId([-180, -40, 110, 50])
+ * //=Error
+ * validateId([-180, -40])
+ * //=Error
+ * validateId('Foo')
+ * //=OK
+ * validateId(5)
+ * //=OK
+ * validateId(null)
+ * //=Error
+ * validateId(undefined)
+ * //=Error
+ */
+function validateId(id) {
+    if (!id) {
+        throw new Error("id is required");
+    }
+    if (["string", "number"].indexOf(typeof id) === -1) {
+        throw new Error("id must be a number or a string");
+    }
+}
+exports.validateId = validateId;
+
+},{}],9:[function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+var helpers_1 = require("@turf/helpers");
+/**
+ * Unwrap a coordinate from a Point Feature, Geometry or a single coordinate.
+ *
+ * @name getCoord
+ * @param {Array<number>|Geometry<Point>|Feature<Point>} coord GeoJSON Point or an Array of numbers
+ * @returns {Array<number>} coordinates
+ * @example
+ * var pt = turf.point([10, 10]);
+ *
+ * var coord = turf.getCoord(pt);
+ * //= [10, 10]
+ */
+function getCoord(coord) {
+    if (!coord) {
+        throw new Error("coord is required");
+    }
+    if (!Array.isArray(coord)) {
+        if (coord.type === "Feature" &&
+            coord.geometry !== null &&
+            coord.geometry.type === "Point") {
+            return coord.geometry.coordinates;
+        }
+        if (coord.type === "Point") {
+            return coord.coordinates;
+        }
+    }
+    if (Array.isArray(coord) &&
+        coord.length >= 2 &&
+        !Array.isArray(coord[0]) &&
+        !Array.isArray(coord[1])) {
+        return coord;
+    }
+    throw new Error("coord must be GeoJSON Point or an Array of numbers");
+}
+exports.getCoord = getCoord;
+/**
+ * Unwrap coordinates from a Feature, Geometry Object or an Array
+ *
+ * @name getCoords
+ * @param {Array<any>|Geometry|Feature} coords Feature, Geometry Object or an Array
+ * @returns {Array<any>} coordinates
+ * @example
+ * var poly = turf.polygon([[[119.32, -8.7], [119.55, -8.69], [119.51, -8.54], [119.32, -8.7]]]);
+ *
+ * var coords = turf.getCoords(poly);
+ * //= [[[119.32, -8.7], [119.55, -8.69], [119.51, -8.54], [119.32, -8.7]]]
+ */
+function getCoords(coords) {
+    if (Array.isArray(coords)) {
+        return coords;
+    }
+    // Feature
+    if (coords.type === "Feature") {
+        if (coords.geometry !== null) {
+            return coords.geometry.coordinates;
+        }
+    }
+    else {
+        // Geometry
+        if (coords.coordinates) {
+            return coords.coordinates;
+        }
+    }
+    throw new Error("coords must be GeoJSON Feature, Geometry Object or an Array");
+}
+exports.getCoords = getCoords;
+/**
+ * Checks if coordinates contains a number
+ *
+ * @name containsNumber
+ * @param {Array<any>} coordinates GeoJSON Coordinates
+ * @returns {boolean} true if Array contains a number
+ */
+function containsNumber(coordinates) {
+    if (coordinates.length > 1 &&
+        helpers_1.isNumber(coordinates[0]) &&
+        helpers_1.isNumber(coordinates[1])) {
+        return true;
+    }
+    if (Array.isArray(coordinates[0]) && coordinates[0].length) {
+        return containsNumber(coordinates[0]);
+    }
+    throw new Error("coordinates must only contain numbers");
+}
+exports.containsNumber = containsNumber;
+/**
+ * Enforce expectations about types of GeoJSON objects for Turf.
+ *
+ * @name geojsonType
+ * @param {GeoJSON} value any GeoJSON object
+ * @param {string} type expected GeoJSON type
+ * @param {string} name name of calling function
+ * @throws {Error} if value is not the expected type.
+ */
+function geojsonType(value, type, name) {
+    if (!type || !name) {
+        throw new Error("type and name required");
+    }
+    if (!value || value.type !== type) {
+        throw new Error("Invalid input to " +
+            name +
+            ": must be a " +
+            type +
+            ", given " +
+            value.type);
+    }
+}
+exports.geojsonType = geojsonType;
+/**
+ * Enforce expectations about types of {@link Feature} inputs for Turf.
+ * Internally this uses {@link geojsonType} to judge geometry types.
+ *
+ * @name featureOf
+ * @param {Feature} feature a feature with an expected geometry type
+ * @param {string} type expected GeoJSON type
+ * @param {string} name name of calling function
+ * @throws {Error} error if value is not the expected type.
+ */
+function featureOf(feature, type, name) {
+    if (!feature) {
+        throw new Error("No feature passed");
+    }
+    if (!name) {
+        throw new Error(".featureOf() requires a name");
+    }
+    if (!feature || feature.type !== "Feature" || !feature.geometry) {
+        throw new Error("Invalid input to " + name + ", Feature with geometry required");
+    }
+    if (!feature.geometry || feature.geometry.type !== type) {
+        throw new Error("Invalid input to " +
+            name +
+            ": must be a " +
+            type +
+            ", given " +
+            feature.geometry.type);
+    }
+}
+exports.featureOf = featureOf;
+/**
+ * Enforce expectations about types of {@link FeatureCollection} inputs for Turf.
+ * Internally this uses {@link geojsonType} to judge geometry types.
+ *
+ * @name collectionOf
+ * @param {FeatureCollection} featureCollection a FeatureCollection for which features will be judged
+ * @param {string} type expected GeoJSON type
+ * @param {string} name name of calling function
+ * @throws {Error} if value is not the expected type.
+ */
+function collectionOf(featureCollection, type, name) {
+    if (!featureCollection) {
+        throw new Error("No featureCollection passed");
+    }
+    if (!name) {
+        throw new Error(".collectionOf() requires a name");
+    }
+    if (!featureCollection || featureCollection.type !== "FeatureCollection") {
+        throw new Error("Invalid input to " + name + ", FeatureCollection required");
+    }
+    for (var _i = 0, _a = featureCollection.features; _i < _a.length; _i++) {
+        var feature = _a[_i];
+        if (!feature || feature.type !== "Feature" || !feature.geometry) {
+            throw new Error("Invalid input to " + name + ", Feature with geometry required");
+        }
+        if (!feature.geometry || feature.geometry.type !== type) {
+            throw new Error("Invalid input to " +
+                name +
+                ": must be a " +
+                type +
+                ", given " +
+                feature.geometry.type);
+        }
+    }
+}
+exports.collectionOf = collectionOf;
+/**
+ * Get Geometry from Feature or Geometry Object
+ *
+ * @param {Feature|Geometry} geojson GeoJSON Feature or Geometry Object
+ * @returns {Geometry|null} GeoJSON Geometry Object
+ * @throws {Error} if geojson is not a Feature or Geometry Object
+ * @example
+ * var point = {
+ *   "type": "Feature",
+ *   "properties": {},
+ *   "geometry": {
+ *     "type": "Point",
+ *     "coordinates": [110, 40]
+ *   }
+ * }
+ * var geom = turf.getGeom(point)
+ * //={"type": "Point", "coordinates": [110, 40]}
+ */
+function getGeom(geojson) {
+    if (geojson.type === "Feature") {
+        return geojson.geometry;
+    }
+    return geojson;
+}
+exports.getGeom = getGeom;
+/**
+ * Get GeoJSON object's type, Geometry type is prioritize.
+ *
+ * @param {GeoJSON} geojson GeoJSON object
+ * @param {string} [name="geojson"] name of the variable to display in error message (unused)
+ * @returns {string} GeoJSON type
+ * @example
+ * var point = {
+ *   "type": "Feature",
+ *   "properties": {},
+ *   "geometry": {
+ *     "type": "Point",
+ *     "coordinates": [110, 40]
+ *   }
+ * }
+ * var geom = turf.getType(point)
+ * //="Point"
+ */
+function getType(geojson, _name) {
+    if (geojson.type === "FeatureCollection") {
+        return "FeatureCollection";
+    }
+    if (geojson.type === "GeometryCollection") {
+        return "GeometryCollection";
+    }
+    if (geojson.type === "Feature" && geojson.geometry !== null) {
+        return geojson.geometry.type;
+    }
+    return geojson.type;
+}
+exports.getType = getType;
+
+},{"@turf/helpers":8}],10:[function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+var helpers_1 = require("@turf/helpers");
+var invariant_1 = require("@turf/invariant");
+var lineclip_1 = require("./lib/lineclip");
 /**
  * Takes a {@link Feature} and a bbox and clips the feature to the bbox using
  * [lineclip](https://github.com/mapbox/lineclip).
@@ -375,7 +1370,7 @@ function bboxClip(feature, bbox) {
                 coords = [coords];
             }
             coords.forEach(function (line) {
-                lineclip.polyline(line, bbox, lines_1);
+                lineclip_1.lineclip(line, bbox, lines_1);
             });
             if (lines_1.length === 1) {
                 return helpers_1.lineString(lines_1[0], properties);
@@ -396,9 +1391,10 @@ function clipPolygon(rings, bbox) {
     var outRings = [];
     for (var _i = 0, rings_1 = rings; _i < rings_1.length; _i++) {
         var ring = rings_1[_i];
-        var clipped = lineclip.polygon(ring, bbox);
+        var clipped = lineclip_1.polygonclip(ring, bbox);
         if (clipped.length > 0) {
-            if (clipped[0][0] !== clipped[clipped.length - 1][0] || clipped[0][1] !== clipped[clipped.length - 1][1]) {
+            if (clipped[0][0] !== clipped[clipped.length - 1][0] ||
+                clipped[0][1] !== clipped[clipped.length - 1][1]) {
                 clipped.push(clipped[0]);
             }
             if (clipped.length >= 4) {
@@ -409,134 +1405,122 @@ function clipPolygon(rings, bbox) {
     return outRings;
 }
 
-},{"./lib/lineclip":7,"@turf/helpers":22,"@turf/invariant":24}],7:[function(require,module,exports){
-'use strict';
-
-module.exports = lineclip;
-module.exports.default = lineclip;
-
-lineclip.polyline = lineclip;
-lineclip.polygon = polygonclip;
-
-
+},{"./lib/lineclip":11,"@turf/helpers":12,"@turf/invariant":13}],11:[function(require,module,exports){
+"use strict";
 // Cohen-Sutherland line clippign algorithm, adapted to efficiently
 // handle polylines rather than just segments
-
+Object.defineProperty(exports, "__esModule", { value: true });
 function lineclip(points, bbox, result) {
-
-    var len = points.length,
-        codeA = bitCode(points[0], bbox),
-        part = [],
-        i, a, b, codeB, lastCode;
-
-    if (!result) result = [];
-
+    var len = points.length, codeA = bitCode(points[0], bbox), part = [], i, a, b, codeB, lastCode;
+    if (!result)
+        result = [];
     for (i = 1; i < len; i++) {
         a = points[i - 1];
         b = points[i];
         codeB = lastCode = bitCode(b, bbox);
-
         while (true) {
-
-            if (!(codeA | codeB)) { // accept
+            if (!(codeA | codeB)) {
+                // accept
                 part.push(a);
-
-                if (codeB !== lastCode) { // segment went outside
+                if (codeB !== lastCode) {
+                    // segment went outside
                     part.push(b);
-
-                    if (i < len - 1) { // start a new line
+                    if (i < len - 1) {
+                        // start a new line
                         result.push(part);
                         part = [];
                     }
-                } else if (i === len - 1) {
+                }
+                else if (i === len - 1) {
                     part.push(b);
                 }
                 break;
-
-            } else if (codeA & codeB) { // trivial reject
+            }
+            else if (codeA & codeB) {
+                // trivial reject
                 break;
-
-            } else if (codeA) { // a outside, intersect with clip edge
+            }
+            else if (codeA) {
+                // a outside, intersect with clip edge
                 a = intersect(a, b, codeA, bbox);
                 codeA = bitCode(a, bbox);
-
-            } else { // b outside
+            }
+            else {
+                // b outside
                 b = intersect(a, b, codeB, bbox);
                 codeB = bitCode(b, bbox);
             }
         }
-
         codeA = lastCode;
     }
-
-    if (part.length) result.push(part);
-
+    if (part.length)
+        result.push(part);
     return result;
 }
-
+exports.lineclip = lineclip;
 // Sutherland-Hodgeman polygon clipping algorithm
-
 function polygonclip(points, bbox) {
-
     var result, edge, prev, prevInside, i, p, inside;
-
     // clip against each side of the clip rectangle
     for (edge = 1; edge <= 8; edge *= 2) {
         result = [];
         prev = points[points.length - 1];
         prevInside = !(bitCode(prev, bbox) & edge);
-
         for (i = 0; i < points.length; i++) {
             p = points[i];
             inside = !(bitCode(p, bbox) & edge);
-
             // if segment goes through the clip window, add an intersection
-            if (inside !== prevInside) result.push(intersect(prev, p, edge, bbox));
-
-            if (inside) result.push(p); // add a point if it's inside
-
+            if (inside !== prevInside)
+                result.push(intersect(prev, p, edge, bbox));
+            if (inside)
+                result.push(p); // add a point if it's inside
             prev = p;
             prevInside = inside;
         }
-
         points = result;
-
-        if (!points.length) break;
+        if (!points.length)
+            break;
     }
-
     return result;
 }
-
+exports.polygonclip = polygonclip;
 // intersect a segment against one of the 4 lines that make up the bbox
-
 function intersect(a, b, edge, bbox) {
-    return edge & 8 ? [a[0] + (b[0] - a[0]) * (bbox[3] - a[1]) / (b[1] - a[1]), bbox[3]] : // top
-           edge & 4 ? [a[0] + (b[0] - a[0]) * (bbox[1] - a[1]) / (b[1] - a[1]), bbox[1]] : // bottom
-           edge & 2 ? [bbox[2], a[1] + (b[1] - a[1]) * (bbox[2] - a[0]) / (b[0] - a[0])] : // right
-           edge & 1 ? [bbox[0], a[1] + (b[1] - a[1]) * (bbox[0] - a[0]) / (b[0] - a[0])] : // left
-           null;
+    return edge & 8
+        ? [a[0] + ((b[0] - a[0]) * (bbox[3] - a[1])) / (b[1] - a[1]), bbox[3]] // top
+        : edge & 4
+            ? [a[0] + ((b[0] - a[0]) * (bbox[1] - a[1])) / (b[1] - a[1]), bbox[1]] // bottom
+            : edge & 2
+                ? [bbox[2], a[1] + ((b[1] - a[1]) * (bbox[2] - a[0])) / (b[0] - a[0])] // right
+                : edge & 1
+                    ? [bbox[0], a[1] + ((b[1] - a[1]) * (bbox[0] - a[0])) / (b[0] - a[0])] // left
+                    : null;
 }
-
 // bit code reflects the point position relative to the bbox:
-
 //         left  mid  right
 //    top  1001  1000  1010
 //    mid  0001  0000  0010
 // bottom  0101  0100  0110
-
 function bitCode(p, bbox) {
     var code = 0;
-
-    if (p[0] < bbox[0]) code |= 1; // left
-    else if (p[0] > bbox[2]) code |= 2; // right
-
-    if (p[1] < bbox[1]) code |= 4; // bottom
-    else if (p[1] > bbox[3]) code |= 8; // top
-
+    if (p[0] < bbox[0])
+        code |= 1;
+    // left
+    else if (p[0] > bbox[2])
+        code |= 2; // right
+    if (p[1] < bbox[1])
+        code |= 4;
+    // bottom
+    else if (p[1] > bbox[3])
+        code |= 8; // top
     return code;
 }
 
-},{}],8:[function(require,module,exports){
+},{}],12:[function(require,module,exports){
+arguments[4][8][0].apply(exports,arguments)
+},{"dup":8}],13:[function(require,module,exports){
+arguments[4][9][0].apply(exports,arguments)
+},{"@turf/helpers":12,"dup":9}],14:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 var meta_1 = require("@turf/meta");
@@ -574,7 +1558,7 @@ function bbox(geojson) {
 }
 exports.default = bbox;
 
-},{"@turf/meta":28}],9:[function(require,module,exports){
+},{"@turf/meta":42}],15:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 var helpers_1 = require("@turf/helpers");
@@ -636,7 +1620,7 @@ function calculateFinalBearing(start, end) {
 }
 exports.default = bearing;
 
-},{"@turf/helpers":22,"@turf/invariant":24}],10:[function(require,module,exports){
+},{"@turf/helpers":30,"@turf/invariant":34}],16:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 var invariant_1 = require("@turf/invariant");
@@ -757,7 +1741,7 @@ function inBBox(pt, bbox) {
         bbox[3] >= pt[1];
 }
 
-},{"@turf/invariant":24}],11:[function(require,module,exports){
+},{"@turf/invariant":34}],17:[function(require,module,exports){
 'use strict';
 
 function _interopDefault (ex) { return (ex && (typeof ex === 'object') && 'default' in ex) ? ex['default'] : ex; }
@@ -805,7 +1789,7 @@ function center(geojson, options) {
 module.exports = center;
 module.exports.default = center;
 
-},{"@turf/bbox":12,"@turf/helpers":13}],12:[function(require,module,exports){
+},{"@turf/bbox":18,"@turf/helpers":19}],18:[function(require,module,exports){
 'use strict';
 
 var meta = require('@turf/meta');
@@ -838,7 +1822,7 @@ function bbox(geojson) {
 module.exports = bbox;
 module.exports.default = bbox;
 
-},{"@turf/meta":14}],13:[function(require,module,exports){
+},{"@turf/meta":20}],19:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, '__esModule', { value: true });
@@ -1631,7 +2615,7 @@ exports.radiansToDistance = radiansToDistance;
 exports.bearingToAngle = bearingToAngle;
 exports.convertDistance = convertDistance;
 
-},{}],14:[function(require,module,exports){
+},{}],20:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, '__esModule', { value: true });
@@ -2758,7 +3742,7 @@ exports.lineReduce = lineReduce;
 exports.findSegment = findSegment;
 exports.findPoint = findPoint;
 
-},{"@turf/helpers":13}],15:[function(require,module,exports){
+},{"@turf/helpers":19}],21:[function(require,module,exports){
 'use strict';
 
 /**
@@ -2915,7 +3899,7 @@ function deepSlice(coords) {
 module.exports = clone;
 module.exports.default = clone;
 
-},{}],16:[function(require,module,exports){
+},{}],22:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 // http://en.wikipedia.org/wiki/Haversine_formula
@@ -2966,16 +3950,14 @@ function destination(origin, distance, bearing, options) {
 }
 exports.default = destination;
 
-},{"@turf/helpers":22,"@turf/invariant":24}],17:[function(require,module,exports){
+},{"@turf/helpers":30,"@turf/invariant":34}],23:[function(require,module,exports){
 'use strict';
 
 function _interopDefault (ex) { return (ex && (typeof ex === 'object') && 'default' in ex) ? ex['default'] : ex; }
 
-var martinez = require('martinez-polygon-clipping');
-var area = _interopDefault(require('@turf/area'));
+var polygonClipping = _interopDefault(require('polygon-clipping'));
 var helpers = require('@turf/helpers');
 var invariant = require('@turf/invariant');
-var meta = require('@turf/meta');
 
 /**
  * Finds the difference between two {@link Polygon|polygons} by clipping the second polygon from the first.
@@ -3012,46 +3994,26 @@ var meta = require('@turf/meta');
  * var addToMap = [polygon1, polygon2, difference];
  */
 function difference(polygon1, polygon2) {
-    var geom1 = invariant.getGeom(polygon1);
-    var geom2 = invariant.getGeom(polygon2);
-    var properties = polygon1.properties || {};
+  var geom1 = invariant.getGeom(polygon1);
+  var geom2 = invariant.getGeom(polygon2);
+  var properties = polygon1.properties || {};
 
-    // Issue #721 - JSTS/Martinez can't handle empty polygons
-    geom1 = removeEmptyPolygon(geom1);
-    geom2 = removeEmptyPolygon(geom2);
-    if (!geom1) return null;
-    if (!geom2) return helpers.feature(geom1, properties);
-
-    var differenced = martinez.diff(geom1.coordinates, geom2.coordinates);
-    if (differenced.length === 0) return null;
-    if (differenced.length === 1) return helpers.polygon(differenced[0], properties);
-    return helpers.multiPolygon(differenced, properties);
-}
-
-/**
- * Detect Empty Polygon
- *
- * @private
- * @param {Geometry<Polygon|MultiPolygon>} geom Geometry Object
- * @returns {Geometry<Polygon|MultiPolygon>|null} removed any polygons with no areas
- */
-function removeEmptyPolygon(geom) {
-    switch (geom.type) {
-    case 'Polygon':
-        if (area(geom) > 1) return geom;
-        return null;
-    case 'MultiPolygon':
-        var coordinates = [];
-        meta.flattenEach(geom, function (feature) {
-            if (area(feature) > 1) coordinates.push(feature.geometry.coordinates);
-        });
-        if (coordinates.length) return {type: 'MultiPolygon', coordinates: coordinates};
-    }
+  var differenced = polygonClipping.difference(
+    geom1.coordinates,
+    geom2.coordinates
+  );
+  if (differenced.length === 0) return null;
+  if (differenced.length === 1) return helpers.polygon(differenced[0], properties);
+  return helpers.multiPolygon(differenced, properties);
 }
 
 module.exports = difference;
 
-},{"@turf/area":5,"@turf/helpers":22,"@turf/invariant":24,"@turf/meta":28,"martinez-polygon-clipping":67}],18:[function(require,module,exports){
+},{"@turf/helpers":24,"@turf/invariant":25,"polygon-clipping":240}],24:[function(require,module,exports){
+arguments[4][8][0].apply(exports,arguments)
+},{"dup":8}],25:[function(require,module,exports){
+arguments[4][9][0].apply(exports,arguments)
+},{"@turf/helpers":24,"dup":9}],26:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 var invariant_1 = require("@turf/invariant");
@@ -3094,7 +4056,7 @@ function distance(from, to, options) {
 }
 exports.default = distance;
 
-},{"@turf/helpers":22,"@turf/invariant":24}],19:[function(require,module,exports){
+},{"@turf/helpers":30,"@turf/invariant":34}],27:[function(require,module,exports){
 'use strict';
 
 var meta = require('@turf/meta');
@@ -3134,11 +4096,11 @@ function explode(geojson) {
 module.exports = explode;
 module.exports.default = explode;
 
-},{"@turf/helpers":20,"@turf/meta":21}],20:[function(require,module,exports){
-arguments[4][13][0].apply(exports,arguments)
-},{"dup":13}],21:[function(require,module,exports){
-arguments[4][14][0].apply(exports,arguments)
-},{"@turf/helpers":20,"dup":14}],22:[function(require,module,exports){
+},{"@turf/helpers":28,"@turf/meta":29}],28:[function(require,module,exports){
+arguments[4][19][0].apply(exports,arguments)
+},{"dup":19}],29:[function(require,module,exports){
+arguments[4][20][0].apply(exports,arguments)
+},{"@turf/helpers":28,"dup":20}],30:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 /**
@@ -3873,19 +4835,15 @@ function convertDistance() {
 }
 exports.convertDistance = convertDistance;
 
-},{}],23:[function(require,module,exports){
+},{}],31:[function(require,module,exports){
 "use strict";
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (Object.hasOwnProperty.call(mod, k)) result[k] = mod[k];
-    result["default"] = mod;
-    return result;
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 var helpers_1 = require("@turf/helpers");
 var invariant_1 = require("@turf/invariant");
-var martinez = __importStar(require("martinez-polygon-clipping"));
+var polygon_clipping_1 = __importDefault(require("polygon-clipping"));
 /**
  * Takes two {@link Polygon|polygon} or {@link MultiPolygon|multi-polygon} geometries and
  * finds their polygonal intersection. If they don't intersect, returns null.
@@ -3926,65 +4884,20 @@ function intersect(poly1, poly2, options) {
     if (options === void 0) { options = {}; }
     var geom1 = invariant_1.getGeom(poly1);
     var geom2 = invariant_1.getGeom(poly2);
-    if (geom1.type === "Polygon" && geom2.type === "Polygon") {
-        var intersection = martinez.intersection(geom1.coordinates, geom2.coordinates);
-        if (intersection === null || intersection.length === 0) {
-            return null;
-        }
-        if (intersection.length === 1) {
-            var start = intersection[0][0][0];
-            var end = intersection[0][0][intersection[0][0].length - 1];
-            if (start[0] === end[0] && start[1] === end[1]) {
-                return helpers_1.polygon(intersection[0], options.properties);
-            }
-            return null;
-        }
-        return helpers_1.multiPolygon(intersection, options.properties);
-    }
-    else if (geom1.type === "MultiPolygon") {
-        var resultCoords = [];
-        // iterate through the polygon and run intersect with each part, adding to the resultCoords.
-        for (var _i = 0, _a = geom1.coordinates; _i < _a.length; _i++) {
-            var coords = _a[_i];
-            var subGeom = invariant_1.getGeom(helpers_1.polygon(coords));
-            var subIntersection = intersect(subGeom, geom2);
-            if (subIntersection) {
-                var subIntGeom = invariant_1.getGeom(subIntersection);
-                if (subIntGeom.type === "Polygon") {
-                    resultCoords.push(subIntGeom.coordinates);
-                }
-                else if (subIntGeom.type === "MultiPolygon") {
-                    resultCoords = resultCoords.concat(subIntGeom.coordinates);
-                }
-                else {
-                    throw new Error("intersection is invalid");
-                }
-            }
-        }
-        // Make a polygon with the result
-        if (resultCoords.length === 0) {
-            return null;
-        }
-        if (resultCoords.length === 1) {
-            return helpers_1.polygon(resultCoords[0], options.properties);
-        }
-        else {
-            return helpers_1.multiPolygon(resultCoords, options.properties);
-        }
-    }
-    else if (geom2.type === "MultiPolygon") {
-        // geom1 is a polygon and geom2 a multiPolygon,
-        // put the multiPolygon first and fallback to the previous case.
-        return intersect(geom2, geom1);
-    }
-    else {
-        // handle invalid geometry types
-        throw new Error("poly1 and poly2 must be either polygons or multiPolygons");
-    }
+    var intersection = polygon_clipping_1.default.intersection(geom1.coordinates, geom2.coordinates);
+    if (intersection.length === 0)
+        return null;
+    if (intersection.length === 1)
+        return helpers_1.polygon(intersection[0], options.properties);
+    return helpers_1.multiPolygon(intersection, options.properties);
 }
 exports.default = intersect;
 
-},{"@turf/helpers":22,"@turf/invariant":24,"martinez-polygon-clipping":67}],24:[function(require,module,exports){
+},{"@turf/helpers":32,"@turf/invariant":33,"polygon-clipping":240}],32:[function(require,module,exports){
+arguments[4][8][0].apply(exports,arguments)
+},{"dup":8}],33:[function(require,module,exports){
+arguments[4][9][0].apply(exports,arguments)
+},{"@turf/helpers":32,"dup":9}],34:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 var helpers_1 = require("@turf/helpers");
@@ -4197,11 +5110,11 @@ function getType(geojson, name) {
 }
 exports.getType = getType;
 
-},{"@turf/helpers":22}],25:[function(require,module,exports){
+},{"@turf/helpers":30}],35:[function(require,module,exports){
 "use strict";
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
-}
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 var distance_1 = __importDefault(require("@turf/distance"));
 var meta_1 = require("@turf/meta");
@@ -4231,7 +5144,1436 @@ function length(geojson, options) {
 }
 exports.default = length;
 
-},{"@turf/distance":18,"@turf/meta":28}],26:[function(require,module,exports){
+},{"@turf/distance":36,"@turf/meta":39}],36:[function(require,module,exports){
+arguments[4][7][0].apply(exports,arguments)
+},{"@turf/helpers":37,"@turf/invariant":38,"dup":7}],37:[function(require,module,exports){
+arguments[4][8][0].apply(exports,arguments)
+},{"dup":8}],38:[function(require,module,exports){
+arguments[4][9][0].apply(exports,arguments)
+},{"@turf/helpers":37,"dup":9}],39:[function(require,module,exports){
+'use strict';
+
+Object.defineProperty(exports, '__esModule', { value: true });
+
+var helpers = require('@turf/helpers');
+
+/**
+ * Callback for coordEach
+ *
+ * @callback coordEachCallback
+ * @param {Array<number>} currentCoord The current coordinate being processed.
+ * @param {number} coordIndex The current index of the coordinate being processed.
+ * @param {number} featureIndex The current index of the Feature being processed.
+ * @param {number} multiFeatureIndex The current index of the Multi-Feature being processed.
+ * @param {number} geometryIndex The current index of the Geometry being processed.
+ */
+
+/**
+ * Iterate over coordinates in any GeoJSON object, similar to Array.forEach()
+ *
+ * @name coordEach
+ * @param {FeatureCollection|Feature|Geometry} geojson any GeoJSON object
+ * @param {Function} callback a method that takes (currentCoord, coordIndex, featureIndex, multiFeatureIndex)
+ * @param {boolean} [excludeWrapCoord=false] whether or not to include the final coordinate of LinearRings that wraps the ring in its iteration.
+ * @returns {void}
+ * @example
+ * var features = turf.featureCollection([
+ *   turf.point([26, 37], {"foo": "bar"}),
+ *   turf.point([36, 53], {"hello": "world"})
+ * ]);
+ *
+ * turf.coordEach(features, function (currentCoord, coordIndex, featureIndex, multiFeatureIndex, geometryIndex) {
+ *   //=currentCoord
+ *   //=coordIndex
+ *   //=featureIndex
+ *   //=multiFeatureIndex
+ *   //=geometryIndex
+ * });
+ */
+function coordEach(geojson, callback, excludeWrapCoord) {
+  // Handles null Geometry -- Skips this GeoJSON
+  if (geojson === null) return;
+  var j,
+    k,
+    l,
+    geometry,
+    stopG,
+    coords,
+    geometryMaybeCollection,
+    wrapShrink = 0,
+    coordIndex = 0,
+    isGeometryCollection,
+    type = geojson.type,
+    isFeatureCollection = type === "FeatureCollection",
+    isFeature = type === "Feature",
+    stop = isFeatureCollection ? geojson.features.length : 1;
+
+  // This logic may look a little weird. The reason why it is that way
+  // is because it's trying to be fast. GeoJSON supports multiple kinds
+  // of objects at its root: FeatureCollection, Features, Geometries.
+  // This function has the responsibility of handling all of them, and that
+  // means that some of the `for` loops you see below actually just don't apply
+  // to certain inputs. For instance, if you give this just a
+  // Point geometry, then both loops are short-circuited and all we do
+  // is gradually rename the input until it's called 'geometry'.
+  //
+  // This also aims to allocate as few resources as possible: just a
+  // few numbers and booleans, rather than any temporary arrays as would
+  // be required with the normalization approach.
+  for (var featureIndex = 0; featureIndex < stop; featureIndex++) {
+    geometryMaybeCollection = isFeatureCollection
+      ? geojson.features[featureIndex].geometry
+      : isFeature
+      ? geojson.geometry
+      : geojson;
+    isGeometryCollection = geometryMaybeCollection
+      ? geometryMaybeCollection.type === "GeometryCollection"
+      : false;
+    stopG = isGeometryCollection
+      ? geometryMaybeCollection.geometries.length
+      : 1;
+
+    for (var geomIndex = 0; geomIndex < stopG; geomIndex++) {
+      var multiFeatureIndex = 0;
+      var geometryIndex = 0;
+      geometry = isGeometryCollection
+        ? geometryMaybeCollection.geometries[geomIndex]
+        : geometryMaybeCollection;
+
+      // Handles null Geometry -- Skips this geometry
+      if (geometry === null) continue;
+      coords = geometry.coordinates;
+      var geomType = geometry.type;
+
+      wrapShrink =
+        excludeWrapCoord &&
+        (geomType === "Polygon" || geomType === "MultiPolygon")
+          ? 1
+          : 0;
+
+      switch (geomType) {
+        case null:
+          break;
+        case "Point":
+          if (
+            callback(
+              coords,
+              coordIndex,
+              featureIndex,
+              multiFeatureIndex,
+              geometryIndex
+            ) === false
+          )
+            return false;
+          coordIndex++;
+          multiFeatureIndex++;
+          break;
+        case "LineString":
+        case "MultiPoint":
+          for (j = 0; j < coords.length; j++) {
+            if (
+              callback(
+                coords[j],
+                coordIndex,
+                featureIndex,
+                multiFeatureIndex,
+                geometryIndex
+              ) === false
+            )
+              return false;
+            coordIndex++;
+            if (geomType === "MultiPoint") multiFeatureIndex++;
+          }
+          if (geomType === "LineString") multiFeatureIndex++;
+          break;
+        case "Polygon":
+        case "MultiLineString":
+          for (j = 0; j < coords.length; j++) {
+            for (k = 0; k < coords[j].length - wrapShrink; k++) {
+              if (
+                callback(
+                  coords[j][k],
+                  coordIndex,
+                  featureIndex,
+                  multiFeatureIndex,
+                  geometryIndex
+                ) === false
+              )
+                return false;
+              coordIndex++;
+            }
+            if (geomType === "MultiLineString") multiFeatureIndex++;
+            if (geomType === "Polygon") geometryIndex++;
+          }
+          if (geomType === "Polygon") multiFeatureIndex++;
+          break;
+        case "MultiPolygon":
+          for (j = 0; j < coords.length; j++) {
+            geometryIndex = 0;
+            for (k = 0; k < coords[j].length; k++) {
+              for (l = 0; l < coords[j][k].length - wrapShrink; l++) {
+                if (
+                  callback(
+                    coords[j][k][l],
+                    coordIndex,
+                    featureIndex,
+                    multiFeatureIndex,
+                    geometryIndex
+                  ) === false
+                )
+                  return false;
+                coordIndex++;
+              }
+              geometryIndex++;
+            }
+            multiFeatureIndex++;
+          }
+          break;
+        case "GeometryCollection":
+          for (j = 0; j < geometry.geometries.length; j++)
+            if (
+              coordEach(geometry.geometries[j], callback, excludeWrapCoord) ===
+              false
+            )
+              return false;
+          break;
+        default:
+          throw new Error("Unknown Geometry Type");
+      }
+    }
+  }
+}
+
+/**
+ * Callback for coordReduce
+ *
+ * The first time the callback function is called, the values provided as arguments depend
+ * on whether the reduce method has an initialValue argument.
+ *
+ * If an initialValue is provided to the reduce method:
+ *  - The previousValue argument is initialValue.
+ *  - The currentValue argument is the value of the first element present in the array.
+ *
+ * If an initialValue is not provided:
+ *  - The previousValue argument is the value of the first element present in the array.
+ *  - The currentValue argument is the value of the second element present in the array.
+ *
+ * @callback coordReduceCallback
+ * @param {*} previousValue The accumulated value previously returned in the last invocation
+ * of the callback, or initialValue, if supplied.
+ * @param {Array<number>} currentCoord The current coordinate being processed.
+ * @param {number} coordIndex The current index of the coordinate being processed.
+ * Starts at index 0, if an initialValue is provided, and at index 1 otherwise.
+ * @param {number} featureIndex The current index of the Feature being processed.
+ * @param {number} multiFeatureIndex The current index of the Multi-Feature being processed.
+ * @param {number} geometryIndex The current index of the Geometry being processed.
+ */
+
+/**
+ * Reduce coordinates in any GeoJSON object, similar to Array.reduce()
+ *
+ * @name coordReduce
+ * @param {FeatureCollection|Geometry|Feature} geojson any GeoJSON object
+ * @param {Function} callback a method that takes (previousValue, currentCoord, coordIndex)
+ * @param {*} [initialValue] Value to use as the first argument to the first call of the callback.
+ * @param {boolean} [excludeWrapCoord=false] whether or not to include the final coordinate of LinearRings that wraps the ring in its iteration.
+ * @returns {*} The value that results from the reduction.
+ * @example
+ * var features = turf.featureCollection([
+ *   turf.point([26, 37], {"foo": "bar"}),
+ *   turf.point([36, 53], {"hello": "world"})
+ * ]);
+ *
+ * turf.coordReduce(features, function (previousValue, currentCoord, coordIndex, featureIndex, multiFeatureIndex, geometryIndex) {
+ *   //=previousValue
+ *   //=currentCoord
+ *   //=coordIndex
+ *   //=featureIndex
+ *   //=multiFeatureIndex
+ *   //=geometryIndex
+ *   return currentCoord;
+ * });
+ */
+function coordReduce(geojson, callback, initialValue, excludeWrapCoord) {
+  var previousValue = initialValue;
+  coordEach(
+    geojson,
+    function (
+      currentCoord,
+      coordIndex,
+      featureIndex,
+      multiFeatureIndex,
+      geometryIndex
+    ) {
+      if (coordIndex === 0 && initialValue === undefined)
+        previousValue = currentCoord;
+      else
+        previousValue = callback(
+          previousValue,
+          currentCoord,
+          coordIndex,
+          featureIndex,
+          multiFeatureIndex,
+          geometryIndex
+        );
+    },
+    excludeWrapCoord
+  );
+  return previousValue;
+}
+
+/**
+ * Callback for propEach
+ *
+ * @callback propEachCallback
+ * @param {Object} currentProperties The current Properties being processed.
+ * @param {number} featureIndex The current index of the Feature being processed.
+ */
+
+/**
+ * Iterate over properties in any GeoJSON object, similar to Array.forEach()
+ *
+ * @name propEach
+ * @param {FeatureCollection|Feature} geojson any GeoJSON object
+ * @param {Function} callback a method that takes (currentProperties, featureIndex)
+ * @returns {void}
+ * @example
+ * var features = turf.featureCollection([
+ *     turf.point([26, 37], {foo: 'bar'}),
+ *     turf.point([36, 53], {hello: 'world'})
+ * ]);
+ *
+ * turf.propEach(features, function (currentProperties, featureIndex) {
+ *   //=currentProperties
+ *   //=featureIndex
+ * });
+ */
+function propEach(geojson, callback) {
+  var i;
+  switch (geojson.type) {
+    case "FeatureCollection":
+      for (i = 0; i < geojson.features.length; i++) {
+        if (callback(geojson.features[i].properties, i) === false) break;
+      }
+      break;
+    case "Feature":
+      callback(geojson.properties, 0);
+      break;
+  }
+}
+
+/**
+ * Callback for propReduce
+ *
+ * The first time the callback function is called, the values provided as arguments depend
+ * on whether the reduce method has an initialValue argument.
+ *
+ * If an initialValue is provided to the reduce method:
+ *  - The previousValue argument is initialValue.
+ *  - The currentValue argument is the value of the first element present in the array.
+ *
+ * If an initialValue is not provided:
+ *  - The previousValue argument is the value of the first element present in the array.
+ *  - The currentValue argument is the value of the second element present in the array.
+ *
+ * @callback propReduceCallback
+ * @param {*} previousValue The accumulated value previously returned in the last invocation
+ * of the callback, or initialValue, if supplied.
+ * @param {*} currentProperties The current Properties being processed.
+ * @param {number} featureIndex The current index of the Feature being processed.
+ */
+
+/**
+ * Reduce properties in any GeoJSON object into a single value,
+ * similar to how Array.reduce works. However, in this case we lazily run
+ * the reduction, so an array of all properties is unnecessary.
+ *
+ * @name propReduce
+ * @param {FeatureCollection|Feature} geojson any GeoJSON object
+ * @param {Function} callback a method that takes (previousValue, currentProperties, featureIndex)
+ * @param {*} [initialValue] Value to use as the first argument to the first call of the callback.
+ * @returns {*} The value that results from the reduction.
+ * @example
+ * var features = turf.featureCollection([
+ *     turf.point([26, 37], {foo: 'bar'}),
+ *     turf.point([36, 53], {hello: 'world'})
+ * ]);
+ *
+ * turf.propReduce(features, function (previousValue, currentProperties, featureIndex) {
+ *   //=previousValue
+ *   //=currentProperties
+ *   //=featureIndex
+ *   return currentProperties
+ * });
+ */
+function propReduce(geojson, callback, initialValue) {
+  var previousValue = initialValue;
+  propEach(geojson, function (currentProperties, featureIndex) {
+    if (featureIndex === 0 && initialValue === undefined)
+      previousValue = currentProperties;
+    else
+      previousValue = callback(previousValue, currentProperties, featureIndex);
+  });
+  return previousValue;
+}
+
+/**
+ * Callback for featureEach
+ *
+ * @callback featureEachCallback
+ * @param {Feature<any>} currentFeature The current Feature being processed.
+ * @param {number} featureIndex The current index of the Feature being processed.
+ */
+
+/**
+ * Iterate over features in any GeoJSON object, similar to
+ * Array.forEach.
+ *
+ * @name featureEach
+ * @param {FeatureCollection|Feature|Geometry} geojson any GeoJSON object
+ * @param {Function} callback a method that takes (currentFeature, featureIndex)
+ * @returns {void}
+ * @example
+ * var features = turf.featureCollection([
+ *   turf.point([26, 37], {foo: 'bar'}),
+ *   turf.point([36, 53], {hello: 'world'})
+ * ]);
+ *
+ * turf.featureEach(features, function (currentFeature, featureIndex) {
+ *   //=currentFeature
+ *   //=featureIndex
+ * });
+ */
+function featureEach(geojson, callback) {
+  if (geojson.type === "Feature") {
+    callback(geojson, 0);
+  } else if (geojson.type === "FeatureCollection") {
+    for (var i = 0; i < geojson.features.length; i++) {
+      if (callback(geojson.features[i], i) === false) break;
+    }
+  }
+}
+
+/**
+ * Callback for featureReduce
+ *
+ * The first time the callback function is called, the values provided as arguments depend
+ * on whether the reduce method has an initialValue argument.
+ *
+ * If an initialValue is provided to the reduce method:
+ *  - The previousValue argument is initialValue.
+ *  - The currentValue argument is the value of the first element present in the array.
+ *
+ * If an initialValue is not provided:
+ *  - The previousValue argument is the value of the first element present in the array.
+ *  - The currentValue argument is the value of the second element present in the array.
+ *
+ * @callback featureReduceCallback
+ * @param {*} previousValue The accumulated value previously returned in the last invocation
+ * of the callback, or initialValue, if supplied.
+ * @param {Feature} currentFeature The current Feature being processed.
+ * @param {number} featureIndex The current index of the Feature being processed.
+ */
+
+/**
+ * Reduce features in any GeoJSON object, similar to Array.reduce().
+ *
+ * @name featureReduce
+ * @param {FeatureCollection|Feature|Geometry} geojson any GeoJSON object
+ * @param {Function} callback a method that takes (previousValue, currentFeature, featureIndex)
+ * @param {*} [initialValue] Value to use as the first argument to the first call of the callback.
+ * @returns {*} The value that results from the reduction.
+ * @example
+ * var features = turf.featureCollection([
+ *   turf.point([26, 37], {"foo": "bar"}),
+ *   turf.point([36, 53], {"hello": "world"})
+ * ]);
+ *
+ * turf.featureReduce(features, function (previousValue, currentFeature, featureIndex) {
+ *   //=previousValue
+ *   //=currentFeature
+ *   //=featureIndex
+ *   return currentFeature
+ * });
+ */
+function featureReduce(geojson, callback, initialValue) {
+  var previousValue = initialValue;
+  featureEach(geojson, function (currentFeature, featureIndex) {
+    if (featureIndex === 0 && initialValue === undefined)
+      previousValue = currentFeature;
+    else previousValue = callback(previousValue, currentFeature, featureIndex);
+  });
+  return previousValue;
+}
+
+/**
+ * Get all coordinates from any GeoJSON object.
+ *
+ * @name coordAll
+ * @param {FeatureCollection|Feature|Geometry} geojson any GeoJSON object
+ * @returns {Array<Array<number>>} coordinate position array
+ * @example
+ * var features = turf.featureCollection([
+ *   turf.point([26, 37], {foo: 'bar'}),
+ *   turf.point([36, 53], {hello: 'world'})
+ * ]);
+ *
+ * var coords = turf.coordAll(features);
+ * //= [[26, 37], [36, 53]]
+ */
+function coordAll(geojson) {
+  var coords = [];
+  coordEach(geojson, function (coord) {
+    coords.push(coord);
+  });
+  return coords;
+}
+
+/**
+ * Callback for geomEach
+ *
+ * @callback geomEachCallback
+ * @param {Geometry} currentGeometry The current Geometry being processed.
+ * @param {number} featureIndex The current index of the Feature being processed.
+ * @param {Object} featureProperties The current Feature Properties being processed.
+ * @param {Array<number>} featureBBox The current Feature BBox being processed.
+ * @param {number|string} featureId The current Feature Id being processed.
+ */
+
+/**
+ * Iterate over each geometry in any GeoJSON object, similar to Array.forEach()
+ *
+ * @name geomEach
+ * @param {FeatureCollection|Feature|Geometry} geojson any GeoJSON object
+ * @param {Function} callback a method that takes (currentGeometry, featureIndex, featureProperties, featureBBox, featureId)
+ * @returns {void}
+ * @example
+ * var features = turf.featureCollection([
+ *     turf.point([26, 37], {foo: 'bar'}),
+ *     turf.point([36, 53], {hello: 'world'})
+ * ]);
+ *
+ * turf.geomEach(features, function (currentGeometry, featureIndex, featureProperties, featureBBox, featureId) {
+ *   //=currentGeometry
+ *   //=featureIndex
+ *   //=featureProperties
+ *   //=featureBBox
+ *   //=featureId
+ * });
+ */
+function geomEach(geojson, callback) {
+  var i,
+    j,
+    g,
+    geometry,
+    stopG,
+    geometryMaybeCollection,
+    isGeometryCollection,
+    featureProperties,
+    featureBBox,
+    featureId,
+    featureIndex = 0,
+    isFeatureCollection = geojson.type === "FeatureCollection",
+    isFeature = geojson.type === "Feature",
+    stop = isFeatureCollection ? geojson.features.length : 1;
+
+  // This logic may look a little weird. The reason why it is that way
+  // is because it's trying to be fast. GeoJSON supports multiple kinds
+  // of objects at its root: FeatureCollection, Features, Geometries.
+  // This function has the responsibility of handling all of them, and that
+  // means that some of the `for` loops you see below actually just don't apply
+  // to certain inputs. For instance, if you give this just a
+  // Point geometry, then both loops are short-circuited and all we do
+  // is gradually rename the input until it's called 'geometry'.
+  //
+  // This also aims to allocate as few resources as possible: just a
+  // few numbers and booleans, rather than any temporary arrays as would
+  // be required with the normalization approach.
+  for (i = 0; i < stop; i++) {
+    geometryMaybeCollection = isFeatureCollection
+      ? geojson.features[i].geometry
+      : isFeature
+      ? geojson.geometry
+      : geojson;
+    featureProperties = isFeatureCollection
+      ? geojson.features[i].properties
+      : isFeature
+      ? geojson.properties
+      : {};
+    featureBBox = isFeatureCollection
+      ? geojson.features[i].bbox
+      : isFeature
+      ? geojson.bbox
+      : undefined;
+    featureId = isFeatureCollection
+      ? geojson.features[i].id
+      : isFeature
+      ? geojson.id
+      : undefined;
+    isGeometryCollection = geometryMaybeCollection
+      ? geometryMaybeCollection.type === "GeometryCollection"
+      : false;
+    stopG = isGeometryCollection
+      ? geometryMaybeCollection.geometries.length
+      : 1;
+
+    for (g = 0; g < stopG; g++) {
+      geometry = isGeometryCollection
+        ? geometryMaybeCollection.geometries[g]
+        : geometryMaybeCollection;
+
+      // Handle null Geometry
+      if (geometry === null) {
+        if (
+          callback(
+            null,
+            featureIndex,
+            featureProperties,
+            featureBBox,
+            featureId
+          ) === false
+        )
+          return false;
+        continue;
+      }
+      switch (geometry.type) {
+        case "Point":
+        case "LineString":
+        case "MultiPoint":
+        case "Polygon":
+        case "MultiLineString":
+        case "MultiPolygon": {
+          if (
+            callback(
+              geometry,
+              featureIndex,
+              featureProperties,
+              featureBBox,
+              featureId
+            ) === false
+          )
+            return false;
+          break;
+        }
+        case "GeometryCollection": {
+          for (j = 0; j < geometry.geometries.length; j++) {
+            if (
+              callback(
+                geometry.geometries[j],
+                featureIndex,
+                featureProperties,
+                featureBBox,
+                featureId
+              ) === false
+            )
+              return false;
+          }
+          break;
+        }
+        default:
+          throw new Error("Unknown Geometry Type");
+      }
+    }
+    // Only increase `featureIndex` per each feature
+    featureIndex++;
+  }
+}
+
+/**
+ * Callback for geomReduce
+ *
+ * The first time the callback function is called, the values provided as arguments depend
+ * on whether the reduce method has an initialValue argument.
+ *
+ * If an initialValue is provided to the reduce method:
+ *  - The previousValue argument is initialValue.
+ *  - The currentValue argument is the value of the first element present in the array.
+ *
+ * If an initialValue is not provided:
+ *  - The previousValue argument is the value of the first element present in the array.
+ *  - The currentValue argument is the value of the second element present in the array.
+ *
+ * @callback geomReduceCallback
+ * @param {*} previousValue The accumulated value previously returned in the last invocation
+ * of the callback, or initialValue, if supplied.
+ * @param {Geometry} currentGeometry The current Geometry being processed.
+ * @param {number} featureIndex The current index of the Feature being processed.
+ * @param {Object} featureProperties The current Feature Properties being processed.
+ * @param {Array<number>} featureBBox The current Feature BBox being processed.
+ * @param {number|string} featureId The current Feature Id being processed.
+ */
+
+/**
+ * Reduce geometry in any GeoJSON object, similar to Array.reduce().
+ *
+ * @name geomReduce
+ * @param {FeatureCollection|Feature|Geometry} geojson any GeoJSON object
+ * @param {Function} callback a method that takes (previousValue, currentGeometry, featureIndex, featureProperties, featureBBox, featureId)
+ * @param {*} [initialValue] Value to use as the first argument to the first call of the callback.
+ * @returns {*} The value that results from the reduction.
+ * @example
+ * var features = turf.featureCollection([
+ *     turf.point([26, 37], {foo: 'bar'}),
+ *     turf.point([36, 53], {hello: 'world'})
+ * ]);
+ *
+ * turf.geomReduce(features, function (previousValue, currentGeometry, featureIndex, featureProperties, featureBBox, featureId) {
+ *   //=previousValue
+ *   //=currentGeometry
+ *   //=featureIndex
+ *   //=featureProperties
+ *   //=featureBBox
+ *   //=featureId
+ *   return currentGeometry
+ * });
+ */
+function geomReduce(geojson, callback, initialValue) {
+  var previousValue = initialValue;
+  geomEach(
+    geojson,
+    function (
+      currentGeometry,
+      featureIndex,
+      featureProperties,
+      featureBBox,
+      featureId
+    ) {
+      if (featureIndex === 0 && initialValue === undefined)
+        previousValue = currentGeometry;
+      else
+        previousValue = callback(
+          previousValue,
+          currentGeometry,
+          featureIndex,
+          featureProperties,
+          featureBBox,
+          featureId
+        );
+    }
+  );
+  return previousValue;
+}
+
+/**
+ * Callback for flattenEach
+ *
+ * @callback flattenEachCallback
+ * @param {Feature} currentFeature The current flattened feature being processed.
+ * @param {number} featureIndex The current index of the Feature being processed.
+ * @param {number} multiFeatureIndex The current index of the Multi-Feature being processed.
+ */
+
+/**
+ * Iterate over flattened features in any GeoJSON object, similar to
+ * Array.forEach.
+ *
+ * @name flattenEach
+ * @param {FeatureCollection|Feature|Geometry} geojson any GeoJSON object
+ * @param {Function} callback a method that takes (currentFeature, featureIndex, multiFeatureIndex)
+ * @example
+ * var features = turf.featureCollection([
+ *     turf.point([26, 37], {foo: 'bar'}),
+ *     turf.multiPoint([[40, 30], [36, 53]], {hello: 'world'})
+ * ]);
+ *
+ * turf.flattenEach(features, function (currentFeature, featureIndex, multiFeatureIndex) {
+ *   //=currentFeature
+ *   //=featureIndex
+ *   //=multiFeatureIndex
+ * });
+ */
+function flattenEach(geojson, callback) {
+  geomEach(geojson, function (geometry, featureIndex, properties, bbox, id) {
+    // Callback for single geometry
+    var type = geometry === null ? null : geometry.type;
+    switch (type) {
+      case null:
+      case "Point":
+      case "LineString":
+      case "Polygon":
+        if (
+          callback(
+            helpers.feature(geometry, properties, { bbox: bbox, id: id }),
+            featureIndex,
+            0
+          ) === false
+        )
+          return false;
+        return;
+    }
+
+    var geomType;
+
+    // Callback for multi-geometry
+    switch (type) {
+      case "MultiPoint":
+        geomType = "Point";
+        break;
+      case "MultiLineString":
+        geomType = "LineString";
+        break;
+      case "MultiPolygon":
+        geomType = "Polygon";
+        break;
+    }
+
+    for (
+      var multiFeatureIndex = 0;
+      multiFeatureIndex < geometry.coordinates.length;
+      multiFeatureIndex++
+    ) {
+      var coordinate = geometry.coordinates[multiFeatureIndex];
+      var geom = {
+        type: geomType,
+        coordinates: coordinate,
+      };
+      if (
+        callback(helpers.feature(geom, properties), featureIndex, multiFeatureIndex) ===
+        false
+      )
+        return false;
+    }
+  });
+}
+
+/**
+ * Callback for flattenReduce
+ *
+ * The first time the callback function is called, the values provided as arguments depend
+ * on whether the reduce method has an initialValue argument.
+ *
+ * If an initialValue is provided to the reduce method:
+ *  - The previousValue argument is initialValue.
+ *  - The currentValue argument is the value of the first element present in the array.
+ *
+ * If an initialValue is not provided:
+ *  - The previousValue argument is the value of the first element present in the array.
+ *  - The currentValue argument is the value of the second element present in the array.
+ *
+ * @callback flattenReduceCallback
+ * @param {*} previousValue The accumulated value previously returned in the last invocation
+ * of the callback, or initialValue, if supplied.
+ * @param {Feature} currentFeature The current Feature being processed.
+ * @param {number} featureIndex The current index of the Feature being processed.
+ * @param {number} multiFeatureIndex The current index of the Multi-Feature being processed.
+ */
+
+/**
+ * Reduce flattened features in any GeoJSON object, similar to Array.reduce().
+ *
+ * @name flattenReduce
+ * @param {FeatureCollection|Feature|Geometry} geojson any GeoJSON object
+ * @param {Function} callback a method that takes (previousValue, currentFeature, featureIndex, multiFeatureIndex)
+ * @param {*} [initialValue] Value to use as the first argument to the first call of the callback.
+ * @returns {*} The value that results from the reduction.
+ * @example
+ * var features = turf.featureCollection([
+ *     turf.point([26, 37], {foo: 'bar'}),
+ *     turf.multiPoint([[40, 30], [36, 53]], {hello: 'world'})
+ * ]);
+ *
+ * turf.flattenReduce(features, function (previousValue, currentFeature, featureIndex, multiFeatureIndex) {
+ *   //=previousValue
+ *   //=currentFeature
+ *   //=featureIndex
+ *   //=multiFeatureIndex
+ *   return currentFeature
+ * });
+ */
+function flattenReduce(geojson, callback, initialValue) {
+  var previousValue = initialValue;
+  flattenEach(
+    geojson,
+    function (currentFeature, featureIndex, multiFeatureIndex) {
+      if (
+        featureIndex === 0 &&
+        multiFeatureIndex === 0 &&
+        initialValue === undefined
+      )
+        previousValue = currentFeature;
+      else
+        previousValue = callback(
+          previousValue,
+          currentFeature,
+          featureIndex,
+          multiFeatureIndex
+        );
+    }
+  );
+  return previousValue;
+}
+
+/**
+ * Callback for segmentEach
+ *
+ * @callback segmentEachCallback
+ * @param {Feature<LineString>} currentSegment The current Segment being processed.
+ * @param {number} featureIndex The current index of the Feature being processed.
+ * @param {number} multiFeatureIndex The current index of the Multi-Feature being processed.
+ * @param {number} geometryIndex The current index of the Geometry being processed.
+ * @param {number} segmentIndex The current index of the Segment being processed.
+ * @returns {void}
+ */
+
+/**
+ * Iterate over 2-vertex line segment in any GeoJSON object, similar to Array.forEach()
+ * (Multi)Point geometries do not contain segments therefore they are ignored during this operation.
+ *
+ * @param {FeatureCollection|Feature|Geometry} geojson any GeoJSON
+ * @param {Function} callback a method that takes (currentSegment, featureIndex, multiFeatureIndex, geometryIndex, segmentIndex)
+ * @returns {void}
+ * @example
+ * var polygon = turf.polygon([[[-50, 5], [-40, -10], [-50, -10], [-40, 5], [-50, 5]]]);
+ *
+ * // Iterate over GeoJSON by 2-vertex segments
+ * turf.segmentEach(polygon, function (currentSegment, featureIndex, multiFeatureIndex, geometryIndex, segmentIndex) {
+ *   //=currentSegment
+ *   //=featureIndex
+ *   //=multiFeatureIndex
+ *   //=geometryIndex
+ *   //=segmentIndex
+ * });
+ *
+ * // Calculate the total number of segments
+ * var total = 0;
+ * turf.segmentEach(polygon, function () {
+ *     total++;
+ * });
+ */
+function segmentEach(geojson, callback) {
+  flattenEach(geojson, function (feature, featureIndex, multiFeatureIndex) {
+    var segmentIndex = 0;
+
+    // Exclude null Geometries
+    if (!feature.geometry) return;
+    // (Multi)Point geometries do not contain segments therefore they are ignored during this operation.
+    var type = feature.geometry.type;
+    if (type === "Point" || type === "MultiPoint") return;
+
+    // Generate 2-vertex line segments
+    var previousCoords;
+    var previousFeatureIndex = 0;
+    var previousMultiIndex = 0;
+    var prevGeomIndex = 0;
+    if (
+      coordEach(
+        feature,
+        function (
+          currentCoord,
+          coordIndex,
+          featureIndexCoord,
+          multiPartIndexCoord,
+          geometryIndex
+        ) {
+          // Simulating a meta.coordReduce() since `reduce` operations cannot be stopped by returning `false`
+          if (
+            previousCoords === undefined ||
+            featureIndex > previousFeatureIndex ||
+            multiPartIndexCoord > previousMultiIndex ||
+            geometryIndex > prevGeomIndex
+          ) {
+            previousCoords = currentCoord;
+            previousFeatureIndex = featureIndex;
+            previousMultiIndex = multiPartIndexCoord;
+            prevGeomIndex = geometryIndex;
+            segmentIndex = 0;
+            return;
+          }
+          var currentSegment = helpers.lineString(
+            [previousCoords, currentCoord],
+            feature.properties
+          );
+          if (
+            callback(
+              currentSegment,
+              featureIndex,
+              multiFeatureIndex,
+              geometryIndex,
+              segmentIndex
+            ) === false
+          )
+            return false;
+          segmentIndex++;
+          previousCoords = currentCoord;
+        }
+      ) === false
+    )
+      return false;
+  });
+}
+
+/**
+ * Callback for segmentReduce
+ *
+ * The first time the callback function is called, the values provided as arguments depend
+ * on whether the reduce method has an initialValue argument.
+ *
+ * If an initialValue is provided to the reduce method:
+ *  - The previousValue argument is initialValue.
+ *  - The currentValue argument is the value of the first element present in the array.
+ *
+ * If an initialValue is not provided:
+ *  - The previousValue argument is the value of the first element present in the array.
+ *  - The currentValue argument is the value of the second element present in the array.
+ *
+ * @callback segmentReduceCallback
+ * @param {*} previousValue The accumulated value previously returned in the last invocation
+ * of the callback, or initialValue, if supplied.
+ * @param {Feature<LineString>} currentSegment The current Segment being processed.
+ * @param {number} featureIndex The current index of the Feature being processed.
+ * @param {number} multiFeatureIndex The current index of the Multi-Feature being processed.
+ * @param {number} geometryIndex The current index of the Geometry being processed.
+ * @param {number} segmentIndex The current index of the Segment being processed.
+ */
+
+/**
+ * Reduce 2-vertex line segment in any GeoJSON object, similar to Array.reduce()
+ * (Multi)Point geometries do not contain segments therefore they are ignored during this operation.
+ *
+ * @param {FeatureCollection|Feature|Geometry} geojson any GeoJSON
+ * @param {Function} callback a method that takes (previousValue, currentSegment, currentIndex)
+ * @param {*} [initialValue] Value to use as the first argument to the first call of the callback.
+ * @returns {void}
+ * @example
+ * var polygon = turf.polygon([[[-50, 5], [-40, -10], [-50, -10], [-40, 5], [-50, 5]]]);
+ *
+ * // Iterate over GeoJSON by 2-vertex segments
+ * turf.segmentReduce(polygon, function (previousSegment, currentSegment, featureIndex, multiFeatureIndex, geometryIndex, segmentIndex) {
+ *   //= previousSegment
+ *   //= currentSegment
+ *   //= featureIndex
+ *   //= multiFeatureIndex
+ *   //= geometryIndex
+ *   //= segmentIndex
+ *   return currentSegment
+ * });
+ *
+ * // Calculate the total number of segments
+ * var initialValue = 0
+ * var total = turf.segmentReduce(polygon, function (previousValue) {
+ *     previousValue++;
+ *     return previousValue;
+ * }, initialValue);
+ */
+function segmentReduce(geojson, callback, initialValue) {
+  var previousValue = initialValue;
+  var started = false;
+  segmentEach(
+    geojson,
+    function (
+      currentSegment,
+      featureIndex,
+      multiFeatureIndex,
+      geometryIndex,
+      segmentIndex
+    ) {
+      if (started === false && initialValue === undefined)
+        previousValue = currentSegment;
+      else
+        previousValue = callback(
+          previousValue,
+          currentSegment,
+          featureIndex,
+          multiFeatureIndex,
+          geometryIndex,
+          segmentIndex
+        );
+      started = true;
+    }
+  );
+  return previousValue;
+}
+
+/**
+ * Callback for lineEach
+ *
+ * @callback lineEachCallback
+ * @param {Feature<LineString>} currentLine The current LineString|LinearRing being processed
+ * @param {number} featureIndex The current index of the Feature being processed
+ * @param {number} multiFeatureIndex The current index of the Multi-Feature being processed
+ * @param {number} geometryIndex The current index of the Geometry being processed
+ */
+
+/**
+ * Iterate over line or ring coordinates in LineString, Polygon, MultiLineString, MultiPolygon Features or Geometries,
+ * similar to Array.forEach.
+ *
+ * @name lineEach
+ * @param {Geometry|Feature<LineString|Polygon|MultiLineString|MultiPolygon>} geojson object
+ * @param {Function} callback a method that takes (currentLine, featureIndex, multiFeatureIndex, geometryIndex)
+ * @example
+ * var multiLine = turf.multiLineString([
+ *   [[26, 37], [35, 45]],
+ *   [[36, 53], [38, 50], [41, 55]]
+ * ]);
+ *
+ * turf.lineEach(multiLine, function (currentLine, featureIndex, multiFeatureIndex, geometryIndex) {
+ *   //=currentLine
+ *   //=featureIndex
+ *   //=multiFeatureIndex
+ *   //=geometryIndex
+ * });
+ */
+function lineEach(geojson, callback) {
+  // validation
+  if (!geojson) throw new Error("geojson is required");
+
+  flattenEach(geojson, function (feature, featureIndex, multiFeatureIndex) {
+    if (feature.geometry === null) return;
+    var type = feature.geometry.type;
+    var coords = feature.geometry.coordinates;
+    switch (type) {
+      case "LineString":
+        if (callback(feature, featureIndex, multiFeatureIndex, 0, 0) === false)
+          return false;
+        break;
+      case "Polygon":
+        for (
+          var geometryIndex = 0;
+          geometryIndex < coords.length;
+          geometryIndex++
+        ) {
+          if (
+            callback(
+              helpers.lineString(coords[geometryIndex], feature.properties),
+              featureIndex,
+              multiFeatureIndex,
+              geometryIndex
+            ) === false
+          )
+            return false;
+        }
+        break;
+    }
+  });
+}
+
+/**
+ * Callback for lineReduce
+ *
+ * The first time the callback function is called, the values provided as arguments depend
+ * on whether the reduce method has an initialValue argument.
+ *
+ * If an initialValue is provided to the reduce method:
+ *  - The previousValue argument is initialValue.
+ *  - The currentValue argument is the value of the first element present in the array.
+ *
+ * If an initialValue is not provided:
+ *  - The previousValue argument is the value of the first element present in the array.
+ *  - The currentValue argument is the value of the second element present in the array.
+ *
+ * @callback lineReduceCallback
+ * @param {*} previousValue The accumulated value previously returned in the last invocation
+ * of the callback, or initialValue, if supplied.
+ * @param {Feature<LineString>} currentLine The current LineString|LinearRing being processed.
+ * @param {number} featureIndex The current index of the Feature being processed
+ * @param {number} multiFeatureIndex The current index of the Multi-Feature being processed
+ * @param {number} geometryIndex The current index of the Geometry being processed
+ */
+
+/**
+ * Reduce features in any GeoJSON object, similar to Array.reduce().
+ *
+ * @name lineReduce
+ * @param {Geometry|Feature<LineString|Polygon|MultiLineString|MultiPolygon>} geojson object
+ * @param {Function} callback a method that takes (previousValue, currentLine, featureIndex, multiFeatureIndex, geometryIndex)
+ * @param {*} [initialValue] Value to use as the first argument to the first call of the callback.
+ * @returns {*} The value that results from the reduction.
+ * @example
+ * var multiPoly = turf.multiPolygon([
+ *   turf.polygon([[[12,48],[2,41],[24,38],[12,48]], [[9,44],[13,41],[13,45],[9,44]]]),
+ *   turf.polygon([[[5, 5], [0, 0], [2, 2], [4, 4], [5, 5]]])
+ * ]);
+ *
+ * turf.lineReduce(multiPoly, function (previousValue, currentLine, featureIndex, multiFeatureIndex, geometryIndex) {
+ *   //=previousValue
+ *   //=currentLine
+ *   //=featureIndex
+ *   //=multiFeatureIndex
+ *   //=geometryIndex
+ *   return currentLine
+ * });
+ */
+function lineReduce(geojson, callback, initialValue) {
+  var previousValue = initialValue;
+  lineEach(
+    geojson,
+    function (currentLine, featureIndex, multiFeatureIndex, geometryIndex) {
+      if (featureIndex === 0 && initialValue === undefined)
+        previousValue = currentLine;
+      else
+        previousValue = callback(
+          previousValue,
+          currentLine,
+          featureIndex,
+          multiFeatureIndex,
+          geometryIndex
+        );
+    }
+  );
+  return previousValue;
+}
+
+/**
+ * Finds a particular 2-vertex LineString Segment from a GeoJSON using `@turf/meta` indexes.
+ *
+ * Negative indexes are permitted.
+ * Point & MultiPoint will always return null.
+ *
+ * @param {FeatureCollection|Feature|Geometry} geojson Any GeoJSON Feature or Geometry
+ * @param {Object} [options={}] Optional parameters
+ * @param {number} [options.featureIndex=0] Feature Index
+ * @param {number} [options.multiFeatureIndex=0] Multi-Feature Index
+ * @param {number} [options.geometryIndex=0] Geometry Index
+ * @param {number} [options.segmentIndex=0] Segment Index
+ * @param {Object} [options.properties={}] Translate Properties to output LineString
+ * @param {BBox} [options.bbox={}] Translate BBox to output LineString
+ * @param {number|string} [options.id={}] Translate Id to output LineString
+ * @returns {Feature<LineString>} 2-vertex GeoJSON Feature LineString
+ * @example
+ * var multiLine = turf.multiLineString([
+ *     [[10, 10], [50, 30], [30, 40]],
+ *     [[-10, -10], [-50, -30], [-30, -40]]
+ * ]);
+ *
+ * // First Segment (defaults are 0)
+ * turf.findSegment(multiLine);
+ * // => Feature<LineString<[[10, 10], [50, 30]]>>
+ *
+ * // First Segment of 2nd Multi Feature
+ * turf.findSegment(multiLine, {multiFeatureIndex: 1});
+ * // => Feature<LineString<[[-10, -10], [-50, -30]]>>
+ *
+ * // Last Segment of Last Multi Feature
+ * turf.findSegment(multiLine, {multiFeatureIndex: -1, segmentIndex: -1});
+ * // => Feature<LineString<[[-50, -30], [-30, -40]]>>
+ */
+function findSegment(geojson, options) {
+  // Optional Parameters
+  options = options || {};
+  if (!helpers.isObject(options)) throw new Error("options is invalid");
+  var featureIndex = options.featureIndex || 0;
+  var multiFeatureIndex = options.multiFeatureIndex || 0;
+  var geometryIndex = options.geometryIndex || 0;
+  var segmentIndex = options.segmentIndex || 0;
+
+  // Find FeatureIndex
+  var properties = options.properties;
+  var geometry;
+
+  switch (geojson.type) {
+    case "FeatureCollection":
+      if (featureIndex < 0)
+        featureIndex = geojson.features.length + featureIndex;
+      properties = properties || geojson.features[featureIndex].properties;
+      geometry = geojson.features[featureIndex].geometry;
+      break;
+    case "Feature":
+      properties = properties || geojson.properties;
+      geometry = geojson.geometry;
+      break;
+    case "Point":
+    case "MultiPoint":
+      return null;
+    case "LineString":
+    case "Polygon":
+    case "MultiLineString":
+    case "MultiPolygon":
+      geometry = geojson;
+      break;
+    default:
+      throw new Error("geojson is invalid");
+  }
+
+  // Find SegmentIndex
+  if (geometry === null) return null;
+  var coords = geometry.coordinates;
+  switch (geometry.type) {
+    case "Point":
+    case "MultiPoint":
+      return null;
+    case "LineString":
+      if (segmentIndex < 0) segmentIndex = coords.length + segmentIndex - 1;
+      return helpers.lineString(
+        [coords[segmentIndex], coords[segmentIndex + 1]],
+        properties,
+        options
+      );
+    case "Polygon":
+      if (geometryIndex < 0) geometryIndex = coords.length + geometryIndex;
+      if (segmentIndex < 0)
+        segmentIndex = coords[geometryIndex].length + segmentIndex - 1;
+      return helpers.lineString(
+        [
+          coords[geometryIndex][segmentIndex],
+          coords[geometryIndex][segmentIndex + 1],
+        ],
+        properties,
+        options
+      );
+    case "MultiLineString":
+      if (multiFeatureIndex < 0)
+        multiFeatureIndex = coords.length + multiFeatureIndex;
+      if (segmentIndex < 0)
+        segmentIndex = coords[multiFeatureIndex].length + segmentIndex - 1;
+      return helpers.lineString(
+        [
+          coords[multiFeatureIndex][segmentIndex],
+          coords[multiFeatureIndex][segmentIndex + 1],
+        ],
+        properties,
+        options
+      );
+    case "MultiPolygon":
+      if (multiFeatureIndex < 0)
+        multiFeatureIndex = coords.length + multiFeatureIndex;
+      if (geometryIndex < 0)
+        geometryIndex = coords[multiFeatureIndex].length + geometryIndex;
+      if (segmentIndex < 0)
+        segmentIndex =
+          coords[multiFeatureIndex][geometryIndex].length - segmentIndex - 1;
+      return helpers.lineString(
+        [
+          coords[multiFeatureIndex][geometryIndex][segmentIndex],
+          coords[multiFeatureIndex][geometryIndex][segmentIndex + 1],
+        ],
+        properties,
+        options
+      );
+  }
+  throw new Error("geojson is invalid");
+}
+
+/**
+ * Finds a particular Point from a GeoJSON using `@turf/meta` indexes.
+ *
+ * Negative indexes are permitted.
+ *
+ * @param {FeatureCollection|Feature|Geometry} geojson Any GeoJSON Feature or Geometry
+ * @param {Object} [options={}] Optional parameters
+ * @param {number} [options.featureIndex=0] Feature Index
+ * @param {number} [options.multiFeatureIndex=0] Multi-Feature Index
+ * @param {number} [options.geometryIndex=0] Geometry Index
+ * @param {number} [options.coordIndex=0] Coord Index
+ * @param {Object} [options.properties={}] Translate Properties to output Point
+ * @param {BBox} [options.bbox={}] Translate BBox to output Point
+ * @param {number|string} [options.id={}] Translate Id to output Point
+ * @returns {Feature<Point>} 2-vertex GeoJSON Feature Point
+ * @example
+ * var multiLine = turf.multiLineString([
+ *     [[10, 10], [50, 30], [30, 40]],
+ *     [[-10, -10], [-50, -30], [-30, -40]]
+ * ]);
+ *
+ * // First Segment (defaults are 0)
+ * turf.findPoint(multiLine);
+ * // => Feature<Point<[10, 10]>>
+ *
+ * // First Segment of the 2nd Multi-Feature
+ * turf.findPoint(multiLine, {multiFeatureIndex: 1});
+ * // => Feature<Point<[-10, -10]>>
+ *
+ * // Last Segment of last Multi-Feature
+ * turf.findPoint(multiLine, {multiFeatureIndex: -1, coordIndex: -1});
+ * // => Feature<Point<[-30, -40]>>
+ */
+function findPoint(geojson, options) {
+  // Optional Parameters
+  options = options || {};
+  if (!helpers.isObject(options)) throw new Error("options is invalid");
+  var featureIndex = options.featureIndex || 0;
+  var multiFeatureIndex = options.multiFeatureIndex || 0;
+  var geometryIndex = options.geometryIndex || 0;
+  var coordIndex = options.coordIndex || 0;
+
+  // Find FeatureIndex
+  var properties = options.properties;
+  var geometry;
+
+  switch (geojson.type) {
+    case "FeatureCollection":
+      if (featureIndex < 0)
+        featureIndex = geojson.features.length + featureIndex;
+      properties = properties || geojson.features[featureIndex].properties;
+      geometry = geojson.features[featureIndex].geometry;
+      break;
+    case "Feature":
+      properties = properties || geojson.properties;
+      geometry = geojson.geometry;
+      break;
+    case "Point":
+    case "MultiPoint":
+      return null;
+    case "LineString":
+    case "Polygon":
+    case "MultiLineString":
+    case "MultiPolygon":
+      geometry = geojson;
+      break;
+    default:
+      throw new Error("geojson is invalid");
+  }
+
+  // Find Coord Index
+  if (geometry === null) return null;
+  var coords = geometry.coordinates;
+  switch (geometry.type) {
+    case "Point":
+      return helpers.point(coords, properties, options);
+    case "MultiPoint":
+      if (multiFeatureIndex < 0)
+        multiFeatureIndex = coords.length + multiFeatureIndex;
+      return helpers.point(coords[multiFeatureIndex], properties, options);
+    case "LineString":
+      if (coordIndex < 0) coordIndex = coords.length + coordIndex;
+      return helpers.point(coords[coordIndex], properties, options);
+    case "Polygon":
+      if (geometryIndex < 0) geometryIndex = coords.length + geometryIndex;
+      if (coordIndex < 0)
+        coordIndex = coords[geometryIndex].length + coordIndex;
+      return helpers.point(coords[geometryIndex][coordIndex], properties, options);
+    case "MultiLineString":
+      if (multiFeatureIndex < 0)
+        multiFeatureIndex = coords.length + multiFeatureIndex;
+      if (coordIndex < 0)
+        coordIndex = coords[multiFeatureIndex].length + coordIndex;
+      return helpers.point(coords[multiFeatureIndex][coordIndex], properties, options);
+    case "MultiPolygon":
+      if (multiFeatureIndex < 0)
+        multiFeatureIndex = coords.length + multiFeatureIndex;
+      if (geometryIndex < 0)
+        geometryIndex = coords[multiFeatureIndex].length + geometryIndex;
+      if (coordIndex < 0)
+        coordIndex =
+          coords[multiFeatureIndex][geometryIndex].length - coordIndex;
+      return helpers.point(
+        coords[multiFeatureIndex][geometryIndex][coordIndex],
+        properties,
+        options
+      );
+  }
+  throw new Error("geojson is invalid");
+}
+
+exports.coordEach = coordEach;
+exports.coordReduce = coordReduce;
+exports.propEach = propEach;
+exports.propReduce = propReduce;
+exports.featureEach = featureEach;
+exports.featureReduce = featureReduce;
+exports.coordAll = coordAll;
+exports.geomEach = geomEach;
+exports.geomReduce = geomReduce;
+exports.flattenEach = flattenEach;
+exports.flattenReduce = flattenReduce;
+exports.segmentEach = segmentEach;
+exports.segmentReduce = segmentReduce;
+exports.lineEach = lineEach;
+exports.lineReduce = lineReduce;
+exports.findSegment = findSegment;
+exports.findPoint = findPoint;
+
+},{"@turf/helpers":37}],40:[function(require,module,exports){
 "use strict";
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
@@ -4345,7 +6687,7 @@ function intersects(line1, line2) {
 }
 exports.default = lineIntersect;
 
-},{"@turf/helpers":22,"@turf/invariant":24,"@turf/line-segment":27,"@turf/meta":28,"geojson-rbush":62}],27:[function(require,module,exports){
+},{"@turf/helpers":30,"@turf/invariant":34,"@turf/line-segment":41,"@turf/meta":42,"geojson-rbush":78}],41:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 var helpers_1 = require("@turf/helpers");
@@ -4442,7 +6784,7 @@ function bbox(coords1, coords2) {
 }
 exports.default = lineSegment;
 
-},{"@turf/helpers":22,"@turf/invariant":24,"@turf/meta":28}],28:[function(require,module,exports){
+},{"@turf/helpers":30,"@turf/invariant":34,"@turf/meta":42}],42:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, '__esModule', { value: true });
@@ -5576,7 +7918,7 @@ exports.lineReduce = lineReduce;
 exports.findSegment = findSegment;
 exports.findPoint = findPoint;
 
-},{"@turf/helpers":22}],29:[function(require,module,exports){
+},{"@turf/helpers":30}],43:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 var bearing_1 = require("@turf/bearing");
@@ -5663,7 +8005,7 @@ function nearestPointOnLine(lines, pt, options) {
 }
 exports.default = nearestPointOnLine;
 
-},{"@turf/bearing":9,"@turf/destination":16,"@turf/distance":18,"@turf/helpers":22,"@turf/invariant":24,"@turf/line-intersect":26,"@turf/meta":28}],30:[function(require,module,exports){
+},{"@turf/bearing":15,"@turf/destination":22,"@turf/distance":26,"@turf/helpers":30,"@turf/invariant":34,"@turf/line-intersect":40,"@turf/meta":42}],44:[function(require,module,exports){
 'use strict';
 
 function _interopDefault (ex) { return (ex && (typeof ex === 'object') && 'default' in ex) ? ex['default'] : ex; }
@@ -5719,7 +8061,7 @@ function nearestPoint(targetPoint, points) {
 module.exports = nearestPoint;
 module.exports.default = nearestPoint;
 
-},{"@turf/clone":15,"@turf/distance":31,"@turf/meta":34}],31:[function(require,module,exports){
+},{"@turf/clone":21,"@turf/distance":45,"@turf/meta":48}],45:[function(require,module,exports){
 'use strict';
 
 var invariant = require('@turf/invariant');
@@ -5774,9 +8116,9 @@ function distance(from, to, options) {
 module.exports = distance;
 module.exports.default = distance;
 
-},{"@turf/helpers":32,"@turf/invariant":33}],32:[function(require,module,exports){
-arguments[4][13][0].apply(exports,arguments)
-},{"dup":13}],33:[function(require,module,exports){
+},{"@turf/helpers":46,"@turf/invariant":47}],46:[function(require,module,exports){
+arguments[4][19][0].apply(exports,arguments)
+},{"dup":19}],47:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, '__esModule', { value: true });
@@ -5985,9 +8327,9 @@ exports.getGeom = getGeom;
 exports.getGeomType = getGeomType;
 exports.getType = getType;
 
-},{"@turf/helpers":32}],34:[function(require,module,exports){
-arguments[4][14][0].apply(exports,arguments)
-},{"@turf/helpers":32,"dup":14}],35:[function(require,module,exports){
+},{"@turf/helpers":46}],48:[function(require,module,exports){
+arguments[4][20][0].apply(exports,arguments)
+},{"@turf/helpers":46,"dup":20}],49:[function(require,module,exports){
 'use strict';
 
 function _interopDefault (ex) { return (ex && (typeof ex === 'object') && 'default' in ex) ? ex['default'] : ex; }
@@ -6137,7 +8479,7 @@ function pointOnSegment(x, y, x1, y1, x2, y2) {
 module.exports = pointOnFeature;
 module.exports.default = pointOnFeature;
 
-},{"@turf/boolean-point-in-polygon":36,"@turf/center":11,"@turf/explode":19,"@turf/helpers":37,"@turf/nearest-point":30}],36:[function(require,module,exports){
+},{"@turf/boolean-point-in-polygon":50,"@turf/center":17,"@turf/explode":27,"@turf/helpers":51,"@turf/nearest-point":44}],50:[function(require,module,exports){
 'use strict';
 
 var invariant = require('@turf/invariant');
@@ -6252,14 +8594,17 @@ function inBBox(pt, bbox) {
 module.exports = booleanPointInPolygon;
 module.exports.default = booleanPointInPolygon;
 
-},{"@turf/invariant":38}],37:[function(require,module,exports){
-arguments[4][13][0].apply(exports,arguments)
-},{"dup":13}],38:[function(require,module,exports){
-arguments[4][33][0].apply(exports,arguments)
-},{"@turf/helpers":37,"dup":33}],39:[function(require,module,exports){
+},{"@turf/invariant":52}],51:[function(require,module,exports){
+arguments[4][19][0].apply(exports,arguments)
+},{"dup":19}],52:[function(require,module,exports){
+arguments[4][47][0].apply(exports,arguments)
+},{"@turf/helpers":51,"dup":47}],53:[function(require,module,exports){
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
-var martinez = require("martinez-polygon-clipping");
+var polygon_clipping_1 = __importDefault(require("polygon-clipping"));
 var invariant_1 = require("@turf/invariant");
 var helpers_1 = require("@turf/helpers");
 /**
@@ -6292,11 +8637,11 @@ var helpers_1 = require("@turf/helpers");
  * //addToMap
  * var addToMap = [poly1, poly2, union];
  */
-function union(polygon1, polygon2, options) {
+function union(poly1, poly2, options) {
     if (options === void 0) { options = {}; }
-    var coords1 = invariant_1.getGeom(polygon1).coordinates;
-    var coords2 = invariant_1.getGeom(polygon2).coordinates;
-    var unioned = martinez.union(coords1, coords2);
+    var geom1 = invariant_1.getGeom(poly1);
+    var geom2 = invariant_1.getGeom(poly2);
+    var unioned = polygon_clipping_1.default.union(geom1.coordinates, geom2.coordinates);
     if (unioned.length === 0)
         return null;
     if (unioned.length === 1)
@@ -6306,7 +8651,11 @@ function union(polygon1, polygon2, options) {
 }
 exports.default = union;
 
-},{"@turf/helpers":22,"@turf/invariant":24,"martinez-polygon-clipping":67}],40:[function(require,module,exports){
+},{"@turf/helpers":54,"@turf/invariant":55,"polygon-clipping":240}],54:[function(require,module,exports){
+arguments[4][8][0].apply(exports,arguments)
+},{"dup":8}],55:[function(require,module,exports){
+arguments[4][9][0].apply(exports,arguments)
+},{"@turf/helpers":54,"dup":9}],56:[function(require,module,exports){
 'use strict'
 
 var GeoJSONBounds = require('geojson-bounds')
@@ -6775,9 +9124,9 @@ if (typeof window !== 'undefined') {
   window.BoundingBox = BoundingBox
 }
 
-},{"geojson-bounds":61,"haversine":63}],41:[function(require,module,exports){
+},{"geojson-bounds":77,"haversine":79}],57:[function(require,module,exports){
 
-},{}],42:[function(require,module,exports){
+},{}],58:[function(require,module,exports){
 'use strict';
 // For more information about browser field, check out the browser field at https://github.com/substack/browserify-handbook#browser-field.
 
@@ -6854,9 +9203,9 @@ module.exports = {
     }
 };
 
-},{}],43:[function(require,module,exports){
-arguments[4][41][0].apply(exports,arguments)
-},{"dup":41}],44:[function(require,module,exports){
+},{}],59:[function(require,module,exports){
+arguments[4][57][0].apply(exports,arguments)
+},{"dup":57}],60:[function(require,module,exports){
 /*
 bzip2.js - a small bzip2 decompression implementation
 
@@ -7165,7 +9514,7 @@ bzip2.decompress = function (bits, size, len) {
 
 module.exports = bzip2;
 
-},{}],45:[function(require,module,exports){
+},{}],61:[function(require,module,exports){
 "use strict";
 
 var isValue         = require("type/value/is")
@@ -7229,18 +9578,18 @@ d.gs = function (dscr, get, set/*, options*/) {
 	return !options ? desc : assign(normalizeOpts(options), desc);
 };
 
-},{"es5-ext/object/assign":47,"es5-ext/object/normalize-options":54,"es5-ext/string/#/contains":57,"type/plain-function/is":233,"type/value/is":235}],46:[function(require,module,exports){
+},{"es5-ext/object/assign":63,"es5-ext/object/normalize-options":70,"es5-ext/string/#/contains":73,"type/plain-function/is":249,"type/value/is":251}],62:[function(require,module,exports){
 "use strict";
 
 // eslint-disable-next-line no-empty-function
 module.exports = function () {};
 
-},{}],47:[function(require,module,exports){
+},{}],63:[function(require,module,exports){
 "use strict";
 
 module.exports = require("./is-implemented")() ? Object.assign : require("./shim");
 
-},{"./is-implemented":48,"./shim":49}],48:[function(require,module,exports){
+},{"./is-implemented":64,"./shim":65}],64:[function(require,module,exports){
 "use strict";
 
 module.exports = function () {
@@ -7251,7 +9600,7 @@ module.exports = function () {
 	return obj.foo + obj.bar + obj.trzy === "razdwatrzy";
 };
 
-},{}],49:[function(require,module,exports){
+},{}],65:[function(require,module,exports){
 "use strict";
 
 var keys  = require("../keys")
@@ -7276,19 +9625,19 @@ module.exports = function (dest, src/*, …srcn*/) {
 	return dest;
 };
 
-},{"../keys":51,"../valid-value":56}],50:[function(require,module,exports){
+},{"../keys":67,"../valid-value":72}],66:[function(require,module,exports){
 "use strict";
 
 var _undefined = require("../function/noop")(); // Support ES3 engines
 
 module.exports = function (val) { return val !== _undefined && val !== null; };
 
-},{"../function/noop":46}],51:[function(require,module,exports){
+},{"../function/noop":62}],67:[function(require,module,exports){
 "use strict";
 
 module.exports = require("./is-implemented")() ? Object.keys : require("./shim");
 
-},{"./is-implemented":52,"./shim":53}],52:[function(require,module,exports){
+},{"./is-implemented":68,"./shim":69}],68:[function(require,module,exports){
 "use strict";
 
 module.exports = function () {
@@ -7300,7 +9649,7 @@ module.exports = function () {
 	}
 };
 
-},{}],53:[function(require,module,exports){
+},{}],69:[function(require,module,exports){
 "use strict";
 
 var isValue = require("../is-value");
@@ -7309,7 +9658,7 @@ var keys = Object.keys;
 
 module.exports = function (object) { return keys(isValue(object) ? Object(object) : object); };
 
-},{"../is-value":50}],54:[function(require,module,exports){
+},{"../is-value":66}],70:[function(require,module,exports){
 "use strict";
 
 var isValue = require("./is-value");
@@ -7331,7 +9680,7 @@ module.exports = function (opts1/*, …options*/) {
 	return result;
 };
 
-},{"./is-value":50}],55:[function(require,module,exports){
+},{"./is-value":66}],71:[function(require,module,exports){
 "use strict";
 
 module.exports = function (fn) {
@@ -7339,7 +9688,7 @@ module.exports = function (fn) {
 	return fn;
 };
 
-},{}],56:[function(require,module,exports){
+},{}],72:[function(require,module,exports){
 "use strict";
 
 var isValue = require("./is-value");
@@ -7349,12 +9698,12 @@ module.exports = function (value) {
 	return value;
 };
 
-},{"./is-value":50}],57:[function(require,module,exports){
+},{"./is-value":66}],73:[function(require,module,exports){
 "use strict";
 
 module.exports = require("./is-implemented")() ? String.prototype.contains : require("./shim");
 
-},{"./is-implemented":58,"./shim":59}],58:[function(require,module,exports){
+},{"./is-implemented":74,"./shim":75}],74:[function(require,module,exports){
 "use strict";
 
 var str = "razdwatrzy";
@@ -7364,7 +9713,7 @@ module.exports = function () {
 	return str.contains("dwa") === true && str.contains("foo") === false;
 };
 
-},{}],59:[function(require,module,exports){
+},{}],75:[function(require,module,exports){
 "use strict";
 
 var indexOf = String.prototype.indexOf;
@@ -7373,7 +9722,7 @@ module.exports = function (searchString/*, position*/) {
 	return indexOf.call(this, searchString, arguments[1]) > -1;
 };
 
-},{}],60:[function(require,module,exports){
+},{}],76:[function(require,module,exports){
 'use strict';
 
 var d        = require('d')
@@ -7507,7 +9856,7 @@ module.exports = exports = function (o) {
 };
 exports.methods = methods;
 
-},{"d":45,"es5-ext/object/valid-callable":55}],61:[function(require,module,exports){
+},{"d":61,"es5-ext/object/valid-callable":71}],77:[function(require,module,exports){
 (function (process){(function (){
 (function() {
   /*
@@ -7693,7 +10042,7 @@ exports.methods = methods;
 }());
 
 }).call(this)}).call(this,require('_process'))
-},{"_process":225}],62:[function(require,module,exports){
+},{"_process":241}],78:[function(require,module,exports){
 var rbush = require('rbush');
 var helpers = require('@turf/helpers');
 var meta = require('@turf/meta');
@@ -7903,7 +10252,7 @@ function geojsonRbush(maxEntries) {
 module.exports = geojsonRbush;
 module.exports.default = geojsonRbush;
 
-},{"@turf/bbox":8,"@turf/helpers":22,"@turf/meta":28,"rbush":227}],63:[function(require,module,exports){
+},{"@turf/bbox":14,"@turf/helpers":30,"@turf/meta":42,"rbush":243}],79:[function(require,module,exports){
 var haversine = (function () {
   var RADII = {
     km:    6371,
@@ -7967,7 +10316,7 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = haversine
 }
 
-},{}],64:[function(require,module,exports){
+},{}],80:[function(require,module,exports){
 "use strict";
 
 // Implementation originally from Twitter's Hogan.js:
@@ -8000,7 +10349,3520 @@ module.exports = function(str) {
   }
 };
 
-},{}],65:[function(require,module,exports){
+},{}],81:[function(require,module,exports){
+var getNative = require('./_getNative'),
+    root = require('./_root');
+
+/* Built-in method references that are verified to be native. */
+var DataView = getNative(root, 'DataView');
+
+module.exports = DataView;
+
+},{"./_getNative":136,"./_root":171}],82:[function(require,module,exports){
+var hashClear = require('./_hashClear'),
+    hashDelete = require('./_hashDelete'),
+    hashGet = require('./_hashGet'),
+    hashHas = require('./_hashHas'),
+    hashSet = require('./_hashSet');
+
+/**
+ * Creates a hash object.
+ *
+ * @private
+ * @constructor
+ * @param {Array} [entries] The key-value pairs to cache.
+ */
+function Hash(entries) {
+  var index = -1,
+      length = entries == null ? 0 : entries.length;
+
+  this.clear();
+  while (++index < length) {
+    var entry = entries[index];
+    this.set(entry[0], entry[1]);
+  }
+}
+
+// Add methods to `Hash`.
+Hash.prototype.clear = hashClear;
+Hash.prototype['delete'] = hashDelete;
+Hash.prototype.get = hashGet;
+Hash.prototype.has = hashHas;
+Hash.prototype.set = hashSet;
+
+module.exports = Hash;
+
+},{"./_hashClear":142,"./_hashDelete":143,"./_hashGet":144,"./_hashHas":145,"./_hashSet":146}],83:[function(require,module,exports){
+var listCacheClear = require('./_listCacheClear'),
+    listCacheDelete = require('./_listCacheDelete'),
+    listCacheGet = require('./_listCacheGet'),
+    listCacheHas = require('./_listCacheHas'),
+    listCacheSet = require('./_listCacheSet');
+
+/**
+ * Creates an list cache object.
+ *
+ * @private
+ * @constructor
+ * @param {Array} [entries] The key-value pairs to cache.
+ */
+function ListCache(entries) {
+  var index = -1,
+      length = entries == null ? 0 : entries.length;
+
+  this.clear();
+  while (++index < length) {
+    var entry = entries[index];
+    this.set(entry[0], entry[1]);
+  }
+}
+
+// Add methods to `ListCache`.
+ListCache.prototype.clear = listCacheClear;
+ListCache.prototype['delete'] = listCacheDelete;
+ListCache.prototype.get = listCacheGet;
+ListCache.prototype.has = listCacheHas;
+ListCache.prototype.set = listCacheSet;
+
+module.exports = ListCache;
+
+},{"./_listCacheClear":153,"./_listCacheDelete":154,"./_listCacheGet":155,"./_listCacheHas":156,"./_listCacheSet":157}],84:[function(require,module,exports){
+var getNative = require('./_getNative'),
+    root = require('./_root');
+
+/* Built-in method references that are verified to be native. */
+var Map = getNative(root, 'Map');
+
+module.exports = Map;
+
+},{"./_getNative":136,"./_root":171}],85:[function(require,module,exports){
+var mapCacheClear = require('./_mapCacheClear'),
+    mapCacheDelete = require('./_mapCacheDelete'),
+    mapCacheGet = require('./_mapCacheGet'),
+    mapCacheHas = require('./_mapCacheHas'),
+    mapCacheSet = require('./_mapCacheSet');
+
+/**
+ * Creates a map cache object to store key-value pairs.
+ *
+ * @private
+ * @constructor
+ * @param {Array} [entries] The key-value pairs to cache.
+ */
+function MapCache(entries) {
+  var index = -1,
+      length = entries == null ? 0 : entries.length;
+
+  this.clear();
+  while (++index < length) {
+    var entry = entries[index];
+    this.set(entry[0], entry[1]);
+  }
+}
+
+// Add methods to `MapCache`.
+MapCache.prototype.clear = mapCacheClear;
+MapCache.prototype['delete'] = mapCacheDelete;
+MapCache.prototype.get = mapCacheGet;
+MapCache.prototype.has = mapCacheHas;
+MapCache.prototype.set = mapCacheSet;
+
+module.exports = MapCache;
+
+},{"./_mapCacheClear":158,"./_mapCacheDelete":159,"./_mapCacheGet":160,"./_mapCacheHas":161,"./_mapCacheSet":162}],86:[function(require,module,exports){
+var getNative = require('./_getNative'),
+    root = require('./_root');
+
+/* Built-in method references that are verified to be native. */
+var Promise = getNative(root, 'Promise');
+
+module.exports = Promise;
+
+},{"./_getNative":136,"./_root":171}],87:[function(require,module,exports){
+var getNative = require('./_getNative'),
+    root = require('./_root');
+
+/* Built-in method references that are verified to be native. */
+var Set = getNative(root, 'Set');
+
+module.exports = Set;
+
+},{"./_getNative":136,"./_root":171}],88:[function(require,module,exports){
+var MapCache = require('./_MapCache'),
+    setCacheAdd = require('./_setCacheAdd'),
+    setCacheHas = require('./_setCacheHas');
+
+/**
+ *
+ * Creates an array cache object to store unique values.
+ *
+ * @private
+ * @constructor
+ * @param {Array} [values] The values to cache.
+ */
+function SetCache(values) {
+  var index = -1,
+      length = values == null ? 0 : values.length;
+
+  this.__data__ = new MapCache;
+  while (++index < length) {
+    this.add(values[index]);
+  }
+}
+
+// Add methods to `SetCache`.
+SetCache.prototype.add = SetCache.prototype.push = setCacheAdd;
+SetCache.prototype.has = setCacheHas;
+
+module.exports = SetCache;
+
+},{"./_MapCache":85,"./_setCacheAdd":172,"./_setCacheHas":173}],89:[function(require,module,exports){
+var ListCache = require('./_ListCache'),
+    stackClear = require('./_stackClear'),
+    stackDelete = require('./_stackDelete'),
+    stackGet = require('./_stackGet'),
+    stackHas = require('./_stackHas'),
+    stackSet = require('./_stackSet');
+
+/**
+ * Creates a stack cache object to store key-value pairs.
+ *
+ * @private
+ * @constructor
+ * @param {Array} [entries] The key-value pairs to cache.
+ */
+function Stack(entries) {
+  var data = this.__data__ = new ListCache(entries);
+  this.size = data.size;
+}
+
+// Add methods to `Stack`.
+Stack.prototype.clear = stackClear;
+Stack.prototype['delete'] = stackDelete;
+Stack.prototype.get = stackGet;
+Stack.prototype.has = stackHas;
+Stack.prototype.set = stackSet;
+
+module.exports = Stack;
+
+},{"./_ListCache":83,"./_stackClear":175,"./_stackDelete":176,"./_stackGet":177,"./_stackHas":178,"./_stackSet":179}],90:[function(require,module,exports){
+var root = require('./_root');
+
+/** Built-in value references. */
+var Symbol = root.Symbol;
+
+module.exports = Symbol;
+
+},{"./_root":171}],91:[function(require,module,exports){
+var root = require('./_root');
+
+/** Built-in value references. */
+var Uint8Array = root.Uint8Array;
+
+module.exports = Uint8Array;
+
+},{"./_root":171}],92:[function(require,module,exports){
+var getNative = require('./_getNative'),
+    root = require('./_root');
+
+/* Built-in method references that are verified to be native. */
+var WeakMap = getNative(root, 'WeakMap');
+
+module.exports = WeakMap;
+
+},{"./_getNative":136,"./_root":171}],93:[function(require,module,exports){
+/**
+ * A specialized version of `_.forEach` for arrays without support for
+ * iteratee shorthands.
+ *
+ * @private
+ * @param {Array} [array] The array to iterate over.
+ * @param {Function} iteratee The function invoked per iteration.
+ * @returns {Array} Returns `array`.
+ */
+function arrayEach(array, iteratee) {
+  var index = -1,
+      length = array == null ? 0 : array.length;
+
+  while (++index < length) {
+    if (iteratee(array[index], index, array) === false) {
+      break;
+    }
+  }
+  return array;
+}
+
+module.exports = arrayEach;
+
+},{}],94:[function(require,module,exports){
+/**
+ * A specialized version of `_.filter` for arrays without support for
+ * iteratee shorthands.
+ *
+ * @private
+ * @param {Array} [array] The array to iterate over.
+ * @param {Function} predicate The function invoked per iteration.
+ * @returns {Array} Returns the new filtered array.
+ */
+function arrayFilter(array, predicate) {
+  var index = -1,
+      length = array == null ? 0 : array.length,
+      resIndex = 0,
+      result = [];
+
+  while (++index < length) {
+    var value = array[index];
+    if (predicate(value, index, array)) {
+      result[resIndex++] = value;
+    }
+  }
+  return result;
+}
+
+module.exports = arrayFilter;
+
+},{}],95:[function(require,module,exports){
+var baseTimes = require('./_baseTimes'),
+    isArguments = require('./isArguments'),
+    isArray = require('./isArray'),
+    isBuffer = require('./isBuffer'),
+    isIndex = require('./_isIndex'),
+    isTypedArray = require('./isTypedArray');
+
+/** Used for built-in method references. */
+var objectProto = Object.prototype;
+
+/** Used to check objects for own properties. */
+var hasOwnProperty = objectProto.hasOwnProperty;
+
+/**
+ * Creates an array of the enumerable property names of the array-like `value`.
+ *
+ * @private
+ * @param {*} value The value to query.
+ * @param {boolean} inherited Specify returning inherited property names.
+ * @returns {Array} Returns the array of property names.
+ */
+function arrayLikeKeys(value, inherited) {
+  var isArr = isArray(value),
+      isArg = !isArr && isArguments(value),
+      isBuff = !isArr && !isArg && isBuffer(value),
+      isType = !isArr && !isArg && !isBuff && isTypedArray(value),
+      skipIndexes = isArr || isArg || isBuff || isType,
+      result = skipIndexes ? baseTimes(value.length, String) : [],
+      length = result.length;
+
+  for (var key in value) {
+    if ((inherited || hasOwnProperty.call(value, key)) &&
+        !(skipIndexes && (
+           // Safari 9 has enumerable `arguments.length` in strict mode.
+           key == 'length' ||
+           // Node.js 0.10 has enumerable non-index properties on buffers.
+           (isBuff && (key == 'offset' || key == 'parent')) ||
+           // PhantomJS 2 has enumerable non-index properties on typed arrays.
+           (isType && (key == 'buffer' || key == 'byteLength' || key == 'byteOffset')) ||
+           // Skip index properties.
+           isIndex(key, length)
+        ))) {
+      result.push(key);
+    }
+  }
+  return result;
+}
+
+module.exports = arrayLikeKeys;
+
+},{"./_baseTimes":120,"./_isIndex":147,"./isArguments":188,"./isArray":189,"./isBuffer":191,"./isTypedArray":197}],96:[function(require,module,exports){
+/**
+ * A specialized version of `_.map` for arrays without support for iteratee
+ * shorthands.
+ *
+ * @private
+ * @param {Array} [array] The array to iterate over.
+ * @param {Function} iteratee The function invoked per iteration.
+ * @returns {Array} Returns the new mapped array.
+ */
+function arrayMap(array, iteratee) {
+  var index = -1,
+      length = array == null ? 0 : array.length,
+      result = Array(length);
+
+  while (++index < length) {
+    result[index] = iteratee(array[index], index, array);
+  }
+  return result;
+}
+
+module.exports = arrayMap;
+
+},{}],97:[function(require,module,exports){
+/**
+ * Appends the elements of `values` to `array`.
+ *
+ * @private
+ * @param {Array} array The array to modify.
+ * @param {Array} values The values to append.
+ * @returns {Array} Returns `array`.
+ */
+function arrayPush(array, values) {
+  var index = -1,
+      length = values.length,
+      offset = array.length;
+
+  while (++index < length) {
+    array[offset + index] = values[index];
+  }
+  return array;
+}
+
+module.exports = arrayPush;
+
+},{}],98:[function(require,module,exports){
+/**
+ * A specialized version of `_.some` for arrays without support for iteratee
+ * shorthands.
+ *
+ * @private
+ * @param {Array} [array] The array to iterate over.
+ * @param {Function} predicate The function invoked per iteration.
+ * @returns {boolean} Returns `true` if any element passes the predicate check,
+ *  else `false`.
+ */
+function arraySome(array, predicate) {
+  var index = -1,
+      length = array == null ? 0 : array.length;
+
+  while (++index < length) {
+    if (predicate(array[index], index, array)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+module.exports = arraySome;
+
+},{}],99:[function(require,module,exports){
+var eq = require('./eq');
+
+/**
+ * Gets the index at which the `key` is found in `array` of key-value pairs.
+ *
+ * @private
+ * @param {Array} array The array to inspect.
+ * @param {*} key The key to search for.
+ * @returns {number} Returns the index of the matched value, else `-1`.
+ */
+function assocIndexOf(array, key) {
+  var length = array.length;
+  while (length--) {
+    if (eq(array[length][0], key)) {
+      return length;
+    }
+  }
+  return -1;
+}
+
+module.exports = assocIndexOf;
+
+},{"./eq":183}],100:[function(require,module,exports){
+var baseForOwn = require('./_baseForOwn'),
+    createBaseEach = require('./_createBaseEach');
+
+/**
+ * The base implementation of `_.forEach` without support for iteratee shorthands.
+ *
+ * @private
+ * @param {Array|Object} collection The collection to iterate over.
+ * @param {Function} iteratee The function invoked per iteration.
+ * @returns {Array|Object} Returns `collection`.
+ */
+var baseEach = createBaseEach(baseForOwn);
+
+module.exports = baseEach;
+
+},{"./_baseForOwn":102,"./_createBaseEach":127}],101:[function(require,module,exports){
+var createBaseFor = require('./_createBaseFor');
+
+/**
+ * The base implementation of `baseForOwn` which iterates over `object`
+ * properties returned by `keysFunc` and invokes `iteratee` for each property.
+ * Iteratee functions may exit iteration early by explicitly returning `false`.
+ *
+ * @private
+ * @param {Object} object The object to iterate over.
+ * @param {Function} iteratee The function invoked per iteration.
+ * @param {Function} keysFunc The function to get the keys of `object`.
+ * @returns {Object} Returns `object`.
+ */
+var baseFor = createBaseFor();
+
+module.exports = baseFor;
+
+},{"./_createBaseFor":128}],102:[function(require,module,exports){
+var baseFor = require('./_baseFor'),
+    keys = require('./keys');
+
+/**
+ * The base implementation of `_.forOwn` without support for iteratee shorthands.
+ *
+ * @private
+ * @param {Object} object The object to iterate over.
+ * @param {Function} iteratee The function invoked per iteration.
+ * @returns {Object} Returns `object`.
+ */
+function baseForOwn(object, iteratee) {
+  return object && baseFor(object, iteratee, keys);
+}
+
+module.exports = baseForOwn;
+
+},{"./_baseFor":101,"./keys":198}],103:[function(require,module,exports){
+var castPath = require('./_castPath'),
+    toKey = require('./_toKey');
+
+/**
+ * The base implementation of `_.get` without support for default values.
+ *
+ * @private
+ * @param {Object} object The object to query.
+ * @param {Array|string} path The path of the property to get.
+ * @returns {*} Returns the resolved value.
+ */
+function baseGet(object, path) {
+  path = castPath(path, object);
+
+  var index = 0,
+      length = path.length;
+
+  while (object != null && index < length) {
+    object = object[toKey(path[index++])];
+  }
+  return (index && index == length) ? object : undefined;
+}
+
+module.exports = baseGet;
+
+},{"./_castPath":125,"./_toKey":181}],104:[function(require,module,exports){
+var arrayPush = require('./_arrayPush'),
+    isArray = require('./isArray');
+
+/**
+ * The base implementation of `getAllKeys` and `getAllKeysIn` which uses
+ * `keysFunc` and `symbolsFunc` to get the enumerable property names and
+ * symbols of `object`.
+ *
+ * @private
+ * @param {Object} object The object to query.
+ * @param {Function} keysFunc The function to get the keys of `object`.
+ * @param {Function} symbolsFunc The function to get the symbols of `object`.
+ * @returns {Array} Returns the array of property names and symbols.
+ */
+function baseGetAllKeys(object, keysFunc, symbolsFunc) {
+  var result = keysFunc(object);
+  return isArray(object) ? result : arrayPush(result, symbolsFunc(object));
+}
+
+module.exports = baseGetAllKeys;
+
+},{"./_arrayPush":97,"./isArray":189}],105:[function(require,module,exports){
+var Symbol = require('./_Symbol'),
+    getRawTag = require('./_getRawTag'),
+    objectToString = require('./_objectToString');
+
+/** `Object#toString` result references. */
+var nullTag = '[object Null]',
+    undefinedTag = '[object Undefined]';
+
+/** Built-in value references. */
+var symToStringTag = Symbol ? Symbol.toStringTag : undefined;
+
+/**
+ * The base implementation of `getTag` without fallbacks for buggy environments.
+ *
+ * @private
+ * @param {*} value The value to query.
+ * @returns {string} Returns the `toStringTag`.
+ */
+function baseGetTag(value) {
+  if (value == null) {
+    return value === undefined ? undefinedTag : nullTag;
+  }
+  return (symToStringTag && symToStringTag in Object(value))
+    ? getRawTag(value)
+    : objectToString(value);
+}
+
+module.exports = baseGetTag;
+
+},{"./_Symbol":90,"./_getRawTag":137,"./_objectToString":169}],106:[function(require,module,exports){
+/**
+ * The base implementation of `_.hasIn` without support for deep paths.
+ *
+ * @private
+ * @param {Object} [object] The object to query.
+ * @param {Array|string} key The key to check.
+ * @returns {boolean} Returns `true` if `key` exists, else `false`.
+ */
+function baseHasIn(object, key) {
+  return object != null && key in Object(object);
+}
+
+module.exports = baseHasIn;
+
+},{}],107:[function(require,module,exports){
+var baseGetTag = require('./_baseGetTag'),
+    isObjectLike = require('./isObjectLike');
+
+/** `Object#toString` result references. */
+var argsTag = '[object Arguments]';
+
+/**
+ * The base implementation of `_.isArguments`.
+ *
+ * @private
+ * @param {*} value The value to check.
+ * @returns {boolean} Returns `true` if `value` is an `arguments` object,
+ */
+function baseIsArguments(value) {
+  return isObjectLike(value) && baseGetTag(value) == argsTag;
+}
+
+module.exports = baseIsArguments;
+
+},{"./_baseGetTag":105,"./isObjectLike":195}],108:[function(require,module,exports){
+var baseIsEqualDeep = require('./_baseIsEqualDeep'),
+    isObjectLike = require('./isObjectLike');
+
+/**
+ * The base implementation of `_.isEqual` which supports partial comparisons
+ * and tracks traversed objects.
+ *
+ * @private
+ * @param {*} value The value to compare.
+ * @param {*} other The other value to compare.
+ * @param {boolean} bitmask The bitmask flags.
+ *  1 - Unordered comparison
+ *  2 - Partial comparison
+ * @param {Function} [customizer] The function to customize comparisons.
+ * @param {Object} [stack] Tracks traversed `value` and `other` objects.
+ * @returns {boolean} Returns `true` if the values are equivalent, else `false`.
+ */
+function baseIsEqual(value, other, bitmask, customizer, stack) {
+  if (value === other) {
+    return true;
+  }
+  if (value == null || other == null || (!isObjectLike(value) && !isObjectLike(other))) {
+    return value !== value && other !== other;
+  }
+  return baseIsEqualDeep(value, other, bitmask, customizer, baseIsEqual, stack);
+}
+
+module.exports = baseIsEqual;
+
+},{"./_baseIsEqualDeep":109,"./isObjectLike":195}],109:[function(require,module,exports){
+var Stack = require('./_Stack'),
+    equalArrays = require('./_equalArrays'),
+    equalByTag = require('./_equalByTag'),
+    equalObjects = require('./_equalObjects'),
+    getTag = require('./_getTag'),
+    isArray = require('./isArray'),
+    isBuffer = require('./isBuffer'),
+    isTypedArray = require('./isTypedArray');
+
+/** Used to compose bitmasks for value comparisons. */
+var COMPARE_PARTIAL_FLAG = 1;
+
+/** `Object#toString` result references. */
+var argsTag = '[object Arguments]',
+    arrayTag = '[object Array]',
+    objectTag = '[object Object]';
+
+/** Used for built-in method references. */
+var objectProto = Object.prototype;
+
+/** Used to check objects for own properties. */
+var hasOwnProperty = objectProto.hasOwnProperty;
+
+/**
+ * A specialized version of `baseIsEqual` for arrays and objects which performs
+ * deep comparisons and tracks traversed objects enabling objects with circular
+ * references to be compared.
+ *
+ * @private
+ * @param {Object} object The object to compare.
+ * @param {Object} other The other object to compare.
+ * @param {number} bitmask The bitmask flags. See `baseIsEqual` for more details.
+ * @param {Function} customizer The function to customize comparisons.
+ * @param {Function} equalFunc The function to determine equivalents of values.
+ * @param {Object} [stack] Tracks traversed `object` and `other` objects.
+ * @returns {boolean} Returns `true` if the objects are equivalent, else `false`.
+ */
+function baseIsEqualDeep(object, other, bitmask, customizer, equalFunc, stack) {
+  var objIsArr = isArray(object),
+      othIsArr = isArray(other),
+      objTag = objIsArr ? arrayTag : getTag(object),
+      othTag = othIsArr ? arrayTag : getTag(other);
+
+  objTag = objTag == argsTag ? objectTag : objTag;
+  othTag = othTag == argsTag ? objectTag : othTag;
+
+  var objIsObj = objTag == objectTag,
+      othIsObj = othTag == objectTag,
+      isSameTag = objTag == othTag;
+
+  if (isSameTag && isBuffer(object)) {
+    if (!isBuffer(other)) {
+      return false;
+    }
+    objIsArr = true;
+    objIsObj = false;
+  }
+  if (isSameTag && !objIsObj) {
+    stack || (stack = new Stack);
+    return (objIsArr || isTypedArray(object))
+      ? equalArrays(object, other, bitmask, customizer, equalFunc, stack)
+      : equalByTag(object, other, objTag, bitmask, customizer, equalFunc, stack);
+  }
+  if (!(bitmask & COMPARE_PARTIAL_FLAG)) {
+    var objIsWrapped = objIsObj && hasOwnProperty.call(object, '__wrapped__'),
+        othIsWrapped = othIsObj && hasOwnProperty.call(other, '__wrapped__');
+
+    if (objIsWrapped || othIsWrapped) {
+      var objUnwrapped = objIsWrapped ? object.value() : object,
+          othUnwrapped = othIsWrapped ? other.value() : other;
+
+      stack || (stack = new Stack);
+      return equalFunc(objUnwrapped, othUnwrapped, bitmask, customizer, stack);
+    }
+  }
+  if (!isSameTag) {
+    return false;
+  }
+  stack || (stack = new Stack);
+  return equalObjects(object, other, bitmask, customizer, equalFunc, stack);
+}
+
+module.exports = baseIsEqualDeep;
+
+},{"./_Stack":89,"./_equalArrays":129,"./_equalByTag":130,"./_equalObjects":131,"./_getTag":139,"./isArray":189,"./isBuffer":191,"./isTypedArray":197}],110:[function(require,module,exports){
+var Stack = require('./_Stack'),
+    baseIsEqual = require('./_baseIsEqual');
+
+/** Used to compose bitmasks for value comparisons. */
+var COMPARE_PARTIAL_FLAG = 1,
+    COMPARE_UNORDERED_FLAG = 2;
+
+/**
+ * The base implementation of `_.isMatch` without support for iteratee shorthands.
+ *
+ * @private
+ * @param {Object} object The object to inspect.
+ * @param {Object} source The object of property values to match.
+ * @param {Array} matchData The property names, values, and compare flags to match.
+ * @param {Function} [customizer] The function to customize comparisons.
+ * @returns {boolean} Returns `true` if `object` is a match, else `false`.
+ */
+function baseIsMatch(object, source, matchData, customizer) {
+  var index = matchData.length,
+      length = index,
+      noCustomizer = !customizer;
+
+  if (object == null) {
+    return !length;
+  }
+  object = Object(object);
+  while (index--) {
+    var data = matchData[index];
+    if ((noCustomizer && data[2])
+          ? data[1] !== object[data[0]]
+          : !(data[0] in object)
+        ) {
+      return false;
+    }
+  }
+  while (++index < length) {
+    data = matchData[index];
+    var key = data[0],
+        objValue = object[key],
+        srcValue = data[1];
+
+    if (noCustomizer && data[2]) {
+      if (objValue === undefined && !(key in object)) {
+        return false;
+      }
+    } else {
+      var stack = new Stack;
+      if (customizer) {
+        var result = customizer(objValue, srcValue, key, object, source, stack);
+      }
+      if (!(result === undefined
+            ? baseIsEqual(srcValue, objValue, COMPARE_PARTIAL_FLAG | COMPARE_UNORDERED_FLAG, customizer, stack)
+            : result
+          )) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+module.exports = baseIsMatch;
+
+},{"./_Stack":89,"./_baseIsEqual":108}],111:[function(require,module,exports){
+var isFunction = require('./isFunction'),
+    isMasked = require('./_isMasked'),
+    isObject = require('./isObject'),
+    toSource = require('./_toSource');
+
+/**
+ * Used to match `RegExp`
+ * [syntax characters](http://ecma-international.org/ecma-262/7.0/#sec-patterns).
+ */
+var reRegExpChar = /[\\^$.*+?()[\]{}|]/g;
+
+/** Used to detect host constructors (Safari). */
+var reIsHostCtor = /^\[object .+?Constructor\]$/;
+
+/** Used for built-in method references. */
+var funcProto = Function.prototype,
+    objectProto = Object.prototype;
+
+/** Used to resolve the decompiled source of functions. */
+var funcToString = funcProto.toString;
+
+/** Used to check objects for own properties. */
+var hasOwnProperty = objectProto.hasOwnProperty;
+
+/** Used to detect if a method is native. */
+var reIsNative = RegExp('^' +
+  funcToString.call(hasOwnProperty).replace(reRegExpChar, '\\$&')
+  .replace(/hasOwnProperty|(function).*?(?=\\\()| for .+?(?=\\\])/g, '$1.*?') + '$'
+);
+
+/**
+ * The base implementation of `_.isNative` without bad shim checks.
+ *
+ * @private
+ * @param {*} value The value to check.
+ * @returns {boolean} Returns `true` if `value` is a native function,
+ *  else `false`.
+ */
+function baseIsNative(value) {
+  if (!isObject(value) || isMasked(value)) {
+    return false;
+  }
+  var pattern = isFunction(value) ? reIsNative : reIsHostCtor;
+  return pattern.test(toSource(value));
+}
+
+module.exports = baseIsNative;
+
+},{"./_isMasked":150,"./_toSource":182,"./isFunction":192,"./isObject":194}],112:[function(require,module,exports){
+var baseGetTag = require('./_baseGetTag'),
+    isLength = require('./isLength'),
+    isObjectLike = require('./isObjectLike');
+
+/** `Object#toString` result references. */
+var argsTag = '[object Arguments]',
+    arrayTag = '[object Array]',
+    boolTag = '[object Boolean]',
+    dateTag = '[object Date]',
+    errorTag = '[object Error]',
+    funcTag = '[object Function]',
+    mapTag = '[object Map]',
+    numberTag = '[object Number]',
+    objectTag = '[object Object]',
+    regexpTag = '[object RegExp]',
+    setTag = '[object Set]',
+    stringTag = '[object String]',
+    weakMapTag = '[object WeakMap]';
+
+var arrayBufferTag = '[object ArrayBuffer]',
+    dataViewTag = '[object DataView]',
+    float32Tag = '[object Float32Array]',
+    float64Tag = '[object Float64Array]',
+    int8Tag = '[object Int8Array]',
+    int16Tag = '[object Int16Array]',
+    int32Tag = '[object Int32Array]',
+    uint8Tag = '[object Uint8Array]',
+    uint8ClampedTag = '[object Uint8ClampedArray]',
+    uint16Tag = '[object Uint16Array]',
+    uint32Tag = '[object Uint32Array]';
+
+/** Used to identify `toStringTag` values of typed arrays. */
+var typedArrayTags = {};
+typedArrayTags[float32Tag] = typedArrayTags[float64Tag] =
+typedArrayTags[int8Tag] = typedArrayTags[int16Tag] =
+typedArrayTags[int32Tag] = typedArrayTags[uint8Tag] =
+typedArrayTags[uint8ClampedTag] = typedArrayTags[uint16Tag] =
+typedArrayTags[uint32Tag] = true;
+typedArrayTags[argsTag] = typedArrayTags[arrayTag] =
+typedArrayTags[arrayBufferTag] = typedArrayTags[boolTag] =
+typedArrayTags[dataViewTag] = typedArrayTags[dateTag] =
+typedArrayTags[errorTag] = typedArrayTags[funcTag] =
+typedArrayTags[mapTag] = typedArrayTags[numberTag] =
+typedArrayTags[objectTag] = typedArrayTags[regexpTag] =
+typedArrayTags[setTag] = typedArrayTags[stringTag] =
+typedArrayTags[weakMapTag] = false;
+
+/**
+ * The base implementation of `_.isTypedArray` without Node.js optimizations.
+ *
+ * @private
+ * @param {*} value The value to check.
+ * @returns {boolean} Returns `true` if `value` is a typed array, else `false`.
+ */
+function baseIsTypedArray(value) {
+  return isObjectLike(value) &&
+    isLength(value.length) && !!typedArrayTags[baseGetTag(value)];
+}
+
+module.exports = baseIsTypedArray;
+
+},{"./_baseGetTag":105,"./isLength":193,"./isObjectLike":195}],113:[function(require,module,exports){
+var baseMatches = require('./_baseMatches'),
+    baseMatchesProperty = require('./_baseMatchesProperty'),
+    identity = require('./identity'),
+    isArray = require('./isArray'),
+    property = require('./property');
+
+/**
+ * The base implementation of `_.iteratee`.
+ *
+ * @private
+ * @param {*} [value=_.identity] The value to convert to an iteratee.
+ * @returns {Function} Returns the iteratee.
+ */
+function baseIteratee(value) {
+  // Don't store the `typeof` result in a variable to avoid a JIT bug in Safari 9.
+  // See https://bugs.webkit.org/show_bug.cgi?id=156034 for more details.
+  if (typeof value == 'function') {
+    return value;
+  }
+  if (value == null) {
+    return identity;
+  }
+  if (typeof value == 'object') {
+    return isArray(value)
+      ? baseMatchesProperty(value[0], value[1])
+      : baseMatches(value);
+  }
+  return property(value);
+}
+
+module.exports = baseIteratee;
+
+},{"./_baseMatches":116,"./_baseMatchesProperty":117,"./identity":187,"./isArray":189,"./property":201}],114:[function(require,module,exports){
+var isPrototype = require('./_isPrototype'),
+    nativeKeys = require('./_nativeKeys');
+
+/** Used for built-in method references. */
+var objectProto = Object.prototype;
+
+/** Used to check objects for own properties. */
+var hasOwnProperty = objectProto.hasOwnProperty;
+
+/**
+ * The base implementation of `_.keys` which doesn't treat sparse arrays as dense.
+ *
+ * @private
+ * @param {Object} object The object to query.
+ * @returns {Array} Returns the array of property names.
+ */
+function baseKeys(object) {
+  if (!isPrototype(object)) {
+    return nativeKeys(object);
+  }
+  var result = [];
+  for (var key in Object(object)) {
+    if (hasOwnProperty.call(object, key) && key != 'constructor') {
+      result.push(key);
+    }
+  }
+  return result;
+}
+
+module.exports = baseKeys;
+
+},{"./_isPrototype":151,"./_nativeKeys":167}],115:[function(require,module,exports){
+var baseEach = require('./_baseEach'),
+    isArrayLike = require('./isArrayLike');
+
+/**
+ * The base implementation of `_.map` without support for iteratee shorthands.
+ *
+ * @private
+ * @param {Array|Object} collection The collection to iterate over.
+ * @param {Function} iteratee The function invoked per iteration.
+ * @returns {Array} Returns the new mapped array.
+ */
+function baseMap(collection, iteratee) {
+  var index = -1,
+      result = isArrayLike(collection) ? Array(collection.length) : [];
+
+  baseEach(collection, function(value, key, collection) {
+    result[++index] = iteratee(value, key, collection);
+  });
+  return result;
+}
+
+module.exports = baseMap;
+
+},{"./_baseEach":100,"./isArrayLike":190}],116:[function(require,module,exports){
+var baseIsMatch = require('./_baseIsMatch'),
+    getMatchData = require('./_getMatchData'),
+    matchesStrictComparable = require('./_matchesStrictComparable');
+
+/**
+ * The base implementation of `_.matches` which doesn't clone `source`.
+ *
+ * @private
+ * @param {Object} source The object of property values to match.
+ * @returns {Function} Returns the new spec function.
+ */
+function baseMatches(source) {
+  var matchData = getMatchData(source);
+  if (matchData.length == 1 && matchData[0][2]) {
+    return matchesStrictComparable(matchData[0][0], matchData[0][1]);
+  }
+  return function(object) {
+    return object === source || baseIsMatch(object, source, matchData);
+  };
+}
+
+module.exports = baseMatches;
+
+},{"./_baseIsMatch":110,"./_getMatchData":135,"./_matchesStrictComparable":164}],117:[function(require,module,exports){
+var baseIsEqual = require('./_baseIsEqual'),
+    get = require('./get'),
+    hasIn = require('./hasIn'),
+    isKey = require('./_isKey'),
+    isStrictComparable = require('./_isStrictComparable'),
+    matchesStrictComparable = require('./_matchesStrictComparable'),
+    toKey = require('./_toKey');
+
+/** Used to compose bitmasks for value comparisons. */
+var COMPARE_PARTIAL_FLAG = 1,
+    COMPARE_UNORDERED_FLAG = 2;
+
+/**
+ * The base implementation of `_.matchesProperty` which doesn't clone `srcValue`.
+ *
+ * @private
+ * @param {string} path The path of the property to get.
+ * @param {*} srcValue The value to match.
+ * @returns {Function} Returns the new spec function.
+ */
+function baseMatchesProperty(path, srcValue) {
+  if (isKey(path) && isStrictComparable(srcValue)) {
+    return matchesStrictComparable(toKey(path), srcValue);
+  }
+  return function(object) {
+    var objValue = get(object, path);
+    return (objValue === undefined && objValue === srcValue)
+      ? hasIn(object, path)
+      : baseIsEqual(srcValue, objValue, COMPARE_PARTIAL_FLAG | COMPARE_UNORDERED_FLAG);
+  };
+}
+
+module.exports = baseMatchesProperty;
+
+},{"./_baseIsEqual":108,"./_isKey":148,"./_isStrictComparable":152,"./_matchesStrictComparable":164,"./_toKey":181,"./get":185,"./hasIn":186}],118:[function(require,module,exports){
+/**
+ * The base implementation of `_.property` without support for deep paths.
+ *
+ * @private
+ * @param {string} key The key of the property to get.
+ * @returns {Function} Returns the new accessor function.
+ */
+function baseProperty(key) {
+  return function(object) {
+    return object == null ? undefined : object[key];
+  };
+}
+
+module.exports = baseProperty;
+
+},{}],119:[function(require,module,exports){
+var baseGet = require('./_baseGet');
+
+/**
+ * A specialized version of `baseProperty` which supports deep paths.
+ *
+ * @private
+ * @param {Array|string} path The path of the property to get.
+ * @returns {Function} Returns the new accessor function.
+ */
+function basePropertyDeep(path) {
+  return function(object) {
+    return baseGet(object, path);
+  };
+}
+
+module.exports = basePropertyDeep;
+
+},{"./_baseGet":103}],120:[function(require,module,exports){
+/**
+ * The base implementation of `_.times` without support for iteratee shorthands
+ * or max array length checks.
+ *
+ * @private
+ * @param {number} n The number of times to invoke `iteratee`.
+ * @param {Function} iteratee The function invoked per iteration.
+ * @returns {Array} Returns the array of results.
+ */
+function baseTimes(n, iteratee) {
+  var index = -1,
+      result = Array(n);
+
+  while (++index < n) {
+    result[index] = iteratee(index);
+  }
+  return result;
+}
+
+module.exports = baseTimes;
+
+},{}],121:[function(require,module,exports){
+var Symbol = require('./_Symbol'),
+    arrayMap = require('./_arrayMap'),
+    isArray = require('./isArray'),
+    isSymbol = require('./isSymbol');
+
+/** Used as references for various `Number` constants. */
+var INFINITY = 1 / 0;
+
+/** Used to convert symbols to primitives and strings. */
+var symbolProto = Symbol ? Symbol.prototype : undefined,
+    symbolToString = symbolProto ? symbolProto.toString : undefined;
+
+/**
+ * The base implementation of `_.toString` which doesn't convert nullish
+ * values to empty strings.
+ *
+ * @private
+ * @param {*} value The value to process.
+ * @returns {string} Returns the string.
+ */
+function baseToString(value) {
+  // Exit early for strings to avoid a performance hit in some environments.
+  if (typeof value == 'string') {
+    return value;
+  }
+  if (isArray(value)) {
+    // Recursively convert values (susceptible to call stack limits).
+    return arrayMap(value, baseToString) + '';
+  }
+  if (isSymbol(value)) {
+    return symbolToString ? symbolToString.call(value) : '';
+  }
+  var result = (value + '');
+  return (result == '0' && (1 / value) == -INFINITY) ? '-0' : result;
+}
+
+module.exports = baseToString;
+
+},{"./_Symbol":90,"./_arrayMap":96,"./isArray":189,"./isSymbol":196}],122:[function(require,module,exports){
+/**
+ * The base implementation of `_.unary` without support for storing metadata.
+ *
+ * @private
+ * @param {Function} func The function to cap arguments for.
+ * @returns {Function} Returns the new capped function.
+ */
+function baseUnary(func) {
+  return function(value) {
+    return func(value);
+  };
+}
+
+module.exports = baseUnary;
+
+},{}],123:[function(require,module,exports){
+/**
+ * Checks if a `cache` value for `key` exists.
+ *
+ * @private
+ * @param {Object} cache The cache to query.
+ * @param {string} key The key of the entry to check.
+ * @returns {boolean} Returns `true` if an entry for `key` exists, else `false`.
+ */
+function cacheHas(cache, key) {
+  return cache.has(key);
+}
+
+module.exports = cacheHas;
+
+},{}],124:[function(require,module,exports){
+var identity = require('./identity');
+
+/**
+ * Casts `value` to `identity` if it's not a function.
+ *
+ * @private
+ * @param {*} value The value to inspect.
+ * @returns {Function} Returns cast function.
+ */
+function castFunction(value) {
+  return typeof value == 'function' ? value : identity;
+}
+
+module.exports = castFunction;
+
+},{"./identity":187}],125:[function(require,module,exports){
+var isArray = require('./isArray'),
+    isKey = require('./_isKey'),
+    stringToPath = require('./_stringToPath'),
+    toString = require('./toString');
+
+/**
+ * Casts `value` to a path array if it's not one.
+ *
+ * @private
+ * @param {*} value The value to inspect.
+ * @param {Object} [object] The object to query keys on.
+ * @returns {Array} Returns the cast property path array.
+ */
+function castPath(value, object) {
+  if (isArray(value)) {
+    return value;
+  }
+  return isKey(value, object) ? [value] : stringToPath(toString(value));
+}
+
+module.exports = castPath;
+
+},{"./_isKey":148,"./_stringToPath":180,"./isArray":189,"./toString":204}],126:[function(require,module,exports){
+var root = require('./_root');
+
+/** Used to detect overreaching core-js shims. */
+var coreJsData = root['__core-js_shared__'];
+
+module.exports = coreJsData;
+
+},{"./_root":171}],127:[function(require,module,exports){
+var isArrayLike = require('./isArrayLike');
+
+/**
+ * Creates a `baseEach` or `baseEachRight` function.
+ *
+ * @private
+ * @param {Function} eachFunc The function to iterate over a collection.
+ * @param {boolean} [fromRight] Specify iterating from right to left.
+ * @returns {Function} Returns the new base function.
+ */
+function createBaseEach(eachFunc, fromRight) {
+  return function(collection, iteratee) {
+    if (collection == null) {
+      return collection;
+    }
+    if (!isArrayLike(collection)) {
+      return eachFunc(collection, iteratee);
+    }
+    var length = collection.length,
+        index = fromRight ? length : -1,
+        iterable = Object(collection);
+
+    while ((fromRight ? index-- : ++index < length)) {
+      if (iteratee(iterable[index], index, iterable) === false) {
+        break;
+      }
+    }
+    return collection;
+  };
+}
+
+module.exports = createBaseEach;
+
+},{"./isArrayLike":190}],128:[function(require,module,exports){
+/**
+ * Creates a base function for methods like `_.forIn` and `_.forOwn`.
+ *
+ * @private
+ * @param {boolean} [fromRight] Specify iterating from right to left.
+ * @returns {Function} Returns the new base function.
+ */
+function createBaseFor(fromRight) {
+  return function(object, iteratee, keysFunc) {
+    var index = -1,
+        iterable = Object(object),
+        props = keysFunc(object),
+        length = props.length;
+
+    while (length--) {
+      var key = props[fromRight ? length : ++index];
+      if (iteratee(iterable[key], key, iterable) === false) {
+        break;
+      }
+    }
+    return object;
+  };
+}
+
+module.exports = createBaseFor;
+
+},{}],129:[function(require,module,exports){
+var SetCache = require('./_SetCache'),
+    arraySome = require('./_arraySome'),
+    cacheHas = require('./_cacheHas');
+
+/** Used to compose bitmasks for value comparisons. */
+var COMPARE_PARTIAL_FLAG = 1,
+    COMPARE_UNORDERED_FLAG = 2;
+
+/**
+ * A specialized version of `baseIsEqualDeep` for arrays with support for
+ * partial deep comparisons.
+ *
+ * @private
+ * @param {Array} array The array to compare.
+ * @param {Array} other The other array to compare.
+ * @param {number} bitmask The bitmask flags. See `baseIsEqual` for more details.
+ * @param {Function} customizer The function to customize comparisons.
+ * @param {Function} equalFunc The function to determine equivalents of values.
+ * @param {Object} stack Tracks traversed `array` and `other` objects.
+ * @returns {boolean} Returns `true` if the arrays are equivalent, else `false`.
+ */
+function equalArrays(array, other, bitmask, customizer, equalFunc, stack) {
+  var isPartial = bitmask & COMPARE_PARTIAL_FLAG,
+      arrLength = array.length,
+      othLength = other.length;
+
+  if (arrLength != othLength && !(isPartial && othLength > arrLength)) {
+    return false;
+  }
+  // Check that cyclic values are equal.
+  var arrStacked = stack.get(array);
+  var othStacked = stack.get(other);
+  if (arrStacked && othStacked) {
+    return arrStacked == other && othStacked == array;
+  }
+  var index = -1,
+      result = true,
+      seen = (bitmask & COMPARE_UNORDERED_FLAG) ? new SetCache : undefined;
+
+  stack.set(array, other);
+  stack.set(other, array);
+
+  // Ignore non-index properties.
+  while (++index < arrLength) {
+    var arrValue = array[index],
+        othValue = other[index];
+
+    if (customizer) {
+      var compared = isPartial
+        ? customizer(othValue, arrValue, index, other, array, stack)
+        : customizer(arrValue, othValue, index, array, other, stack);
+    }
+    if (compared !== undefined) {
+      if (compared) {
+        continue;
+      }
+      result = false;
+      break;
+    }
+    // Recursively compare arrays (susceptible to call stack limits).
+    if (seen) {
+      if (!arraySome(other, function(othValue, othIndex) {
+            if (!cacheHas(seen, othIndex) &&
+                (arrValue === othValue || equalFunc(arrValue, othValue, bitmask, customizer, stack))) {
+              return seen.push(othIndex);
+            }
+          })) {
+        result = false;
+        break;
+      }
+    } else if (!(
+          arrValue === othValue ||
+            equalFunc(arrValue, othValue, bitmask, customizer, stack)
+        )) {
+      result = false;
+      break;
+    }
+  }
+  stack['delete'](array);
+  stack['delete'](other);
+  return result;
+}
+
+module.exports = equalArrays;
+
+},{"./_SetCache":88,"./_arraySome":98,"./_cacheHas":123}],130:[function(require,module,exports){
+var Symbol = require('./_Symbol'),
+    Uint8Array = require('./_Uint8Array'),
+    eq = require('./eq'),
+    equalArrays = require('./_equalArrays'),
+    mapToArray = require('./_mapToArray'),
+    setToArray = require('./_setToArray');
+
+/** Used to compose bitmasks for value comparisons. */
+var COMPARE_PARTIAL_FLAG = 1,
+    COMPARE_UNORDERED_FLAG = 2;
+
+/** `Object#toString` result references. */
+var boolTag = '[object Boolean]',
+    dateTag = '[object Date]',
+    errorTag = '[object Error]',
+    mapTag = '[object Map]',
+    numberTag = '[object Number]',
+    regexpTag = '[object RegExp]',
+    setTag = '[object Set]',
+    stringTag = '[object String]',
+    symbolTag = '[object Symbol]';
+
+var arrayBufferTag = '[object ArrayBuffer]',
+    dataViewTag = '[object DataView]';
+
+/** Used to convert symbols to primitives and strings. */
+var symbolProto = Symbol ? Symbol.prototype : undefined,
+    symbolValueOf = symbolProto ? symbolProto.valueOf : undefined;
+
+/**
+ * A specialized version of `baseIsEqualDeep` for comparing objects of
+ * the same `toStringTag`.
+ *
+ * **Note:** This function only supports comparing values with tags of
+ * `Boolean`, `Date`, `Error`, `Number`, `RegExp`, or `String`.
+ *
+ * @private
+ * @param {Object} object The object to compare.
+ * @param {Object} other The other object to compare.
+ * @param {string} tag The `toStringTag` of the objects to compare.
+ * @param {number} bitmask The bitmask flags. See `baseIsEqual` for more details.
+ * @param {Function} customizer The function to customize comparisons.
+ * @param {Function} equalFunc The function to determine equivalents of values.
+ * @param {Object} stack Tracks traversed `object` and `other` objects.
+ * @returns {boolean} Returns `true` if the objects are equivalent, else `false`.
+ */
+function equalByTag(object, other, tag, bitmask, customizer, equalFunc, stack) {
+  switch (tag) {
+    case dataViewTag:
+      if ((object.byteLength != other.byteLength) ||
+          (object.byteOffset != other.byteOffset)) {
+        return false;
+      }
+      object = object.buffer;
+      other = other.buffer;
+
+    case arrayBufferTag:
+      if ((object.byteLength != other.byteLength) ||
+          !equalFunc(new Uint8Array(object), new Uint8Array(other))) {
+        return false;
+      }
+      return true;
+
+    case boolTag:
+    case dateTag:
+    case numberTag:
+      // Coerce booleans to `1` or `0` and dates to milliseconds.
+      // Invalid dates are coerced to `NaN`.
+      return eq(+object, +other);
+
+    case errorTag:
+      return object.name == other.name && object.message == other.message;
+
+    case regexpTag:
+    case stringTag:
+      // Coerce regexes to strings and treat strings, primitives and objects,
+      // as equal. See http://www.ecma-international.org/ecma-262/7.0/#sec-regexp.prototype.tostring
+      // for more details.
+      return object == (other + '');
+
+    case mapTag:
+      var convert = mapToArray;
+
+    case setTag:
+      var isPartial = bitmask & COMPARE_PARTIAL_FLAG;
+      convert || (convert = setToArray);
+
+      if (object.size != other.size && !isPartial) {
+        return false;
+      }
+      // Assume cyclic values are equal.
+      var stacked = stack.get(object);
+      if (stacked) {
+        return stacked == other;
+      }
+      bitmask |= COMPARE_UNORDERED_FLAG;
+
+      // Recursively compare objects (susceptible to call stack limits).
+      stack.set(object, other);
+      var result = equalArrays(convert(object), convert(other), bitmask, customizer, equalFunc, stack);
+      stack['delete'](object);
+      return result;
+
+    case symbolTag:
+      if (symbolValueOf) {
+        return symbolValueOf.call(object) == symbolValueOf.call(other);
+      }
+  }
+  return false;
+}
+
+module.exports = equalByTag;
+
+},{"./_Symbol":90,"./_Uint8Array":91,"./_equalArrays":129,"./_mapToArray":163,"./_setToArray":174,"./eq":183}],131:[function(require,module,exports){
+var getAllKeys = require('./_getAllKeys');
+
+/** Used to compose bitmasks for value comparisons. */
+var COMPARE_PARTIAL_FLAG = 1;
+
+/** Used for built-in method references. */
+var objectProto = Object.prototype;
+
+/** Used to check objects for own properties. */
+var hasOwnProperty = objectProto.hasOwnProperty;
+
+/**
+ * A specialized version of `baseIsEqualDeep` for objects with support for
+ * partial deep comparisons.
+ *
+ * @private
+ * @param {Object} object The object to compare.
+ * @param {Object} other The other object to compare.
+ * @param {number} bitmask The bitmask flags. See `baseIsEqual` for more details.
+ * @param {Function} customizer The function to customize comparisons.
+ * @param {Function} equalFunc The function to determine equivalents of values.
+ * @param {Object} stack Tracks traversed `object` and `other` objects.
+ * @returns {boolean} Returns `true` if the objects are equivalent, else `false`.
+ */
+function equalObjects(object, other, bitmask, customizer, equalFunc, stack) {
+  var isPartial = bitmask & COMPARE_PARTIAL_FLAG,
+      objProps = getAllKeys(object),
+      objLength = objProps.length,
+      othProps = getAllKeys(other),
+      othLength = othProps.length;
+
+  if (objLength != othLength && !isPartial) {
+    return false;
+  }
+  var index = objLength;
+  while (index--) {
+    var key = objProps[index];
+    if (!(isPartial ? key in other : hasOwnProperty.call(other, key))) {
+      return false;
+    }
+  }
+  // Check that cyclic values are equal.
+  var objStacked = stack.get(object);
+  var othStacked = stack.get(other);
+  if (objStacked && othStacked) {
+    return objStacked == other && othStacked == object;
+  }
+  var result = true;
+  stack.set(object, other);
+  stack.set(other, object);
+
+  var skipCtor = isPartial;
+  while (++index < objLength) {
+    key = objProps[index];
+    var objValue = object[key],
+        othValue = other[key];
+
+    if (customizer) {
+      var compared = isPartial
+        ? customizer(othValue, objValue, key, other, object, stack)
+        : customizer(objValue, othValue, key, object, other, stack);
+    }
+    // Recursively compare objects (susceptible to call stack limits).
+    if (!(compared === undefined
+          ? (objValue === othValue || equalFunc(objValue, othValue, bitmask, customizer, stack))
+          : compared
+        )) {
+      result = false;
+      break;
+    }
+    skipCtor || (skipCtor = key == 'constructor');
+  }
+  if (result && !skipCtor) {
+    var objCtor = object.constructor,
+        othCtor = other.constructor;
+
+    // Non `Object` object instances with different constructors are not equal.
+    if (objCtor != othCtor &&
+        ('constructor' in object && 'constructor' in other) &&
+        !(typeof objCtor == 'function' && objCtor instanceof objCtor &&
+          typeof othCtor == 'function' && othCtor instanceof othCtor)) {
+      result = false;
+    }
+  }
+  stack['delete'](object);
+  stack['delete'](other);
+  return result;
+}
+
+module.exports = equalObjects;
+
+},{"./_getAllKeys":133}],132:[function(require,module,exports){
+(function (global){(function (){
+/** Detect free variable `global` from Node.js. */
+var freeGlobal = typeof global == 'object' && global && global.Object === Object && global;
+
+module.exports = freeGlobal;
+
+}).call(this)}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
+},{}],133:[function(require,module,exports){
+var baseGetAllKeys = require('./_baseGetAllKeys'),
+    getSymbols = require('./_getSymbols'),
+    keys = require('./keys');
+
+/**
+ * Creates an array of own enumerable property names and symbols of `object`.
+ *
+ * @private
+ * @param {Object} object The object to query.
+ * @returns {Array} Returns the array of property names and symbols.
+ */
+function getAllKeys(object) {
+  return baseGetAllKeys(object, keys, getSymbols);
+}
+
+module.exports = getAllKeys;
+
+},{"./_baseGetAllKeys":104,"./_getSymbols":138,"./keys":198}],134:[function(require,module,exports){
+var isKeyable = require('./_isKeyable');
+
+/**
+ * Gets the data for `map`.
+ *
+ * @private
+ * @param {Object} map The map to query.
+ * @param {string} key The reference key.
+ * @returns {*} Returns the map data.
+ */
+function getMapData(map, key) {
+  var data = map.__data__;
+  return isKeyable(key)
+    ? data[typeof key == 'string' ? 'string' : 'hash']
+    : data.map;
+}
+
+module.exports = getMapData;
+
+},{"./_isKeyable":149}],135:[function(require,module,exports){
+var isStrictComparable = require('./_isStrictComparable'),
+    keys = require('./keys');
+
+/**
+ * Gets the property names, values, and compare flags of `object`.
+ *
+ * @private
+ * @param {Object} object The object to query.
+ * @returns {Array} Returns the match data of `object`.
+ */
+function getMatchData(object) {
+  var result = keys(object),
+      length = result.length;
+
+  while (length--) {
+    var key = result[length],
+        value = object[key];
+
+    result[length] = [key, value, isStrictComparable(value)];
+  }
+  return result;
+}
+
+module.exports = getMatchData;
+
+},{"./_isStrictComparable":152,"./keys":198}],136:[function(require,module,exports){
+var baseIsNative = require('./_baseIsNative'),
+    getValue = require('./_getValue');
+
+/**
+ * Gets the native function at `key` of `object`.
+ *
+ * @private
+ * @param {Object} object The object to query.
+ * @param {string} key The key of the method to get.
+ * @returns {*} Returns the function if it's native, else `undefined`.
+ */
+function getNative(object, key) {
+  var value = getValue(object, key);
+  return baseIsNative(value) ? value : undefined;
+}
+
+module.exports = getNative;
+
+},{"./_baseIsNative":111,"./_getValue":140}],137:[function(require,module,exports){
+var Symbol = require('./_Symbol');
+
+/** Used for built-in method references. */
+var objectProto = Object.prototype;
+
+/** Used to check objects for own properties. */
+var hasOwnProperty = objectProto.hasOwnProperty;
+
+/**
+ * Used to resolve the
+ * [`toStringTag`](http://ecma-international.org/ecma-262/7.0/#sec-object.prototype.tostring)
+ * of values.
+ */
+var nativeObjectToString = objectProto.toString;
+
+/** Built-in value references. */
+var symToStringTag = Symbol ? Symbol.toStringTag : undefined;
+
+/**
+ * A specialized version of `baseGetTag` which ignores `Symbol.toStringTag` values.
+ *
+ * @private
+ * @param {*} value The value to query.
+ * @returns {string} Returns the raw `toStringTag`.
+ */
+function getRawTag(value) {
+  var isOwn = hasOwnProperty.call(value, symToStringTag),
+      tag = value[symToStringTag];
+
+  try {
+    value[symToStringTag] = undefined;
+    var unmasked = true;
+  } catch (e) {}
+
+  var result = nativeObjectToString.call(value);
+  if (unmasked) {
+    if (isOwn) {
+      value[symToStringTag] = tag;
+    } else {
+      delete value[symToStringTag];
+    }
+  }
+  return result;
+}
+
+module.exports = getRawTag;
+
+},{"./_Symbol":90}],138:[function(require,module,exports){
+var arrayFilter = require('./_arrayFilter'),
+    stubArray = require('./stubArray');
+
+/** Used for built-in method references. */
+var objectProto = Object.prototype;
+
+/** Built-in value references. */
+var propertyIsEnumerable = objectProto.propertyIsEnumerable;
+
+/* Built-in method references for those with the same name as other `lodash` methods. */
+var nativeGetSymbols = Object.getOwnPropertySymbols;
+
+/**
+ * Creates an array of the own enumerable symbols of `object`.
+ *
+ * @private
+ * @param {Object} object The object to query.
+ * @returns {Array} Returns the array of symbols.
+ */
+var getSymbols = !nativeGetSymbols ? stubArray : function(object) {
+  if (object == null) {
+    return [];
+  }
+  object = Object(object);
+  return arrayFilter(nativeGetSymbols(object), function(symbol) {
+    return propertyIsEnumerable.call(object, symbol);
+  });
+};
+
+module.exports = getSymbols;
+
+},{"./_arrayFilter":94,"./stubArray":202}],139:[function(require,module,exports){
+var DataView = require('./_DataView'),
+    Map = require('./_Map'),
+    Promise = require('./_Promise'),
+    Set = require('./_Set'),
+    WeakMap = require('./_WeakMap'),
+    baseGetTag = require('./_baseGetTag'),
+    toSource = require('./_toSource');
+
+/** `Object#toString` result references. */
+var mapTag = '[object Map]',
+    objectTag = '[object Object]',
+    promiseTag = '[object Promise]',
+    setTag = '[object Set]',
+    weakMapTag = '[object WeakMap]';
+
+var dataViewTag = '[object DataView]';
+
+/** Used to detect maps, sets, and weakmaps. */
+var dataViewCtorString = toSource(DataView),
+    mapCtorString = toSource(Map),
+    promiseCtorString = toSource(Promise),
+    setCtorString = toSource(Set),
+    weakMapCtorString = toSource(WeakMap);
+
+/**
+ * Gets the `toStringTag` of `value`.
+ *
+ * @private
+ * @param {*} value The value to query.
+ * @returns {string} Returns the `toStringTag`.
+ */
+var getTag = baseGetTag;
+
+// Fallback for data views, maps, sets, and weak maps in IE 11 and promises in Node.js < 6.
+if ((DataView && getTag(new DataView(new ArrayBuffer(1))) != dataViewTag) ||
+    (Map && getTag(new Map) != mapTag) ||
+    (Promise && getTag(Promise.resolve()) != promiseTag) ||
+    (Set && getTag(new Set) != setTag) ||
+    (WeakMap && getTag(new WeakMap) != weakMapTag)) {
+  getTag = function(value) {
+    var result = baseGetTag(value),
+        Ctor = result == objectTag ? value.constructor : undefined,
+        ctorString = Ctor ? toSource(Ctor) : '';
+
+    if (ctorString) {
+      switch (ctorString) {
+        case dataViewCtorString: return dataViewTag;
+        case mapCtorString: return mapTag;
+        case promiseCtorString: return promiseTag;
+        case setCtorString: return setTag;
+        case weakMapCtorString: return weakMapTag;
+      }
+    }
+    return result;
+  };
+}
+
+module.exports = getTag;
+
+},{"./_DataView":81,"./_Map":84,"./_Promise":86,"./_Set":87,"./_WeakMap":92,"./_baseGetTag":105,"./_toSource":182}],140:[function(require,module,exports){
+/**
+ * Gets the value at `key` of `object`.
+ *
+ * @private
+ * @param {Object} [object] The object to query.
+ * @param {string} key The key of the property to get.
+ * @returns {*} Returns the property value.
+ */
+function getValue(object, key) {
+  return object == null ? undefined : object[key];
+}
+
+module.exports = getValue;
+
+},{}],141:[function(require,module,exports){
+var castPath = require('./_castPath'),
+    isArguments = require('./isArguments'),
+    isArray = require('./isArray'),
+    isIndex = require('./_isIndex'),
+    isLength = require('./isLength'),
+    toKey = require('./_toKey');
+
+/**
+ * Checks if `path` exists on `object`.
+ *
+ * @private
+ * @param {Object} object The object to query.
+ * @param {Array|string} path The path to check.
+ * @param {Function} hasFunc The function to check properties.
+ * @returns {boolean} Returns `true` if `path` exists, else `false`.
+ */
+function hasPath(object, path, hasFunc) {
+  path = castPath(path, object);
+
+  var index = -1,
+      length = path.length,
+      result = false;
+
+  while (++index < length) {
+    var key = toKey(path[index]);
+    if (!(result = object != null && hasFunc(object, key))) {
+      break;
+    }
+    object = object[key];
+  }
+  if (result || ++index != length) {
+    return result;
+  }
+  length = object == null ? 0 : object.length;
+  return !!length && isLength(length) && isIndex(key, length) &&
+    (isArray(object) || isArguments(object));
+}
+
+module.exports = hasPath;
+
+},{"./_castPath":125,"./_isIndex":147,"./_toKey":181,"./isArguments":188,"./isArray":189,"./isLength":193}],142:[function(require,module,exports){
+var nativeCreate = require('./_nativeCreate');
+
+/**
+ * Removes all key-value entries from the hash.
+ *
+ * @private
+ * @name clear
+ * @memberOf Hash
+ */
+function hashClear() {
+  this.__data__ = nativeCreate ? nativeCreate(null) : {};
+  this.size = 0;
+}
+
+module.exports = hashClear;
+
+},{"./_nativeCreate":166}],143:[function(require,module,exports){
+/**
+ * Removes `key` and its value from the hash.
+ *
+ * @private
+ * @name delete
+ * @memberOf Hash
+ * @param {Object} hash The hash to modify.
+ * @param {string} key The key of the value to remove.
+ * @returns {boolean} Returns `true` if the entry was removed, else `false`.
+ */
+function hashDelete(key) {
+  var result = this.has(key) && delete this.__data__[key];
+  this.size -= result ? 1 : 0;
+  return result;
+}
+
+module.exports = hashDelete;
+
+},{}],144:[function(require,module,exports){
+var nativeCreate = require('./_nativeCreate');
+
+/** Used to stand-in for `undefined` hash values. */
+var HASH_UNDEFINED = '__lodash_hash_undefined__';
+
+/** Used for built-in method references. */
+var objectProto = Object.prototype;
+
+/** Used to check objects for own properties. */
+var hasOwnProperty = objectProto.hasOwnProperty;
+
+/**
+ * Gets the hash value for `key`.
+ *
+ * @private
+ * @name get
+ * @memberOf Hash
+ * @param {string} key The key of the value to get.
+ * @returns {*} Returns the entry value.
+ */
+function hashGet(key) {
+  var data = this.__data__;
+  if (nativeCreate) {
+    var result = data[key];
+    return result === HASH_UNDEFINED ? undefined : result;
+  }
+  return hasOwnProperty.call(data, key) ? data[key] : undefined;
+}
+
+module.exports = hashGet;
+
+},{"./_nativeCreate":166}],145:[function(require,module,exports){
+var nativeCreate = require('./_nativeCreate');
+
+/** Used for built-in method references. */
+var objectProto = Object.prototype;
+
+/** Used to check objects for own properties. */
+var hasOwnProperty = objectProto.hasOwnProperty;
+
+/**
+ * Checks if a hash value for `key` exists.
+ *
+ * @private
+ * @name has
+ * @memberOf Hash
+ * @param {string} key The key of the entry to check.
+ * @returns {boolean} Returns `true` if an entry for `key` exists, else `false`.
+ */
+function hashHas(key) {
+  var data = this.__data__;
+  return nativeCreate ? (data[key] !== undefined) : hasOwnProperty.call(data, key);
+}
+
+module.exports = hashHas;
+
+},{"./_nativeCreate":166}],146:[function(require,module,exports){
+var nativeCreate = require('./_nativeCreate');
+
+/** Used to stand-in for `undefined` hash values. */
+var HASH_UNDEFINED = '__lodash_hash_undefined__';
+
+/**
+ * Sets the hash `key` to `value`.
+ *
+ * @private
+ * @name set
+ * @memberOf Hash
+ * @param {string} key The key of the value to set.
+ * @param {*} value The value to set.
+ * @returns {Object} Returns the hash instance.
+ */
+function hashSet(key, value) {
+  var data = this.__data__;
+  this.size += this.has(key) ? 0 : 1;
+  data[key] = (nativeCreate && value === undefined) ? HASH_UNDEFINED : value;
+  return this;
+}
+
+module.exports = hashSet;
+
+},{"./_nativeCreate":166}],147:[function(require,module,exports){
+/** Used as references for various `Number` constants. */
+var MAX_SAFE_INTEGER = 9007199254740991;
+
+/** Used to detect unsigned integer values. */
+var reIsUint = /^(?:0|[1-9]\d*)$/;
+
+/**
+ * Checks if `value` is a valid array-like index.
+ *
+ * @private
+ * @param {*} value The value to check.
+ * @param {number} [length=MAX_SAFE_INTEGER] The upper bounds of a valid index.
+ * @returns {boolean} Returns `true` if `value` is a valid index, else `false`.
+ */
+function isIndex(value, length) {
+  var type = typeof value;
+  length = length == null ? MAX_SAFE_INTEGER : length;
+
+  return !!length &&
+    (type == 'number' ||
+      (type != 'symbol' && reIsUint.test(value))) &&
+        (value > -1 && value % 1 == 0 && value < length);
+}
+
+module.exports = isIndex;
+
+},{}],148:[function(require,module,exports){
+var isArray = require('./isArray'),
+    isSymbol = require('./isSymbol');
+
+/** Used to match property names within property paths. */
+var reIsDeepProp = /\.|\[(?:[^[\]]*|(["'])(?:(?!\1)[^\\]|\\.)*?\1)\]/,
+    reIsPlainProp = /^\w*$/;
+
+/**
+ * Checks if `value` is a property name and not a property path.
+ *
+ * @private
+ * @param {*} value The value to check.
+ * @param {Object} [object] The object to query keys on.
+ * @returns {boolean} Returns `true` if `value` is a property name, else `false`.
+ */
+function isKey(value, object) {
+  if (isArray(value)) {
+    return false;
+  }
+  var type = typeof value;
+  if (type == 'number' || type == 'symbol' || type == 'boolean' ||
+      value == null || isSymbol(value)) {
+    return true;
+  }
+  return reIsPlainProp.test(value) || !reIsDeepProp.test(value) ||
+    (object != null && value in Object(object));
+}
+
+module.exports = isKey;
+
+},{"./isArray":189,"./isSymbol":196}],149:[function(require,module,exports){
+/**
+ * Checks if `value` is suitable for use as unique object key.
+ *
+ * @private
+ * @param {*} value The value to check.
+ * @returns {boolean} Returns `true` if `value` is suitable, else `false`.
+ */
+function isKeyable(value) {
+  var type = typeof value;
+  return (type == 'string' || type == 'number' || type == 'symbol' || type == 'boolean')
+    ? (value !== '__proto__')
+    : (value === null);
+}
+
+module.exports = isKeyable;
+
+},{}],150:[function(require,module,exports){
+var coreJsData = require('./_coreJsData');
+
+/** Used to detect methods masquerading as native. */
+var maskSrcKey = (function() {
+  var uid = /[^.]+$/.exec(coreJsData && coreJsData.keys && coreJsData.keys.IE_PROTO || '');
+  return uid ? ('Symbol(src)_1.' + uid) : '';
+}());
+
+/**
+ * Checks if `func` has its source masked.
+ *
+ * @private
+ * @param {Function} func The function to check.
+ * @returns {boolean} Returns `true` if `func` is masked, else `false`.
+ */
+function isMasked(func) {
+  return !!maskSrcKey && (maskSrcKey in func);
+}
+
+module.exports = isMasked;
+
+},{"./_coreJsData":126}],151:[function(require,module,exports){
+/** Used for built-in method references. */
+var objectProto = Object.prototype;
+
+/**
+ * Checks if `value` is likely a prototype object.
+ *
+ * @private
+ * @param {*} value The value to check.
+ * @returns {boolean} Returns `true` if `value` is a prototype, else `false`.
+ */
+function isPrototype(value) {
+  var Ctor = value && value.constructor,
+      proto = (typeof Ctor == 'function' && Ctor.prototype) || objectProto;
+
+  return value === proto;
+}
+
+module.exports = isPrototype;
+
+},{}],152:[function(require,module,exports){
+var isObject = require('./isObject');
+
+/**
+ * Checks if `value` is suitable for strict equality comparisons, i.e. `===`.
+ *
+ * @private
+ * @param {*} value The value to check.
+ * @returns {boolean} Returns `true` if `value` if suitable for strict
+ *  equality comparisons, else `false`.
+ */
+function isStrictComparable(value) {
+  return value === value && !isObject(value);
+}
+
+module.exports = isStrictComparable;
+
+},{"./isObject":194}],153:[function(require,module,exports){
+/**
+ * Removes all key-value entries from the list cache.
+ *
+ * @private
+ * @name clear
+ * @memberOf ListCache
+ */
+function listCacheClear() {
+  this.__data__ = [];
+  this.size = 0;
+}
+
+module.exports = listCacheClear;
+
+},{}],154:[function(require,module,exports){
+var assocIndexOf = require('./_assocIndexOf');
+
+/** Used for built-in method references. */
+var arrayProto = Array.prototype;
+
+/** Built-in value references. */
+var splice = arrayProto.splice;
+
+/**
+ * Removes `key` and its value from the list cache.
+ *
+ * @private
+ * @name delete
+ * @memberOf ListCache
+ * @param {string} key The key of the value to remove.
+ * @returns {boolean} Returns `true` if the entry was removed, else `false`.
+ */
+function listCacheDelete(key) {
+  var data = this.__data__,
+      index = assocIndexOf(data, key);
+
+  if (index < 0) {
+    return false;
+  }
+  var lastIndex = data.length - 1;
+  if (index == lastIndex) {
+    data.pop();
+  } else {
+    splice.call(data, index, 1);
+  }
+  --this.size;
+  return true;
+}
+
+module.exports = listCacheDelete;
+
+},{"./_assocIndexOf":99}],155:[function(require,module,exports){
+var assocIndexOf = require('./_assocIndexOf');
+
+/**
+ * Gets the list cache value for `key`.
+ *
+ * @private
+ * @name get
+ * @memberOf ListCache
+ * @param {string} key The key of the value to get.
+ * @returns {*} Returns the entry value.
+ */
+function listCacheGet(key) {
+  var data = this.__data__,
+      index = assocIndexOf(data, key);
+
+  return index < 0 ? undefined : data[index][1];
+}
+
+module.exports = listCacheGet;
+
+},{"./_assocIndexOf":99}],156:[function(require,module,exports){
+var assocIndexOf = require('./_assocIndexOf');
+
+/**
+ * Checks if a list cache value for `key` exists.
+ *
+ * @private
+ * @name has
+ * @memberOf ListCache
+ * @param {string} key The key of the entry to check.
+ * @returns {boolean} Returns `true` if an entry for `key` exists, else `false`.
+ */
+function listCacheHas(key) {
+  return assocIndexOf(this.__data__, key) > -1;
+}
+
+module.exports = listCacheHas;
+
+},{"./_assocIndexOf":99}],157:[function(require,module,exports){
+var assocIndexOf = require('./_assocIndexOf');
+
+/**
+ * Sets the list cache `key` to `value`.
+ *
+ * @private
+ * @name set
+ * @memberOf ListCache
+ * @param {string} key The key of the value to set.
+ * @param {*} value The value to set.
+ * @returns {Object} Returns the list cache instance.
+ */
+function listCacheSet(key, value) {
+  var data = this.__data__,
+      index = assocIndexOf(data, key);
+
+  if (index < 0) {
+    ++this.size;
+    data.push([key, value]);
+  } else {
+    data[index][1] = value;
+  }
+  return this;
+}
+
+module.exports = listCacheSet;
+
+},{"./_assocIndexOf":99}],158:[function(require,module,exports){
+var Hash = require('./_Hash'),
+    ListCache = require('./_ListCache'),
+    Map = require('./_Map');
+
+/**
+ * Removes all key-value entries from the map.
+ *
+ * @private
+ * @name clear
+ * @memberOf MapCache
+ */
+function mapCacheClear() {
+  this.size = 0;
+  this.__data__ = {
+    'hash': new Hash,
+    'map': new (Map || ListCache),
+    'string': new Hash
+  };
+}
+
+module.exports = mapCacheClear;
+
+},{"./_Hash":82,"./_ListCache":83,"./_Map":84}],159:[function(require,module,exports){
+var getMapData = require('./_getMapData');
+
+/**
+ * Removes `key` and its value from the map.
+ *
+ * @private
+ * @name delete
+ * @memberOf MapCache
+ * @param {string} key The key of the value to remove.
+ * @returns {boolean} Returns `true` if the entry was removed, else `false`.
+ */
+function mapCacheDelete(key) {
+  var result = getMapData(this, key)['delete'](key);
+  this.size -= result ? 1 : 0;
+  return result;
+}
+
+module.exports = mapCacheDelete;
+
+},{"./_getMapData":134}],160:[function(require,module,exports){
+var getMapData = require('./_getMapData');
+
+/**
+ * Gets the map value for `key`.
+ *
+ * @private
+ * @name get
+ * @memberOf MapCache
+ * @param {string} key The key of the value to get.
+ * @returns {*} Returns the entry value.
+ */
+function mapCacheGet(key) {
+  return getMapData(this, key).get(key);
+}
+
+module.exports = mapCacheGet;
+
+},{"./_getMapData":134}],161:[function(require,module,exports){
+var getMapData = require('./_getMapData');
+
+/**
+ * Checks if a map value for `key` exists.
+ *
+ * @private
+ * @name has
+ * @memberOf MapCache
+ * @param {string} key The key of the entry to check.
+ * @returns {boolean} Returns `true` if an entry for `key` exists, else `false`.
+ */
+function mapCacheHas(key) {
+  return getMapData(this, key).has(key);
+}
+
+module.exports = mapCacheHas;
+
+},{"./_getMapData":134}],162:[function(require,module,exports){
+var getMapData = require('./_getMapData');
+
+/**
+ * Sets the map `key` to `value`.
+ *
+ * @private
+ * @name set
+ * @memberOf MapCache
+ * @param {string} key The key of the value to set.
+ * @param {*} value The value to set.
+ * @returns {Object} Returns the map cache instance.
+ */
+function mapCacheSet(key, value) {
+  var data = getMapData(this, key),
+      size = data.size;
+
+  data.set(key, value);
+  this.size += data.size == size ? 0 : 1;
+  return this;
+}
+
+module.exports = mapCacheSet;
+
+},{"./_getMapData":134}],163:[function(require,module,exports){
+/**
+ * Converts `map` to its key-value pairs.
+ *
+ * @private
+ * @param {Object} map The map to convert.
+ * @returns {Array} Returns the key-value pairs.
+ */
+function mapToArray(map) {
+  var index = -1,
+      result = Array(map.size);
+
+  map.forEach(function(value, key) {
+    result[++index] = [key, value];
+  });
+  return result;
+}
+
+module.exports = mapToArray;
+
+},{}],164:[function(require,module,exports){
+/**
+ * A specialized version of `matchesProperty` for source values suitable
+ * for strict equality comparisons, i.e. `===`.
+ *
+ * @private
+ * @param {string} key The key of the property to get.
+ * @param {*} srcValue The value to match.
+ * @returns {Function} Returns the new spec function.
+ */
+function matchesStrictComparable(key, srcValue) {
+  return function(object) {
+    if (object == null) {
+      return false;
+    }
+    return object[key] === srcValue &&
+      (srcValue !== undefined || (key in Object(object)));
+  };
+}
+
+module.exports = matchesStrictComparable;
+
+},{}],165:[function(require,module,exports){
+var memoize = require('./memoize');
+
+/** Used as the maximum memoize cache size. */
+var MAX_MEMOIZE_SIZE = 500;
+
+/**
+ * A specialized version of `_.memoize` which clears the memoized function's
+ * cache when it exceeds `MAX_MEMOIZE_SIZE`.
+ *
+ * @private
+ * @param {Function} func The function to have its output memoized.
+ * @returns {Function} Returns the new memoized function.
+ */
+function memoizeCapped(func) {
+  var result = memoize(func, function(key) {
+    if (cache.size === MAX_MEMOIZE_SIZE) {
+      cache.clear();
+    }
+    return key;
+  });
+
+  var cache = result.cache;
+  return result;
+}
+
+module.exports = memoizeCapped;
+
+},{"./memoize":200}],166:[function(require,module,exports){
+var getNative = require('./_getNative');
+
+/* Built-in method references that are verified to be native. */
+var nativeCreate = getNative(Object, 'create');
+
+module.exports = nativeCreate;
+
+},{"./_getNative":136}],167:[function(require,module,exports){
+var overArg = require('./_overArg');
+
+/* Built-in method references for those with the same name as other `lodash` methods. */
+var nativeKeys = overArg(Object.keys, Object);
+
+module.exports = nativeKeys;
+
+},{"./_overArg":170}],168:[function(require,module,exports){
+var freeGlobal = require('./_freeGlobal');
+
+/** Detect free variable `exports`. */
+var freeExports = typeof exports == 'object' && exports && !exports.nodeType && exports;
+
+/** Detect free variable `module`. */
+var freeModule = freeExports && typeof module == 'object' && module && !module.nodeType && module;
+
+/** Detect the popular CommonJS extension `module.exports`. */
+var moduleExports = freeModule && freeModule.exports === freeExports;
+
+/** Detect free variable `process` from Node.js. */
+var freeProcess = moduleExports && freeGlobal.process;
+
+/** Used to access faster Node.js helpers. */
+var nodeUtil = (function() {
+  try {
+    // Use `util.types` for Node.js 10+.
+    var types = freeModule && freeModule.require && freeModule.require('util').types;
+
+    if (types) {
+      return types;
+    }
+
+    // Legacy `process.binding('util')` for Node.js < 10.
+    return freeProcess && freeProcess.binding && freeProcess.binding('util');
+  } catch (e) {}
+}());
+
+module.exports = nodeUtil;
+
+},{"./_freeGlobal":132}],169:[function(require,module,exports){
+/** Used for built-in method references. */
+var objectProto = Object.prototype;
+
+/**
+ * Used to resolve the
+ * [`toStringTag`](http://ecma-international.org/ecma-262/7.0/#sec-object.prototype.tostring)
+ * of values.
+ */
+var nativeObjectToString = objectProto.toString;
+
+/**
+ * Converts `value` to a string using `Object.prototype.toString`.
+ *
+ * @private
+ * @param {*} value The value to convert.
+ * @returns {string} Returns the converted string.
+ */
+function objectToString(value) {
+  return nativeObjectToString.call(value);
+}
+
+module.exports = objectToString;
+
+},{}],170:[function(require,module,exports){
+/**
+ * Creates a unary function that invokes `func` with its argument transformed.
+ *
+ * @private
+ * @param {Function} func The function to wrap.
+ * @param {Function} transform The argument transform.
+ * @returns {Function} Returns the new function.
+ */
+function overArg(func, transform) {
+  return function(arg) {
+    return func(transform(arg));
+  };
+}
+
+module.exports = overArg;
+
+},{}],171:[function(require,module,exports){
+var freeGlobal = require('./_freeGlobal');
+
+/** Detect free variable `self`. */
+var freeSelf = typeof self == 'object' && self && self.Object === Object && self;
+
+/** Used as a reference to the global object. */
+var root = freeGlobal || freeSelf || Function('return this')();
+
+module.exports = root;
+
+},{"./_freeGlobal":132}],172:[function(require,module,exports){
+/** Used to stand-in for `undefined` hash values. */
+var HASH_UNDEFINED = '__lodash_hash_undefined__';
+
+/**
+ * Adds `value` to the array cache.
+ *
+ * @private
+ * @name add
+ * @memberOf SetCache
+ * @alias push
+ * @param {*} value The value to cache.
+ * @returns {Object} Returns the cache instance.
+ */
+function setCacheAdd(value) {
+  this.__data__.set(value, HASH_UNDEFINED);
+  return this;
+}
+
+module.exports = setCacheAdd;
+
+},{}],173:[function(require,module,exports){
+/**
+ * Checks if `value` is in the array cache.
+ *
+ * @private
+ * @name has
+ * @memberOf SetCache
+ * @param {*} value The value to search for.
+ * @returns {number} Returns `true` if `value` is found, else `false`.
+ */
+function setCacheHas(value) {
+  return this.__data__.has(value);
+}
+
+module.exports = setCacheHas;
+
+},{}],174:[function(require,module,exports){
+/**
+ * Converts `set` to an array of its values.
+ *
+ * @private
+ * @param {Object} set The set to convert.
+ * @returns {Array} Returns the values.
+ */
+function setToArray(set) {
+  var index = -1,
+      result = Array(set.size);
+
+  set.forEach(function(value) {
+    result[++index] = value;
+  });
+  return result;
+}
+
+module.exports = setToArray;
+
+},{}],175:[function(require,module,exports){
+var ListCache = require('./_ListCache');
+
+/**
+ * Removes all key-value entries from the stack.
+ *
+ * @private
+ * @name clear
+ * @memberOf Stack
+ */
+function stackClear() {
+  this.__data__ = new ListCache;
+  this.size = 0;
+}
+
+module.exports = stackClear;
+
+},{"./_ListCache":83}],176:[function(require,module,exports){
+/**
+ * Removes `key` and its value from the stack.
+ *
+ * @private
+ * @name delete
+ * @memberOf Stack
+ * @param {string} key The key of the value to remove.
+ * @returns {boolean} Returns `true` if the entry was removed, else `false`.
+ */
+function stackDelete(key) {
+  var data = this.__data__,
+      result = data['delete'](key);
+
+  this.size = data.size;
+  return result;
+}
+
+module.exports = stackDelete;
+
+},{}],177:[function(require,module,exports){
+/**
+ * Gets the stack value for `key`.
+ *
+ * @private
+ * @name get
+ * @memberOf Stack
+ * @param {string} key The key of the value to get.
+ * @returns {*} Returns the entry value.
+ */
+function stackGet(key) {
+  return this.__data__.get(key);
+}
+
+module.exports = stackGet;
+
+},{}],178:[function(require,module,exports){
+/**
+ * Checks if a stack value for `key` exists.
+ *
+ * @private
+ * @name has
+ * @memberOf Stack
+ * @param {string} key The key of the entry to check.
+ * @returns {boolean} Returns `true` if an entry for `key` exists, else `false`.
+ */
+function stackHas(key) {
+  return this.__data__.has(key);
+}
+
+module.exports = stackHas;
+
+},{}],179:[function(require,module,exports){
+var ListCache = require('./_ListCache'),
+    Map = require('./_Map'),
+    MapCache = require('./_MapCache');
+
+/** Used as the size to enable large array optimizations. */
+var LARGE_ARRAY_SIZE = 200;
+
+/**
+ * Sets the stack `key` to `value`.
+ *
+ * @private
+ * @name set
+ * @memberOf Stack
+ * @param {string} key The key of the value to set.
+ * @param {*} value The value to set.
+ * @returns {Object} Returns the stack cache instance.
+ */
+function stackSet(key, value) {
+  var data = this.__data__;
+  if (data instanceof ListCache) {
+    var pairs = data.__data__;
+    if (!Map || (pairs.length < LARGE_ARRAY_SIZE - 1)) {
+      pairs.push([key, value]);
+      this.size = ++data.size;
+      return this;
+    }
+    data = this.__data__ = new MapCache(pairs);
+  }
+  data.set(key, value);
+  this.size = data.size;
+  return this;
+}
+
+module.exports = stackSet;
+
+},{"./_ListCache":83,"./_Map":84,"./_MapCache":85}],180:[function(require,module,exports){
+var memoizeCapped = require('./_memoizeCapped');
+
+/** Used to match property names within property paths. */
+var rePropName = /[^.[\]]+|\[(?:(-?\d+(?:\.\d+)?)|(["'])((?:(?!\2)[^\\]|\\.)*?)\2)\]|(?=(?:\.|\[\])(?:\.|\[\]|$))/g;
+
+/** Used to match backslashes in property paths. */
+var reEscapeChar = /\\(\\)?/g;
+
+/**
+ * Converts `string` to a property path array.
+ *
+ * @private
+ * @param {string} string The string to convert.
+ * @returns {Array} Returns the property path array.
+ */
+var stringToPath = memoizeCapped(function(string) {
+  var result = [];
+  if (string.charCodeAt(0) === 46 /* . */) {
+    result.push('');
+  }
+  string.replace(rePropName, function(match, number, quote, subString) {
+    result.push(quote ? subString.replace(reEscapeChar, '$1') : (number || match));
+  });
+  return result;
+});
+
+module.exports = stringToPath;
+
+},{"./_memoizeCapped":165}],181:[function(require,module,exports){
+var isSymbol = require('./isSymbol');
+
+/** Used as references for various `Number` constants. */
+var INFINITY = 1 / 0;
+
+/**
+ * Converts `value` to a string key if it's not a string or symbol.
+ *
+ * @private
+ * @param {*} value The value to inspect.
+ * @returns {string|symbol} Returns the key.
+ */
+function toKey(value) {
+  if (typeof value == 'string' || isSymbol(value)) {
+    return value;
+  }
+  var result = (value + '');
+  return (result == '0' && (1 / value) == -INFINITY) ? '-0' : result;
+}
+
+module.exports = toKey;
+
+},{"./isSymbol":196}],182:[function(require,module,exports){
+/** Used for built-in method references. */
+var funcProto = Function.prototype;
+
+/** Used to resolve the decompiled source of functions. */
+var funcToString = funcProto.toString;
+
+/**
+ * Converts `func` to its source code.
+ *
+ * @private
+ * @param {Function} func The function to convert.
+ * @returns {string} Returns the source code.
+ */
+function toSource(func) {
+  if (func != null) {
+    try {
+      return funcToString.call(func);
+    } catch (e) {}
+    try {
+      return (func + '');
+    } catch (e) {}
+  }
+  return '';
+}
+
+module.exports = toSource;
+
+},{}],183:[function(require,module,exports){
+/**
+ * Performs a
+ * [`SameValueZero`](http://ecma-international.org/ecma-262/7.0/#sec-samevaluezero)
+ * comparison between two values to determine if they are equivalent.
+ *
+ * @static
+ * @memberOf _
+ * @since 4.0.0
+ * @category Lang
+ * @param {*} value The value to compare.
+ * @param {*} other The other value to compare.
+ * @returns {boolean} Returns `true` if the values are equivalent, else `false`.
+ * @example
+ *
+ * var object = { 'a': 1 };
+ * var other = { 'a': 1 };
+ *
+ * _.eq(object, object);
+ * // => true
+ *
+ * _.eq(object, other);
+ * // => false
+ *
+ * _.eq('a', 'a');
+ * // => true
+ *
+ * _.eq('a', Object('a'));
+ * // => false
+ *
+ * _.eq(NaN, NaN);
+ * // => true
+ */
+function eq(value, other) {
+  return value === other || (value !== value && other !== other);
+}
+
+module.exports = eq;
+
+},{}],184:[function(require,module,exports){
+var arrayEach = require('./_arrayEach'),
+    baseEach = require('./_baseEach'),
+    castFunction = require('./_castFunction'),
+    isArray = require('./isArray');
+
+/**
+ * Iterates over elements of `collection` and invokes `iteratee` for each element.
+ * The iteratee is invoked with three arguments: (value, index|key, collection).
+ * Iteratee functions may exit iteration early by explicitly returning `false`.
+ *
+ * **Note:** As with other "Collections" methods, objects with a "length"
+ * property are iterated like arrays. To avoid this behavior use `_.forIn`
+ * or `_.forOwn` for object iteration.
+ *
+ * @static
+ * @memberOf _
+ * @since 0.1.0
+ * @alias each
+ * @category Collection
+ * @param {Array|Object} collection The collection to iterate over.
+ * @param {Function} [iteratee=_.identity] The function invoked per iteration.
+ * @returns {Array|Object} Returns `collection`.
+ * @see _.forEachRight
+ * @example
+ *
+ * _.forEach([1, 2], function(value) {
+ *   console.log(value);
+ * });
+ * // => Logs `1` then `2`.
+ *
+ * _.forEach({ 'a': 1, 'b': 2 }, function(value, key) {
+ *   console.log(key);
+ * });
+ * // => Logs 'a' then 'b' (iteration order is not guaranteed).
+ */
+function forEach(collection, iteratee) {
+  var func = isArray(collection) ? arrayEach : baseEach;
+  return func(collection, castFunction(iteratee));
+}
+
+module.exports = forEach;
+
+},{"./_arrayEach":93,"./_baseEach":100,"./_castFunction":124,"./isArray":189}],185:[function(require,module,exports){
+var baseGet = require('./_baseGet');
+
+/**
+ * Gets the value at `path` of `object`. If the resolved value is
+ * `undefined`, the `defaultValue` is returned in its place.
+ *
+ * @static
+ * @memberOf _
+ * @since 3.7.0
+ * @category Object
+ * @param {Object} object The object to query.
+ * @param {Array|string} path The path of the property to get.
+ * @param {*} [defaultValue] The value returned for `undefined` resolved values.
+ * @returns {*} Returns the resolved value.
+ * @example
+ *
+ * var object = { 'a': [{ 'b': { 'c': 3 } }] };
+ *
+ * _.get(object, 'a[0].b.c');
+ * // => 3
+ *
+ * _.get(object, ['a', '0', 'b', 'c']);
+ * // => 3
+ *
+ * _.get(object, 'a.b.c', 'default');
+ * // => 'default'
+ */
+function get(object, path, defaultValue) {
+  var result = object == null ? undefined : baseGet(object, path);
+  return result === undefined ? defaultValue : result;
+}
+
+module.exports = get;
+
+},{"./_baseGet":103}],186:[function(require,module,exports){
+var baseHasIn = require('./_baseHasIn'),
+    hasPath = require('./_hasPath');
+
+/**
+ * Checks if `path` is a direct or inherited property of `object`.
+ *
+ * @static
+ * @memberOf _
+ * @since 4.0.0
+ * @category Object
+ * @param {Object} object The object to query.
+ * @param {Array|string} path The path to check.
+ * @returns {boolean} Returns `true` if `path` exists, else `false`.
+ * @example
+ *
+ * var object = _.create({ 'a': _.create({ 'b': 2 }) });
+ *
+ * _.hasIn(object, 'a');
+ * // => true
+ *
+ * _.hasIn(object, 'a.b');
+ * // => true
+ *
+ * _.hasIn(object, ['a', 'b']);
+ * // => true
+ *
+ * _.hasIn(object, 'b');
+ * // => false
+ */
+function hasIn(object, path) {
+  return object != null && hasPath(object, path, baseHasIn);
+}
+
+module.exports = hasIn;
+
+},{"./_baseHasIn":106,"./_hasPath":141}],187:[function(require,module,exports){
+/**
+ * This method returns the first argument it receives.
+ *
+ * @static
+ * @since 0.1.0
+ * @memberOf _
+ * @category Util
+ * @param {*} value Any value.
+ * @returns {*} Returns `value`.
+ * @example
+ *
+ * var object = { 'a': 1 };
+ *
+ * console.log(_.identity(object) === object);
+ * // => true
+ */
+function identity(value) {
+  return value;
+}
+
+module.exports = identity;
+
+},{}],188:[function(require,module,exports){
+var baseIsArguments = require('./_baseIsArguments'),
+    isObjectLike = require('./isObjectLike');
+
+/** Used for built-in method references. */
+var objectProto = Object.prototype;
+
+/** Used to check objects for own properties. */
+var hasOwnProperty = objectProto.hasOwnProperty;
+
+/** Built-in value references. */
+var propertyIsEnumerable = objectProto.propertyIsEnumerable;
+
+/**
+ * Checks if `value` is likely an `arguments` object.
+ *
+ * @static
+ * @memberOf _
+ * @since 0.1.0
+ * @category Lang
+ * @param {*} value The value to check.
+ * @returns {boolean} Returns `true` if `value` is an `arguments` object,
+ *  else `false`.
+ * @example
+ *
+ * _.isArguments(function() { return arguments; }());
+ * // => true
+ *
+ * _.isArguments([1, 2, 3]);
+ * // => false
+ */
+var isArguments = baseIsArguments(function() { return arguments; }()) ? baseIsArguments : function(value) {
+  return isObjectLike(value) && hasOwnProperty.call(value, 'callee') &&
+    !propertyIsEnumerable.call(value, 'callee');
+};
+
+module.exports = isArguments;
+
+},{"./_baseIsArguments":107,"./isObjectLike":195}],189:[function(require,module,exports){
+/**
+ * Checks if `value` is classified as an `Array` object.
+ *
+ * @static
+ * @memberOf _
+ * @since 0.1.0
+ * @category Lang
+ * @param {*} value The value to check.
+ * @returns {boolean} Returns `true` if `value` is an array, else `false`.
+ * @example
+ *
+ * _.isArray([1, 2, 3]);
+ * // => true
+ *
+ * _.isArray(document.body.children);
+ * // => false
+ *
+ * _.isArray('abc');
+ * // => false
+ *
+ * _.isArray(_.noop);
+ * // => false
+ */
+var isArray = Array.isArray;
+
+module.exports = isArray;
+
+},{}],190:[function(require,module,exports){
+var isFunction = require('./isFunction'),
+    isLength = require('./isLength');
+
+/**
+ * Checks if `value` is array-like. A value is considered array-like if it's
+ * not a function and has a `value.length` that's an integer greater than or
+ * equal to `0` and less than or equal to `Number.MAX_SAFE_INTEGER`.
+ *
+ * @static
+ * @memberOf _
+ * @since 4.0.0
+ * @category Lang
+ * @param {*} value The value to check.
+ * @returns {boolean} Returns `true` if `value` is array-like, else `false`.
+ * @example
+ *
+ * _.isArrayLike([1, 2, 3]);
+ * // => true
+ *
+ * _.isArrayLike(document.body.children);
+ * // => true
+ *
+ * _.isArrayLike('abc');
+ * // => true
+ *
+ * _.isArrayLike(_.noop);
+ * // => false
+ */
+function isArrayLike(value) {
+  return value != null && isLength(value.length) && !isFunction(value);
+}
+
+module.exports = isArrayLike;
+
+},{"./isFunction":192,"./isLength":193}],191:[function(require,module,exports){
+var root = require('./_root'),
+    stubFalse = require('./stubFalse');
+
+/** Detect free variable `exports`. */
+var freeExports = typeof exports == 'object' && exports && !exports.nodeType && exports;
+
+/** Detect free variable `module`. */
+var freeModule = freeExports && typeof module == 'object' && module && !module.nodeType && module;
+
+/** Detect the popular CommonJS extension `module.exports`. */
+var moduleExports = freeModule && freeModule.exports === freeExports;
+
+/** Built-in value references. */
+var Buffer = moduleExports ? root.Buffer : undefined;
+
+/* Built-in method references for those with the same name as other `lodash` methods. */
+var nativeIsBuffer = Buffer ? Buffer.isBuffer : undefined;
+
+/**
+ * Checks if `value` is a buffer.
+ *
+ * @static
+ * @memberOf _
+ * @since 4.3.0
+ * @category Lang
+ * @param {*} value The value to check.
+ * @returns {boolean} Returns `true` if `value` is a buffer, else `false`.
+ * @example
+ *
+ * _.isBuffer(new Buffer(2));
+ * // => true
+ *
+ * _.isBuffer(new Uint8Array(2));
+ * // => false
+ */
+var isBuffer = nativeIsBuffer || stubFalse;
+
+module.exports = isBuffer;
+
+},{"./_root":171,"./stubFalse":203}],192:[function(require,module,exports){
+var baseGetTag = require('./_baseGetTag'),
+    isObject = require('./isObject');
+
+/** `Object#toString` result references. */
+var asyncTag = '[object AsyncFunction]',
+    funcTag = '[object Function]',
+    genTag = '[object GeneratorFunction]',
+    proxyTag = '[object Proxy]';
+
+/**
+ * Checks if `value` is classified as a `Function` object.
+ *
+ * @static
+ * @memberOf _
+ * @since 0.1.0
+ * @category Lang
+ * @param {*} value The value to check.
+ * @returns {boolean} Returns `true` if `value` is a function, else `false`.
+ * @example
+ *
+ * _.isFunction(_);
+ * // => true
+ *
+ * _.isFunction(/abc/);
+ * // => false
+ */
+function isFunction(value) {
+  if (!isObject(value)) {
+    return false;
+  }
+  // The use of `Object#toString` avoids issues with the `typeof` operator
+  // in Safari 9 which returns 'object' for typed arrays and other constructors.
+  var tag = baseGetTag(value);
+  return tag == funcTag || tag == genTag || tag == asyncTag || tag == proxyTag;
+}
+
+module.exports = isFunction;
+
+},{"./_baseGetTag":105,"./isObject":194}],193:[function(require,module,exports){
+/** Used as references for various `Number` constants. */
+var MAX_SAFE_INTEGER = 9007199254740991;
+
+/**
+ * Checks if `value` is a valid array-like length.
+ *
+ * **Note:** This method is loosely based on
+ * [`ToLength`](http://ecma-international.org/ecma-262/7.0/#sec-tolength).
+ *
+ * @static
+ * @memberOf _
+ * @since 4.0.0
+ * @category Lang
+ * @param {*} value The value to check.
+ * @returns {boolean} Returns `true` if `value` is a valid length, else `false`.
+ * @example
+ *
+ * _.isLength(3);
+ * // => true
+ *
+ * _.isLength(Number.MIN_VALUE);
+ * // => false
+ *
+ * _.isLength(Infinity);
+ * // => false
+ *
+ * _.isLength('3');
+ * // => false
+ */
+function isLength(value) {
+  return typeof value == 'number' &&
+    value > -1 && value % 1 == 0 && value <= MAX_SAFE_INTEGER;
+}
+
+module.exports = isLength;
+
+},{}],194:[function(require,module,exports){
+/**
+ * Checks if `value` is the
+ * [language type](http://www.ecma-international.org/ecma-262/7.0/#sec-ecmascript-language-types)
+ * of `Object`. (e.g. arrays, functions, objects, regexes, `new Number(0)`, and `new String('')`)
+ *
+ * @static
+ * @memberOf _
+ * @since 0.1.0
+ * @category Lang
+ * @param {*} value The value to check.
+ * @returns {boolean} Returns `true` if `value` is an object, else `false`.
+ * @example
+ *
+ * _.isObject({});
+ * // => true
+ *
+ * _.isObject([1, 2, 3]);
+ * // => true
+ *
+ * _.isObject(_.noop);
+ * // => true
+ *
+ * _.isObject(null);
+ * // => false
+ */
+function isObject(value) {
+  var type = typeof value;
+  return value != null && (type == 'object' || type == 'function');
+}
+
+module.exports = isObject;
+
+},{}],195:[function(require,module,exports){
+/**
+ * Checks if `value` is object-like. A value is object-like if it's not `null`
+ * and has a `typeof` result of "object".
+ *
+ * @static
+ * @memberOf _
+ * @since 4.0.0
+ * @category Lang
+ * @param {*} value The value to check.
+ * @returns {boolean} Returns `true` if `value` is object-like, else `false`.
+ * @example
+ *
+ * _.isObjectLike({});
+ * // => true
+ *
+ * _.isObjectLike([1, 2, 3]);
+ * // => true
+ *
+ * _.isObjectLike(_.noop);
+ * // => false
+ *
+ * _.isObjectLike(null);
+ * // => false
+ */
+function isObjectLike(value) {
+  return value != null && typeof value == 'object';
+}
+
+module.exports = isObjectLike;
+
+},{}],196:[function(require,module,exports){
+var baseGetTag = require('./_baseGetTag'),
+    isObjectLike = require('./isObjectLike');
+
+/** `Object#toString` result references. */
+var symbolTag = '[object Symbol]';
+
+/**
+ * Checks if `value` is classified as a `Symbol` primitive or object.
+ *
+ * @static
+ * @memberOf _
+ * @since 4.0.0
+ * @category Lang
+ * @param {*} value The value to check.
+ * @returns {boolean} Returns `true` if `value` is a symbol, else `false`.
+ * @example
+ *
+ * _.isSymbol(Symbol.iterator);
+ * // => true
+ *
+ * _.isSymbol('abc');
+ * // => false
+ */
+function isSymbol(value) {
+  return typeof value == 'symbol' ||
+    (isObjectLike(value) && baseGetTag(value) == symbolTag);
+}
+
+module.exports = isSymbol;
+
+},{"./_baseGetTag":105,"./isObjectLike":195}],197:[function(require,module,exports){
+var baseIsTypedArray = require('./_baseIsTypedArray'),
+    baseUnary = require('./_baseUnary'),
+    nodeUtil = require('./_nodeUtil');
+
+/* Node.js helper references. */
+var nodeIsTypedArray = nodeUtil && nodeUtil.isTypedArray;
+
+/**
+ * Checks if `value` is classified as a typed array.
+ *
+ * @static
+ * @memberOf _
+ * @since 3.0.0
+ * @category Lang
+ * @param {*} value The value to check.
+ * @returns {boolean} Returns `true` if `value` is a typed array, else `false`.
+ * @example
+ *
+ * _.isTypedArray(new Uint8Array);
+ * // => true
+ *
+ * _.isTypedArray([]);
+ * // => false
+ */
+var isTypedArray = nodeIsTypedArray ? baseUnary(nodeIsTypedArray) : baseIsTypedArray;
+
+module.exports = isTypedArray;
+
+},{"./_baseIsTypedArray":112,"./_baseUnary":122,"./_nodeUtil":168}],198:[function(require,module,exports){
+var arrayLikeKeys = require('./_arrayLikeKeys'),
+    baseKeys = require('./_baseKeys'),
+    isArrayLike = require('./isArrayLike');
+
+/**
+ * Creates an array of the own enumerable property names of `object`.
+ *
+ * **Note:** Non-object values are coerced to objects. See the
+ * [ES spec](http://ecma-international.org/ecma-262/7.0/#sec-object.keys)
+ * for more details.
+ *
+ * @static
+ * @since 0.1.0
+ * @memberOf _
+ * @category Object
+ * @param {Object} object The object to query.
+ * @returns {Array} Returns the array of property names.
+ * @example
+ *
+ * function Foo() {
+ *   this.a = 1;
+ *   this.b = 2;
+ * }
+ *
+ * Foo.prototype.c = 3;
+ *
+ * _.keys(new Foo);
+ * // => ['a', 'b'] (iteration order is not guaranteed)
+ *
+ * _.keys('hi');
+ * // => ['0', '1']
+ */
+function keys(object) {
+  return isArrayLike(object) ? arrayLikeKeys(object) : baseKeys(object);
+}
+
+module.exports = keys;
+
+},{"./_arrayLikeKeys":95,"./_baseKeys":114,"./isArrayLike":190}],199:[function(require,module,exports){
+var arrayMap = require('./_arrayMap'),
+    baseIteratee = require('./_baseIteratee'),
+    baseMap = require('./_baseMap'),
+    isArray = require('./isArray');
+
+/**
+ * Creates an array of values by running each element in `collection` thru
+ * `iteratee`. The iteratee is invoked with three arguments:
+ * (value, index|key, collection).
+ *
+ * Many lodash methods are guarded to work as iteratees for methods like
+ * `_.every`, `_.filter`, `_.map`, `_.mapValues`, `_.reject`, and `_.some`.
+ *
+ * The guarded methods are:
+ * `ary`, `chunk`, `curry`, `curryRight`, `drop`, `dropRight`, `every`,
+ * `fill`, `invert`, `parseInt`, `random`, `range`, `rangeRight`, `repeat`,
+ * `sampleSize`, `slice`, `some`, `sortBy`, `split`, `take`, `takeRight`,
+ * `template`, `trim`, `trimEnd`, `trimStart`, and `words`
+ *
+ * @static
+ * @memberOf _
+ * @since 0.1.0
+ * @category Collection
+ * @param {Array|Object} collection The collection to iterate over.
+ * @param {Function} [iteratee=_.identity] The function invoked per iteration.
+ * @returns {Array} Returns the new mapped array.
+ * @example
+ *
+ * function square(n) {
+ *   return n * n;
+ * }
+ *
+ * _.map([4, 8], square);
+ * // => [16, 64]
+ *
+ * _.map({ 'a': 4, 'b': 8 }, square);
+ * // => [16, 64] (iteration order is not guaranteed)
+ *
+ * var users = [
+ *   { 'user': 'barney' },
+ *   { 'user': 'fred' }
+ * ];
+ *
+ * // The `_.property` iteratee shorthand.
+ * _.map(users, 'user');
+ * // => ['barney', 'fred']
+ */
+function map(collection, iteratee) {
+  var func = isArray(collection) ? arrayMap : baseMap;
+  return func(collection, baseIteratee(iteratee, 3));
+}
+
+module.exports = map;
+
+},{"./_arrayMap":96,"./_baseIteratee":113,"./_baseMap":115,"./isArray":189}],200:[function(require,module,exports){
+var MapCache = require('./_MapCache');
+
+/** Error message constants. */
+var FUNC_ERROR_TEXT = 'Expected a function';
+
+/**
+ * Creates a function that memoizes the result of `func`. If `resolver` is
+ * provided, it determines the cache key for storing the result based on the
+ * arguments provided to the memoized function. By default, the first argument
+ * provided to the memoized function is used as the map cache key. The `func`
+ * is invoked with the `this` binding of the memoized function.
+ *
+ * **Note:** The cache is exposed as the `cache` property on the memoized
+ * function. Its creation may be customized by replacing the `_.memoize.Cache`
+ * constructor with one whose instances implement the
+ * [`Map`](http://ecma-international.org/ecma-262/7.0/#sec-properties-of-the-map-prototype-object)
+ * method interface of `clear`, `delete`, `get`, `has`, and `set`.
+ *
+ * @static
+ * @memberOf _
+ * @since 0.1.0
+ * @category Function
+ * @param {Function} func The function to have its output memoized.
+ * @param {Function} [resolver] The function to resolve the cache key.
+ * @returns {Function} Returns the new memoized function.
+ * @example
+ *
+ * var object = { 'a': 1, 'b': 2 };
+ * var other = { 'c': 3, 'd': 4 };
+ *
+ * var values = _.memoize(_.values);
+ * values(object);
+ * // => [1, 2]
+ *
+ * values(other);
+ * // => [3, 4]
+ *
+ * object.a = 2;
+ * values(object);
+ * // => [1, 2]
+ *
+ * // Modify the result cache.
+ * values.cache.set(object, ['a', 'b']);
+ * values(object);
+ * // => ['a', 'b']
+ *
+ * // Replace `_.memoize.Cache`.
+ * _.memoize.Cache = WeakMap;
+ */
+function memoize(func, resolver) {
+  if (typeof func != 'function' || (resolver != null && typeof resolver != 'function')) {
+    throw new TypeError(FUNC_ERROR_TEXT);
+  }
+  var memoized = function() {
+    var args = arguments,
+        key = resolver ? resolver.apply(this, args) : args[0],
+        cache = memoized.cache;
+
+    if (cache.has(key)) {
+      return cache.get(key);
+    }
+    var result = func.apply(this, args);
+    memoized.cache = cache.set(key, result) || cache;
+    return result;
+  };
+  memoized.cache = new (memoize.Cache || MapCache);
+  return memoized;
+}
+
+// Expose `MapCache`.
+memoize.Cache = MapCache;
+
+module.exports = memoize;
+
+},{"./_MapCache":85}],201:[function(require,module,exports){
+var baseProperty = require('./_baseProperty'),
+    basePropertyDeep = require('./_basePropertyDeep'),
+    isKey = require('./_isKey'),
+    toKey = require('./_toKey');
+
+/**
+ * Creates a function that returns the value at `path` of a given object.
+ *
+ * @static
+ * @memberOf _
+ * @since 2.4.0
+ * @category Util
+ * @param {Array|string} path The path of the property to get.
+ * @returns {Function} Returns the new accessor function.
+ * @example
+ *
+ * var objects = [
+ *   { 'a': { 'b': 2 } },
+ *   { 'a': { 'b': 1 } }
+ * ];
+ *
+ * _.map(objects, _.property('a.b'));
+ * // => [2, 1]
+ *
+ * _.map(_.sortBy(objects, _.property(['a', 'b'])), 'a.b');
+ * // => [1, 2]
+ */
+function property(path) {
+  return isKey(path) ? baseProperty(toKey(path)) : basePropertyDeep(path);
+}
+
+module.exports = property;
+
+},{"./_baseProperty":118,"./_basePropertyDeep":119,"./_isKey":148,"./_toKey":181}],202:[function(require,module,exports){
+/**
+ * This method returns a new empty array.
+ *
+ * @static
+ * @memberOf _
+ * @since 4.13.0
+ * @category Util
+ * @returns {Array} Returns the new empty array.
+ * @example
+ *
+ * var arrays = _.times(2, _.stubArray);
+ *
+ * console.log(arrays);
+ * // => [[], []]
+ *
+ * console.log(arrays[0] === arrays[1]);
+ * // => false
+ */
+function stubArray() {
+  return [];
+}
+
+module.exports = stubArray;
+
+},{}],203:[function(require,module,exports){
+/**
+ * This method returns `false`.
+ *
+ * @static
+ * @memberOf _
+ * @since 4.13.0
+ * @category Util
+ * @returns {boolean} Returns `false`.
+ * @example
+ *
+ * _.times(2, _.stubFalse);
+ * // => [false, false]
+ */
+function stubFalse() {
+  return false;
+}
+
+module.exports = stubFalse;
+
+},{}],204:[function(require,module,exports){
+var baseToString = require('./_baseToString');
+
+/**
+ * Converts `value` to a string. An empty string is returned for `null`
+ * and `undefined` values. The sign of `-0` is preserved.
+ *
+ * @static
+ * @memberOf _
+ * @since 4.0.0
+ * @category Lang
+ * @param {*} value The value to convert.
+ * @returns {string} Returns the converted string.
+ * @example
+ *
+ * _.toString(null);
+ * // => ''
+ *
+ * _.toString(-0);
+ * // => '-0'
+ *
+ * _.toString([1, 2, 3]);
+ * // => '1,2,3'
+ */
+function toString(value) {
+  return value == null ? '' : baseToString(value);
+}
+
+module.exports = toString;
+
+},{"./_baseToString":121}],205:[function(require,module,exports){
 /*
   Loki IndexedDb Adapter (need to include this script to use it)
 
@@ -8634,7 +14496,7 @@ module.exports = function(str) {
   }());
 }));
 
-},{}],66:[function(require,module,exports){
+},{}],206:[function(require,module,exports){
 (function (process,global){(function (){
 /**
  * LokiJS
@@ -11364,29 +17226,43 @@ module.exports = function(str) {
 
       // run incremental, reference, or normal mode adapters, depending on what's available
       if (this.persistenceAdapter.mode === "incremental") {
-        var lokiCopy = this.copy({ removeNonSerializable: true });
+        var cachedDirty;
+        // ignore autosave until we copy loki (only then we can clear dirty flags,
+        // but if we don't do it now, autosave will be triggered a lot unnecessarily)
+        this.ignoreAutosave = true;
+        this.persistenceAdapter.saveDatabase(
+          this.filename,
+          function getLokiCopy() {
+            self.ignoreAutosave = false;
+            if (cachedDirty) {
+              cFun(new Error('adapter error - getLokiCopy called more than once'));
+              return;
+            }
+            var lokiCopy = self.copy({ removeNonSerializable: true });
 
-        // remember and clear dirty ids -- we must do it before the save so that if
-        // and update occurs between here and callback, it will get saved later
-        var cachedDirty = this.collections.map(function (collection) {
-          return [collection.dirty, collection.dirtyIds];
-        });
-        this.collections.forEach(function (col) {
-          col.dirty = false;
-          col.dirtyIds = [];
-        });
-
-        this.persistenceAdapter.saveDatabase(this.filename, lokiCopy, function exportDatabaseCallback(err) {
-          if (err) {
-            // roll back dirty IDs to be saved later
-            self.collections.forEach(function (col, i) {
-              var cached = cachedDirty[i];
-              col.dirty = cached[0];
-              col.dirtyIds = col.dirtyIds.concat(cached[1]);
+            // remember and clear dirty ids -- we must do it before the save so that if
+            // and update occurs between here and callback, it will get saved later
+            cachedDirty = self.collections.map(function (collection) {
+              return [collection.dirty, collection.dirtyIds];
             });
-          }
-          cFun(err);
-        });
+            self.collections.forEach(function (col) {
+              col.dirty = false;
+              col.dirtyIds = [];
+            });
+            return lokiCopy;
+          },
+          function exportDatabaseCallback(err) {
+            self.ignoreAutosave = false;
+            if (err && cachedDirty) {
+              // roll back dirty IDs to be saved later
+              self.collections.forEach(function (col, i) {
+                var cached = cachedDirty[i];
+                col.dirty = col.dirty || cached[0];
+                col.dirtyIds = col.dirtyIds.concat(cached[1]);
+              });
+            }
+            cFun(err);
+          });
       } else if (this.persistenceAdapter.mode === "reference" && typeof this.persistenceAdapter.exportDatabase === "function") {
         // TODO: dirty should be cleared here
         // filename may seem redundant but loadDatabase will need to expect this same filename
@@ -11543,7 +17419,7 @@ module.exports = function(str) {
         // so next step will be to implement collection level dirty flags set on insert/update/remove
         // along with loki level isdirty() function which iterates all collections to see if any are dirty
 
-        if (self.autosaveDirty()) {
+        if (self.autosaveDirty() && !self.ignoreAutosave) {
           self.saveDatabase(callback);
         }
       }, delay);
@@ -16205,6 +22081,7 @@ module.exports = function(str) {
     UniqueIndex.prototype.remove = function (key) {
       var obj = this.keyMap[key];
       if (obj !== null && typeof obj !== 'undefined') {
+        // avoid using `delete`
         this.keyMap[key] = undefined;
         this.lokiMap[obj.$loki] = undefined;
       } else {
@@ -16364,1725 +22241,7 @@ module.exports = function(str) {
 }));
 
 }).call(this)}).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./loki-indexed-adapter.js":65,"_process":225,"fs":43}],67:[function(require,module,exports){
-/**
- * martinez v0.4.3
- * Martinez polygon clipping algorithm, does boolean operation on polygons (multipolygons, polygons with holes etc): intersection, union, difference, xor
- *
- * @author Alex Milevski <info@w8r.name>
- * @license MIT
- * @preserve
- */
-
-(function (global, factory) {
-  typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports) :
-  typeof define === 'function' && define.amd ? define(['exports'], factory) :
-  (factory((global.martinez = {})));
-}(this, (function (exports) { 'use strict';
-
-  function DEFAULT_COMPARE (a, b) { return a > b ? 1 : a < b ? -1 : 0; }
-
-  var SplayTree = function SplayTree(compare, noDuplicates) {
-    if ( compare === void 0 ) compare = DEFAULT_COMPARE;
-    if ( noDuplicates === void 0 ) noDuplicates = false;
-
-    this._compare = compare;
-    this._root = null;
-    this._size = 0;
-    this._noDuplicates = !!noDuplicates;
-  };
-
-  var prototypeAccessors = { size: { configurable: true } };
-
-
-  SplayTree.prototype.rotateLeft = function rotateLeft (x) {
-    var y = x.right;
-    if (y) {
-      x.right = y.left;
-      if (y.left) { y.left.parent = x; }
-      y.parent = x.parent;
-    }
-
-    if (!x.parent)              { this._root = y; }
-    else if (x === x.parent.left) { x.parent.left = y; }
-    else                        { x.parent.right = y; }
-    if (y) { y.left = x; }
-    x.parent = y;
-  };
-
-
-  SplayTree.prototype.rotateRight = function rotateRight (x) {
-    var y = x.left;
-    if (y) {
-      x.left = y.right;
-      if (y.right) { y.right.parent = x; }
-      y.parent = x.parent;
-    }
-
-    if (!x.parent)             { this._root = y; }
-    else if(x === x.parent.left) { x.parent.left = y; }
-    else                       { x.parent.right = y; }
-    if (y) { y.right = x; }
-    x.parent = y;
-  };
-
-
-  SplayTree.prototype._splay = function _splay (x) {
-      var this$1 = this;
-
-    while (x.parent) {
-      var p = x.parent;
-      if (!p.parent) {
-        if (p.left === x) { this$1.rotateRight(p); }
-        else            { this$1.rotateLeft(p); }
-      } else if (p.left === x && p.parent.left === p) {
-        this$1.rotateRight(p.parent);
-        this$1.rotateRight(p);
-      } else if (p.right === x && p.parent.right === p) {
-        this$1.rotateLeft(p.parent);
-        this$1.rotateLeft(p);
-      } else if (p.left === x && p.parent.right === p) {
-        this$1.rotateRight(p);
-        this$1.rotateLeft(p);
-      } else {
-        this$1.rotateLeft(p);
-        this$1.rotateRight(p);
-      }
-    }
-  };
-
-
-  SplayTree.prototype.splay = function splay (x) {
-      var this$1 = this;
-
-    var p, gp, ggp, l, r;
-
-    while (x.parent) {
-      p = x.parent;
-      gp = p.parent;
-
-      if (gp && gp.parent) {
-        ggp = gp.parent;
-        if (ggp.left === gp) { ggp.left= x; }
-        else               { ggp.right = x; }
-        x.parent = ggp;
-      } else {
-        x.parent = null;
-        this$1._root = x;
-      }
-
-      l = x.left; r = x.right;
-
-      if (x === p.left) { // left
-        if (gp) {
-          if (gp.left === p) {
-            /* zig-zig */
-            if (p.right) {
-              gp.left = p.right;
-              gp.left.parent = gp;
-            } else { gp.left = null; }
-
-            p.right = gp;
-            gp.parent = p;
-          } else {
-            /* zig-zag */
-            if (l) {
-              gp.right = l;
-              l.parent = gp;
-            } else { gp.right = null; }
-
-            x.left  = gp;
-            gp.parent = x;
-          }
-        }
-        if (r) {
-          p.left = r;
-          r.parent = p;
-        } else { p.left = null; }
-
-        x.right= p;
-        p.parent = x;
-      } else { // right
-        if (gp) {
-          if (gp.right === p) {
-            /* zig-zig */
-            if (p.left) {
-              gp.right = p.left;
-              gp.right.parent = gp;
-            } else { gp.right = null; }
-
-            p.left = gp;
-            gp.parent = p;
-          } else {
-            /* zig-zag */
-            if (r) {
-              gp.left = r;
-              r.parent = gp;
-            } else { gp.left = null; }
-
-            x.right = gp;
-            gp.parent = x;
-          }
-        }
-        if (l) {
-          p.right = l;
-          l.parent = p;
-        } else { p.right = null; }
-
-        x.left = p;
-        p.parent = x;
-      }
-    }
-  };
-
-
-  SplayTree.prototype.replace = function replace (u, v) {
-    if (!u.parent) { this._root = v; }
-    else if (u === u.parent.left) { u.parent.left = v; }
-    else { u.parent.right = v; }
-    if (v) { v.parent = u.parent; }
-  };
-
-
-  SplayTree.prototype.minNode = function minNode (u) {
-      if ( u === void 0 ) u = this._root;
-
-    if (u) { while (u.left) { u = u.left; } }
-    return u;
-  };
-
-
-  SplayTree.prototype.maxNode = function maxNode (u) {
-      if ( u === void 0 ) u = this._root;
-
-    if (u) { while (u.right) { u = u.right; } }
-    return u;
-  };
-
-
-  SplayTree.prototype.insert = function insert (key, data) {
-    var z = this._root;
-    var p = null;
-    var comp = this._compare;
-    var cmp;
-
-    if (this._noDuplicates) {
-      while (z) {
-        p = z;
-        cmp = comp(z.key, key);
-        if (cmp === 0) { return; }
-        else if (comp(z.key, key) < 0) { z = z.right; }
-        else { z = z.left; }
-      }
-    } else {
-      while (z) {
-        p = z;
-        if (comp(z.key, key) < 0) { z = z.right; }
-        else { z = z.left; }
-      }
-    }
-
-    z = { key: key, data: data, left: null, right: null, parent: p };
-
-    if (!p)                        { this._root = z; }
-    else if (comp(p.key, z.key) < 0) { p.right = z; }
-    else                           { p.left= z; }
-
-    this.splay(z);
-    this._size++;
-    return z;
-  };
-
-
-  SplayTree.prototype.find = function find (key) {
-    var z  = this._root;
-    var comp = this._compare;
-    while (z) {
-      var cmp = comp(z.key, key);
-      if    (cmp < 0) { z = z.right; }
-      else if (cmp > 0) { z = z.left; }
-      else            { return z; }
-    }
-    return null;
-  };
-
-  /**
-   * Whether the tree contains a node with the given key
-   * @param{Key} key
-   * @return {boolean} true/false
-   */
-  SplayTree.prototype.contains = function contains (key) {
-    var node     = this._root;
-    var comparator = this._compare;
-    while (node){
-      var cmp = comparator(key, node.key);
-      if    (cmp === 0) { return true; }
-      else if (cmp < 0) { node = node.left; }
-      else              { node = node.right; }
-    }
-
-    return false;
-  };
-
-
-  SplayTree.prototype.remove = function remove (key) {
-    var z = this.find(key);
-
-    if (!z) { return false; }
-
-    this.splay(z);
-
-    if (!z.left) { this.replace(z, z.right); }
-    else if (!z.right) { this.replace(z, z.left); }
-    else {
-      var y = this.minNode(z.right);
-      if (y.parent !== z) {
-        this.replace(y, y.right);
-        y.right = z.right;
-        y.right.parent = y;
-      }
-      this.replace(z, y);
-      y.left = z.left;
-      y.left.parent = y;
-    }
-
-    this._size--;
-    return true;
-  };
-
-
-  SplayTree.prototype.removeNode = function removeNode (z) {
-    if (!z) { return false; }
-
-    this.splay(z);
-
-    if (!z.left) { this.replace(z, z.right); }
-    else if (!z.right) { this.replace(z, z.left); }
-    else {
-      var y = this.minNode(z.right);
-      if (y.parent !== z) {
-        this.replace(y, y.right);
-        y.right = z.right;
-        y.right.parent = y;
-      }
-      this.replace(z, y);
-      y.left = z.left;
-      y.left.parent = y;
-    }
-
-    this._size--;
-    return true;
-  };
-
-
-  SplayTree.prototype.erase = function erase (key) {
-    var z = this.find(key);
-    if (!z) { return; }
-
-    this.splay(z);
-
-    var s = z.left;
-    var t = z.right;
-
-    var sMax = null;
-    if (s) {
-      s.parent = null;
-      sMax = this.maxNode(s);
-      this.splay(sMax);
-      this._root = sMax;
-    }
-    if (t) {
-      if (s) { sMax.right = t; }
-      else { this._root = t; }
-      t.parent = sMax;
-    }
-
-    this._size--;
-  };
-
-  /**
-   * Removes and returns the node with smallest key
-   * @return {?Node}
-   */
-  SplayTree.prototype.pop = function pop () {
-    var node = this._root, returnValue = null;
-    if (node) {
-      while (node.left) { node = node.left; }
-      returnValue = { key: node.key, data: node.data };
-      this.remove(node.key);
-    }
-    return returnValue;
-  };
-
-
-  /* eslint-disable class-methods-use-this */
-
-  /**
-   * Successor node
-   * @param{Node} node
-   * @return {?Node}
-   */
-  SplayTree.prototype.next = function next (node) {
-    var successor = node;
-    if (successor) {
-      if (successor.right) {
-        successor = successor.right;
-        while (successor && successor.left) { successor = successor.left; }
-      } else {
-        successor = node.parent;
-        while (successor && successor.right === node) {
-          node = successor; successor = successor.parent;
-        }
-      }
-    }
-    return successor;
-  };
-
-
-  /**
-   * Predecessor node
-   * @param{Node} node
-   * @return {?Node}
-   */
-  SplayTree.prototype.prev = function prev (node) {
-    var predecessor = node;
-    if (predecessor) {
-      if (predecessor.left) {
-        predecessor = predecessor.left;
-        while (predecessor && predecessor.right) { predecessor = predecessor.right; }
-      } else {
-        predecessor = node.parent;
-        while (predecessor && predecessor.left === node) {
-          node = predecessor;
-          predecessor = predecessor.parent;
-        }
-      }
-    }
-    return predecessor;
-  };
-  /* eslint-enable class-methods-use-this */
-
-
-  /**
-   * @param{forEachCallback} callback
-   * @return {SplayTree}
-   */
-  SplayTree.prototype.forEach = function forEach (callback) {
-    var current = this._root;
-    var s = [], done = false, i = 0;
-
-    while (!done) {
-      // Reach the left most Node of the current Node
-      if (current) {
-        // Place pointer to a tree node on the stack
-        // before traversing the node's left subtree
-        s.push(current);
-        current = current.left;
-      } else {
-        // BackTrack from the empty subtree and visit the Node
-        // at the top of the stack; however, if the stack is
-        // empty you are done
-        if (s.length > 0) {
-          current = s.pop();
-          callback(current, i++);
-
-          // We have visited the node and its left
-          // subtree. Now, it's right subtree's turn
-          current = current.right;
-        } else { done = true; }
-      }
-    }
-    return this;
-  };
-
-
-  /**
-   * Walk key range from `low` to `high`. Stops if `fn` returns a value.
-   * @param{Key}    low
-   * @param{Key}    high
-   * @param{Function} fn
-   * @param{*?}     ctx
-   * @return {SplayTree}
-   */
-  SplayTree.prototype.range = function range (low, high, fn, ctx) {
-      var this$1 = this;
-
-    var Q = [];
-    var compare = this._compare;
-    var node = this._root, cmp;
-
-    while (Q.length !== 0 || node) {
-      if (node) {
-        Q.push(node);
-        node = node.left;
-      } else {
-        node = Q.pop();
-        cmp = compare(node.key, high);
-        if (cmp > 0) {
-          break;
-        } else if (compare(node.key, low) >= 0) {
-          if (fn.call(ctx, node)) { return this$1; } // stop if smth is returned
-        }
-        node = node.right;
-      }
-    }
-    return this;
-  };
-
-  /**
-   * Returns all keys in order
-   * @return {Array<Key>}
-   */
-  SplayTree.prototype.keys = function keys () {
-    var current = this._root;
-    var s = [], r = [], done = false;
-
-    while (!done) {
-      if (current) {
-        s.push(current);
-        current = current.left;
-      } else {
-        if (s.length > 0) {
-          current = s.pop();
-          r.push(current.key);
-          current = current.right;
-        } else { done = true; }
-      }
-    }
-    return r;
-  };
-
-
-  /**
-   * Returns `data` fields of all nodes in order.
-   * @return {Array<Value>}
-   */
-  SplayTree.prototype.values = function values () {
-    var current = this._root;
-    var s = [], r = [], done = false;
-
-    while (!done) {
-      if (current) {
-        s.push(current);
-        current = current.left;
-      } else {
-        if (s.length > 0) {
-          current = s.pop();
-          r.push(current.data);
-          current = current.right;
-        } else { done = true; }
-      }
-    }
-    return r;
-  };
-
-
-  /**
-   * Returns node at given index
-   * @param{number} index
-   * @return {?Node}
-   */
-  SplayTree.prototype.at = function at (index) {
-    // removed after a consideration, more misleading than useful
-    // index = index % this.size;
-    // if (index < 0) index = this.size - index;
-
-    var current = this._root;
-    var s = [], done = false, i = 0;
-
-    while (!done) {
-      if (current) {
-        s.push(current);
-        current = current.left;
-      } else {
-        if (s.length > 0) {
-          current = s.pop();
-          if (i === index) { return current; }
-          i++;
-          current = current.right;
-        } else { done = true; }
-      }
-    }
-    return null;
-  };
-
-  /**
-   * Bulk-load items. Both array have to be same size
-   * @param{Array<Key>}  keys
-   * @param{Array<Value>}[values]
-   * @param{Boolean}     [presort=false] Pre-sort keys and values, using
-   *                                       tree's comparator. Sorting is done
-   *                                       in-place
-   * @return {AVLTree}
-   */
-  SplayTree.prototype.load = function load (keys, values, presort) {
-      if ( keys === void 0 ) keys = [];
-      if ( values === void 0 ) values = [];
-      if ( presort === void 0 ) presort = false;
-
-    if (this._size !== 0) { throw new Error('bulk-load: tree is not empty'); }
-    var size = keys.length;
-    if (presort) { sort(keys, values, 0, size - 1, this._compare); }
-    this._root = loadRecursive(null, keys, values, 0, size);
-    this._size = size;
-    return this;
-  };
-
-
-  SplayTree.prototype.min = function min () {
-    var node = this.minNode(this._root);
-    if (node) { return node.key; }
-    else    { return null; }
-  };
-
-
-  SplayTree.prototype.max = function max () {
-    var node = this.maxNode(this._root);
-    if (node) { return node.key; }
-    else    { return null; }
-  };
-
-  SplayTree.prototype.isEmpty = function isEmpty () { return this._root === null; };
-  prototypeAccessors.size.get = function () { return this._size; };
-
-
-  /**
-   * Create a tree and load it with items
-   * @param{Array<Key>}        keys
-   * @param{Array<Value>?}      [values]
-
-   * @param{Function?}          [comparator]
-   * @param{Boolean?}           [presort=false] Pre-sort keys and values, using
-   *                                             tree's comparator. Sorting is done
-   *                                             in-place
-   * @param{Boolean?}           [noDuplicates=false] Allow duplicates
-   * @return {SplayTree}
-   */
-  SplayTree.createTree = function createTree (keys, values, comparator, presort, noDuplicates) {
-    return new SplayTree(comparator, noDuplicates).load(keys, values, presort);
-  };
-
-  Object.defineProperties( SplayTree.prototype, prototypeAccessors );
-
-
-  function loadRecursive (parent, keys, values, start, end) {
-    var size = end - start;
-    if (size > 0) {
-      var middle = start + Math.floor(size / 2);
-      var key    = keys[middle];
-      var data   = values[middle];
-      var node   = { key: key, data: data, parent: parent };
-      node.left    = loadRecursive(node, keys, values, start, middle);
-      node.right   = loadRecursive(node, keys, values, middle + 1, end);
-      return node;
-    }
-    return null;
-  }
-
-
-  function sort(keys, values, left, right, compare) {
-    if (left >= right) { return; }
-
-    var pivot = keys[(left + right) >> 1];
-    var i = left - 1;
-    var j = right + 1;
-
-    while (true) {
-      do { i++; } while (compare(keys[i], pivot) < 0);
-      do { j--; } while (compare(keys[j], pivot) > 0);
-      if (i >= j) { break; }
-
-      var tmp = keys[i];
-      keys[i] = keys[j];
-      keys[j] = tmp;
-
-      tmp = values[i];
-      values[i] = values[j];
-      values[j] = tmp;
-    }
-
-    sort(keys, values,  left,     j, compare);
-    sort(keys, values, j + 1, right, compare);
-  }
-
-  var NORMAL               = 0;
-  var NON_CONTRIBUTING     = 1;
-  var SAME_TRANSITION      = 2;
-  var DIFFERENT_TRANSITION = 3;
-
-  var INTERSECTION = 0;
-  var UNION        = 1;
-  var DIFFERENCE   = 2;
-  var XOR          = 3;
-
-  /**
-   * @param  {SweepEvent} event
-   * @param  {SweepEvent} prev
-   * @param  {Operation} operation
-   */
-  function computeFields (event, prev, operation) {
-    // compute inOut and otherInOut fields
-    if (prev === null) {
-      event.inOut      = false;
-      event.otherInOut = true;
-
-    // previous line segment in sweepline belongs to the same polygon
-    } else {
-      if (event.isSubject === prev.isSubject) {
-        event.inOut      = !prev.inOut;
-        event.otherInOut = prev.otherInOut;
-
-      // previous line segment in sweepline belongs to the clipping polygon
-      } else {
-        event.inOut      = !prev.otherInOut;
-        event.otherInOut = prev.isVertical() ? !prev.inOut : prev.inOut;
-      }
-
-      // compute prevInResult field
-      if (prev) {
-        event.prevInResult = (!inResult(prev, operation) || prev.isVertical())
-          ? prev.prevInResult : prev;
-      }
-    }
-
-    // check if the line segment belongs to the Boolean operation
-    event.inResult = inResult(event, operation);
-  }
-
-
-  /* eslint-disable indent */
-  function inResult(event, operation) {
-    switch (event.type) {
-      case NORMAL:
-        switch (operation) {
-          case INTERSECTION:
-            return !event.otherInOut;
-          case UNION:
-            return event.otherInOut;
-          case DIFFERENCE:
-            // return (event.isSubject && !event.otherInOut) ||
-            //         (!event.isSubject && event.otherInOut);
-            return (event.isSubject && event.otherInOut) ||
-                    (!event.isSubject && !event.otherInOut);
-          case XOR:
-            return true;
-        }
-        break;
-      case SAME_TRANSITION:
-        return operation === INTERSECTION || operation === UNION;
-      case DIFFERENT_TRANSITION:
-        return operation === DIFFERENCE;
-      case NON_CONTRIBUTING:
-        return false;
-    }
-    return false;
-  }
-  /* eslint-enable indent */
-
-  var SweepEvent = function SweepEvent (point, left, otherEvent, isSubject, edgeType) {
-
-    /**
-     * Is left endpoint?
-     * @type {Boolean}
-     */
-    this.left = left;
-
-    /**
-     * @type {Array.<Number>}
-     */
-    this.point = point;
-
-    /**
-     * Other edge reference
-     * @type {SweepEvent}
-     */
-    this.otherEvent = otherEvent;
-
-    /**
-     * Belongs to source or clipping polygon
-     * @type {Boolean}
-     */
-    this.isSubject = isSubject;
-
-    /**
-     * Edge contribution type
-     * @type {Number}
-     */
-    this.type = edgeType || NORMAL;
-
-
-    /**
-     * In-out transition for the sweepline crossing polygon
-     * @type {Boolean}
-     */
-    this.inOut = false;
-
-
-    /**
-     * @type {Boolean}
-     */
-    this.otherInOut = false;
-
-    /**
-     * Previous event in result?
-     * @type {SweepEvent}
-     */
-    this.prevInResult = null;
-
-    /**
-     * Does event belong to result?
-     * @type {Boolean}
-     */
-    this.inResult = false;
-
-
-    // connection step
-
-    /**
-     * @type {Boolean}
-     */
-    this.resultInOut = false;
-
-    this.isExteriorRing = true;
-  };
-
-
-  /**
-   * @param{Array.<Number>}p
-   * @return {Boolean}
-   */
-  SweepEvent.prototype.isBelow = function isBelow (p) {
-    var p0 = this.point, p1 = this.otherEvent.point;
-    return this.left
-      ? (p0[0] - p[0]) * (p1[1] - p[1]) - (p1[0] - p[0]) * (p0[1] - p[1]) > 0
-      // signedArea(this.point, this.otherEvent.point, p) > 0 :
-      : (p1[0] - p[0]) * (p0[1] - p[1]) - (p0[0] - p[0]) * (p1[1] - p[1]) > 0;
-      //signedArea(this.otherEvent.point, this.point, p) > 0;
-  };
-
-
-  /**
-   * @param{Array.<Number>}p
-   * @return {Boolean}
-   */
-  SweepEvent.prototype.isAbove = function isAbove (p) {
-    return !this.isBelow(p);
-  };
-
-
-  /**
-   * @return {Boolean}
-   */
-  SweepEvent.prototype.isVertical = function isVertical () {
-    return this.point[0] === this.otherEvent.point[0];
-  };
-
-
-  SweepEvent.prototype.clone = function clone () {
-    var copy = new SweepEvent(
-      this.point, this.left, this.otherEvent, this.isSubject, this.type);
-
-    copy.inResult     = this.inResult;
-    copy.prevInResult = this.prevInResult;
-    copy.isExteriorRing = this.isExteriorRing;
-    copy.inOut        = this.inOut;
-    copy.otherInOut   = this.otherInOut;
-
-    return copy;
-  };
-
-  function equals(p1, p2) {
-    if (p1[0] === p2[0]) {
-      if (p1[1] === p2[1]) {
-        return true;
-      } else {
-        return false;
-      }
-    }
-    return false;
-  }
-
-  // const EPSILON = 1e-9;
-  // const abs = Math.abs;
-  // TODO https://github.com/w8r/martinez/issues/6#issuecomment-262847164
-  // Precision problem.
-  //
-  // module.exports = function equals(p1, p2) {
-  //   return abs(p1[0] - p2[0]) <= EPSILON && abs(p1[1] - p2[1]) <= EPSILON;
-  // };
-
-  /**
-   * Signed area of the triangle (p0, p1, p2)
-   * @param  {Array.<Number>} p0
-   * @param  {Array.<Number>} p1
-   * @param  {Array.<Number>} p2
-   * @return {Number}
-   */
-  function signedArea(p0, p1, p2) {
-    return (p0[0] - p2[0]) * (p1[1] - p2[1]) - (p1[0] - p2[0]) * (p0[1] - p2[1]);
-  }
-
-  /**
-   * @param  {SweepEvent} e1
-   * @param  {SweepEvent} e2
-   * @return {Number}
-   */
-  function compareEvents(e1, e2) {
-    var p1 = e1.point;
-    var p2 = e2.point;
-
-    // Different x-coordinate
-    if (p1[0] > p2[0]) { return 1; }
-    if (p1[0] < p2[0]) { return -1; }
-
-    // Different points, but same x-coordinate
-    // Event with lower y-coordinate is processed first
-    if (p1[1] !== p2[1]) { return p1[1] > p2[1] ? 1 : -1; }
-
-    return specialCases(e1, e2, p1, p2);
-  }
-
-
-  /* eslint-disable no-unused-vars */
-  function specialCases(e1, e2, p1, p2) {
-    // Same coordinates, but one is a left endpoint and the other is
-    // a right endpoint. The right endpoint is processed first
-    if (e1.left !== e2.left)
-      { return e1.left ? 1 : -1; }
-
-    // const p2 = e1.otherEvent.point, p3 = e2.otherEvent.point;
-    // const sa = (p1[0] - p3[0]) * (p2[1] - p3[1]) - (p2[0] - p3[0]) * (p1[1] - p3[1])
-    // Same coordinates, both events
-    // are left endpoints or right endpoints.
-    // not collinear
-    if (signedArea(p1, e1.otherEvent.point, e2.otherEvent.point) !== 0) {
-      // the event associate to the bottom segment is processed first
-      return (!e1.isBelow(e2.otherEvent.point)) ? 1 : -1;
-    }
-
-    return (!e1.isSubject && e2.isSubject) ? 1 : -1;
-  }
-  /* eslint-enable no-unused-vars */
-
-  /**
-   * @param  {SweepEvent} se
-   * @param  {Array.<Number>} p
-   * @param  {Queue} queue
-   * @return {Queue}
-   */
-  function divideSegment(se, p, queue)  {
-    var r = new SweepEvent(p, false, se,            se.isSubject);
-    var l = new SweepEvent(p, true,  se.otherEvent, se.isSubject);
-
-    /* eslint-disable no-console */
-    if (equals(se.point, se.otherEvent.point)) {
-
-      console.warn('what is that, a collapsed segment?', se);
-    }
-    /* eslint-enable no-console */
-
-    r.contourId = l.contourId = se.contourId;
-
-    // avoid a rounding error. The left event would be processed after the right event
-    if (compareEvents(l, se.otherEvent) > 0) {
-      se.otherEvent.left = true;
-      l.left = false;
-    }
-
-    // avoid a rounding error. The left event would be processed after the right event
-    // if (compareEvents(se, r) > 0) {}
-
-    se.otherEvent.otherEvent = l;
-    se.otherEvent = r;
-
-    queue.push(l);
-    queue.push(r);
-
-    return queue;
-  }
-
-  //const EPS = 1e-9;
-
-  /**
-   * Finds the magnitude of the cross product of two vectors (if we pretend
-   * they're in three dimensions)
-   *
-   * @param {Object} a First vector
-   * @param {Object} b Second vector
-   * @private
-   * @returns {Number} The magnitude of the cross product
-   */
-  function crossProduct(a, b) {
-    return (a[0] * b[1]) - (a[1] * b[0]);
-  }
-
-  /**
-   * Finds the dot product of two vectors.
-   *
-   * @param {Object} a First vector
-   * @param {Object} b Second vector
-   * @private
-   * @returns {Number} The dot product
-   */
-  function dotProduct(a, b) {
-    return (a[0] * b[0]) + (a[1] * b[1]);
-  }
-
-  /**
-   * Finds the intersection (if any) between two line segments a and b, given the
-   * line segments' end points a1, a2 and b1, b2.
-   *
-   * This algorithm is based on Schneider and Eberly.
-   * http://www.cimec.org.ar/~ncalvo/Schneider_Eberly.pdf
-   * Page 244.
-   *
-   * @param {Array.<Number>} a1 point of first line
-   * @param {Array.<Number>} a2 point of first line
-   * @param {Array.<Number>} b1 point of second line
-   * @param {Array.<Number>} b2 point of second line
-   * @param {Boolean=}       noEndpointTouch whether to skip single touchpoints
-   *                                         (meaning connected segments) as
-   *                                         intersections
-   * @returns {Array.<Array.<Number>>|Null} If the lines intersect, the point of
-   * intersection. If they overlap, the two end points of the overlapping segment.
-   * Otherwise, null.
-   */
-  function intersection (a1, a2, b1, b2, noEndpointTouch) {
-    // The algorithm expects our lines in the form P + sd, where P is a point,
-    // s is on the interval [0, 1], and d is a vector.
-    // We are passed two points. P can be the first point of each pair. The
-    // vector, then, could be thought of as the distance (in x and y components)
-    // from the first point to the second point.
-    // So first, let's make our vectors:
-    var va = [a2[0] - a1[0], a2[1] - a1[1]];
-    var vb = [b2[0] - b1[0], b2[1] - b1[1]];
-    // We also define a function to convert back to regular point form:
-
-    /* eslint-disable arrow-body-style */
-
-    function toPoint(p, s, d) {
-      return [
-        p[0] + s * d[0],
-        p[1] + s * d[1]
-      ];
-    }
-
-    /* eslint-enable arrow-body-style */
-
-    // The rest is pretty much a straight port of the algorithm.
-    var e = [b1[0] - a1[0], b1[1] - a1[1]];
-    var kross    = crossProduct(va, vb);
-    var sqrKross = kross * kross;
-    var sqrLenA  = dotProduct(va, va);
-    //const sqrLenB  = dotProduct(vb, vb);
-
-    // Check for line intersection. This works because of the properties of the
-    // cross product -- specifically, two vectors are parallel if and only if the
-    // cross product is the 0 vector. The full calculation involves relative error
-    // to account for possible very small line segments. See Schneider & Eberly
-    // for details.
-    if (sqrKross > 0/* EPS * sqrLenB * sqLenA */) {
-      // If they're not parallel, then (because these are line segments) they
-      // still might not actually intersect. This code checks that the
-      // intersection point of the lines is actually on both line segments.
-      var s = crossProduct(e, vb) / kross;
-      if (s < 0 || s > 1) {
-        // not on line segment a
-        return null;
-      }
-      var t = crossProduct(e, va) / kross;
-      if (t < 0 || t > 1) {
-        // not on line segment b
-        return null;
-      }
-      if (s === 0 || s === 1) {
-        // on an endpoint of line segment a
-        return noEndpointTouch ? null : [toPoint(a1, s, va)];
-      }
-      if (t === 0 || t === 1) {
-        // on an endpoint of line segment b
-        return noEndpointTouch ? null : [toPoint(b1, t, vb)];
-      }
-      return [toPoint(a1, s, va)];
-    }
-
-    // If we've reached this point, then the lines are either parallel or the
-    // same, but the segments could overlap partially or fully, or not at all.
-    // So we need to find the overlap, if any. To do that, we can use e, which is
-    // the (vector) difference between the two initial points. If this is parallel
-    // with the line itself, then the two lines are the same line, and there will
-    // be overlap.
-    //const sqrLenE = dotProduct(e, e);
-    kross = crossProduct(e, va);
-    sqrKross = kross * kross;
-
-    if (sqrKross > 0 /* EPS * sqLenB * sqLenE */) {
-    // Lines are just parallel, not the same. No overlap.
-      return null;
-    }
-
-    var sa = dotProduct(va, e) / sqrLenA;
-    var sb = sa + dotProduct(va, vb) / sqrLenA;
-    var smin = Math.min(sa, sb);
-    var smax = Math.max(sa, sb);
-
-    // this is, essentially, the FindIntersection acting on floats from
-    // Schneider & Eberly, just inlined into this function.
-    if (smin <= 1 && smax >= 0) {
-
-      // overlap on an end point
-      if (smin === 1) {
-        return noEndpointTouch ? null : [toPoint(a1, smin > 0 ? smin : 0, va)];
-      }
-
-      if (smax === 0) {
-        return noEndpointTouch ? null : [toPoint(a1, smax < 1 ? smax : 1, va)];
-      }
-
-      if (noEndpointTouch && smin === 0 && smax === 1) { return null; }
-
-      // There's overlap on a segment -- two points of intersection. Return both.
-      return [
-        toPoint(a1, smin > 0 ? smin : 0, va),
-        toPoint(a1, smax < 1 ? smax : 1, va)
-      ];
-    }
-
-    return null;
-  }
-
-  /**
-   * @param  {SweepEvent} se1
-   * @param  {SweepEvent} se2
-   * @param  {Queue}      queue
-   * @return {Number}
-   */
-  function possibleIntersection (se1, se2, queue) {
-    // that disallows self-intersecting polygons,
-    // did cost us half a day, so I'll leave it
-    // out of respect
-    // if (se1.isSubject === se2.isSubject) return;
-    var inter = intersection(
-      se1.point, se1.otherEvent.point,
-      se2.point, se2.otherEvent.point
-    );
-
-    var nintersections = inter ? inter.length : 0;
-    if (nintersections === 0) { return 0; } // no intersection
-
-    // the line segments intersect at an endpoint of both line segments
-    if ((nintersections === 1) &&
-        (equals(se1.point, se2.point) ||
-         equals(se1.otherEvent.point, se2.otherEvent.point))) {
-      return 0;
-    }
-
-    if (nintersections === 2 && se1.isSubject === se2.isSubject) {
-      // if(se1.contourId === se2.contourId){
-      // console.warn('Edges of the same polygon overlap',
-      //   se1.point, se1.otherEvent.point, se2.point, se2.otherEvent.point);
-      // }
-      //throw new Error('Edges of the same polygon overlap');
-      return 0;
-    }
-
-    // The line segments associated to se1 and se2 intersect
-    if (nintersections === 1) {
-
-      // if the intersection point is not an endpoint of se1
-      if (!equals(se1.point, inter[0]) && !equals(se1.otherEvent.point, inter[0])) {
-        divideSegment(se1, inter[0], queue);
-      }
-
-      // if the intersection point is not an endpoint of se2
-      if (!equals(se2.point, inter[0]) && !equals(se2.otherEvent.point, inter[0])) {
-        divideSegment(se2, inter[0], queue);
-      }
-      return 1;
-    }
-
-    // The line segments associated to se1 and se2 overlap
-    var events        = [];
-    var leftCoincide  = false;
-    var rightCoincide = false;
-
-    if (equals(se1.point, se2.point)) {
-      leftCoincide = true; // linked
-    } else if (compareEvents(se1, se2) === 1) {
-      events.push(se2, se1);
-    } else {
-      events.push(se1, se2);
-    }
-
-    if (equals(se1.otherEvent.point, se2.otherEvent.point)) {
-      rightCoincide = true;
-    } else if (compareEvents(se1.otherEvent, se2.otherEvent) === 1) {
-      events.push(se2.otherEvent, se1.otherEvent);
-    } else {
-      events.push(se1.otherEvent, se2.otherEvent);
-    }
-
-    if ((leftCoincide && rightCoincide) || leftCoincide) {
-      // both line segments are equal or share the left endpoint
-      se2.type = NON_CONTRIBUTING;
-      se1.type = (se2.inOut === se1.inOut)
-        ? SAME_TRANSITION : DIFFERENT_TRANSITION;
-
-      if (leftCoincide && !rightCoincide) {
-        // honestly no idea, but changing events selection from [2, 1]
-        // to [0, 1] fixes the overlapping self-intersecting polygons issue
-        divideSegment(events[1].otherEvent, events[0].point, queue);
-      }
-      return 2;
-    }
-
-    // the line segments share the right endpoint
-    if (rightCoincide) {
-      divideSegment(events[0], events[1].point, queue);
-      return 3;
-    }
-
-    // no line segment includes totally the other one
-    if (events[0] !== events[3].otherEvent) {
-      divideSegment(events[0], events[1].point, queue);
-      divideSegment(events[1], events[2].point, queue);
-      return 3;
-    }
-
-    // one line segment includes the other one
-    divideSegment(events[0], events[1].point, queue);
-    divideSegment(events[3].otherEvent, events[2].point, queue);
-
-    return 3;
-  }
-
-  /**
-   * @param  {SweepEvent} le1
-   * @param  {SweepEvent} le2
-   * @return {Number}
-   */
-  function compareSegments(le1, le2) {
-    if (le1 === le2) { return 0; }
-
-    // Segments are not collinear
-    if (signedArea(le1.point, le1.otherEvent.point, le2.point) !== 0 ||
-      signedArea(le1.point, le1.otherEvent.point, le2.otherEvent.point) !== 0) {
-
-      // If they share their left endpoint use the right endpoint to sort
-      if (equals(le1.point, le2.point)) { return le1.isBelow(le2.otherEvent.point) ? -1 : 1; }
-
-      // Different left endpoint: use the left endpoint to sort
-      if (le1.point[0] === le2.point[0]) { return le1.point[1] < le2.point[1] ? -1 : 1; }
-
-      // has the line segment associated to e1 been inserted
-      // into S after the line segment associated to e2 ?
-      if (compareEvents(le1, le2) === 1) { return le2.isAbove(le1.point) ? -1 : 1; }
-
-      // The line segment associated to e2 has been inserted
-      // into S after the line segment associated to e1
-      return le1.isBelow(le2.point) ? -1 : 1;
-    }
-
-    if (le1.isSubject === le2.isSubject) { // same polygon
-      var p1 = le1.point, p2 = le2.point;
-      if (p1[0] === p2[0] && p1[1] === p2[1]/*equals(le1.point, le2.point)*/) {
-        p1 = le1.otherEvent.point; p2 = le2.otherEvent.point;
-        if (p1[0] === p2[0] && p1[1] === p2[1]) { return 0; }
-        else { return le1.contourId > le2.contourId ? 1 : -1; }
-      }
-    } else { // Segments are collinear, but belong to separate polygons
-      return le1.isSubject ? -1 : 1;
-    }
-
-    return compareEvents(le1, le2) === 1 ? 1 : -1;
-  }
-
-  function subdivide(eventQueue, subject, clipping, sbbox, cbbox, operation) {
-    var sweepLine = new SplayTree(compareSegments);
-    var sortedEvents = [];
-
-    var rightbound = Math.min(sbbox[2], cbbox[2]);
-
-    var prev, next, begin;
-
-    while (eventQueue.length !== 0) {
-      var event = eventQueue.pop();
-      sortedEvents.push(event);
-
-      // optimization by bboxes for intersection and difference goes here
-      if ((operation === INTERSECTION && event.point[0] > rightbound) ||
-          (operation === DIFFERENCE   && event.point[0] > sbbox[2])) {
-        break;
-      }
-
-      if (event.left) {
-        next  = prev = sweepLine.insert(event);
-        begin = sweepLine.minNode();
-
-        if (prev !== begin) { prev = sweepLine.prev(prev); }
-        else                { prev = null; }
-
-        next = sweepLine.next(next);
-
-        var prevEvent = prev ? prev.key : null;
-        var prevprevEvent = (void 0);
-        computeFields(event, prevEvent, operation);
-        if (next) {
-          if (possibleIntersection(event, next.key, eventQueue) === 2) {
-            computeFields(event, prevEvent, operation);
-            computeFields(event, next.key, operation);
-          }
-        }
-
-        if (prev) {
-          if (possibleIntersection(prev.key, event, eventQueue) === 2) {
-            var prevprev = prev;
-            if (prevprev !== begin) { prevprev = sweepLine.prev(prevprev); }
-            else                    { prevprev = null; }
-
-            prevprevEvent = prevprev ? prevprev.key : null;
-            computeFields(prevEvent, prevprevEvent, operation);
-            computeFields(event,     prevEvent,     operation);
-          }
-        }
-      } else {
-        event = event.otherEvent;
-        next = prev = sweepLine.find(event);
-
-        if (prev && next) {
-
-          if (prev !== begin) { prev = sweepLine.prev(prev); }
-          else                { prev = null; }
-
-          next = sweepLine.next(next);
-          sweepLine.remove(event);
-
-          if (next && prev) {
-            possibleIntersection(prev.key, next.key, eventQueue);
-          }
-        }
-      }
-    }
-    return sortedEvents;
-  }
-
-  /**
-   * @param  {Array.<SweepEvent>} sortedEvents
-   * @return {Array.<SweepEvent>}
-   */
-  function orderEvents(sortedEvents) {
-    var event, i, len, tmp;
-    var resultEvents = [];
-    for (i = 0, len = sortedEvents.length; i < len; i++) {
-      event = sortedEvents[i];
-      if ((event.left && event.inResult) ||
-        (!event.left && event.otherEvent.inResult)) {
-        resultEvents.push(event);
-      }
-    }
-    // Due to overlapping edges the resultEvents array can be not wholly sorted
-    var sorted = false;
-    while (!sorted) {
-      sorted = true;
-      for (i = 0, len = resultEvents.length; i < len; i++) {
-        if ((i + 1) < len &&
-          compareEvents(resultEvents[i], resultEvents[i + 1]) === 1) {
-          tmp = resultEvents[i];
-          resultEvents[i] = resultEvents[i + 1];
-          resultEvents[i + 1] = tmp;
-          sorted = false;
-        }
-      }
-    }
-
-
-    for (i = 0, len = resultEvents.length; i < len; i++) {
-      event = resultEvents[i];
-      event.pos = i;
-    }
-
-    // imagine, the right event is found in the beginning of the queue,
-    // when his left counterpart is not marked yet
-    for (i = 0, len = resultEvents.length; i < len; i++) {
-      event = resultEvents[i];
-      if (!event.left) {
-        tmp = event.pos;
-        event.pos = event.otherEvent.pos;
-        event.otherEvent.pos = tmp;
-      }
-    }
-
-    return resultEvents;
-  }
-
-
-  /**
-   * @param  {Number} pos
-   * @param  {Array.<SweepEvent>} resultEvents
-   * @param  {Object>}    processed
-   * @return {Number}
-   */
-  function nextPos(pos, resultEvents, processed, origIndex) {
-    var newPos = pos + 1;
-    var length = resultEvents.length;
-    if (newPos > length - 1) { return pos - 1; }
-    var p  = resultEvents[pos].point;
-    var p1 = resultEvents[newPos].point;
-
-
-    // while in range and not the current one by value
-    while (newPos < length && p1[0] === p[0] && p1[1] === p[1]) {
-      if (!processed[newPos]) {
-        return newPos;
-      } else   {
-        newPos++;
-      }
-      p1 = resultEvents[newPos].point;
-    }
-
-    newPos = pos - 1;
-
-    while (processed[newPos] && newPos >= origIndex) {
-      newPos--;
-    }
-    return newPos;
-  }
-
-
-  /**
-   * @param  {Array.<SweepEvent>} sortedEvents
-   * @return {Array.<*>} polygons
-   */
-  function connectEdges(sortedEvents, operation) {
-    var i, len;
-    var resultEvents = orderEvents(sortedEvents);
-
-    // "false"-filled array
-    var processed = {};
-    var result = [];
-    var event;
-
-    for (i = 0, len = resultEvents.length; i < len; i++) {
-      if (processed[i]) { continue; }
-      var contour = [[]];
-
-      if (!resultEvents[i].isExteriorRing) {
-        if (operation === DIFFERENCE && !resultEvents[i].isSubject && result.length === 0) {
-          result.push(contour);
-        } else if (result.length === 0) {
-          result.push([[contour]]);
-        } else {
-          result[result.length - 1].push(contour[0]);
-        }
-      } else if (operation === DIFFERENCE && !resultEvents[i].isSubject && result.length > 1) {
-        result[result.length - 1].push(contour[0]);
-      } else {
-        result.push(contour);
-      }
-
-      var ringId = result.length - 1;
-      var pos = i;
-
-      var initial = resultEvents[i].point;
-      contour[0].push(initial);
-
-      while (pos >= i) {
-        event = resultEvents[pos];
-        processed[pos] = true;
-
-        if (event.left) {
-          event.resultInOut = false;
-          event.contourId   = ringId;
-        } else {
-          event.otherEvent.resultInOut = true;
-          event.otherEvent.contourId   = ringId;
-        }
-
-        pos = event.pos;
-        processed[pos] = true;
-        contour[0].push(resultEvents[pos].point);
-        pos = nextPos(pos, resultEvents, processed, i);
-      }
-
-      pos = pos === -1 ? i : pos;
-
-      event = resultEvents[pos];
-      processed[pos] = processed[event.pos] = true;
-      event.otherEvent.resultInOut = true;
-      event.otherEvent.contourId   = ringId;
-    }
-
-    // Handle if the result is a polygon (eg not multipoly)
-    // Commented it again, let's see what do we mean by that
-    // if (result.length === 1) result = result[0];
-    return result;
-  }
-
-  var tinyqueue = TinyQueue;
-  var default_1 = TinyQueue;
-
-  function TinyQueue(data, compare) {
-      var this$1 = this;
-
-      if (!(this instanceof TinyQueue)) { return new TinyQueue(data, compare); }
-
-      this.data = data || [];
-      this.length = this.data.length;
-      this.compare = compare || defaultCompare;
-
-      if (this.length > 0) {
-          for (var i = (this.length >> 1) - 1; i >= 0; i--) { this$1._down(i); }
-      }
-  }
-
-  function defaultCompare(a, b) {
-      return a < b ? -1 : a > b ? 1 : 0;
-  }
-
-  TinyQueue.prototype = {
-
-      push: function (item) {
-          this.data.push(item);
-          this.length++;
-          this._up(this.length - 1);
-      },
-
-      pop: function () {
-          if (this.length === 0) { return undefined; }
-
-          var top = this.data[0];
-          this.length--;
-
-          if (this.length > 0) {
-              this.data[0] = this.data[this.length];
-              this._down(0);
-          }
-          this.data.pop();
-
-          return top;
-      },
-
-      peek: function () {
-          return this.data[0];
-      },
-
-      _up: function (pos) {
-          var data = this.data;
-          var compare = this.compare;
-          var item = data[pos];
-
-          while (pos > 0) {
-              var parent = (pos - 1) >> 1;
-              var current = data[parent];
-              if (compare(item, current) >= 0) { break; }
-              data[pos] = current;
-              pos = parent;
-          }
-
-          data[pos] = item;
-      },
-
-      _down: function (pos) {
-          var this$1 = this;
-
-          var data = this.data;
-          var compare = this.compare;
-          var halfLength = this.length >> 1;
-          var item = data[pos];
-
-          while (pos < halfLength) {
-              var left = (pos << 1) + 1;
-              var right = left + 1;
-              var best = data[left];
-
-              if (right < this$1.length && compare(data[right], best) < 0) {
-                  left = right;
-                  best = data[right];
-              }
-              if (compare(best, item) >= 0) { break; }
-
-              data[pos] = best;
-              pos = left;
-          }
-
-          data[pos] = item;
-      }
-  };
-  tinyqueue.default = default_1;
-
-  var max = Math.max;
-  var min = Math.min;
-
-  var contourId = 0;
-
-
-  function processPolygon(contourOrHole, isSubject, depth, Q, bbox, isExteriorRing) {
-    var i, len, s1, s2, e1, e2;
-    for (i = 0, len = contourOrHole.length - 1; i < len; i++) {
-      s1 = contourOrHole[i];
-      s2 = contourOrHole[i + 1];
-      e1 = new SweepEvent(s1, false, undefined, isSubject);
-      e2 = new SweepEvent(s2, false, e1,        isSubject);
-      e1.otherEvent = e2;
-
-      if (s1[0] === s2[0] && s1[1] === s2[1]) {
-        continue; // skip collapsed edges, or it breaks
-      }
-
-      e1.contourId = e2.contourId = depth;
-      if (!isExteriorRing) {
-        e1.isExteriorRing = false;
-        e2.isExteriorRing = false;
-      }
-      if (compareEvents(e1, e2) > 0) {
-        e2.left = true;
-      } else {
-        e1.left = true;
-      }
-
-      var x = s1[0], y = s1[1];
-      bbox[0] = min(bbox[0], x);
-      bbox[1] = min(bbox[1], y);
-      bbox[2] = max(bbox[2], x);
-      bbox[3] = max(bbox[3], y);
-
-      // Pushing it so the queue is sorted from left to right,
-      // with object on the left having the highest priority.
-      Q.push(e1);
-      Q.push(e2);
-    }
-  }
-
-
-  function fillQueue(subject, clipping, sbbox, cbbox, operation) {
-    var eventQueue = new tinyqueue(null, compareEvents);
-    var polygonSet, isExteriorRing, i, ii, j, jj; //, k, kk;
-
-    for (i = 0, ii = subject.length; i < ii; i++) {
-      polygonSet = subject[i];
-      for (j = 0, jj = polygonSet.length; j < jj; j++) {
-        isExteriorRing = j === 0;
-        if (isExteriorRing) { contourId++; }
-        processPolygon(polygonSet[j], true, contourId, eventQueue, sbbox, isExteriorRing);
-      }
-    }
-
-    for (i = 0, ii = clipping.length; i < ii; i++) {
-      polygonSet = clipping[i];
-      for (j = 0, jj = polygonSet.length; j < jj; j++) {
-        isExteriorRing = j === 0;
-        if (operation === DIFFERENCE) { isExteriorRing = false; }
-        if (isExteriorRing) { contourId++; }
-        processPolygon(polygonSet[j], false, contourId, eventQueue, cbbox, isExteriorRing);
-      }
-    }
-
-    return eventQueue;
-  }
-
-  var EMPTY = [];
-
-
-  function trivialOperation(subject, clipping, operation) {
-    var result = null;
-    if (subject.length * clipping.length === 0) {
-      if        (operation === INTERSECTION) {
-        result = EMPTY;
-      } else if (operation === DIFFERENCE) {
-        result = subject;
-      } else if (operation === UNION ||
-                 operation === XOR) {
-        result = (subject.length === 0) ? clipping : subject;
-      }
-    }
-    return result;
-  }
-
-
-  function compareBBoxes(subject, clipping, sbbox, cbbox, operation) {
-    var result = null;
-    if (sbbox[0] > cbbox[2] ||
-        cbbox[0] > sbbox[2] ||
-        sbbox[1] > cbbox[3] ||
-        cbbox[1] > sbbox[3]) {
-      if        (operation === INTERSECTION) {
-        result = EMPTY;
-      } else if (operation === DIFFERENCE) {
-        result = subject;
-      } else if (operation === UNION ||
-                 operation === XOR) {
-        result = subject.concat(clipping);
-      }
-    }
-    return result;
-  }
-
-
-  function boolean(subject, clipping, operation) {
-    if (typeof subject[0][0][0] === 'number') {
-      subject = [subject];
-    }
-    if (typeof clipping[0][0][0] === 'number') {
-      clipping = [clipping];
-    }
-    var trivial = trivialOperation(subject, clipping, operation);
-    if (trivial) {
-      return trivial === EMPTY ? null : trivial;
-    }
-    var sbbox = [Infinity, Infinity, -Infinity, -Infinity];
-    var cbbox = [Infinity, Infinity, -Infinity, -Infinity];
-
-    //console.time('fill queue');
-    var eventQueue = fillQueue(subject, clipping, sbbox, cbbox, operation);
-    //console.timeEnd('fill queue');
-
-    trivial = compareBBoxes(subject, clipping, sbbox, cbbox, operation);
-    if (trivial) {
-      return trivial === EMPTY ? null : trivial;
-    }
-    //console.time('subdivide edges');
-    var sortedEvents = subdivide(eventQueue, subject, clipping, sbbox, cbbox, operation);
-    //console.timeEnd('subdivide edges');
-
-    //console.time('connect vertices');
-    var result = connectEdges(sortedEvents, operation);
-    //console.timeEnd('connect vertices');
-    return result;
-  }
-
-  function union (subject, clipping) {
-    return boolean(subject, clipping, UNION);
-  }
-
-  function diff (subject, clipping) {
-    return boolean(subject, clipping, DIFFERENCE);
-  }
-
-  function xor (subject, clipping){
-    return boolean(subject, clipping, XOR);
-  }
-
-  function intersection$1 (subject, clipping) {
-    return boolean(subject, clipping, INTERSECTION);
-  }
-
-  /**
-   * @enum {Number}
-   */
-  var operations = { UNION: UNION, DIFFERENCE: DIFFERENCE, INTERSECTION: INTERSECTION, XOR: XOR };
-
-  exports.union = union;
-  exports.diff = diff;
-  exports.xor = xor;
-  exports.intersection = intersection$1;
-  exports.operations = operations;
-
-  Object.defineProperty(exports, '__esModule', { value: true });
-
-})));
-
-
-},{}],68:[function(require,module,exports){
+},{"./loki-indexed-adapter.js":205,"_process":241,"fs":59}],207:[function(require,module,exports){
 const turf = {
   nearestPointOnLine: require('@turf/nearest-point-on-line').default,
   booleanPointInPolygon: require('@turf/boolean-point-in-polygon').default
@@ -18172,10 +22331,10 @@ function nearestPointOnGeometry (feature, pt, options) {
 
 module.exports = nearestPointOnGeometry
 
-},{"@turf/boolean-point-in-polygon":10,"@turf/nearest-point-on-line":29}],69:[function(require,module,exports){
+},{"@turf/boolean-point-in-polygon":16,"@turf/nearest-point-on-line":43}],208:[function(require,module,exports){
 module.exports = require('./polygon-features.json')
 
-},{"./polygon-features.json":70}],70:[function(require,module,exports){
+},{"./polygon-features.json":209}],209:[function(require,module,exports){
 module.exports=[
     {
         "key": "building",
@@ -18334,7 +22493,7 @@ module.exports=[
     }
 ]
 
-},{}],71:[function(require,module,exports){
+},{}],210:[function(require,module,exports){
 var _ = require("./lodash.custom.js");
 var rewind = require("@mapbox/geojson-rewind");
 
@@ -19401,7 +23560,7 @@ osmtogeojson.toGeojson = osmtogeojson;
 
 module.exports = osmtogeojson;
 
-},{"./lodash.custom.js":72,"@mapbox/geojson-rewind":3,"osm-polygon-features":69}],72:[function(require,module,exports){
+},{"./lodash.custom.js":211,"@mapbox/geojson-rewind":3,"osm-polygon-features":208}],211:[function(require,module,exports){
 (function (global){(function (){
 /**
  * @license
@@ -23108,7 +27267,7 @@ module.exports = osmtogeojson;
 }.call(this));
 
 }).call(this)}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}],73:[function(require,module,exports){
+},{}],212:[function(require,module,exports){
 (function (process,setImmediate){(function (){
 (function (global, factory) {
     typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports) :
@@ -27958,3520 +32117,7 @@ module.exports = osmtogeojson;
 })));
 
 }).call(this)}).call(this,require('_process'),require("timers").setImmediate)
-},{"_process":225,"timers":229}],74:[function(require,module,exports){
-var getNative = require('./_getNative'),
-    root = require('./_root');
-
-/* Built-in method references that are verified to be native. */
-var DataView = getNative(root, 'DataView');
-
-module.exports = DataView;
-
-},{"./_getNative":129,"./_root":164}],75:[function(require,module,exports){
-var hashClear = require('./_hashClear'),
-    hashDelete = require('./_hashDelete'),
-    hashGet = require('./_hashGet'),
-    hashHas = require('./_hashHas'),
-    hashSet = require('./_hashSet');
-
-/**
- * Creates a hash object.
- *
- * @private
- * @constructor
- * @param {Array} [entries] The key-value pairs to cache.
- */
-function Hash(entries) {
-  var index = -1,
-      length = entries == null ? 0 : entries.length;
-
-  this.clear();
-  while (++index < length) {
-    var entry = entries[index];
-    this.set(entry[0], entry[1]);
-  }
-}
-
-// Add methods to `Hash`.
-Hash.prototype.clear = hashClear;
-Hash.prototype['delete'] = hashDelete;
-Hash.prototype.get = hashGet;
-Hash.prototype.has = hashHas;
-Hash.prototype.set = hashSet;
-
-module.exports = Hash;
-
-},{"./_hashClear":135,"./_hashDelete":136,"./_hashGet":137,"./_hashHas":138,"./_hashSet":139}],76:[function(require,module,exports){
-var listCacheClear = require('./_listCacheClear'),
-    listCacheDelete = require('./_listCacheDelete'),
-    listCacheGet = require('./_listCacheGet'),
-    listCacheHas = require('./_listCacheHas'),
-    listCacheSet = require('./_listCacheSet');
-
-/**
- * Creates an list cache object.
- *
- * @private
- * @constructor
- * @param {Array} [entries] The key-value pairs to cache.
- */
-function ListCache(entries) {
-  var index = -1,
-      length = entries == null ? 0 : entries.length;
-
-  this.clear();
-  while (++index < length) {
-    var entry = entries[index];
-    this.set(entry[0], entry[1]);
-  }
-}
-
-// Add methods to `ListCache`.
-ListCache.prototype.clear = listCacheClear;
-ListCache.prototype['delete'] = listCacheDelete;
-ListCache.prototype.get = listCacheGet;
-ListCache.prototype.has = listCacheHas;
-ListCache.prototype.set = listCacheSet;
-
-module.exports = ListCache;
-
-},{"./_listCacheClear":146,"./_listCacheDelete":147,"./_listCacheGet":148,"./_listCacheHas":149,"./_listCacheSet":150}],77:[function(require,module,exports){
-var getNative = require('./_getNative'),
-    root = require('./_root');
-
-/* Built-in method references that are verified to be native. */
-var Map = getNative(root, 'Map');
-
-module.exports = Map;
-
-},{"./_getNative":129,"./_root":164}],78:[function(require,module,exports){
-var mapCacheClear = require('./_mapCacheClear'),
-    mapCacheDelete = require('./_mapCacheDelete'),
-    mapCacheGet = require('./_mapCacheGet'),
-    mapCacheHas = require('./_mapCacheHas'),
-    mapCacheSet = require('./_mapCacheSet');
-
-/**
- * Creates a map cache object to store key-value pairs.
- *
- * @private
- * @constructor
- * @param {Array} [entries] The key-value pairs to cache.
- */
-function MapCache(entries) {
-  var index = -1,
-      length = entries == null ? 0 : entries.length;
-
-  this.clear();
-  while (++index < length) {
-    var entry = entries[index];
-    this.set(entry[0], entry[1]);
-  }
-}
-
-// Add methods to `MapCache`.
-MapCache.prototype.clear = mapCacheClear;
-MapCache.prototype['delete'] = mapCacheDelete;
-MapCache.prototype.get = mapCacheGet;
-MapCache.prototype.has = mapCacheHas;
-MapCache.prototype.set = mapCacheSet;
-
-module.exports = MapCache;
-
-},{"./_mapCacheClear":151,"./_mapCacheDelete":152,"./_mapCacheGet":153,"./_mapCacheHas":154,"./_mapCacheSet":155}],79:[function(require,module,exports){
-var getNative = require('./_getNative'),
-    root = require('./_root');
-
-/* Built-in method references that are verified to be native. */
-var Promise = getNative(root, 'Promise');
-
-module.exports = Promise;
-
-},{"./_getNative":129,"./_root":164}],80:[function(require,module,exports){
-var getNative = require('./_getNative'),
-    root = require('./_root');
-
-/* Built-in method references that are verified to be native. */
-var Set = getNative(root, 'Set');
-
-module.exports = Set;
-
-},{"./_getNative":129,"./_root":164}],81:[function(require,module,exports){
-var MapCache = require('./_MapCache'),
-    setCacheAdd = require('./_setCacheAdd'),
-    setCacheHas = require('./_setCacheHas');
-
-/**
- *
- * Creates an array cache object to store unique values.
- *
- * @private
- * @constructor
- * @param {Array} [values] The values to cache.
- */
-function SetCache(values) {
-  var index = -1,
-      length = values == null ? 0 : values.length;
-
-  this.__data__ = new MapCache;
-  while (++index < length) {
-    this.add(values[index]);
-  }
-}
-
-// Add methods to `SetCache`.
-SetCache.prototype.add = SetCache.prototype.push = setCacheAdd;
-SetCache.prototype.has = setCacheHas;
-
-module.exports = SetCache;
-
-},{"./_MapCache":78,"./_setCacheAdd":165,"./_setCacheHas":166}],82:[function(require,module,exports){
-var ListCache = require('./_ListCache'),
-    stackClear = require('./_stackClear'),
-    stackDelete = require('./_stackDelete'),
-    stackGet = require('./_stackGet'),
-    stackHas = require('./_stackHas'),
-    stackSet = require('./_stackSet');
-
-/**
- * Creates a stack cache object to store key-value pairs.
- *
- * @private
- * @constructor
- * @param {Array} [entries] The key-value pairs to cache.
- */
-function Stack(entries) {
-  var data = this.__data__ = new ListCache(entries);
-  this.size = data.size;
-}
-
-// Add methods to `Stack`.
-Stack.prototype.clear = stackClear;
-Stack.prototype['delete'] = stackDelete;
-Stack.prototype.get = stackGet;
-Stack.prototype.has = stackHas;
-Stack.prototype.set = stackSet;
-
-module.exports = Stack;
-
-},{"./_ListCache":76,"./_stackClear":168,"./_stackDelete":169,"./_stackGet":170,"./_stackHas":171,"./_stackSet":172}],83:[function(require,module,exports){
-var root = require('./_root');
-
-/** Built-in value references. */
-var Symbol = root.Symbol;
-
-module.exports = Symbol;
-
-},{"./_root":164}],84:[function(require,module,exports){
-var root = require('./_root');
-
-/** Built-in value references. */
-var Uint8Array = root.Uint8Array;
-
-module.exports = Uint8Array;
-
-},{"./_root":164}],85:[function(require,module,exports){
-var getNative = require('./_getNative'),
-    root = require('./_root');
-
-/* Built-in method references that are verified to be native. */
-var WeakMap = getNative(root, 'WeakMap');
-
-module.exports = WeakMap;
-
-},{"./_getNative":129,"./_root":164}],86:[function(require,module,exports){
-/**
- * A specialized version of `_.forEach` for arrays without support for
- * iteratee shorthands.
- *
- * @private
- * @param {Array} [array] The array to iterate over.
- * @param {Function} iteratee The function invoked per iteration.
- * @returns {Array} Returns `array`.
- */
-function arrayEach(array, iteratee) {
-  var index = -1,
-      length = array == null ? 0 : array.length;
-
-  while (++index < length) {
-    if (iteratee(array[index], index, array) === false) {
-      break;
-    }
-  }
-  return array;
-}
-
-module.exports = arrayEach;
-
-},{}],87:[function(require,module,exports){
-/**
- * A specialized version of `_.filter` for arrays without support for
- * iteratee shorthands.
- *
- * @private
- * @param {Array} [array] The array to iterate over.
- * @param {Function} predicate The function invoked per iteration.
- * @returns {Array} Returns the new filtered array.
- */
-function arrayFilter(array, predicate) {
-  var index = -1,
-      length = array == null ? 0 : array.length,
-      resIndex = 0,
-      result = [];
-
-  while (++index < length) {
-    var value = array[index];
-    if (predicate(value, index, array)) {
-      result[resIndex++] = value;
-    }
-  }
-  return result;
-}
-
-module.exports = arrayFilter;
-
-},{}],88:[function(require,module,exports){
-var baseTimes = require('./_baseTimes'),
-    isArguments = require('./isArguments'),
-    isArray = require('./isArray'),
-    isBuffer = require('./isBuffer'),
-    isIndex = require('./_isIndex'),
-    isTypedArray = require('./isTypedArray');
-
-/** Used for built-in method references. */
-var objectProto = Object.prototype;
-
-/** Used to check objects for own properties. */
-var hasOwnProperty = objectProto.hasOwnProperty;
-
-/**
- * Creates an array of the enumerable property names of the array-like `value`.
- *
- * @private
- * @param {*} value The value to query.
- * @param {boolean} inherited Specify returning inherited property names.
- * @returns {Array} Returns the array of property names.
- */
-function arrayLikeKeys(value, inherited) {
-  var isArr = isArray(value),
-      isArg = !isArr && isArguments(value),
-      isBuff = !isArr && !isArg && isBuffer(value),
-      isType = !isArr && !isArg && !isBuff && isTypedArray(value),
-      skipIndexes = isArr || isArg || isBuff || isType,
-      result = skipIndexes ? baseTimes(value.length, String) : [],
-      length = result.length;
-
-  for (var key in value) {
-    if ((inherited || hasOwnProperty.call(value, key)) &&
-        !(skipIndexes && (
-           // Safari 9 has enumerable `arguments.length` in strict mode.
-           key == 'length' ||
-           // Node.js 0.10 has enumerable non-index properties on buffers.
-           (isBuff && (key == 'offset' || key == 'parent')) ||
-           // PhantomJS 2 has enumerable non-index properties on typed arrays.
-           (isType && (key == 'buffer' || key == 'byteLength' || key == 'byteOffset')) ||
-           // Skip index properties.
-           isIndex(key, length)
-        ))) {
-      result.push(key);
-    }
-  }
-  return result;
-}
-
-module.exports = arrayLikeKeys;
-
-},{"./_baseTimes":113,"./_isIndex":140,"./isArguments":181,"./isArray":182,"./isBuffer":184,"./isTypedArray":190}],89:[function(require,module,exports){
-/**
- * A specialized version of `_.map` for arrays without support for iteratee
- * shorthands.
- *
- * @private
- * @param {Array} [array] The array to iterate over.
- * @param {Function} iteratee The function invoked per iteration.
- * @returns {Array} Returns the new mapped array.
- */
-function arrayMap(array, iteratee) {
-  var index = -1,
-      length = array == null ? 0 : array.length,
-      result = Array(length);
-
-  while (++index < length) {
-    result[index] = iteratee(array[index], index, array);
-  }
-  return result;
-}
-
-module.exports = arrayMap;
-
-},{}],90:[function(require,module,exports){
-/**
- * Appends the elements of `values` to `array`.
- *
- * @private
- * @param {Array} array The array to modify.
- * @param {Array} values The values to append.
- * @returns {Array} Returns `array`.
- */
-function arrayPush(array, values) {
-  var index = -1,
-      length = values.length,
-      offset = array.length;
-
-  while (++index < length) {
-    array[offset + index] = values[index];
-  }
-  return array;
-}
-
-module.exports = arrayPush;
-
-},{}],91:[function(require,module,exports){
-/**
- * A specialized version of `_.some` for arrays without support for iteratee
- * shorthands.
- *
- * @private
- * @param {Array} [array] The array to iterate over.
- * @param {Function} predicate The function invoked per iteration.
- * @returns {boolean} Returns `true` if any element passes the predicate check,
- *  else `false`.
- */
-function arraySome(array, predicate) {
-  var index = -1,
-      length = array == null ? 0 : array.length;
-
-  while (++index < length) {
-    if (predicate(array[index], index, array)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-module.exports = arraySome;
-
-},{}],92:[function(require,module,exports){
-var eq = require('./eq');
-
-/**
- * Gets the index at which the `key` is found in `array` of key-value pairs.
- *
- * @private
- * @param {Array} array The array to inspect.
- * @param {*} key The key to search for.
- * @returns {number} Returns the index of the matched value, else `-1`.
- */
-function assocIndexOf(array, key) {
-  var length = array.length;
-  while (length--) {
-    if (eq(array[length][0], key)) {
-      return length;
-    }
-  }
-  return -1;
-}
-
-module.exports = assocIndexOf;
-
-},{"./eq":176}],93:[function(require,module,exports){
-var baseForOwn = require('./_baseForOwn'),
-    createBaseEach = require('./_createBaseEach');
-
-/**
- * The base implementation of `_.forEach` without support for iteratee shorthands.
- *
- * @private
- * @param {Array|Object} collection The collection to iterate over.
- * @param {Function} iteratee The function invoked per iteration.
- * @returns {Array|Object} Returns `collection`.
- */
-var baseEach = createBaseEach(baseForOwn);
-
-module.exports = baseEach;
-
-},{"./_baseForOwn":95,"./_createBaseEach":120}],94:[function(require,module,exports){
-var createBaseFor = require('./_createBaseFor');
-
-/**
- * The base implementation of `baseForOwn` which iterates over `object`
- * properties returned by `keysFunc` and invokes `iteratee` for each property.
- * Iteratee functions may exit iteration early by explicitly returning `false`.
- *
- * @private
- * @param {Object} object The object to iterate over.
- * @param {Function} iteratee The function invoked per iteration.
- * @param {Function} keysFunc The function to get the keys of `object`.
- * @returns {Object} Returns `object`.
- */
-var baseFor = createBaseFor();
-
-module.exports = baseFor;
-
-},{"./_createBaseFor":121}],95:[function(require,module,exports){
-var baseFor = require('./_baseFor'),
-    keys = require('./keys');
-
-/**
- * The base implementation of `_.forOwn` without support for iteratee shorthands.
- *
- * @private
- * @param {Object} object The object to iterate over.
- * @param {Function} iteratee The function invoked per iteration.
- * @returns {Object} Returns `object`.
- */
-function baseForOwn(object, iteratee) {
-  return object && baseFor(object, iteratee, keys);
-}
-
-module.exports = baseForOwn;
-
-},{"./_baseFor":94,"./keys":191}],96:[function(require,module,exports){
-var castPath = require('./_castPath'),
-    toKey = require('./_toKey');
-
-/**
- * The base implementation of `_.get` without support for default values.
- *
- * @private
- * @param {Object} object The object to query.
- * @param {Array|string} path The path of the property to get.
- * @returns {*} Returns the resolved value.
- */
-function baseGet(object, path) {
-  path = castPath(path, object);
-
-  var index = 0,
-      length = path.length;
-
-  while (object != null && index < length) {
-    object = object[toKey(path[index++])];
-  }
-  return (index && index == length) ? object : undefined;
-}
-
-module.exports = baseGet;
-
-},{"./_castPath":118,"./_toKey":174}],97:[function(require,module,exports){
-var arrayPush = require('./_arrayPush'),
-    isArray = require('./isArray');
-
-/**
- * The base implementation of `getAllKeys` and `getAllKeysIn` which uses
- * `keysFunc` and `symbolsFunc` to get the enumerable property names and
- * symbols of `object`.
- *
- * @private
- * @param {Object} object The object to query.
- * @param {Function} keysFunc The function to get the keys of `object`.
- * @param {Function} symbolsFunc The function to get the symbols of `object`.
- * @returns {Array} Returns the array of property names and symbols.
- */
-function baseGetAllKeys(object, keysFunc, symbolsFunc) {
-  var result = keysFunc(object);
-  return isArray(object) ? result : arrayPush(result, symbolsFunc(object));
-}
-
-module.exports = baseGetAllKeys;
-
-},{"./_arrayPush":90,"./isArray":182}],98:[function(require,module,exports){
-var Symbol = require('./_Symbol'),
-    getRawTag = require('./_getRawTag'),
-    objectToString = require('./_objectToString');
-
-/** `Object#toString` result references. */
-var nullTag = '[object Null]',
-    undefinedTag = '[object Undefined]';
-
-/** Built-in value references. */
-var symToStringTag = Symbol ? Symbol.toStringTag : undefined;
-
-/**
- * The base implementation of `getTag` without fallbacks for buggy environments.
- *
- * @private
- * @param {*} value The value to query.
- * @returns {string} Returns the `toStringTag`.
- */
-function baseGetTag(value) {
-  if (value == null) {
-    return value === undefined ? undefinedTag : nullTag;
-  }
-  return (symToStringTag && symToStringTag in Object(value))
-    ? getRawTag(value)
-    : objectToString(value);
-}
-
-module.exports = baseGetTag;
-
-},{"./_Symbol":83,"./_getRawTag":130,"./_objectToString":162}],99:[function(require,module,exports){
-/**
- * The base implementation of `_.hasIn` without support for deep paths.
- *
- * @private
- * @param {Object} [object] The object to query.
- * @param {Array|string} key The key to check.
- * @returns {boolean} Returns `true` if `key` exists, else `false`.
- */
-function baseHasIn(object, key) {
-  return object != null && key in Object(object);
-}
-
-module.exports = baseHasIn;
-
-},{}],100:[function(require,module,exports){
-var baseGetTag = require('./_baseGetTag'),
-    isObjectLike = require('./isObjectLike');
-
-/** `Object#toString` result references. */
-var argsTag = '[object Arguments]';
-
-/**
- * The base implementation of `_.isArguments`.
- *
- * @private
- * @param {*} value The value to check.
- * @returns {boolean} Returns `true` if `value` is an `arguments` object,
- */
-function baseIsArguments(value) {
-  return isObjectLike(value) && baseGetTag(value) == argsTag;
-}
-
-module.exports = baseIsArguments;
-
-},{"./_baseGetTag":98,"./isObjectLike":188}],101:[function(require,module,exports){
-var baseIsEqualDeep = require('./_baseIsEqualDeep'),
-    isObjectLike = require('./isObjectLike');
-
-/**
- * The base implementation of `_.isEqual` which supports partial comparisons
- * and tracks traversed objects.
- *
- * @private
- * @param {*} value The value to compare.
- * @param {*} other The other value to compare.
- * @param {boolean} bitmask The bitmask flags.
- *  1 - Unordered comparison
- *  2 - Partial comparison
- * @param {Function} [customizer] The function to customize comparisons.
- * @param {Object} [stack] Tracks traversed `value` and `other` objects.
- * @returns {boolean} Returns `true` if the values are equivalent, else `false`.
- */
-function baseIsEqual(value, other, bitmask, customizer, stack) {
-  if (value === other) {
-    return true;
-  }
-  if (value == null || other == null || (!isObjectLike(value) && !isObjectLike(other))) {
-    return value !== value && other !== other;
-  }
-  return baseIsEqualDeep(value, other, bitmask, customizer, baseIsEqual, stack);
-}
-
-module.exports = baseIsEqual;
-
-},{"./_baseIsEqualDeep":102,"./isObjectLike":188}],102:[function(require,module,exports){
-var Stack = require('./_Stack'),
-    equalArrays = require('./_equalArrays'),
-    equalByTag = require('./_equalByTag'),
-    equalObjects = require('./_equalObjects'),
-    getTag = require('./_getTag'),
-    isArray = require('./isArray'),
-    isBuffer = require('./isBuffer'),
-    isTypedArray = require('./isTypedArray');
-
-/** Used to compose bitmasks for value comparisons. */
-var COMPARE_PARTIAL_FLAG = 1;
-
-/** `Object#toString` result references. */
-var argsTag = '[object Arguments]',
-    arrayTag = '[object Array]',
-    objectTag = '[object Object]';
-
-/** Used for built-in method references. */
-var objectProto = Object.prototype;
-
-/** Used to check objects for own properties. */
-var hasOwnProperty = objectProto.hasOwnProperty;
-
-/**
- * A specialized version of `baseIsEqual` for arrays and objects which performs
- * deep comparisons and tracks traversed objects enabling objects with circular
- * references to be compared.
- *
- * @private
- * @param {Object} object The object to compare.
- * @param {Object} other The other object to compare.
- * @param {number} bitmask The bitmask flags. See `baseIsEqual` for more details.
- * @param {Function} customizer The function to customize comparisons.
- * @param {Function} equalFunc The function to determine equivalents of values.
- * @param {Object} [stack] Tracks traversed `object` and `other` objects.
- * @returns {boolean} Returns `true` if the objects are equivalent, else `false`.
- */
-function baseIsEqualDeep(object, other, bitmask, customizer, equalFunc, stack) {
-  var objIsArr = isArray(object),
-      othIsArr = isArray(other),
-      objTag = objIsArr ? arrayTag : getTag(object),
-      othTag = othIsArr ? arrayTag : getTag(other);
-
-  objTag = objTag == argsTag ? objectTag : objTag;
-  othTag = othTag == argsTag ? objectTag : othTag;
-
-  var objIsObj = objTag == objectTag,
-      othIsObj = othTag == objectTag,
-      isSameTag = objTag == othTag;
-
-  if (isSameTag && isBuffer(object)) {
-    if (!isBuffer(other)) {
-      return false;
-    }
-    objIsArr = true;
-    objIsObj = false;
-  }
-  if (isSameTag && !objIsObj) {
-    stack || (stack = new Stack);
-    return (objIsArr || isTypedArray(object))
-      ? equalArrays(object, other, bitmask, customizer, equalFunc, stack)
-      : equalByTag(object, other, objTag, bitmask, customizer, equalFunc, stack);
-  }
-  if (!(bitmask & COMPARE_PARTIAL_FLAG)) {
-    var objIsWrapped = objIsObj && hasOwnProperty.call(object, '__wrapped__'),
-        othIsWrapped = othIsObj && hasOwnProperty.call(other, '__wrapped__');
-
-    if (objIsWrapped || othIsWrapped) {
-      var objUnwrapped = objIsWrapped ? object.value() : object,
-          othUnwrapped = othIsWrapped ? other.value() : other;
-
-      stack || (stack = new Stack);
-      return equalFunc(objUnwrapped, othUnwrapped, bitmask, customizer, stack);
-    }
-  }
-  if (!isSameTag) {
-    return false;
-  }
-  stack || (stack = new Stack);
-  return equalObjects(object, other, bitmask, customizer, equalFunc, stack);
-}
-
-module.exports = baseIsEqualDeep;
-
-},{"./_Stack":82,"./_equalArrays":122,"./_equalByTag":123,"./_equalObjects":124,"./_getTag":132,"./isArray":182,"./isBuffer":184,"./isTypedArray":190}],103:[function(require,module,exports){
-var Stack = require('./_Stack'),
-    baseIsEqual = require('./_baseIsEqual');
-
-/** Used to compose bitmasks for value comparisons. */
-var COMPARE_PARTIAL_FLAG = 1,
-    COMPARE_UNORDERED_FLAG = 2;
-
-/**
- * The base implementation of `_.isMatch` without support for iteratee shorthands.
- *
- * @private
- * @param {Object} object The object to inspect.
- * @param {Object} source The object of property values to match.
- * @param {Array} matchData The property names, values, and compare flags to match.
- * @param {Function} [customizer] The function to customize comparisons.
- * @returns {boolean} Returns `true` if `object` is a match, else `false`.
- */
-function baseIsMatch(object, source, matchData, customizer) {
-  var index = matchData.length,
-      length = index,
-      noCustomizer = !customizer;
-
-  if (object == null) {
-    return !length;
-  }
-  object = Object(object);
-  while (index--) {
-    var data = matchData[index];
-    if ((noCustomizer && data[2])
-          ? data[1] !== object[data[0]]
-          : !(data[0] in object)
-        ) {
-      return false;
-    }
-  }
-  while (++index < length) {
-    data = matchData[index];
-    var key = data[0],
-        objValue = object[key],
-        srcValue = data[1];
-
-    if (noCustomizer && data[2]) {
-      if (objValue === undefined && !(key in object)) {
-        return false;
-      }
-    } else {
-      var stack = new Stack;
-      if (customizer) {
-        var result = customizer(objValue, srcValue, key, object, source, stack);
-      }
-      if (!(result === undefined
-            ? baseIsEqual(srcValue, objValue, COMPARE_PARTIAL_FLAG | COMPARE_UNORDERED_FLAG, customizer, stack)
-            : result
-          )) {
-        return false;
-      }
-    }
-  }
-  return true;
-}
-
-module.exports = baseIsMatch;
-
-},{"./_Stack":82,"./_baseIsEqual":101}],104:[function(require,module,exports){
-var isFunction = require('./isFunction'),
-    isMasked = require('./_isMasked'),
-    isObject = require('./isObject'),
-    toSource = require('./_toSource');
-
-/**
- * Used to match `RegExp`
- * [syntax characters](http://ecma-international.org/ecma-262/7.0/#sec-patterns).
- */
-var reRegExpChar = /[\\^$.*+?()[\]{}|]/g;
-
-/** Used to detect host constructors (Safari). */
-var reIsHostCtor = /^\[object .+?Constructor\]$/;
-
-/** Used for built-in method references. */
-var funcProto = Function.prototype,
-    objectProto = Object.prototype;
-
-/** Used to resolve the decompiled source of functions. */
-var funcToString = funcProto.toString;
-
-/** Used to check objects for own properties. */
-var hasOwnProperty = objectProto.hasOwnProperty;
-
-/** Used to detect if a method is native. */
-var reIsNative = RegExp('^' +
-  funcToString.call(hasOwnProperty).replace(reRegExpChar, '\\$&')
-  .replace(/hasOwnProperty|(function).*?(?=\\\()| for .+?(?=\\\])/g, '$1.*?') + '$'
-);
-
-/**
- * The base implementation of `_.isNative` without bad shim checks.
- *
- * @private
- * @param {*} value The value to check.
- * @returns {boolean} Returns `true` if `value` is a native function,
- *  else `false`.
- */
-function baseIsNative(value) {
-  if (!isObject(value) || isMasked(value)) {
-    return false;
-  }
-  var pattern = isFunction(value) ? reIsNative : reIsHostCtor;
-  return pattern.test(toSource(value));
-}
-
-module.exports = baseIsNative;
-
-},{"./_isMasked":143,"./_toSource":175,"./isFunction":185,"./isObject":187}],105:[function(require,module,exports){
-var baseGetTag = require('./_baseGetTag'),
-    isLength = require('./isLength'),
-    isObjectLike = require('./isObjectLike');
-
-/** `Object#toString` result references. */
-var argsTag = '[object Arguments]',
-    arrayTag = '[object Array]',
-    boolTag = '[object Boolean]',
-    dateTag = '[object Date]',
-    errorTag = '[object Error]',
-    funcTag = '[object Function]',
-    mapTag = '[object Map]',
-    numberTag = '[object Number]',
-    objectTag = '[object Object]',
-    regexpTag = '[object RegExp]',
-    setTag = '[object Set]',
-    stringTag = '[object String]',
-    weakMapTag = '[object WeakMap]';
-
-var arrayBufferTag = '[object ArrayBuffer]',
-    dataViewTag = '[object DataView]',
-    float32Tag = '[object Float32Array]',
-    float64Tag = '[object Float64Array]',
-    int8Tag = '[object Int8Array]',
-    int16Tag = '[object Int16Array]',
-    int32Tag = '[object Int32Array]',
-    uint8Tag = '[object Uint8Array]',
-    uint8ClampedTag = '[object Uint8ClampedArray]',
-    uint16Tag = '[object Uint16Array]',
-    uint32Tag = '[object Uint32Array]';
-
-/** Used to identify `toStringTag` values of typed arrays. */
-var typedArrayTags = {};
-typedArrayTags[float32Tag] = typedArrayTags[float64Tag] =
-typedArrayTags[int8Tag] = typedArrayTags[int16Tag] =
-typedArrayTags[int32Tag] = typedArrayTags[uint8Tag] =
-typedArrayTags[uint8ClampedTag] = typedArrayTags[uint16Tag] =
-typedArrayTags[uint32Tag] = true;
-typedArrayTags[argsTag] = typedArrayTags[arrayTag] =
-typedArrayTags[arrayBufferTag] = typedArrayTags[boolTag] =
-typedArrayTags[dataViewTag] = typedArrayTags[dateTag] =
-typedArrayTags[errorTag] = typedArrayTags[funcTag] =
-typedArrayTags[mapTag] = typedArrayTags[numberTag] =
-typedArrayTags[objectTag] = typedArrayTags[regexpTag] =
-typedArrayTags[setTag] = typedArrayTags[stringTag] =
-typedArrayTags[weakMapTag] = false;
-
-/**
- * The base implementation of `_.isTypedArray` without Node.js optimizations.
- *
- * @private
- * @param {*} value The value to check.
- * @returns {boolean} Returns `true` if `value` is a typed array, else `false`.
- */
-function baseIsTypedArray(value) {
-  return isObjectLike(value) &&
-    isLength(value.length) && !!typedArrayTags[baseGetTag(value)];
-}
-
-module.exports = baseIsTypedArray;
-
-},{"./_baseGetTag":98,"./isLength":186,"./isObjectLike":188}],106:[function(require,module,exports){
-var baseMatches = require('./_baseMatches'),
-    baseMatchesProperty = require('./_baseMatchesProperty'),
-    identity = require('./identity'),
-    isArray = require('./isArray'),
-    property = require('./property');
-
-/**
- * The base implementation of `_.iteratee`.
- *
- * @private
- * @param {*} [value=_.identity] The value to convert to an iteratee.
- * @returns {Function} Returns the iteratee.
- */
-function baseIteratee(value) {
-  // Don't store the `typeof` result in a variable to avoid a JIT bug in Safari 9.
-  // See https://bugs.webkit.org/show_bug.cgi?id=156034 for more details.
-  if (typeof value == 'function') {
-    return value;
-  }
-  if (value == null) {
-    return identity;
-  }
-  if (typeof value == 'object') {
-    return isArray(value)
-      ? baseMatchesProperty(value[0], value[1])
-      : baseMatches(value);
-  }
-  return property(value);
-}
-
-module.exports = baseIteratee;
-
-},{"./_baseMatches":109,"./_baseMatchesProperty":110,"./identity":180,"./isArray":182,"./property":194}],107:[function(require,module,exports){
-var isPrototype = require('./_isPrototype'),
-    nativeKeys = require('./_nativeKeys');
-
-/** Used for built-in method references. */
-var objectProto = Object.prototype;
-
-/** Used to check objects for own properties. */
-var hasOwnProperty = objectProto.hasOwnProperty;
-
-/**
- * The base implementation of `_.keys` which doesn't treat sparse arrays as dense.
- *
- * @private
- * @param {Object} object The object to query.
- * @returns {Array} Returns the array of property names.
- */
-function baseKeys(object) {
-  if (!isPrototype(object)) {
-    return nativeKeys(object);
-  }
-  var result = [];
-  for (var key in Object(object)) {
-    if (hasOwnProperty.call(object, key) && key != 'constructor') {
-      result.push(key);
-    }
-  }
-  return result;
-}
-
-module.exports = baseKeys;
-
-},{"./_isPrototype":144,"./_nativeKeys":160}],108:[function(require,module,exports){
-var baseEach = require('./_baseEach'),
-    isArrayLike = require('./isArrayLike');
-
-/**
- * The base implementation of `_.map` without support for iteratee shorthands.
- *
- * @private
- * @param {Array|Object} collection The collection to iterate over.
- * @param {Function} iteratee The function invoked per iteration.
- * @returns {Array} Returns the new mapped array.
- */
-function baseMap(collection, iteratee) {
-  var index = -1,
-      result = isArrayLike(collection) ? Array(collection.length) : [];
-
-  baseEach(collection, function(value, key, collection) {
-    result[++index] = iteratee(value, key, collection);
-  });
-  return result;
-}
-
-module.exports = baseMap;
-
-},{"./_baseEach":93,"./isArrayLike":183}],109:[function(require,module,exports){
-var baseIsMatch = require('./_baseIsMatch'),
-    getMatchData = require('./_getMatchData'),
-    matchesStrictComparable = require('./_matchesStrictComparable');
-
-/**
- * The base implementation of `_.matches` which doesn't clone `source`.
- *
- * @private
- * @param {Object} source The object of property values to match.
- * @returns {Function} Returns the new spec function.
- */
-function baseMatches(source) {
-  var matchData = getMatchData(source);
-  if (matchData.length == 1 && matchData[0][2]) {
-    return matchesStrictComparable(matchData[0][0], matchData[0][1]);
-  }
-  return function(object) {
-    return object === source || baseIsMatch(object, source, matchData);
-  };
-}
-
-module.exports = baseMatches;
-
-},{"./_baseIsMatch":103,"./_getMatchData":128,"./_matchesStrictComparable":157}],110:[function(require,module,exports){
-var baseIsEqual = require('./_baseIsEqual'),
-    get = require('./get'),
-    hasIn = require('./hasIn'),
-    isKey = require('./_isKey'),
-    isStrictComparable = require('./_isStrictComparable'),
-    matchesStrictComparable = require('./_matchesStrictComparable'),
-    toKey = require('./_toKey');
-
-/** Used to compose bitmasks for value comparisons. */
-var COMPARE_PARTIAL_FLAG = 1,
-    COMPARE_UNORDERED_FLAG = 2;
-
-/**
- * The base implementation of `_.matchesProperty` which doesn't clone `srcValue`.
- *
- * @private
- * @param {string} path The path of the property to get.
- * @param {*} srcValue The value to match.
- * @returns {Function} Returns the new spec function.
- */
-function baseMatchesProperty(path, srcValue) {
-  if (isKey(path) && isStrictComparable(srcValue)) {
-    return matchesStrictComparable(toKey(path), srcValue);
-  }
-  return function(object) {
-    var objValue = get(object, path);
-    return (objValue === undefined && objValue === srcValue)
-      ? hasIn(object, path)
-      : baseIsEqual(srcValue, objValue, COMPARE_PARTIAL_FLAG | COMPARE_UNORDERED_FLAG);
-  };
-}
-
-module.exports = baseMatchesProperty;
-
-},{"./_baseIsEqual":101,"./_isKey":141,"./_isStrictComparable":145,"./_matchesStrictComparable":157,"./_toKey":174,"./get":178,"./hasIn":179}],111:[function(require,module,exports){
-/**
- * The base implementation of `_.property` without support for deep paths.
- *
- * @private
- * @param {string} key The key of the property to get.
- * @returns {Function} Returns the new accessor function.
- */
-function baseProperty(key) {
-  return function(object) {
-    return object == null ? undefined : object[key];
-  };
-}
-
-module.exports = baseProperty;
-
-},{}],112:[function(require,module,exports){
-var baseGet = require('./_baseGet');
-
-/**
- * A specialized version of `baseProperty` which supports deep paths.
- *
- * @private
- * @param {Array|string} path The path of the property to get.
- * @returns {Function} Returns the new accessor function.
- */
-function basePropertyDeep(path) {
-  return function(object) {
-    return baseGet(object, path);
-  };
-}
-
-module.exports = basePropertyDeep;
-
-},{"./_baseGet":96}],113:[function(require,module,exports){
-/**
- * The base implementation of `_.times` without support for iteratee shorthands
- * or max array length checks.
- *
- * @private
- * @param {number} n The number of times to invoke `iteratee`.
- * @param {Function} iteratee The function invoked per iteration.
- * @returns {Array} Returns the array of results.
- */
-function baseTimes(n, iteratee) {
-  var index = -1,
-      result = Array(n);
-
-  while (++index < n) {
-    result[index] = iteratee(index);
-  }
-  return result;
-}
-
-module.exports = baseTimes;
-
-},{}],114:[function(require,module,exports){
-var Symbol = require('./_Symbol'),
-    arrayMap = require('./_arrayMap'),
-    isArray = require('./isArray'),
-    isSymbol = require('./isSymbol');
-
-/** Used as references for various `Number` constants. */
-var INFINITY = 1 / 0;
-
-/** Used to convert symbols to primitives and strings. */
-var symbolProto = Symbol ? Symbol.prototype : undefined,
-    symbolToString = symbolProto ? symbolProto.toString : undefined;
-
-/**
- * The base implementation of `_.toString` which doesn't convert nullish
- * values to empty strings.
- *
- * @private
- * @param {*} value The value to process.
- * @returns {string} Returns the string.
- */
-function baseToString(value) {
-  // Exit early for strings to avoid a performance hit in some environments.
-  if (typeof value == 'string') {
-    return value;
-  }
-  if (isArray(value)) {
-    // Recursively convert values (susceptible to call stack limits).
-    return arrayMap(value, baseToString) + '';
-  }
-  if (isSymbol(value)) {
-    return symbolToString ? symbolToString.call(value) : '';
-  }
-  var result = (value + '');
-  return (result == '0' && (1 / value) == -INFINITY) ? '-0' : result;
-}
-
-module.exports = baseToString;
-
-},{"./_Symbol":83,"./_arrayMap":89,"./isArray":182,"./isSymbol":189}],115:[function(require,module,exports){
-/**
- * The base implementation of `_.unary` without support for storing metadata.
- *
- * @private
- * @param {Function} func The function to cap arguments for.
- * @returns {Function} Returns the new capped function.
- */
-function baseUnary(func) {
-  return function(value) {
-    return func(value);
-  };
-}
-
-module.exports = baseUnary;
-
-},{}],116:[function(require,module,exports){
-/**
- * Checks if a `cache` value for `key` exists.
- *
- * @private
- * @param {Object} cache The cache to query.
- * @param {string} key The key of the entry to check.
- * @returns {boolean} Returns `true` if an entry for `key` exists, else `false`.
- */
-function cacheHas(cache, key) {
-  return cache.has(key);
-}
-
-module.exports = cacheHas;
-
-},{}],117:[function(require,module,exports){
-var identity = require('./identity');
-
-/**
- * Casts `value` to `identity` if it's not a function.
- *
- * @private
- * @param {*} value The value to inspect.
- * @returns {Function} Returns cast function.
- */
-function castFunction(value) {
-  return typeof value == 'function' ? value : identity;
-}
-
-module.exports = castFunction;
-
-},{"./identity":180}],118:[function(require,module,exports){
-var isArray = require('./isArray'),
-    isKey = require('./_isKey'),
-    stringToPath = require('./_stringToPath'),
-    toString = require('./toString');
-
-/**
- * Casts `value` to a path array if it's not one.
- *
- * @private
- * @param {*} value The value to inspect.
- * @param {Object} [object] The object to query keys on.
- * @returns {Array} Returns the cast property path array.
- */
-function castPath(value, object) {
-  if (isArray(value)) {
-    return value;
-  }
-  return isKey(value, object) ? [value] : stringToPath(toString(value));
-}
-
-module.exports = castPath;
-
-},{"./_isKey":141,"./_stringToPath":173,"./isArray":182,"./toString":197}],119:[function(require,module,exports){
-var root = require('./_root');
-
-/** Used to detect overreaching core-js shims. */
-var coreJsData = root['__core-js_shared__'];
-
-module.exports = coreJsData;
-
-},{"./_root":164}],120:[function(require,module,exports){
-var isArrayLike = require('./isArrayLike');
-
-/**
- * Creates a `baseEach` or `baseEachRight` function.
- *
- * @private
- * @param {Function} eachFunc The function to iterate over a collection.
- * @param {boolean} [fromRight] Specify iterating from right to left.
- * @returns {Function} Returns the new base function.
- */
-function createBaseEach(eachFunc, fromRight) {
-  return function(collection, iteratee) {
-    if (collection == null) {
-      return collection;
-    }
-    if (!isArrayLike(collection)) {
-      return eachFunc(collection, iteratee);
-    }
-    var length = collection.length,
-        index = fromRight ? length : -1,
-        iterable = Object(collection);
-
-    while ((fromRight ? index-- : ++index < length)) {
-      if (iteratee(iterable[index], index, iterable) === false) {
-        break;
-      }
-    }
-    return collection;
-  };
-}
-
-module.exports = createBaseEach;
-
-},{"./isArrayLike":183}],121:[function(require,module,exports){
-/**
- * Creates a base function for methods like `_.forIn` and `_.forOwn`.
- *
- * @private
- * @param {boolean} [fromRight] Specify iterating from right to left.
- * @returns {Function} Returns the new base function.
- */
-function createBaseFor(fromRight) {
-  return function(object, iteratee, keysFunc) {
-    var index = -1,
-        iterable = Object(object),
-        props = keysFunc(object),
-        length = props.length;
-
-    while (length--) {
-      var key = props[fromRight ? length : ++index];
-      if (iteratee(iterable[key], key, iterable) === false) {
-        break;
-      }
-    }
-    return object;
-  };
-}
-
-module.exports = createBaseFor;
-
-},{}],122:[function(require,module,exports){
-var SetCache = require('./_SetCache'),
-    arraySome = require('./_arraySome'),
-    cacheHas = require('./_cacheHas');
-
-/** Used to compose bitmasks for value comparisons. */
-var COMPARE_PARTIAL_FLAG = 1,
-    COMPARE_UNORDERED_FLAG = 2;
-
-/**
- * A specialized version of `baseIsEqualDeep` for arrays with support for
- * partial deep comparisons.
- *
- * @private
- * @param {Array} array The array to compare.
- * @param {Array} other The other array to compare.
- * @param {number} bitmask The bitmask flags. See `baseIsEqual` for more details.
- * @param {Function} customizer The function to customize comparisons.
- * @param {Function} equalFunc The function to determine equivalents of values.
- * @param {Object} stack Tracks traversed `array` and `other` objects.
- * @returns {boolean} Returns `true` if the arrays are equivalent, else `false`.
- */
-function equalArrays(array, other, bitmask, customizer, equalFunc, stack) {
-  var isPartial = bitmask & COMPARE_PARTIAL_FLAG,
-      arrLength = array.length,
-      othLength = other.length;
-
-  if (arrLength != othLength && !(isPartial && othLength > arrLength)) {
-    return false;
-  }
-  // Check that cyclic values are equal.
-  var arrStacked = stack.get(array);
-  var othStacked = stack.get(other);
-  if (arrStacked && othStacked) {
-    return arrStacked == other && othStacked == array;
-  }
-  var index = -1,
-      result = true,
-      seen = (bitmask & COMPARE_UNORDERED_FLAG) ? new SetCache : undefined;
-
-  stack.set(array, other);
-  stack.set(other, array);
-
-  // Ignore non-index properties.
-  while (++index < arrLength) {
-    var arrValue = array[index],
-        othValue = other[index];
-
-    if (customizer) {
-      var compared = isPartial
-        ? customizer(othValue, arrValue, index, other, array, stack)
-        : customizer(arrValue, othValue, index, array, other, stack);
-    }
-    if (compared !== undefined) {
-      if (compared) {
-        continue;
-      }
-      result = false;
-      break;
-    }
-    // Recursively compare arrays (susceptible to call stack limits).
-    if (seen) {
-      if (!arraySome(other, function(othValue, othIndex) {
-            if (!cacheHas(seen, othIndex) &&
-                (arrValue === othValue || equalFunc(arrValue, othValue, bitmask, customizer, stack))) {
-              return seen.push(othIndex);
-            }
-          })) {
-        result = false;
-        break;
-      }
-    } else if (!(
-          arrValue === othValue ||
-            equalFunc(arrValue, othValue, bitmask, customizer, stack)
-        )) {
-      result = false;
-      break;
-    }
-  }
-  stack['delete'](array);
-  stack['delete'](other);
-  return result;
-}
-
-module.exports = equalArrays;
-
-},{"./_SetCache":81,"./_arraySome":91,"./_cacheHas":116}],123:[function(require,module,exports){
-var Symbol = require('./_Symbol'),
-    Uint8Array = require('./_Uint8Array'),
-    eq = require('./eq'),
-    equalArrays = require('./_equalArrays'),
-    mapToArray = require('./_mapToArray'),
-    setToArray = require('./_setToArray');
-
-/** Used to compose bitmasks for value comparisons. */
-var COMPARE_PARTIAL_FLAG = 1,
-    COMPARE_UNORDERED_FLAG = 2;
-
-/** `Object#toString` result references. */
-var boolTag = '[object Boolean]',
-    dateTag = '[object Date]',
-    errorTag = '[object Error]',
-    mapTag = '[object Map]',
-    numberTag = '[object Number]',
-    regexpTag = '[object RegExp]',
-    setTag = '[object Set]',
-    stringTag = '[object String]',
-    symbolTag = '[object Symbol]';
-
-var arrayBufferTag = '[object ArrayBuffer]',
-    dataViewTag = '[object DataView]';
-
-/** Used to convert symbols to primitives and strings. */
-var symbolProto = Symbol ? Symbol.prototype : undefined,
-    symbolValueOf = symbolProto ? symbolProto.valueOf : undefined;
-
-/**
- * A specialized version of `baseIsEqualDeep` for comparing objects of
- * the same `toStringTag`.
- *
- * **Note:** This function only supports comparing values with tags of
- * `Boolean`, `Date`, `Error`, `Number`, `RegExp`, or `String`.
- *
- * @private
- * @param {Object} object The object to compare.
- * @param {Object} other The other object to compare.
- * @param {string} tag The `toStringTag` of the objects to compare.
- * @param {number} bitmask The bitmask flags. See `baseIsEqual` for more details.
- * @param {Function} customizer The function to customize comparisons.
- * @param {Function} equalFunc The function to determine equivalents of values.
- * @param {Object} stack Tracks traversed `object` and `other` objects.
- * @returns {boolean} Returns `true` if the objects are equivalent, else `false`.
- */
-function equalByTag(object, other, tag, bitmask, customizer, equalFunc, stack) {
-  switch (tag) {
-    case dataViewTag:
-      if ((object.byteLength != other.byteLength) ||
-          (object.byteOffset != other.byteOffset)) {
-        return false;
-      }
-      object = object.buffer;
-      other = other.buffer;
-
-    case arrayBufferTag:
-      if ((object.byteLength != other.byteLength) ||
-          !equalFunc(new Uint8Array(object), new Uint8Array(other))) {
-        return false;
-      }
-      return true;
-
-    case boolTag:
-    case dateTag:
-    case numberTag:
-      // Coerce booleans to `1` or `0` and dates to milliseconds.
-      // Invalid dates are coerced to `NaN`.
-      return eq(+object, +other);
-
-    case errorTag:
-      return object.name == other.name && object.message == other.message;
-
-    case regexpTag:
-    case stringTag:
-      // Coerce regexes to strings and treat strings, primitives and objects,
-      // as equal. See http://www.ecma-international.org/ecma-262/7.0/#sec-regexp.prototype.tostring
-      // for more details.
-      return object == (other + '');
-
-    case mapTag:
-      var convert = mapToArray;
-
-    case setTag:
-      var isPartial = bitmask & COMPARE_PARTIAL_FLAG;
-      convert || (convert = setToArray);
-
-      if (object.size != other.size && !isPartial) {
-        return false;
-      }
-      // Assume cyclic values are equal.
-      var stacked = stack.get(object);
-      if (stacked) {
-        return stacked == other;
-      }
-      bitmask |= COMPARE_UNORDERED_FLAG;
-
-      // Recursively compare objects (susceptible to call stack limits).
-      stack.set(object, other);
-      var result = equalArrays(convert(object), convert(other), bitmask, customizer, equalFunc, stack);
-      stack['delete'](object);
-      return result;
-
-    case symbolTag:
-      if (symbolValueOf) {
-        return symbolValueOf.call(object) == symbolValueOf.call(other);
-      }
-  }
-  return false;
-}
-
-module.exports = equalByTag;
-
-},{"./_Symbol":83,"./_Uint8Array":84,"./_equalArrays":122,"./_mapToArray":156,"./_setToArray":167,"./eq":176}],124:[function(require,module,exports){
-var getAllKeys = require('./_getAllKeys');
-
-/** Used to compose bitmasks for value comparisons. */
-var COMPARE_PARTIAL_FLAG = 1;
-
-/** Used for built-in method references. */
-var objectProto = Object.prototype;
-
-/** Used to check objects for own properties. */
-var hasOwnProperty = objectProto.hasOwnProperty;
-
-/**
- * A specialized version of `baseIsEqualDeep` for objects with support for
- * partial deep comparisons.
- *
- * @private
- * @param {Object} object The object to compare.
- * @param {Object} other The other object to compare.
- * @param {number} bitmask The bitmask flags. See `baseIsEqual` for more details.
- * @param {Function} customizer The function to customize comparisons.
- * @param {Function} equalFunc The function to determine equivalents of values.
- * @param {Object} stack Tracks traversed `object` and `other` objects.
- * @returns {boolean} Returns `true` if the objects are equivalent, else `false`.
- */
-function equalObjects(object, other, bitmask, customizer, equalFunc, stack) {
-  var isPartial = bitmask & COMPARE_PARTIAL_FLAG,
-      objProps = getAllKeys(object),
-      objLength = objProps.length,
-      othProps = getAllKeys(other),
-      othLength = othProps.length;
-
-  if (objLength != othLength && !isPartial) {
-    return false;
-  }
-  var index = objLength;
-  while (index--) {
-    var key = objProps[index];
-    if (!(isPartial ? key in other : hasOwnProperty.call(other, key))) {
-      return false;
-    }
-  }
-  // Check that cyclic values are equal.
-  var objStacked = stack.get(object);
-  var othStacked = stack.get(other);
-  if (objStacked && othStacked) {
-    return objStacked == other && othStacked == object;
-  }
-  var result = true;
-  stack.set(object, other);
-  stack.set(other, object);
-
-  var skipCtor = isPartial;
-  while (++index < objLength) {
-    key = objProps[index];
-    var objValue = object[key],
-        othValue = other[key];
-
-    if (customizer) {
-      var compared = isPartial
-        ? customizer(othValue, objValue, key, other, object, stack)
-        : customizer(objValue, othValue, key, object, other, stack);
-    }
-    // Recursively compare objects (susceptible to call stack limits).
-    if (!(compared === undefined
-          ? (objValue === othValue || equalFunc(objValue, othValue, bitmask, customizer, stack))
-          : compared
-        )) {
-      result = false;
-      break;
-    }
-    skipCtor || (skipCtor = key == 'constructor');
-  }
-  if (result && !skipCtor) {
-    var objCtor = object.constructor,
-        othCtor = other.constructor;
-
-    // Non `Object` object instances with different constructors are not equal.
-    if (objCtor != othCtor &&
-        ('constructor' in object && 'constructor' in other) &&
-        !(typeof objCtor == 'function' && objCtor instanceof objCtor &&
-          typeof othCtor == 'function' && othCtor instanceof othCtor)) {
-      result = false;
-    }
-  }
-  stack['delete'](object);
-  stack['delete'](other);
-  return result;
-}
-
-module.exports = equalObjects;
-
-},{"./_getAllKeys":126}],125:[function(require,module,exports){
-(function (global){(function (){
-/** Detect free variable `global` from Node.js. */
-var freeGlobal = typeof global == 'object' && global && global.Object === Object && global;
-
-module.exports = freeGlobal;
-
-}).call(this)}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}],126:[function(require,module,exports){
-var baseGetAllKeys = require('./_baseGetAllKeys'),
-    getSymbols = require('./_getSymbols'),
-    keys = require('./keys');
-
-/**
- * Creates an array of own enumerable property names and symbols of `object`.
- *
- * @private
- * @param {Object} object The object to query.
- * @returns {Array} Returns the array of property names and symbols.
- */
-function getAllKeys(object) {
-  return baseGetAllKeys(object, keys, getSymbols);
-}
-
-module.exports = getAllKeys;
-
-},{"./_baseGetAllKeys":97,"./_getSymbols":131,"./keys":191}],127:[function(require,module,exports){
-var isKeyable = require('./_isKeyable');
-
-/**
- * Gets the data for `map`.
- *
- * @private
- * @param {Object} map The map to query.
- * @param {string} key The reference key.
- * @returns {*} Returns the map data.
- */
-function getMapData(map, key) {
-  var data = map.__data__;
-  return isKeyable(key)
-    ? data[typeof key == 'string' ? 'string' : 'hash']
-    : data.map;
-}
-
-module.exports = getMapData;
-
-},{"./_isKeyable":142}],128:[function(require,module,exports){
-var isStrictComparable = require('./_isStrictComparable'),
-    keys = require('./keys');
-
-/**
- * Gets the property names, values, and compare flags of `object`.
- *
- * @private
- * @param {Object} object The object to query.
- * @returns {Array} Returns the match data of `object`.
- */
-function getMatchData(object) {
-  var result = keys(object),
-      length = result.length;
-
-  while (length--) {
-    var key = result[length],
-        value = object[key];
-
-    result[length] = [key, value, isStrictComparable(value)];
-  }
-  return result;
-}
-
-module.exports = getMatchData;
-
-},{"./_isStrictComparable":145,"./keys":191}],129:[function(require,module,exports){
-var baseIsNative = require('./_baseIsNative'),
-    getValue = require('./_getValue');
-
-/**
- * Gets the native function at `key` of `object`.
- *
- * @private
- * @param {Object} object The object to query.
- * @param {string} key The key of the method to get.
- * @returns {*} Returns the function if it's native, else `undefined`.
- */
-function getNative(object, key) {
-  var value = getValue(object, key);
-  return baseIsNative(value) ? value : undefined;
-}
-
-module.exports = getNative;
-
-},{"./_baseIsNative":104,"./_getValue":133}],130:[function(require,module,exports){
-var Symbol = require('./_Symbol');
-
-/** Used for built-in method references. */
-var objectProto = Object.prototype;
-
-/** Used to check objects for own properties. */
-var hasOwnProperty = objectProto.hasOwnProperty;
-
-/**
- * Used to resolve the
- * [`toStringTag`](http://ecma-international.org/ecma-262/7.0/#sec-object.prototype.tostring)
- * of values.
- */
-var nativeObjectToString = objectProto.toString;
-
-/** Built-in value references. */
-var symToStringTag = Symbol ? Symbol.toStringTag : undefined;
-
-/**
- * A specialized version of `baseGetTag` which ignores `Symbol.toStringTag` values.
- *
- * @private
- * @param {*} value The value to query.
- * @returns {string} Returns the raw `toStringTag`.
- */
-function getRawTag(value) {
-  var isOwn = hasOwnProperty.call(value, symToStringTag),
-      tag = value[symToStringTag];
-
-  try {
-    value[symToStringTag] = undefined;
-    var unmasked = true;
-  } catch (e) {}
-
-  var result = nativeObjectToString.call(value);
-  if (unmasked) {
-    if (isOwn) {
-      value[symToStringTag] = tag;
-    } else {
-      delete value[symToStringTag];
-    }
-  }
-  return result;
-}
-
-module.exports = getRawTag;
-
-},{"./_Symbol":83}],131:[function(require,module,exports){
-var arrayFilter = require('./_arrayFilter'),
-    stubArray = require('./stubArray');
-
-/** Used for built-in method references. */
-var objectProto = Object.prototype;
-
-/** Built-in value references. */
-var propertyIsEnumerable = objectProto.propertyIsEnumerable;
-
-/* Built-in method references for those with the same name as other `lodash` methods. */
-var nativeGetSymbols = Object.getOwnPropertySymbols;
-
-/**
- * Creates an array of the own enumerable symbols of `object`.
- *
- * @private
- * @param {Object} object The object to query.
- * @returns {Array} Returns the array of symbols.
- */
-var getSymbols = !nativeGetSymbols ? stubArray : function(object) {
-  if (object == null) {
-    return [];
-  }
-  object = Object(object);
-  return arrayFilter(nativeGetSymbols(object), function(symbol) {
-    return propertyIsEnumerable.call(object, symbol);
-  });
-};
-
-module.exports = getSymbols;
-
-},{"./_arrayFilter":87,"./stubArray":195}],132:[function(require,module,exports){
-var DataView = require('./_DataView'),
-    Map = require('./_Map'),
-    Promise = require('./_Promise'),
-    Set = require('./_Set'),
-    WeakMap = require('./_WeakMap'),
-    baseGetTag = require('./_baseGetTag'),
-    toSource = require('./_toSource');
-
-/** `Object#toString` result references. */
-var mapTag = '[object Map]',
-    objectTag = '[object Object]',
-    promiseTag = '[object Promise]',
-    setTag = '[object Set]',
-    weakMapTag = '[object WeakMap]';
-
-var dataViewTag = '[object DataView]';
-
-/** Used to detect maps, sets, and weakmaps. */
-var dataViewCtorString = toSource(DataView),
-    mapCtorString = toSource(Map),
-    promiseCtorString = toSource(Promise),
-    setCtorString = toSource(Set),
-    weakMapCtorString = toSource(WeakMap);
-
-/**
- * Gets the `toStringTag` of `value`.
- *
- * @private
- * @param {*} value The value to query.
- * @returns {string} Returns the `toStringTag`.
- */
-var getTag = baseGetTag;
-
-// Fallback for data views, maps, sets, and weak maps in IE 11 and promises in Node.js < 6.
-if ((DataView && getTag(new DataView(new ArrayBuffer(1))) != dataViewTag) ||
-    (Map && getTag(new Map) != mapTag) ||
-    (Promise && getTag(Promise.resolve()) != promiseTag) ||
-    (Set && getTag(new Set) != setTag) ||
-    (WeakMap && getTag(new WeakMap) != weakMapTag)) {
-  getTag = function(value) {
-    var result = baseGetTag(value),
-        Ctor = result == objectTag ? value.constructor : undefined,
-        ctorString = Ctor ? toSource(Ctor) : '';
-
-    if (ctorString) {
-      switch (ctorString) {
-        case dataViewCtorString: return dataViewTag;
-        case mapCtorString: return mapTag;
-        case promiseCtorString: return promiseTag;
-        case setCtorString: return setTag;
-        case weakMapCtorString: return weakMapTag;
-      }
-    }
-    return result;
-  };
-}
-
-module.exports = getTag;
-
-},{"./_DataView":74,"./_Map":77,"./_Promise":79,"./_Set":80,"./_WeakMap":85,"./_baseGetTag":98,"./_toSource":175}],133:[function(require,module,exports){
-/**
- * Gets the value at `key` of `object`.
- *
- * @private
- * @param {Object} [object] The object to query.
- * @param {string} key The key of the property to get.
- * @returns {*} Returns the property value.
- */
-function getValue(object, key) {
-  return object == null ? undefined : object[key];
-}
-
-module.exports = getValue;
-
-},{}],134:[function(require,module,exports){
-var castPath = require('./_castPath'),
-    isArguments = require('./isArguments'),
-    isArray = require('./isArray'),
-    isIndex = require('./_isIndex'),
-    isLength = require('./isLength'),
-    toKey = require('./_toKey');
-
-/**
- * Checks if `path` exists on `object`.
- *
- * @private
- * @param {Object} object The object to query.
- * @param {Array|string} path The path to check.
- * @param {Function} hasFunc The function to check properties.
- * @returns {boolean} Returns `true` if `path` exists, else `false`.
- */
-function hasPath(object, path, hasFunc) {
-  path = castPath(path, object);
-
-  var index = -1,
-      length = path.length,
-      result = false;
-
-  while (++index < length) {
-    var key = toKey(path[index]);
-    if (!(result = object != null && hasFunc(object, key))) {
-      break;
-    }
-    object = object[key];
-  }
-  if (result || ++index != length) {
-    return result;
-  }
-  length = object == null ? 0 : object.length;
-  return !!length && isLength(length) && isIndex(key, length) &&
-    (isArray(object) || isArguments(object));
-}
-
-module.exports = hasPath;
-
-},{"./_castPath":118,"./_isIndex":140,"./_toKey":174,"./isArguments":181,"./isArray":182,"./isLength":186}],135:[function(require,module,exports){
-var nativeCreate = require('./_nativeCreate');
-
-/**
- * Removes all key-value entries from the hash.
- *
- * @private
- * @name clear
- * @memberOf Hash
- */
-function hashClear() {
-  this.__data__ = nativeCreate ? nativeCreate(null) : {};
-  this.size = 0;
-}
-
-module.exports = hashClear;
-
-},{"./_nativeCreate":159}],136:[function(require,module,exports){
-/**
- * Removes `key` and its value from the hash.
- *
- * @private
- * @name delete
- * @memberOf Hash
- * @param {Object} hash The hash to modify.
- * @param {string} key The key of the value to remove.
- * @returns {boolean} Returns `true` if the entry was removed, else `false`.
- */
-function hashDelete(key) {
-  var result = this.has(key) && delete this.__data__[key];
-  this.size -= result ? 1 : 0;
-  return result;
-}
-
-module.exports = hashDelete;
-
-},{}],137:[function(require,module,exports){
-var nativeCreate = require('./_nativeCreate');
-
-/** Used to stand-in for `undefined` hash values. */
-var HASH_UNDEFINED = '__lodash_hash_undefined__';
-
-/** Used for built-in method references. */
-var objectProto = Object.prototype;
-
-/** Used to check objects for own properties. */
-var hasOwnProperty = objectProto.hasOwnProperty;
-
-/**
- * Gets the hash value for `key`.
- *
- * @private
- * @name get
- * @memberOf Hash
- * @param {string} key The key of the value to get.
- * @returns {*} Returns the entry value.
- */
-function hashGet(key) {
-  var data = this.__data__;
-  if (nativeCreate) {
-    var result = data[key];
-    return result === HASH_UNDEFINED ? undefined : result;
-  }
-  return hasOwnProperty.call(data, key) ? data[key] : undefined;
-}
-
-module.exports = hashGet;
-
-},{"./_nativeCreate":159}],138:[function(require,module,exports){
-var nativeCreate = require('./_nativeCreate');
-
-/** Used for built-in method references. */
-var objectProto = Object.prototype;
-
-/** Used to check objects for own properties. */
-var hasOwnProperty = objectProto.hasOwnProperty;
-
-/**
- * Checks if a hash value for `key` exists.
- *
- * @private
- * @name has
- * @memberOf Hash
- * @param {string} key The key of the entry to check.
- * @returns {boolean} Returns `true` if an entry for `key` exists, else `false`.
- */
-function hashHas(key) {
-  var data = this.__data__;
-  return nativeCreate ? (data[key] !== undefined) : hasOwnProperty.call(data, key);
-}
-
-module.exports = hashHas;
-
-},{"./_nativeCreate":159}],139:[function(require,module,exports){
-var nativeCreate = require('./_nativeCreate');
-
-/** Used to stand-in for `undefined` hash values. */
-var HASH_UNDEFINED = '__lodash_hash_undefined__';
-
-/**
- * Sets the hash `key` to `value`.
- *
- * @private
- * @name set
- * @memberOf Hash
- * @param {string} key The key of the value to set.
- * @param {*} value The value to set.
- * @returns {Object} Returns the hash instance.
- */
-function hashSet(key, value) {
-  var data = this.__data__;
-  this.size += this.has(key) ? 0 : 1;
-  data[key] = (nativeCreate && value === undefined) ? HASH_UNDEFINED : value;
-  return this;
-}
-
-module.exports = hashSet;
-
-},{"./_nativeCreate":159}],140:[function(require,module,exports){
-/** Used as references for various `Number` constants. */
-var MAX_SAFE_INTEGER = 9007199254740991;
-
-/** Used to detect unsigned integer values. */
-var reIsUint = /^(?:0|[1-9]\d*)$/;
-
-/**
- * Checks if `value` is a valid array-like index.
- *
- * @private
- * @param {*} value The value to check.
- * @param {number} [length=MAX_SAFE_INTEGER] The upper bounds of a valid index.
- * @returns {boolean} Returns `true` if `value` is a valid index, else `false`.
- */
-function isIndex(value, length) {
-  var type = typeof value;
-  length = length == null ? MAX_SAFE_INTEGER : length;
-
-  return !!length &&
-    (type == 'number' ||
-      (type != 'symbol' && reIsUint.test(value))) &&
-        (value > -1 && value % 1 == 0 && value < length);
-}
-
-module.exports = isIndex;
-
-},{}],141:[function(require,module,exports){
-var isArray = require('./isArray'),
-    isSymbol = require('./isSymbol');
-
-/** Used to match property names within property paths. */
-var reIsDeepProp = /\.|\[(?:[^[\]]*|(["'])(?:(?!\1)[^\\]|\\.)*?\1)\]/,
-    reIsPlainProp = /^\w*$/;
-
-/**
- * Checks if `value` is a property name and not a property path.
- *
- * @private
- * @param {*} value The value to check.
- * @param {Object} [object] The object to query keys on.
- * @returns {boolean} Returns `true` if `value` is a property name, else `false`.
- */
-function isKey(value, object) {
-  if (isArray(value)) {
-    return false;
-  }
-  var type = typeof value;
-  if (type == 'number' || type == 'symbol' || type == 'boolean' ||
-      value == null || isSymbol(value)) {
-    return true;
-  }
-  return reIsPlainProp.test(value) || !reIsDeepProp.test(value) ||
-    (object != null && value in Object(object));
-}
-
-module.exports = isKey;
-
-},{"./isArray":182,"./isSymbol":189}],142:[function(require,module,exports){
-/**
- * Checks if `value` is suitable for use as unique object key.
- *
- * @private
- * @param {*} value The value to check.
- * @returns {boolean} Returns `true` if `value` is suitable, else `false`.
- */
-function isKeyable(value) {
-  var type = typeof value;
-  return (type == 'string' || type == 'number' || type == 'symbol' || type == 'boolean')
-    ? (value !== '__proto__')
-    : (value === null);
-}
-
-module.exports = isKeyable;
-
-},{}],143:[function(require,module,exports){
-var coreJsData = require('./_coreJsData');
-
-/** Used to detect methods masquerading as native. */
-var maskSrcKey = (function() {
-  var uid = /[^.]+$/.exec(coreJsData && coreJsData.keys && coreJsData.keys.IE_PROTO || '');
-  return uid ? ('Symbol(src)_1.' + uid) : '';
-}());
-
-/**
- * Checks if `func` has its source masked.
- *
- * @private
- * @param {Function} func The function to check.
- * @returns {boolean} Returns `true` if `func` is masked, else `false`.
- */
-function isMasked(func) {
-  return !!maskSrcKey && (maskSrcKey in func);
-}
-
-module.exports = isMasked;
-
-},{"./_coreJsData":119}],144:[function(require,module,exports){
-/** Used for built-in method references. */
-var objectProto = Object.prototype;
-
-/**
- * Checks if `value` is likely a prototype object.
- *
- * @private
- * @param {*} value The value to check.
- * @returns {boolean} Returns `true` if `value` is a prototype, else `false`.
- */
-function isPrototype(value) {
-  var Ctor = value && value.constructor,
-      proto = (typeof Ctor == 'function' && Ctor.prototype) || objectProto;
-
-  return value === proto;
-}
-
-module.exports = isPrototype;
-
-},{}],145:[function(require,module,exports){
-var isObject = require('./isObject');
-
-/**
- * Checks if `value` is suitable for strict equality comparisons, i.e. `===`.
- *
- * @private
- * @param {*} value The value to check.
- * @returns {boolean} Returns `true` if `value` if suitable for strict
- *  equality comparisons, else `false`.
- */
-function isStrictComparable(value) {
-  return value === value && !isObject(value);
-}
-
-module.exports = isStrictComparable;
-
-},{"./isObject":187}],146:[function(require,module,exports){
-/**
- * Removes all key-value entries from the list cache.
- *
- * @private
- * @name clear
- * @memberOf ListCache
- */
-function listCacheClear() {
-  this.__data__ = [];
-  this.size = 0;
-}
-
-module.exports = listCacheClear;
-
-},{}],147:[function(require,module,exports){
-var assocIndexOf = require('./_assocIndexOf');
-
-/** Used for built-in method references. */
-var arrayProto = Array.prototype;
-
-/** Built-in value references. */
-var splice = arrayProto.splice;
-
-/**
- * Removes `key` and its value from the list cache.
- *
- * @private
- * @name delete
- * @memberOf ListCache
- * @param {string} key The key of the value to remove.
- * @returns {boolean} Returns `true` if the entry was removed, else `false`.
- */
-function listCacheDelete(key) {
-  var data = this.__data__,
-      index = assocIndexOf(data, key);
-
-  if (index < 0) {
-    return false;
-  }
-  var lastIndex = data.length - 1;
-  if (index == lastIndex) {
-    data.pop();
-  } else {
-    splice.call(data, index, 1);
-  }
-  --this.size;
-  return true;
-}
-
-module.exports = listCacheDelete;
-
-},{"./_assocIndexOf":92}],148:[function(require,module,exports){
-var assocIndexOf = require('./_assocIndexOf');
-
-/**
- * Gets the list cache value for `key`.
- *
- * @private
- * @name get
- * @memberOf ListCache
- * @param {string} key The key of the value to get.
- * @returns {*} Returns the entry value.
- */
-function listCacheGet(key) {
-  var data = this.__data__,
-      index = assocIndexOf(data, key);
-
-  return index < 0 ? undefined : data[index][1];
-}
-
-module.exports = listCacheGet;
-
-},{"./_assocIndexOf":92}],149:[function(require,module,exports){
-var assocIndexOf = require('./_assocIndexOf');
-
-/**
- * Checks if a list cache value for `key` exists.
- *
- * @private
- * @name has
- * @memberOf ListCache
- * @param {string} key The key of the entry to check.
- * @returns {boolean} Returns `true` if an entry for `key` exists, else `false`.
- */
-function listCacheHas(key) {
-  return assocIndexOf(this.__data__, key) > -1;
-}
-
-module.exports = listCacheHas;
-
-},{"./_assocIndexOf":92}],150:[function(require,module,exports){
-var assocIndexOf = require('./_assocIndexOf');
-
-/**
- * Sets the list cache `key` to `value`.
- *
- * @private
- * @name set
- * @memberOf ListCache
- * @param {string} key The key of the value to set.
- * @param {*} value The value to set.
- * @returns {Object} Returns the list cache instance.
- */
-function listCacheSet(key, value) {
-  var data = this.__data__,
-      index = assocIndexOf(data, key);
-
-  if (index < 0) {
-    ++this.size;
-    data.push([key, value]);
-  } else {
-    data[index][1] = value;
-  }
-  return this;
-}
-
-module.exports = listCacheSet;
-
-},{"./_assocIndexOf":92}],151:[function(require,module,exports){
-var Hash = require('./_Hash'),
-    ListCache = require('./_ListCache'),
-    Map = require('./_Map');
-
-/**
- * Removes all key-value entries from the map.
- *
- * @private
- * @name clear
- * @memberOf MapCache
- */
-function mapCacheClear() {
-  this.size = 0;
-  this.__data__ = {
-    'hash': new Hash,
-    'map': new (Map || ListCache),
-    'string': new Hash
-  };
-}
-
-module.exports = mapCacheClear;
-
-},{"./_Hash":75,"./_ListCache":76,"./_Map":77}],152:[function(require,module,exports){
-var getMapData = require('./_getMapData');
-
-/**
- * Removes `key` and its value from the map.
- *
- * @private
- * @name delete
- * @memberOf MapCache
- * @param {string} key The key of the value to remove.
- * @returns {boolean} Returns `true` if the entry was removed, else `false`.
- */
-function mapCacheDelete(key) {
-  var result = getMapData(this, key)['delete'](key);
-  this.size -= result ? 1 : 0;
-  return result;
-}
-
-module.exports = mapCacheDelete;
-
-},{"./_getMapData":127}],153:[function(require,module,exports){
-var getMapData = require('./_getMapData');
-
-/**
- * Gets the map value for `key`.
- *
- * @private
- * @name get
- * @memberOf MapCache
- * @param {string} key The key of the value to get.
- * @returns {*} Returns the entry value.
- */
-function mapCacheGet(key) {
-  return getMapData(this, key).get(key);
-}
-
-module.exports = mapCacheGet;
-
-},{"./_getMapData":127}],154:[function(require,module,exports){
-var getMapData = require('./_getMapData');
-
-/**
- * Checks if a map value for `key` exists.
- *
- * @private
- * @name has
- * @memberOf MapCache
- * @param {string} key The key of the entry to check.
- * @returns {boolean} Returns `true` if an entry for `key` exists, else `false`.
- */
-function mapCacheHas(key) {
-  return getMapData(this, key).has(key);
-}
-
-module.exports = mapCacheHas;
-
-},{"./_getMapData":127}],155:[function(require,module,exports){
-var getMapData = require('./_getMapData');
-
-/**
- * Sets the map `key` to `value`.
- *
- * @private
- * @name set
- * @memberOf MapCache
- * @param {string} key The key of the value to set.
- * @param {*} value The value to set.
- * @returns {Object} Returns the map cache instance.
- */
-function mapCacheSet(key, value) {
-  var data = getMapData(this, key),
-      size = data.size;
-
-  data.set(key, value);
-  this.size += data.size == size ? 0 : 1;
-  return this;
-}
-
-module.exports = mapCacheSet;
-
-},{"./_getMapData":127}],156:[function(require,module,exports){
-/**
- * Converts `map` to its key-value pairs.
- *
- * @private
- * @param {Object} map The map to convert.
- * @returns {Array} Returns the key-value pairs.
- */
-function mapToArray(map) {
-  var index = -1,
-      result = Array(map.size);
-
-  map.forEach(function(value, key) {
-    result[++index] = [key, value];
-  });
-  return result;
-}
-
-module.exports = mapToArray;
-
-},{}],157:[function(require,module,exports){
-/**
- * A specialized version of `matchesProperty` for source values suitable
- * for strict equality comparisons, i.e. `===`.
- *
- * @private
- * @param {string} key The key of the property to get.
- * @param {*} srcValue The value to match.
- * @returns {Function} Returns the new spec function.
- */
-function matchesStrictComparable(key, srcValue) {
-  return function(object) {
-    if (object == null) {
-      return false;
-    }
-    return object[key] === srcValue &&
-      (srcValue !== undefined || (key in Object(object)));
-  };
-}
-
-module.exports = matchesStrictComparable;
-
-},{}],158:[function(require,module,exports){
-var memoize = require('./memoize');
-
-/** Used as the maximum memoize cache size. */
-var MAX_MEMOIZE_SIZE = 500;
-
-/**
- * A specialized version of `_.memoize` which clears the memoized function's
- * cache when it exceeds `MAX_MEMOIZE_SIZE`.
- *
- * @private
- * @param {Function} func The function to have its output memoized.
- * @returns {Function} Returns the new memoized function.
- */
-function memoizeCapped(func) {
-  var result = memoize(func, function(key) {
-    if (cache.size === MAX_MEMOIZE_SIZE) {
-      cache.clear();
-    }
-    return key;
-  });
-
-  var cache = result.cache;
-  return result;
-}
-
-module.exports = memoizeCapped;
-
-},{"./memoize":193}],159:[function(require,module,exports){
-var getNative = require('./_getNative');
-
-/* Built-in method references that are verified to be native. */
-var nativeCreate = getNative(Object, 'create');
-
-module.exports = nativeCreate;
-
-},{"./_getNative":129}],160:[function(require,module,exports){
-var overArg = require('./_overArg');
-
-/* Built-in method references for those with the same name as other `lodash` methods. */
-var nativeKeys = overArg(Object.keys, Object);
-
-module.exports = nativeKeys;
-
-},{"./_overArg":163}],161:[function(require,module,exports){
-var freeGlobal = require('./_freeGlobal');
-
-/** Detect free variable `exports`. */
-var freeExports = typeof exports == 'object' && exports && !exports.nodeType && exports;
-
-/** Detect free variable `module`. */
-var freeModule = freeExports && typeof module == 'object' && module && !module.nodeType && module;
-
-/** Detect the popular CommonJS extension `module.exports`. */
-var moduleExports = freeModule && freeModule.exports === freeExports;
-
-/** Detect free variable `process` from Node.js. */
-var freeProcess = moduleExports && freeGlobal.process;
-
-/** Used to access faster Node.js helpers. */
-var nodeUtil = (function() {
-  try {
-    // Use `util.types` for Node.js 10+.
-    var types = freeModule && freeModule.require && freeModule.require('util').types;
-
-    if (types) {
-      return types;
-    }
-
-    // Legacy `process.binding('util')` for Node.js < 10.
-    return freeProcess && freeProcess.binding && freeProcess.binding('util');
-  } catch (e) {}
-}());
-
-module.exports = nodeUtil;
-
-},{"./_freeGlobal":125}],162:[function(require,module,exports){
-/** Used for built-in method references. */
-var objectProto = Object.prototype;
-
-/**
- * Used to resolve the
- * [`toStringTag`](http://ecma-international.org/ecma-262/7.0/#sec-object.prototype.tostring)
- * of values.
- */
-var nativeObjectToString = objectProto.toString;
-
-/**
- * Converts `value` to a string using `Object.prototype.toString`.
- *
- * @private
- * @param {*} value The value to convert.
- * @returns {string} Returns the converted string.
- */
-function objectToString(value) {
-  return nativeObjectToString.call(value);
-}
-
-module.exports = objectToString;
-
-},{}],163:[function(require,module,exports){
-/**
- * Creates a unary function that invokes `func` with its argument transformed.
- *
- * @private
- * @param {Function} func The function to wrap.
- * @param {Function} transform The argument transform.
- * @returns {Function} Returns the new function.
- */
-function overArg(func, transform) {
-  return function(arg) {
-    return func(transform(arg));
-  };
-}
-
-module.exports = overArg;
-
-},{}],164:[function(require,module,exports){
-var freeGlobal = require('./_freeGlobal');
-
-/** Detect free variable `self`. */
-var freeSelf = typeof self == 'object' && self && self.Object === Object && self;
-
-/** Used as a reference to the global object. */
-var root = freeGlobal || freeSelf || Function('return this')();
-
-module.exports = root;
-
-},{"./_freeGlobal":125}],165:[function(require,module,exports){
-/** Used to stand-in for `undefined` hash values. */
-var HASH_UNDEFINED = '__lodash_hash_undefined__';
-
-/**
- * Adds `value` to the array cache.
- *
- * @private
- * @name add
- * @memberOf SetCache
- * @alias push
- * @param {*} value The value to cache.
- * @returns {Object} Returns the cache instance.
- */
-function setCacheAdd(value) {
-  this.__data__.set(value, HASH_UNDEFINED);
-  return this;
-}
-
-module.exports = setCacheAdd;
-
-},{}],166:[function(require,module,exports){
-/**
- * Checks if `value` is in the array cache.
- *
- * @private
- * @name has
- * @memberOf SetCache
- * @param {*} value The value to search for.
- * @returns {number} Returns `true` if `value` is found, else `false`.
- */
-function setCacheHas(value) {
-  return this.__data__.has(value);
-}
-
-module.exports = setCacheHas;
-
-},{}],167:[function(require,module,exports){
-/**
- * Converts `set` to an array of its values.
- *
- * @private
- * @param {Object} set The set to convert.
- * @returns {Array} Returns the values.
- */
-function setToArray(set) {
-  var index = -1,
-      result = Array(set.size);
-
-  set.forEach(function(value) {
-    result[++index] = value;
-  });
-  return result;
-}
-
-module.exports = setToArray;
-
-},{}],168:[function(require,module,exports){
-var ListCache = require('./_ListCache');
-
-/**
- * Removes all key-value entries from the stack.
- *
- * @private
- * @name clear
- * @memberOf Stack
- */
-function stackClear() {
-  this.__data__ = new ListCache;
-  this.size = 0;
-}
-
-module.exports = stackClear;
-
-},{"./_ListCache":76}],169:[function(require,module,exports){
-/**
- * Removes `key` and its value from the stack.
- *
- * @private
- * @name delete
- * @memberOf Stack
- * @param {string} key The key of the value to remove.
- * @returns {boolean} Returns `true` if the entry was removed, else `false`.
- */
-function stackDelete(key) {
-  var data = this.__data__,
-      result = data['delete'](key);
-
-  this.size = data.size;
-  return result;
-}
-
-module.exports = stackDelete;
-
-},{}],170:[function(require,module,exports){
-/**
- * Gets the stack value for `key`.
- *
- * @private
- * @name get
- * @memberOf Stack
- * @param {string} key The key of the value to get.
- * @returns {*} Returns the entry value.
- */
-function stackGet(key) {
-  return this.__data__.get(key);
-}
-
-module.exports = stackGet;
-
-},{}],171:[function(require,module,exports){
-/**
- * Checks if a stack value for `key` exists.
- *
- * @private
- * @name has
- * @memberOf Stack
- * @param {string} key The key of the entry to check.
- * @returns {boolean} Returns `true` if an entry for `key` exists, else `false`.
- */
-function stackHas(key) {
-  return this.__data__.has(key);
-}
-
-module.exports = stackHas;
-
-},{}],172:[function(require,module,exports){
-var ListCache = require('./_ListCache'),
-    Map = require('./_Map'),
-    MapCache = require('./_MapCache');
-
-/** Used as the size to enable large array optimizations. */
-var LARGE_ARRAY_SIZE = 200;
-
-/**
- * Sets the stack `key` to `value`.
- *
- * @private
- * @name set
- * @memberOf Stack
- * @param {string} key The key of the value to set.
- * @param {*} value The value to set.
- * @returns {Object} Returns the stack cache instance.
- */
-function stackSet(key, value) {
-  var data = this.__data__;
-  if (data instanceof ListCache) {
-    var pairs = data.__data__;
-    if (!Map || (pairs.length < LARGE_ARRAY_SIZE - 1)) {
-      pairs.push([key, value]);
-      this.size = ++data.size;
-      return this;
-    }
-    data = this.__data__ = new MapCache(pairs);
-  }
-  data.set(key, value);
-  this.size = data.size;
-  return this;
-}
-
-module.exports = stackSet;
-
-},{"./_ListCache":76,"./_Map":77,"./_MapCache":78}],173:[function(require,module,exports){
-var memoizeCapped = require('./_memoizeCapped');
-
-/** Used to match property names within property paths. */
-var rePropName = /[^.[\]]+|\[(?:(-?\d+(?:\.\d+)?)|(["'])((?:(?!\2)[^\\]|\\.)*?)\2)\]|(?=(?:\.|\[\])(?:\.|\[\]|$))/g;
-
-/** Used to match backslashes in property paths. */
-var reEscapeChar = /\\(\\)?/g;
-
-/**
- * Converts `string` to a property path array.
- *
- * @private
- * @param {string} string The string to convert.
- * @returns {Array} Returns the property path array.
- */
-var stringToPath = memoizeCapped(function(string) {
-  var result = [];
-  if (string.charCodeAt(0) === 46 /* . */) {
-    result.push('');
-  }
-  string.replace(rePropName, function(match, number, quote, subString) {
-    result.push(quote ? subString.replace(reEscapeChar, '$1') : (number || match));
-  });
-  return result;
-});
-
-module.exports = stringToPath;
-
-},{"./_memoizeCapped":158}],174:[function(require,module,exports){
-var isSymbol = require('./isSymbol');
-
-/** Used as references for various `Number` constants. */
-var INFINITY = 1 / 0;
-
-/**
- * Converts `value` to a string key if it's not a string or symbol.
- *
- * @private
- * @param {*} value The value to inspect.
- * @returns {string|symbol} Returns the key.
- */
-function toKey(value) {
-  if (typeof value == 'string' || isSymbol(value)) {
-    return value;
-  }
-  var result = (value + '');
-  return (result == '0' && (1 / value) == -INFINITY) ? '-0' : result;
-}
-
-module.exports = toKey;
-
-},{"./isSymbol":189}],175:[function(require,module,exports){
-/** Used for built-in method references. */
-var funcProto = Function.prototype;
-
-/** Used to resolve the decompiled source of functions. */
-var funcToString = funcProto.toString;
-
-/**
- * Converts `func` to its source code.
- *
- * @private
- * @param {Function} func The function to convert.
- * @returns {string} Returns the source code.
- */
-function toSource(func) {
-  if (func != null) {
-    try {
-      return funcToString.call(func);
-    } catch (e) {}
-    try {
-      return (func + '');
-    } catch (e) {}
-  }
-  return '';
-}
-
-module.exports = toSource;
-
-},{}],176:[function(require,module,exports){
-/**
- * Performs a
- * [`SameValueZero`](http://ecma-international.org/ecma-262/7.0/#sec-samevaluezero)
- * comparison between two values to determine if they are equivalent.
- *
- * @static
- * @memberOf _
- * @since 4.0.0
- * @category Lang
- * @param {*} value The value to compare.
- * @param {*} other The other value to compare.
- * @returns {boolean} Returns `true` if the values are equivalent, else `false`.
- * @example
- *
- * var object = { 'a': 1 };
- * var other = { 'a': 1 };
- *
- * _.eq(object, object);
- * // => true
- *
- * _.eq(object, other);
- * // => false
- *
- * _.eq('a', 'a');
- * // => true
- *
- * _.eq('a', Object('a'));
- * // => false
- *
- * _.eq(NaN, NaN);
- * // => true
- */
-function eq(value, other) {
-  return value === other || (value !== value && other !== other);
-}
-
-module.exports = eq;
-
-},{}],177:[function(require,module,exports){
-var arrayEach = require('./_arrayEach'),
-    baseEach = require('./_baseEach'),
-    castFunction = require('./_castFunction'),
-    isArray = require('./isArray');
-
-/**
- * Iterates over elements of `collection` and invokes `iteratee` for each element.
- * The iteratee is invoked with three arguments: (value, index|key, collection).
- * Iteratee functions may exit iteration early by explicitly returning `false`.
- *
- * **Note:** As with other "Collections" methods, objects with a "length"
- * property are iterated like arrays. To avoid this behavior use `_.forIn`
- * or `_.forOwn` for object iteration.
- *
- * @static
- * @memberOf _
- * @since 0.1.0
- * @alias each
- * @category Collection
- * @param {Array|Object} collection The collection to iterate over.
- * @param {Function} [iteratee=_.identity] The function invoked per iteration.
- * @returns {Array|Object} Returns `collection`.
- * @see _.forEachRight
- * @example
- *
- * _.forEach([1, 2], function(value) {
- *   console.log(value);
- * });
- * // => Logs `1` then `2`.
- *
- * _.forEach({ 'a': 1, 'b': 2 }, function(value, key) {
- *   console.log(key);
- * });
- * // => Logs 'a' then 'b' (iteration order is not guaranteed).
- */
-function forEach(collection, iteratee) {
-  var func = isArray(collection) ? arrayEach : baseEach;
-  return func(collection, castFunction(iteratee));
-}
-
-module.exports = forEach;
-
-},{"./_arrayEach":86,"./_baseEach":93,"./_castFunction":117,"./isArray":182}],178:[function(require,module,exports){
-var baseGet = require('./_baseGet');
-
-/**
- * Gets the value at `path` of `object`. If the resolved value is
- * `undefined`, the `defaultValue` is returned in its place.
- *
- * @static
- * @memberOf _
- * @since 3.7.0
- * @category Object
- * @param {Object} object The object to query.
- * @param {Array|string} path The path of the property to get.
- * @param {*} [defaultValue] The value returned for `undefined` resolved values.
- * @returns {*} Returns the resolved value.
- * @example
- *
- * var object = { 'a': [{ 'b': { 'c': 3 } }] };
- *
- * _.get(object, 'a[0].b.c');
- * // => 3
- *
- * _.get(object, ['a', '0', 'b', 'c']);
- * // => 3
- *
- * _.get(object, 'a.b.c', 'default');
- * // => 'default'
- */
-function get(object, path, defaultValue) {
-  var result = object == null ? undefined : baseGet(object, path);
-  return result === undefined ? defaultValue : result;
-}
-
-module.exports = get;
-
-},{"./_baseGet":96}],179:[function(require,module,exports){
-var baseHasIn = require('./_baseHasIn'),
-    hasPath = require('./_hasPath');
-
-/**
- * Checks if `path` is a direct or inherited property of `object`.
- *
- * @static
- * @memberOf _
- * @since 4.0.0
- * @category Object
- * @param {Object} object The object to query.
- * @param {Array|string} path The path to check.
- * @returns {boolean} Returns `true` if `path` exists, else `false`.
- * @example
- *
- * var object = _.create({ 'a': _.create({ 'b': 2 }) });
- *
- * _.hasIn(object, 'a');
- * // => true
- *
- * _.hasIn(object, 'a.b');
- * // => true
- *
- * _.hasIn(object, ['a', 'b']);
- * // => true
- *
- * _.hasIn(object, 'b');
- * // => false
- */
-function hasIn(object, path) {
-  return object != null && hasPath(object, path, baseHasIn);
-}
-
-module.exports = hasIn;
-
-},{"./_baseHasIn":99,"./_hasPath":134}],180:[function(require,module,exports){
-/**
- * This method returns the first argument it receives.
- *
- * @static
- * @since 0.1.0
- * @memberOf _
- * @category Util
- * @param {*} value Any value.
- * @returns {*} Returns `value`.
- * @example
- *
- * var object = { 'a': 1 };
- *
- * console.log(_.identity(object) === object);
- * // => true
- */
-function identity(value) {
-  return value;
-}
-
-module.exports = identity;
-
-},{}],181:[function(require,module,exports){
-var baseIsArguments = require('./_baseIsArguments'),
-    isObjectLike = require('./isObjectLike');
-
-/** Used for built-in method references. */
-var objectProto = Object.prototype;
-
-/** Used to check objects for own properties. */
-var hasOwnProperty = objectProto.hasOwnProperty;
-
-/** Built-in value references. */
-var propertyIsEnumerable = objectProto.propertyIsEnumerable;
-
-/**
- * Checks if `value` is likely an `arguments` object.
- *
- * @static
- * @memberOf _
- * @since 0.1.0
- * @category Lang
- * @param {*} value The value to check.
- * @returns {boolean} Returns `true` if `value` is an `arguments` object,
- *  else `false`.
- * @example
- *
- * _.isArguments(function() { return arguments; }());
- * // => true
- *
- * _.isArguments([1, 2, 3]);
- * // => false
- */
-var isArguments = baseIsArguments(function() { return arguments; }()) ? baseIsArguments : function(value) {
-  return isObjectLike(value) && hasOwnProperty.call(value, 'callee') &&
-    !propertyIsEnumerable.call(value, 'callee');
-};
-
-module.exports = isArguments;
-
-},{"./_baseIsArguments":100,"./isObjectLike":188}],182:[function(require,module,exports){
-/**
- * Checks if `value` is classified as an `Array` object.
- *
- * @static
- * @memberOf _
- * @since 0.1.0
- * @category Lang
- * @param {*} value The value to check.
- * @returns {boolean} Returns `true` if `value` is an array, else `false`.
- * @example
- *
- * _.isArray([1, 2, 3]);
- * // => true
- *
- * _.isArray(document.body.children);
- * // => false
- *
- * _.isArray('abc');
- * // => false
- *
- * _.isArray(_.noop);
- * // => false
- */
-var isArray = Array.isArray;
-
-module.exports = isArray;
-
-},{}],183:[function(require,module,exports){
-var isFunction = require('./isFunction'),
-    isLength = require('./isLength');
-
-/**
- * Checks if `value` is array-like. A value is considered array-like if it's
- * not a function and has a `value.length` that's an integer greater than or
- * equal to `0` and less than or equal to `Number.MAX_SAFE_INTEGER`.
- *
- * @static
- * @memberOf _
- * @since 4.0.0
- * @category Lang
- * @param {*} value The value to check.
- * @returns {boolean} Returns `true` if `value` is array-like, else `false`.
- * @example
- *
- * _.isArrayLike([1, 2, 3]);
- * // => true
- *
- * _.isArrayLike(document.body.children);
- * // => true
- *
- * _.isArrayLike('abc');
- * // => true
- *
- * _.isArrayLike(_.noop);
- * // => false
- */
-function isArrayLike(value) {
-  return value != null && isLength(value.length) && !isFunction(value);
-}
-
-module.exports = isArrayLike;
-
-},{"./isFunction":185,"./isLength":186}],184:[function(require,module,exports){
-var root = require('./_root'),
-    stubFalse = require('./stubFalse');
-
-/** Detect free variable `exports`. */
-var freeExports = typeof exports == 'object' && exports && !exports.nodeType && exports;
-
-/** Detect free variable `module`. */
-var freeModule = freeExports && typeof module == 'object' && module && !module.nodeType && module;
-
-/** Detect the popular CommonJS extension `module.exports`. */
-var moduleExports = freeModule && freeModule.exports === freeExports;
-
-/** Built-in value references. */
-var Buffer = moduleExports ? root.Buffer : undefined;
-
-/* Built-in method references for those with the same name as other `lodash` methods. */
-var nativeIsBuffer = Buffer ? Buffer.isBuffer : undefined;
-
-/**
- * Checks if `value` is a buffer.
- *
- * @static
- * @memberOf _
- * @since 4.3.0
- * @category Lang
- * @param {*} value The value to check.
- * @returns {boolean} Returns `true` if `value` is a buffer, else `false`.
- * @example
- *
- * _.isBuffer(new Buffer(2));
- * // => true
- *
- * _.isBuffer(new Uint8Array(2));
- * // => false
- */
-var isBuffer = nativeIsBuffer || stubFalse;
-
-module.exports = isBuffer;
-
-},{"./_root":164,"./stubFalse":196}],185:[function(require,module,exports){
-var baseGetTag = require('./_baseGetTag'),
-    isObject = require('./isObject');
-
-/** `Object#toString` result references. */
-var asyncTag = '[object AsyncFunction]',
-    funcTag = '[object Function]',
-    genTag = '[object GeneratorFunction]',
-    proxyTag = '[object Proxy]';
-
-/**
- * Checks if `value` is classified as a `Function` object.
- *
- * @static
- * @memberOf _
- * @since 0.1.0
- * @category Lang
- * @param {*} value The value to check.
- * @returns {boolean} Returns `true` if `value` is a function, else `false`.
- * @example
- *
- * _.isFunction(_);
- * // => true
- *
- * _.isFunction(/abc/);
- * // => false
- */
-function isFunction(value) {
-  if (!isObject(value)) {
-    return false;
-  }
-  // The use of `Object#toString` avoids issues with the `typeof` operator
-  // in Safari 9 which returns 'object' for typed arrays and other constructors.
-  var tag = baseGetTag(value);
-  return tag == funcTag || tag == genTag || tag == asyncTag || tag == proxyTag;
-}
-
-module.exports = isFunction;
-
-},{"./_baseGetTag":98,"./isObject":187}],186:[function(require,module,exports){
-/** Used as references for various `Number` constants. */
-var MAX_SAFE_INTEGER = 9007199254740991;
-
-/**
- * Checks if `value` is a valid array-like length.
- *
- * **Note:** This method is loosely based on
- * [`ToLength`](http://ecma-international.org/ecma-262/7.0/#sec-tolength).
- *
- * @static
- * @memberOf _
- * @since 4.0.0
- * @category Lang
- * @param {*} value The value to check.
- * @returns {boolean} Returns `true` if `value` is a valid length, else `false`.
- * @example
- *
- * _.isLength(3);
- * // => true
- *
- * _.isLength(Number.MIN_VALUE);
- * // => false
- *
- * _.isLength(Infinity);
- * // => false
- *
- * _.isLength('3');
- * // => false
- */
-function isLength(value) {
-  return typeof value == 'number' &&
-    value > -1 && value % 1 == 0 && value <= MAX_SAFE_INTEGER;
-}
-
-module.exports = isLength;
-
-},{}],187:[function(require,module,exports){
-/**
- * Checks if `value` is the
- * [language type](http://www.ecma-international.org/ecma-262/7.0/#sec-ecmascript-language-types)
- * of `Object`. (e.g. arrays, functions, objects, regexes, `new Number(0)`, and `new String('')`)
- *
- * @static
- * @memberOf _
- * @since 0.1.0
- * @category Lang
- * @param {*} value The value to check.
- * @returns {boolean} Returns `true` if `value` is an object, else `false`.
- * @example
- *
- * _.isObject({});
- * // => true
- *
- * _.isObject([1, 2, 3]);
- * // => true
- *
- * _.isObject(_.noop);
- * // => true
- *
- * _.isObject(null);
- * // => false
- */
-function isObject(value) {
-  var type = typeof value;
-  return value != null && (type == 'object' || type == 'function');
-}
-
-module.exports = isObject;
-
-},{}],188:[function(require,module,exports){
-/**
- * Checks if `value` is object-like. A value is object-like if it's not `null`
- * and has a `typeof` result of "object".
- *
- * @static
- * @memberOf _
- * @since 4.0.0
- * @category Lang
- * @param {*} value The value to check.
- * @returns {boolean} Returns `true` if `value` is object-like, else `false`.
- * @example
- *
- * _.isObjectLike({});
- * // => true
- *
- * _.isObjectLike([1, 2, 3]);
- * // => true
- *
- * _.isObjectLike(_.noop);
- * // => false
- *
- * _.isObjectLike(null);
- * // => false
- */
-function isObjectLike(value) {
-  return value != null && typeof value == 'object';
-}
-
-module.exports = isObjectLike;
-
-},{}],189:[function(require,module,exports){
-var baseGetTag = require('./_baseGetTag'),
-    isObjectLike = require('./isObjectLike');
-
-/** `Object#toString` result references. */
-var symbolTag = '[object Symbol]';
-
-/**
- * Checks if `value` is classified as a `Symbol` primitive or object.
- *
- * @static
- * @memberOf _
- * @since 4.0.0
- * @category Lang
- * @param {*} value The value to check.
- * @returns {boolean} Returns `true` if `value` is a symbol, else `false`.
- * @example
- *
- * _.isSymbol(Symbol.iterator);
- * // => true
- *
- * _.isSymbol('abc');
- * // => false
- */
-function isSymbol(value) {
-  return typeof value == 'symbol' ||
-    (isObjectLike(value) && baseGetTag(value) == symbolTag);
-}
-
-module.exports = isSymbol;
-
-},{"./_baseGetTag":98,"./isObjectLike":188}],190:[function(require,module,exports){
-var baseIsTypedArray = require('./_baseIsTypedArray'),
-    baseUnary = require('./_baseUnary'),
-    nodeUtil = require('./_nodeUtil');
-
-/* Node.js helper references. */
-var nodeIsTypedArray = nodeUtil && nodeUtil.isTypedArray;
-
-/**
- * Checks if `value` is classified as a typed array.
- *
- * @static
- * @memberOf _
- * @since 3.0.0
- * @category Lang
- * @param {*} value The value to check.
- * @returns {boolean} Returns `true` if `value` is a typed array, else `false`.
- * @example
- *
- * _.isTypedArray(new Uint8Array);
- * // => true
- *
- * _.isTypedArray([]);
- * // => false
- */
-var isTypedArray = nodeIsTypedArray ? baseUnary(nodeIsTypedArray) : baseIsTypedArray;
-
-module.exports = isTypedArray;
-
-},{"./_baseIsTypedArray":105,"./_baseUnary":115,"./_nodeUtil":161}],191:[function(require,module,exports){
-var arrayLikeKeys = require('./_arrayLikeKeys'),
-    baseKeys = require('./_baseKeys'),
-    isArrayLike = require('./isArrayLike');
-
-/**
- * Creates an array of the own enumerable property names of `object`.
- *
- * **Note:** Non-object values are coerced to objects. See the
- * [ES spec](http://ecma-international.org/ecma-262/7.0/#sec-object.keys)
- * for more details.
- *
- * @static
- * @since 0.1.0
- * @memberOf _
- * @category Object
- * @param {Object} object The object to query.
- * @returns {Array} Returns the array of property names.
- * @example
- *
- * function Foo() {
- *   this.a = 1;
- *   this.b = 2;
- * }
- *
- * Foo.prototype.c = 3;
- *
- * _.keys(new Foo);
- * // => ['a', 'b'] (iteration order is not guaranteed)
- *
- * _.keys('hi');
- * // => ['0', '1']
- */
-function keys(object) {
-  return isArrayLike(object) ? arrayLikeKeys(object) : baseKeys(object);
-}
-
-module.exports = keys;
-
-},{"./_arrayLikeKeys":88,"./_baseKeys":107,"./isArrayLike":183}],192:[function(require,module,exports){
-var arrayMap = require('./_arrayMap'),
-    baseIteratee = require('./_baseIteratee'),
-    baseMap = require('./_baseMap'),
-    isArray = require('./isArray');
-
-/**
- * Creates an array of values by running each element in `collection` thru
- * `iteratee`. The iteratee is invoked with three arguments:
- * (value, index|key, collection).
- *
- * Many lodash methods are guarded to work as iteratees for methods like
- * `_.every`, `_.filter`, `_.map`, `_.mapValues`, `_.reject`, and `_.some`.
- *
- * The guarded methods are:
- * `ary`, `chunk`, `curry`, `curryRight`, `drop`, `dropRight`, `every`,
- * `fill`, `invert`, `parseInt`, `random`, `range`, `rangeRight`, `repeat`,
- * `sampleSize`, `slice`, `some`, `sortBy`, `split`, `take`, `takeRight`,
- * `template`, `trim`, `trimEnd`, `trimStart`, and `words`
- *
- * @static
- * @memberOf _
- * @since 0.1.0
- * @category Collection
- * @param {Array|Object} collection The collection to iterate over.
- * @param {Function} [iteratee=_.identity] The function invoked per iteration.
- * @returns {Array} Returns the new mapped array.
- * @example
- *
- * function square(n) {
- *   return n * n;
- * }
- *
- * _.map([4, 8], square);
- * // => [16, 64]
- *
- * _.map({ 'a': 4, 'b': 8 }, square);
- * // => [16, 64] (iteration order is not guaranteed)
- *
- * var users = [
- *   { 'user': 'barney' },
- *   { 'user': 'fred' }
- * ];
- *
- * // The `_.property` iteratee shorthand.
- * _.map(users, 'user');
- * // => ['barney', 'fred']
- */
-function map(collection, iteratee) {
-  var func = isArray(collection) ? arrayMap : baseMap;
-  return func(collection, baseIteratee(iteratee, 3));
-}
-
-module.exports = map;
-
-},{"./_arrayMap":89,"./_baseIteratee":106,"./_baseMap":108,"./isArray":182}],193:[function(require,module,exports){
-var MapCache = require('./_MapCache');
-
-/** Error message constants. */
-var FUNC_ERROR_TEXT = 'Expected a function';
-
-/**
- * Creates a function that memoizes the result of `func`. If `resolver` is
- * provided, it determines the cache key for storing the result based on the
- * arguments provided to the memoized function. By default, the first argument
- * provided to the memoized function is used as the map cache key. The `func`
- * is invoked with the `this` binding of the memoized function.
- *
- * **Note:** The cache is exposed as the `cache` property on the memoized
- * function. Its creation may be customized by replacing the `_.memoize.Cache`
- * constructor with one whose instances implement the
- * [`Map`](http://ecma-international.org/ecma-262/7.0/#sec-properties-of-the-map-prototype-object)
- * method interface of `clear`, `delete`, `get`, `has`, and `set`.
- *
- * @static
- * @memberOf _
- * @since 0.1.0
- * @category Function
- * @param {Function} func The function to have its output memoized.
- * @param {Function} [resolver] The function to resolve the cache key.
- * @returns {Function} Returns the new memoized function.
- * @example
- *
- * var object = { 'a': 1, 'b': 2 };
- * var other = { 'c': 3, 'd': 4 };
- *
- * var values = _.memoize(_.values);
- * values(object);
- * // => [1, 2]
- *
- * values(other);
- * // => [3, 4]
- *
- * object.a = 2;
- * values(object);
- * // => [1, 2]
- *
- * // Modify the result cache.
- * values.cache.set(object, ['a', 'b']);
- * values(object);
- * // => ['a', 'b']
- *
- * // Replace `_.memoize.Cache`.
- * _.memoize.Cache = WeakMap;
- */
-function memoize(func, resolver) {
-  if (typeof func != 'function' || (resolver != null && typeof resolver != 'function')) {
-    throw new TypeError(FUNC_ERROR_TEXT);
-  }
-  var memoized = function() {
-    var args = arguments,
-        key = resolver ? resolver.apply(this, args) : args[0],
-        cache = memoized.cache;
-
-    if (cache.has(key)) {
-      return cache.get(key);
-    }
-    var result = func.apply(this, args);
-    memoized.cache = cache.set(key, result) || cache;
-    return result;
-  };
-  memoized.cache = new (memoize.Cache || MapCache);
-  return memoized;
-}
-
-// Expose `MapCache`.
-memoize.Cache = MapCache;
-
-module.exports = memoize;
-
-},{"./_MapCache":78}],194:[function(require,module,exports){
-var baseProperty = require('./_baseProperty'),
-    basePropertyDeep = require('./_basePropertyDeep'),
-    isKey = require('./_isKey'),
-    toKey = require('./_toKey');
-
-/**
- * Creates a function that returns the value at `path` of a given object.
- *
- * @static
- * @memberOf _
- * @since 2.4.0
- * @category Util
- * @param {Array|string} path The path of the property to get.
- * @returns {Function} Returns the new accessor function.
- * @example
- *
- * var objects = [
- *   { 'a': { 'b': 2 } },
- *   { 'a': { 'b': 1 } }
- * ];
- *
- * _.map(objects, _.property('a.b'));
- * // => [2, 1]
- *
- * _.map(_.sortBy(objects, _.property(['a', 'b'])), 'a.b');
- * // => [1, 2]
- */
-function property(path) {
-  return isKey(path) ? baseProperty(toKey(path)) : basePropertyDeep(path);
-}
-
-module.exports = property;
-
-},{"./_baseProperty":111,"./_basePropertyDeep":112,"./_isKey":141,"./_toKey":174}],195:[function(require,module,exports){
-/**
- * This method returns a new empty array.
- *
- * @static
- * @memberOf _
- * @since 4.13.0
- * @category Util
- * @returns {Array} Returns the new empty array.
- * @example
- *
- * var arrays = _.times(2, _.stubArray);
- *
- * console.log(arrays);
- * // => [[], []]
- *
- * console.log(arrays[0] === arrays[1]);
- * // => false
- */
-function stubArray() {
-  return [];
-}
-
-module.exports = stubArray;
-
-},{}],196:[function(require,module,exports){
-/**
- * This method returns `false`.
- *
- * @static
- * @memberOf _
- * @since 4.13.0
- * @category Util
- * @returns {boolean} Returns `false`.
- * @example
- *
- * _.times(2, _.stubFalse);
- * // => [false, false]
- */
-function stubFalse() {
-  return false;
-}
-
-module.exports = stubFalse;
-
-},{}],197:[function(require,module,exports){
-var baseToString = require('./_baseToString');
-
-/**
- * Converts `value` to a string. An empty string is returned for `null`
- * and `undefined` values. The sign of `-0` is preserved.
- *
- * @static
- * @memberOf _
- * @since 4.0.0
- * @category Lang
- * @param {*} value The value to convert.
- * @returns {string} Returns the converted string.
- * @example
- *
- * _.toString(null);
- * // => ''
- *
- * _.toString(-0);
- * // => '-0'
- *
- * _.toString([1, 2, 3]);
- * // => '1,2,3'
- */
-function toString(value) {
-  return value == null ? '' : baseToString(value);
-}
-
-module.exports = toString;
-
-},{"./_baseToString":114}],198:[function(require,module,exports){
+},{"_process":241,"timers":245}],213:[function(require,module,exports){
 const strsearch2regexp = require('strsearch2regexp')
 const filterJoin = require('./filterJoin')
 
@@ -32018,7 +32664,7 @@ class Filter {
 
 module.exports = Filter
 
-},{"./filterJoin":215,"strsearch2regexp":228}],199:[function(require,module,exports){
+},{"./filterJoin":230,"strsearch2regexp":244}],214:[function(require,module,exports){
 (function (global){(function (){
 const ee = require('event-emitter')
 const async = require('async')
@@ -32749,7 +33395,7 @@ OverpassFrontend.Filter = Filter
 module.exports = OverpassFrontend
 
 }).call(this)}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./Filter":198,"./OverpassNode":200,"./OverpassObject":201,"./OverpassRelation":202,"./OverpassWay":203,"./RequestBBox":205,"./RequestGet":207,"./RequestMulti":209,"./copyOsm3sMeta":213,"./defines":214,"./httpLoad":217,"./loadOsmFile":219,"./removeNullEntries":221,"./timestamp":222,"async":73,"boundingbox":40,"event-emitter":60,"lokijs":66,"weight-sort":236}],200:[function(require,module,exports){
+},{"./Filter":213,"./OverpassNode":215,"./OverpassObject":216,"./OverpassRelation":217,"./OverpassWay":218,"./RequestBBox":220,"./RequestGet":222,"./RequestMulti":224,"./copyOsm3sMeta":228,"./defines":229,"./httpLoad":232,"./loadOsmFile":234,"./removeNullEntries":236,"./timestamp":237,"async":212,"boundingbox":56,"event-emitter":76,"lokijs":206,"weight-sort":252}],215:[function(require,module,exports){
 /* global L:false */
 
 const OverpassObject = require('./OverpassObject')
@@ -32886,7 +33532,7 @@ class OverpassNode extends OverpassObject {
 
 module.exports = OverpassNode
 
-},{"./OverpassObject":201,"./defines":214,"boundingbox":40}],201:[function(require,module,exports){
+},{"./OverpassObject":216,"./defines":229,"boundingbox":56}],216:[function(require,module,exports){
 const ee = require('event-emitter')
 const BoundingBox = require('boundingbox')
 const OverpassFrontend = require('./defines')
@@ -33259,7 +33905,7 @@ ee(OverpassObject.prototype)
 
 module.exports = OverpassObject
 
-},{"./defines":214,"@turf/difference":17,"@turf/intersect":23,"boundingbox":40,"event-emitter":60}],202:[function(require,module,exports){
+},{"./defines":229,"@turf/difference":23,"@turf/intersect":31,"boundingbox":56,"event-emitter":76}],217:[function(require,module,exports){
 /* global L:false */
 
 const async = require('async')
@@ -33762,7 +34408,7 @@ class OverpassRelation extends OverpassObject {
 
 module.exports = OverpassRelation
 
-},{"./OverpassObject":201,"./defines":214,"./geojsonShiftWorld":216,"@turf/bbox-clip":6,"async":73,"boundingbox":40,"osmtogeojson":71}],203:[function(require,module,exports){
+},{"./OverpassObject":216,"./defines":229,"./geojsonShiftWorld":231,"@turf/bbox-clip":10,"async":212,"boundingbox":56,"osmtogeojson":210}],218:[function(require,module,exports){
 /* global L:false */
 
 const async = require('async')
@@ -34046,7 +34692,7 @@ class OverpassWay extends OverpassObject {
 
 module.exports = OverpassWay
 
-},{"./OverpassObject":201,"./defines":214,"@turf/bbox-clip":6,"async":73,"boundingbox":40}],204:[function(require,module,exports){
+},{"./OverpassObject":216,"./defines":229,"@turf/bbox-clip":10,"async":212,"boundingbox":56}],219:[function(require,module,exports){
 const ee = require('event-emitter')
 const SortedCallbacks = require('./SortedCallbacks')
 
@@ -34192,7 +34838,7 @@ ee(Request.prototype)
 
 module.exports = Request
 
-},{"./SortedCallbacks":210,"event-emitter":60}],205:[function(require,module,exports){
+},{"./SortedCallbacks":225,"event-emitter":76}],220:[function(require,module,exports){
 const Request = require('./Request')
 const overpassOutOptions = require('./overpassOutOptions')
 const defines = require('./defines')
@@ -34486,7 +35132,7 @@ class RequestBBox extends Request {
 
 module.exports = RequestBBox
 
-},{"./Filter":198,"./Request":204,"./RequestBBoxMembers":206,"./boundsToLokiQuery":211,"./defines":214,"./knownArea":218,"./overpassOutOptions":220}],206:[function(require,module,exports){
+},{"./Filter":213,"./Request":219,"./RequestBBoxMembers":221,"./boundsToLokiQuery":226,"./defines":229,"./knownArea":233,"./overpassOutOptions":235}],221:[function(require,module,exports){
 const defines = require('./defines')
 const overpassOutOptions = require('./overpassOutOptions')
 const each = require('lodash/forEach')
@@ -34689,7 +35335,7 @@ module.exports = function (request) {
   return new RequestBBoxMembers(request)
 }
 
-},{"./SortedCallbacks":210,"./defines":214,"./overpassOutOptions":220,"boundingbox":40,"lodash/forEach":177,"lodash/keys":191,"lodash/map":192}],207:[function(require,module,exports){
+},{"./SortedCallbacks":225,"./defines":229,"./overpassOutOptions":235,"boundingbox":56,"lodash/forEach":184,"lodash/keys":198,"lodash/map":199}],222:[function(require,module,exports){
 const Request = require('./Request')
 const defines = require('./defines')
 const BoundingBox = require('boundingbox')
@@ -34980,7 +35626,7 @@ class RequestGet extends Request {
 
 module.exports = RequestGet
 
-},{"./Request":204,"./RequestGetMembers":208,"./defines":214,"./overpassOutOptions":220,"boundingbox":40}],208:[function(require,module,exports){
+},{"./Request":219,"./RequestGetMembers":223,"./defines":229,"./overpassOutOptions":235,"boundingbox":56}],223:[function(require,module,exports){
 const defines = require('./defines')
 const overpassOutOptions = require('./overpassOutOptions')
 const each = require('lodash/forEach')
@@ -35200,7 +35846,7 @@ module.exports = function (request) {
   return new RequestGetMembers(request)
 }
 
-},{"./defines":214,"./overpassOutOptions":220,"boundingbox":40,"lodash/forEach":177,"lodash/keys":191,"lodash/map":192}],209:[function(require,module,exports){
+},{"./defines":229,"./overpassOutOptions":235,"boundingbox":56,"lodash/forEach":184,"lodash/keys":198,"lodash/map":199}],224:[function(require,module,exports){
 const Request = require('./Request')
 
 /**
@@ -35257,7 +35903,7 @@ class RequestMulti extends Request {
 
 module.exports = RequestMulti
 
-},{"./Request":204}],210:[function(require,module,exports){
+},{"./Request":219}],225:[function(require,module,exports){
 const async = require('async')
 const weightSort = require('weight-sort')
 const OverpassFrontend = require('./defines')
@@ -35340,7 +35986,7 @@ class SortedCallbacks {
 
 module.exports = SortedCallbacks
 
-},{"./defines":214,"async":73,"weight-sort":236}],211:[function(require,module,exports){
+},{"./defines":229,"async":212,"weight-sort":252}],226:[function(require,module,exports){
 module.exports = function boundsToLokiQuery (bounds, overpass) {
   if (bounds.minlon <= bounds.maxlon) {
     if (overpass.hasStretchLon180) {
@@ -35389,7 +36035,7 @@ module.exports = function boundsToLokiQuery (bounds, overpass) {
   }
 }
 
-},{}],212:[function(require,module,exports){
+},{}],227:[function(require,module,exports){
 module.exports = function convertFromXML (xml) {
   const result = {
     version: parseFloat(xml.getAttribute('version')),
@@ -35463,7 +36109,7 @@ module.exports = function convertFromXML (xml) {
   return result
 }
 
-},{}],213:[function(require,module,exports){
+},{}],228:[function(require,module,exports){
 module.exports = function copyOsm3sMetaFrom (results) {
   const osm3sMeta = {}
 
@@ -35482,7 +36128,7 @@ module.exports = function copyOsm3sMetaFrom (results) {
   return osm3sMeta
 }
 
-},{}],214:[function(require,module,exports){
+},{}],229:[function(require,module,exports){
 module.exports = {
   ID_ONLY: 0,
   TAGS: 1,
@@ -35495,7 +36141,7 @@ module.exports = {
   DEFAULT: 13
 }
 
-},{}],215:[function(require,module,exports){
+},{}],230:[function(require,module,exports){
 module.exports = function filterJoin (def) {
   let result = ['']
 
@@ -35520,7 +36166,7 @@ module.exports = function filterJoin (def) {
   return result
 }
 
-},{}],216:[function(require,module,exports){
+},{}],231:[function(require,module,exports){
 function geojsonShiftWorld (geojson, shift) {
   switch (geojson.type) {
     case 'FeatureCollection':
@@ -35569,7 +36215,7 @@ function geojsonShiftWorld (geojson, shift) {
 
 module.exports = geojsonShiftWorld
 
-},{}],217:[function(require,module,exports){
+},{}],232:[function(require,module,exports){
 (function (global){(function (){
 /* global location:false */
 
@@ -35654,7 +36300,7 @@ function httpLoad (url, getParam, postParam, callback) {
 module.exports = httpLoad
 
 }).call(this)}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}],218:[function(require,module,exports){
+},{}],233:[function(require,module,exports){
 const BoundingBox = require('boundingbox')
 const turf = require('./turf')
 
@@ -35706,7 +36352,7 @@ class KnownArea {
 
 module.exports = KnownArea
 
-},{"./turf":223,"boundingbox":40}],219:[function(require,module,exports){
+},{"./turf":238,"boundingbox":56}],234:[function(require,module,exports){
 const fs = require('fs')
 const DOMParser = require('xmldom').DOMParser
 const bzip2 = require('bzip2')
@@ -35794,7 +36440,7 @@ module.exports = function loadOsmFile (url, callback) {
   req.send()
 }
 
-},{"./convertFromXML":212,"bzip2":44,"fs":43,"xmldom":238}],220:[function(require,module,exports){
+},{"./convertFromXML":227,"bzip2":60,"fs":59,"xmldom":254}],235:[function(require,module,exports){
 const defines = require('./defines')
 
 function overpassOutOptions (options, optionsOverride) {
@@ -35835,7 +36481,7 @@ function overpassOutOptions (options, optionsOverride) {
 
 module.exports = overpassOutOptions
 
-},{"./defines":214}],221:[function(require,module,exports){
+},{"./defines":229}],236:[function(require,module,exports){
 function removeNullEntries (arr) {
   let p
 
@@ -35848,18 +36494,18 @@ function removeNullEntries (arr) {
 
 module.exports = removeNullEntries
 
-},{}],222:[function(require,module,exports){
+},{}],237:[function(require,module,exports){
 module.exports = function timestamp () {
   return new Date().getTime()
 }
 
-},{}],223:[function(require,module,exports){
+},{}],238:[function(require,module,exports){
 module.exports = {
   difference: require('@turf/difference'),
   union: require('@turf/union').default
 }
 
-},{"@turf/difference":17,"@turf/union":39}],224:[function(require,module,exports){
+},{"@turf/difference":23,"@turf/union":53}],239:[function(require,module,exports){
 (function (process){(function (){
 // 'path' module extracted from Node.js v8.11.1 (only the posix part)
 // transplited with Babel
@@ -36392,7 +37038,2568 @@ posix.posix = posix;
 module.exports = posix;
 
 }).call(this)}).call(this,require('_process'))
-},{"_process":225}],225:[function(require,module,exports){
+},{"_process":241}],240:[function(require,module,exports){
+(function (process){(function (){
+(function (global, factory) {
+  typeof exports === 'object' && typeof module !== 'undefined' ? module.exports = factory() :
+  typeof define === 'function' && define.amd ? define(factory) :
+  (global = typeof globalThis !== 'undefined' ? globalThis : global || self, global.polygonClipping = factory());
+}(this, (function () { 'use strict';
+
+  function _classCallCheck(instance, Constructor) {
+    if (!(instance instanceof Constructor)) {
+      throw new TypeError("Cannot call a class as a function");
+    }
+  }
+
+  function _defineProperties(target, props) {
+    for (var i = 0; i < props.length; i++) {
+      var descriptor = props[i];
+      descriptor.enumerable = descriptor.enumerable || false;
+      descriptor.configurable = true;
+      if ("value" in descriptor) descriptor.writable = true;
+      Object.defineProperty(target, descriptor.key, descriptor);
+    }
+  }
+
+  function _createClass(Constructor, protoProps, staticProps) {
+    if (protoProps) _defineProperties(Constructor.prototype, protoProps);
+    if (staticProps) _defineProperties(Constructor, staticProps);
+    return Constructor;
+  }
+
+  /**
+   * splaytree v3.1.0
+   * Fast Splay tree for Node and browser
+   *
+   * @author Alexander Milevski <info@w8r.name>
+   * @license MIT
+   * @preserve
+   */
+  var Node =
+  /** @class */
+  function () {
+    function Node(key, data) {
+      this.next = null;
+      this.key = key;
+      this.data = data;
+      this.left = null;
+      this.right = null;
+    }
+
+    return Node;
+  }();
+  /* follows "An implementation of top-down splaying"
+   * by D. Sleator <sleator@cs.cmu.edu> March 1992
+   */
+
+
+  function DEFAULT_COMPARE(a, b) {
+    return a > b ? 1 : a < b ? -1 : 0;
+  }
+  /**
+   * Simple top down splay, not requiring i to be in the tree t.
+   */
+
+
+  function splay(i, t, comparator) {
+    var N = new Node(null, null);
+    var l = N;
+    var r = N;
+
+    while (true) {
+      var cmp = comparator(i, t.key); //if (i < t.key) {
+
+      if (cmp < 0) {
+        if (t.left === null) break; //if (i < t.left.key) {
+
+        if (comparator(i, t.left.key) < 0) {
+          var y = t.left;
+          /* rotate right */
+
+          t.left = y.right;
+          y.right = t;
+          t = y;
+          if (t.left === null) break;
+        }
+
+        r.left = t;
+        /* link right */
+
+        r = t;
+        t = t.left; //} else if (i > t.key) {
+      } else if (cmp > 0) {
+        if (t.right === null) break; //if (i > t.right.key) {
+
+        if (comparator(i, t.right.key) > 0) {
+          var y = t.right;
+          /* rotate left */
+
+          t.right = y.left;
+          y.left = t;
+          t = y;
+          if (t.right === null) break;
+        }
+
+        l.right = t;
+        /* link left */
+
+        l = t;
+        t = t.right;
+      } else break;
+    }
+    /* assemble */
+
+
+    l.right = t.left;
+    r.left = t.right;
+    t.left = N.right;
+    t.right = N.left;
+    return t;
+  }
+
+  function insert(i, data, t, comparator) {
+    var node = new Node(i, data);
+
+    if (t === null) {
+      node.left = node.right = null;
+      return node;
+    }
+
+    t = splay(i, t, comparator);
+    var cmp = comparator(i, t.key);
+
+    if (cmp < 0) {
+      node.left = t.left;
+      node.right = t;
+      t.left = null;
+    } else if (cmp >= 0) {
+      node.right = t.right;
+      node.left = t;
+      t.right = null;
+    }
+
+    return node;
+  }
+
+  function split(key, v, comparator) {
+    var left = null;
+    var right = null;
+
+    if (v) {
+      v = splay(key, v, comparator);
+      var cmp = comparator(v.key, key);
+
+      if (cmp === 0) {
+        left = v.left;
+        right = v.right;
+      } else if (cmp < 0) {
+        right = v.right;
+        v.right = null;
+        left = v;
+      } else {
+        left = v.left;
+        v.left = null;
+        right = v;
+      }
+    }
+
+    return {
+      left: left,
+      right: right
+    };
+  }
+
+  function merge(left, right, comparator) {
+    if (right === null) return left;
+    if (left === null) return right;
+    right = splay(left.key, right, comparator);
+    right.left = left;
+    return right;
+  }
+  /**
+   * Prints level of the tree
+   */
+
+
+  function printRow(root, prefix, isTail, out, printNode) {
+    if (root) {
+      out("" + prefix + (isTail ? '└── ' : '├── ') + printNode(root) + "\n");
+      var indent = prefix + (isTail ? '    ' : '│   ');
+      if (root.left) printRow(root.left, indent, false, out, printNode);
+      if (root.right) printRow(root.right, indent, true, out, printNode);
+    }
+  }
+
+  var Tree =
+  /** @class */
+  function () {
+    function Tree(comparator) {
+      if (comparator === void 0) {
+        comparator = DEFAULT_COMPARE;
+      }
+
+      this._root = null;
+      this._size = 0;
+      this._comparator = comparator;
+    }
+    /**
+     * Inserts a key, allows duplicates
+     */
+
+
+    Tree.prototype.insert = function (key, data) {
+      this._size++;
+      return this._root = insert(key, data, this._root, this._comparator);
+    };
+    /**
+     * Adds a key, if it is not present in the tree
+     */
+
+
+    Tree.prototype.add = function (key, data) {
+      var node = new Node(key, data);
+
+      if (this._root === null) {
+        node.left = node.right = null;
+        this._size++;
+        this._root = node;
+      }
+
+      var comparator = this._comparator;
+      var t = splay(key, this._root, comparator);
+      var cmp = comparator(key, t.key);
+      if (cmp === 0) this._root = t;else {
+        if (cmp < 0) {
+          node.left = t.left;
+          node.right = t;
+          t.left = null;
+        } else if (cmp > 0) {
+          node.right = t.right;
+          node.left = t;
+          t.right = null;
+        }
+
+        this._size++;
+        this._root = node;
+      }
+      return this._root;
+    };
+    /**
+     * @param  {Key} key
+     * @return {Node|null}
+     */
+
+
+    Tree.prototype.remove = function (key) {
+      this._root = this._remove(key, this._root, this._comparator);
+    };
+    /**
+     * Deletes i from the tree if it's there
+     */
+
+
+    Tree.prototype._remove = function (i, t, comparator) {
+      var x;
+      if (t === null) return null;
+      t = splay(i, t, comparator);
+      var cmp = comparator(i, t.key);
+
+      if (cmp === 0) {
+        /* found it */
+        if (t.left === null) {
+          x = t.right;
+        } else {
+          x = splay(i, t.left, comparator);
+          x.right = t.right;
+        }
+
+        this._size--;
+        return x;
+      }
+
+      return t;
+      /* It wasn't there */
+    };
+    /**
+     * Removes and returns the node with smallest key
+     */
+
+
+    Tree.prototype.pop = function () {
+      var node = this._root;
+
+      if (node) {
+        while (node.left) {
+          node = node.left;
+        }
+
+        this._root = splay(node.key, this._root, this._comparator);
+        this._root = this._remove(node.key, this._root, this._comparator);
+        return {
+          key: node.key,
+          data: node.data
+        };
+      }
+
+      return null;
+    };
+    /**
+     * Find without splaying
+     */
+
+
+    Tree.prototype.findStatic = function (key) {
+      var current = this._root;
+      var compare = this._comparator;
+
+      while (current) {
+        var cmp = compare(key, current.key);
+        if (cmp === 0) return current;else if (cmp < 0) current = current.left;else current = current.right;
+      }
+
+      return null;
+    };
+
+    Tree.prototype.find = function (key) {
+      if (this._root) {
+        this._root = splay(key, this._root, this._comparator);
+        if (this._comparator(key, this._root.key) !== 0) return null;
+      }
+
+      return this._root;
+    };
+
+    Tree.prototype.contains = function (key) {
+      var current = this._root;
+      var compare = this._comparator;
+
+      while (current) {
+        var cmp = compare(key, current.key);
+        if (cmp === 0) return true;else if (cmp < 0) current = current.left;else current = current.right;
+      }
+
+      return false;
+    };
+
+    Tree.prototype.forEach = function (visitor, ctx) {
+      var current = this._root;
+      var Q = [];
+      /* Initialize stack s */
+
+      var done = false;
+
+      while (!done) {
+        if (current !== null) {
+          Q.push(current);
+          current = current.left;
+        } else {
+          if (Q.length !== 0) {
+            current = Q.pop();
+            visitor.call(ctx, current);
+            current = current.right;
+          } else done = true;
+        }
+      }
+
+      return this;
+    };
+    /**
+     * Walk key range from `low` to `high`. Stops if `fn` returns a value.
+     */
+
+
+    Tree.prototype.range = function (low, high, fn, ctx) {
+      var Q = [];
+      var compare = this._comparator;
+      var node = this._root;
+      var cmp;
+
+      while (Q.length !== 0 || node) {
+        if (node) {
+          Q.push(node);
+          node = node.left;
+        } else {
+          node = Q.pop();
+          cmp = compare(node.key, high);
+
+          if (cmp > 0) {
+            break;
+          } else if (compare(node.key, low) >= 0) {
+            if (fn.call(ctx, node)) return this; // stop if smth is returned
+          }
+
+          node = node.right;
+        }
+      }
+
+      return this;
+    };
+    /**
+     * Returns array of keys
+     */
+
+
+    Tree.prototype.keys = function () {
+      var keys = [];
+      this.forEach(function (_a) {
+        var key = _a.key;
+        return keys.push(key);
+      });
+      return keys;
+    };
+    /**
+     * Returns array of all the data in the nodes
+     */
+
+
+    Tree.prototype.values = function () {
+      var values = [];
+      this.forEach(function (_a) {
+        var data = _a.data;
+        return values.push(data);
+      });
+      return values;
+    };
+
+    Tree.prototype.min = function () {
+      if (this._root) return this.minNode(this._root).key;
+      return null;
+    };
+
+    Tree.prototype.max = function () {
+      if (this._root) return this.maxNode(this._root).key;
+      return null;
+    };
+
+    Tree.prototype.minNode = function (t) {
+      if (t === void 0) {
+        t = this._root;
+      }
+
+      if (t) while (t.left) {
+        t = t.left;
+      }
+      return t;
+    };
+
+    Tree.prototype.maxNode = function (t) {
+      if (t === void 0) {
+        t = this._root;
+      }
+
+      if (t) while (t.right) {
+        t = t.right;
+      }
+      return t;
+    };
+    /**
+     * Returns node at given index
+     */
+
+
+    Tree.prototype.at = function (index) {
+      var current = this._root;
+      var done = false;
+      var i = 0;
+      var Q = [];
+
+      while (!done) {
+        if (current) {
+          Q.push(current);
+          current = current.left;
+        } else {
+          if (Q.length > 0) {
+            current = Q.pop();
+            if (i === index) return current;
+            i++;
+            current = current.right;
+          } else done = true;
+        }
+      }
+
+      return null;
+    };
+
+    Tree.prototype.next = function (d) {
+      var root = this._root;
+      var successor = null;
+
+      if (d.right) {
+        successor = d.right;
+
+        while (successor.left) {
+          successor = successor.left;
+        }
+
+        return successor;
+      }
+
+      var comparator = this._comparator;
+
+      while (root) {
+        var cmp = comparator(d.key, root.key);
+        if (cmp === 0) break;else if (cmp < 0) {
+          successor = root;
+          root = root.left;
+        } else root = root.right;
+      }
+
+      return successor;
+    };
+
+    Tree.prototype.prev = function (d) {
+      var root = this._root;
+      var predecessor = null;
+
+      if (d.left !== null) {
+        predecessor = d.left;
+
+        while (predecessor.right) {
+          predecessor = predecessor.right;
+        }
+
+        return predecessor;
+      }
+
+      var comparator = this._comparator;
+
+      while (root) {
+        var cmp = comparator(d.key, root.key);
+        if (cmp === 0) break;else if (cmp < 0) root = root.left;else {
+          predecessor = root;
+          root = root.right;
+        }
+      }
+
+      return predecessor;
+    };
+
+    Tree.prototype.clear = function () {
+      this._root = null;
+      this._size = 0;
+      return this;
+    };
+
+    Tree.prototype.toList = function () {
+      return toList(this._root);
+    };
+    /**
+     * Bulk-load items. Both array have to be same size
+     */
+
+
+    Tree.prototype.load = function (keys, values, presort) {
+      if (values === void 0) {
+        values = [];
+      }
+
+      if (presort === void 0) {
+        presort = false;
+      }
+
+      var size = keys.length;
+      var comparator = this._comparator; // sort if needed
+
+      if (presort) sort(keys, values, 0, size - 1, comparator);
+
+      if (this._root === null) {
+        // empty tree
+        this._root = loadRecursive(keys, values, 0, size);
+        this._size = size;
+      } else {
+        // that re-builds the whole tree from two in-order traversals
+        var mergedList = mergeLists(this.toList(), createList(keys, values), comparator);
+        size = this._size + size;
+        this._root = sortedListToBST({
+          head: mergedList
+        }, 0, size);
+      }
+
+      return this;
+    };
+
+    Tree.prototype.isEmpty = function () {
+      return this._root === null;
+    };
+
+    Object.defineProperty(Tree.prototype, "size", {
+      get: function get() {
+        return this._size;
+      },
+      enumerable: true,
+      configurable: true
+    });
+    Object.defineProperty(Tree.prototype, "root", {
+      get: function get() {
+        return this._root;
+      },
+      enumerable: true,
+      configurable: true
+    });
+
+    Tree.prototype.toString = function (printNode) {
+      if (printNode === void 0) {
+        printNode = function printNode(n) {
+          return String(n.key);
+        };
+      }
+
+      var out = [];
+      printRow(this._root, '', true, function (v) {
+        return out.push(v);
+      }, printNode);
+      return out.join('');
+    };
+
+    Tree.prototype.update = function (key, newKey, newData) {
+      var comparator = this._comparator;
+
+      var _a = split(key, this._root, comparator),
+          left = _a.left,
+          right = _a.right;
+
+      if (comparator(key, newKey) < 0) {
+        right = insert(newKey, newData, right, comparator);
+      } else {
+        left = insert(newKey, newData, left, comparator);
+      }
+
+      this._root = merge(left, right, comparator);
+    };
+
+    Tree.prototype.split = function (key) {
+      return split(key, this._root, this._comparator);
+    };
+
+    return Tree;
+  }();
+
+  function loadRecursive(keys, values, start, end) {
+    var size = end - start;
+
+    if (size > 0) {
+      var middle = start + Math.floor(size / 2);
+      var key = keys[middle];
+      var data = values[middle];
+      var node = new Node(key, data);
+      node.left = loadRecursive(keys, values, start, middle);
+      node.right = loadRecursive(keys, values, middle + 1, end);
+      return node;
+    }
+
+    return null;
+  }
+
+  function createList(keys, values) {
+    var head = new Node(null, null);
+    var p = head;
+
+    for (var i = 0; i < keys.length; i++) {
+      p = p.next = new Node(keys[i], values[i]);
+    }
+
+    p.next = null;
+    return head.next;
+  }
+
+  function toList(root) {
+    var current = root;
+    var Q = [];
+    var done = false;
+    var head = new Node(null, null);
+    var p = head;
+
+    while (!done) {
+      if (current) {
+        Q.push(current);
+        current = current.left;
+      } else {
+        if (Q.length > 0) {
+          current = p = p.next = Q.pop();
+          current = current.right;
+        } else done = true;
+      }
+    }
+
+    p.next = null; // that'll work even if the tree was empty
+
+    return head.next;
+  }
+
+  function sortedListToBST(list, start, end) {
+    var size = end - start;
+
+    if (size > 0) {
+      var middle = start + Math.floor(size / 2);
+      var left = sortedListToBST(list, start, middle);
+      var root = list.head;
+      root.left = left;
+      list.head = list.head.next;
+      root.right = sortedListToBST(list, middle + 1, end);
+      return root;
+    }
+
+    return null;
+  }
+
+  function mergeLists(l1, l2, compare) {
+    var head = new Node(null, null); // dummy
+
+    var p = head;
+    var p1 = l1;
+    var p2 = l2;
+
+    while (p1 !== null && p2 !== null) {
+      if (compare(p1.key, p2.key) < 0) {
+        p.next = p1;
+        p1 = p1.next;
+      } else {
+        p.next = p2;
+        p2 = p2.next;
+      }
+
+      p = p.next;
+    }
+
+    if (p1 !== null) {
+      p.next = p1;
+    } else if (p2 !== null) {
+      p.next = p2;
+    }
+
+    return head.next;
+  }
+
+  function sort(keys, values, left, right, compare) {
+    if (left >= right) return;
+    var pivot = keys[left + right >> 1];
+    var i = left - 1;
+    var j = right + 1;
+
+    while (true) {
+      do {
+        i++;
+      } while (compare(keys[i], pivot) < 0);
+
+      do {
+        j--;
+      } while (compare(keys[j], pivot) > 0);
+
+      if (i >= j) break;
+      var tmp = keys[i];
+      keys[i] = keys[j];
+      keys[j] = tmp;
+      tmp = values[i];
+      values[i] = values[j];
+      values[j] = tmp;
+    }
+
+    sort(keys, values, left, j, compare);
+    sort(keys, values, j + 1, right, compare);
+  }
+
+  /**
+   * A bounding box has the format:
+   *
+   *  { ll: { x: xmin, y: ymin }, ur: { x: xmax, y: ymax } }
+   *
+   */
+  var isInBbox = function isInBbox(bbox, point) {
+    return bbox.ll.x <= point.x && point.x <= bbox.ur.x && bbox.ll.y <= point.y && point.y <= bbox.ur.y;
+  };
+  /* Returns either null, or a bbox (aka an ordered pair of points)
+   * If there is only one point of overlap, a bbox with identical points
+   * will be returned */
+
+  var getBboxOverlap = function getBboxOverlap(b1, b2) {
+    // check if the bboxes overlap at all
+    if (b2.ur.x < b1.ll.x || b1.ur.x < b2.ll.x || b2.ur.y < b1.ll.y || b1.ur.y < b2.ll.y) return null; // find the middle two X values
+
+    var lowerX = b1.ll.x < b2.ll.x ? b2.ll.x : b1.ll.x;
+    var upperX = b1.ur.x < b2.ur.x ? b1.ur.x : b2.ur.x; // find the middle two Y values
+
+    var lowerY = b1.ll.y < b2.ll.y ? b2.ll.y : b1.ll.y;
+    var upperY = b1.ur.y < b2.ur.y ? b1.ur.y : b2.ur.y; // put those middle values together to get the overlap
+
+    return {
+      ll: {
+        x: lowerX,
+        y: lowerY
+      },
+      ur: {
+        x: upperX,
+        y: upperY
+      }
+    };
+  };
+
+  /* Javascript doesn't do integer math. Everything is
+   * floating point with percision Number.EPSILON.
+   *
+   * https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number/EPSILON
+   */
+  var epsilon = Number.EPSILON; // IE Polyfill
+
+  if (epsilon === undefined) epsilon = Math.pow(2, -52);
+  var EPSILON_SQ = epsilon * epsilon;
+  /* FLP comparator */
+
+  var cmp = function cmp(a, b) {
+    // check if they're both 0
+    if (-epsilon < a && a < epsilon) {
+      if (-epsilon < b && b < epsilon) {
+        return 0;
+      }
+    } // check if they're flp equal
+
+
+    var ab = a - b;
+
+    if (ab * ab < EPSILON_SQ * a * b) {
+      return 0;
+    } // normal comparison
+
+
+    return a < b ? -1 : 1;
+  };
+
+  /**
+   * This class rounds incoming values sufficiently so that
+   * floating points problems are, for the most part, avoided.
+   *
+   * Incoming points are have their x & y values tested against
+   * all previously seen x & y values. If either is 'too close'
+   * to a previously seen value, it's value is 'snapped' to the
+   * previously seen value.
+   *
+   * All points should be rounded by this class before being
+   * stored in any data structures in the rest of this algorithm.
+   */
+
+  var PtRounder = /*#__PURE__*/function () {
+    function PtRounder() {
+      _classCallCheck(this, PtRounder);
+
+      this.reset();
+    }
+
+    _createClass(PtRounder, [{
+      key: "reset",
+      value: function reset() {
+        this.xRounder = new CoordRounder();
+        this.yRounder = new CoordRounder();
+      }
+    }, {
+      key: "round",
+      value: function round(x, y) {
+        return {
+          x: this.xRounder.round(x),
+          y: this.yRounder.round(y)
+        };
+      }
+    }]);
+
+    return PtRounder;
+  }();
+
+  var CoordRounder = /*#__PURE__*/function () {
+    function CoordRounder() {
+      _classCallCheck(this, CoordRounder);
+
+      this.tree = new Tree(); // preseed with 0 so we don't end up with values < Number.EPSILON
+
+      this.round(0);
+    } // Note: this can rounds input values backwards or forwards.
+    //       You might ask, why not restrict this to just rounding
+    //       forwards? Wouldn't that allow left endpoints to always
+    //       remain left endpoints during splitting (never change to
+    //       right). No - it wouldn't, because we snap intersections
+    //       to endpoints (to establish independence from the segment
+    //       angle for t-intersections).
+
+
+    _createClass(CoordRounder, [{
+      key: "round",
+      value: function round(coord) {
+        var node = this.tree.add(coord);
+        var prevNode = this.tree.prev(node);
+
+        if (prevNode !== null && cmp(node.key, prevNode.key) === 0) {
+          this.tree.remove(coord);
+          return prevNode.key;
+        }
+
+        var nextNode = this.tree.next(node);
+
+        if (nextNode !== null && cmp(node.key, nextNode.key) === 0) {
+          this.tree.remove(coord);
+          return nextNode.key;
+        }
+
+        return coord;
+      }
+    }]);
+
+    return CoordRounder;
+  }(); // singleton available by import
+
+
+  var rounder = new PtRounder();
+
+  /* Cross Product of two vectors with first point at origin */
+
+  var crossProduct = function crossProduct(a, b) {
+    return a.x * b.y - a.y * b.x;
+  };
+  /* Dot Product of two vectors with first point at origin */
+
+  var dotProduct = function dotProduct(a, b) {
+    return a.x * b.x + a.y * b.y;
+  };
+  /* Comparator for two vectors with same starting point */
+
+  var compareVectorAngles = function compareVectorAngles(basePt, endPt1, endPt2) {
+    var v1 = {
+      x: endPt1.x - basePt.x,
+      y: endPt1.y - basePt.y
+    };
+    var v2 = {
+      x: endPt2.x - basePt.x,
+      y: endPt2.y - basePt.y
+    };
+    var kross = crossProduct(v1, v2);
+    return cmp(kross, 0);
+  };
+  var length = function length(v) {
+    return Math.sqrt(dotProduct(v, v));
+  };
+  /* Get the sine of the angle from pShared -> pAngle to pShaed -> pBase */
+
+  var sineOfAngle = function sineOfAngle(pShared, pBase, pAngle) {
+    var vBase = {
+      x: pBase.x - pShared.x,
+      y: pBase.y - pShared.y
+    };
+    var vAngle = {
+      x: pAngle.x - pShared.x,
+      y: pAngle.y - pShared.y
+    };
+    return crossProduct(vAngle, vBase) / length(vAngle) / length(vBase);
+  };
+  /* Get the cosine of the angle from pShared -> pAngle to pShaed -> pBase */
+
+  var cosineOfAngle = function cosineOfAngle(pShared, pBase, pAngle) {
+    var vBase = {
+      x: pBase.x - pShared.x,
+      y: pBase.y - pShared.y
+    };
+    var vAngle = {
+      x: pAngle.x - pShared.x,
+      y: pAngle.y - pShared.y
+    };
+    return dotProduct(vAngle, vBase) / length(vAngle) / length(vBase);
+  };
+  /* Get the x coordinate where the given line (defined by a point and vector)
+   * crosses the horizontal line with the given y coordiante.
+   * In the case of parrallel lines (including overlapping ones) returns null. */
+
+  var horizontalIntersection = function horizontalIntersection(pt, v, y) {
+    if (v.y === 0) return null;
+    return {
+      x: pt.x + v.x / v.y * (y - pt.y),
+      y: y
+    };
+  };
+  /* Get the y coordinate where the given line (defined by a point and vector)
+   * crosses the vertical line with the given x coordiante.
+   * In the case of parrallel lines (including overlapping ones) returns null. */
+
+  var verticalIntersection = function verticalIntersection(pt, v, x) {
+    if (v.x === 0) return null;
+    return {
+      x: x,
+      y: pt.y + v.y / v.x * (x - pt.x)
+    };
+  };
+  /* Get the intersection of two lines, each defined by a base point and a vector.
+   * In the case of parrallel lines (including overlapping ones) returns null. */
+
+  var intersection = function intersection(pt1, v1, pt2, v2) {
+    // take some shortcuts for vertical and horizontal lines
+    // this also ensures we don't calculate an intersection and then discover
+    // it's actually outside the bounding box of the line
+    if (v1.x === 0) return verticalIntersection(pt2, v2, pt1.x);
+    if (v2.x === 0) return verticalIntersection(pt1, v1, pt2.x);
+    if (v1.y === 0) return horizontalIntersection(pt2, v2, pt1.y);
+    if (v2.y === 0) return horizontalIntersection(pt1, v1, pt2.y); // General case for non-overlapping segments.
+    // This algorithm is based on Schneider and Eberly.
+    // http://www.cimec.org.ar/~ncalvo/Schneider_Eberly.pdf - pg 244
+
+    var kross = crossProduct(v1, v2);
+    if (kross == 0) return null;
+    var ve = {
+      x: pt2.x - pt1.x,
+      y: pt2.y - pt1.y
+    };
+    var d1 = crossProduct(ve, v1) / kross;
+    var d2 = crossProduct(ve, v2) / kross; // take the average of the two calculations to minimize rounding error
+
+    var x1 = pt1.x + d2 * v1.x,
+        x2 = pt2.x + d1 * v2.x;
+    var y1 = pt1.y + d2 * v1.y,
+        y2 = pt2.y + d1 * v2.y;
+    var x = (x1 + x2) / 2;
+    var y = (y1 + y2) / 2;
+    return {
+      x: x,
+      y: y
+    };
+  };
+
+  var SweepEvent = /*#__PURE__*/function () {
+    _createClass(SweepEvent, null, [{
+      key: "compare",
+      // for ordering sweep events in the sweep event queue
+      value: function compare(a, b) {
+        // favor event with a point that the sweep line hits first
+        var ptCmp = SweepEvent.comparePoints(a.point, b.point);
+        if (ptCmp !== 0) return ptCmp; // the points are the same, so link them if needed
+
+        if (a.point !== b.point) a.link(b); // favor right events over left
+
+        if (a.isLeft !== b.isLeft) return a.isLeft ? 1 : -1; // we have two matching left or right endpoints
+        // ordering of this case is the same as for their segments
+
+        return Segment.compare(a.segment, b.segment);
+      } // for ordering points in sweep line order
+
+    }, {
+      key: "comparePoints",
+      value: function comparePoints(aPt, bPt) {
+        if (aPt.x < bPt.x) return -1;
+        if (aPt.x > bPt.x) return 1;
+        if (aPt.y < bPt.y) return -1;
+        if (aPt.y > bPt.y) return 1;
+        return 0;
+      } // Warning: 'point' input will be modified and re-used (for performance)
+
+    }]);
+
+    function SweepEvent(point, isLeft) {
+      _classCallCheck(this, SweepEvent);
+
+      if (point.events === undefined) point.events = [this];else point.events.push(this);
+      this.point = point;
+      this.isLeft = isLeft; // this.segment, this.otherSE set by factory
+    }
+
+    _createClass(SweepEvent, [{
+      key: "link",
+      value: function link(other) {
+        if (other.point === this.point) {
+          throw new Error('Tried to link already linked events');
+        }
+
+        var otherEvents = other.point.events;
+
+        for (var i = 0, iMax = otherEvents.length; i < iMax; i++) {
+          var evt = otherEvents[i];
+          this.point.events.push(evt);
+          evt.point = this.point;
+        }
+
+        this.checkForConsuming();
+      }
+      /* Do a pass over our linked events and check to see if any pair
+       * of segments match, and should be consumed. */
+
+    }, {
+      key: "checkForConsuming",
+      value: function checkForConsuming() {
+        // FIXME: The loops in this method run O(n^2) => no good.
+        //        Maintain little ordered sweep event trees?
+        //        Can we maintaining an ordering that avoids the need
+        //        for the re-sorting with getLeftmostComparator in geom-out?
+        // Compare each pair of events to see if other events also match
+        var numEvents = this.point.events.length;
+
+        for (var i = 0; i < numEvents; i++) {
+          var evt1 = this.point.events[i];
+          if (evt1.segment.consumedBy !== undefined) continue;
+
+          for (var j = i + 1; j < numEvents; j++) {
+            var evt2 = this.point.events[j];
+            if (evt2.consumedBy !== undefined) continue;
+            if (evt1.otherSE.point.events !== evt2.otherSE.point.events) continue;
+            evt1.segment.consume(evt2.segment);
+          }
+        }
+      }
+    }, {
+      key: "getAvailableLinkedEvents",
+      value: function getAvailableLinkedEvents() {
+        // point.events is always of length 2 or greater
+        var events = [];
+
+        for (var i = 0, iMax = this.point.events.length; i < iMax; i++) {
+          var evt = this.point.events[i];
+
+          if (evt !== this && !evt.segment.ringOut && evt.segment.isInResult()) {
+            events.push(evt);
+          }
+        }
+
+        return events;
+      }
+      /**
+       * Returns a comparator function for sorting linked events that will
+       * favor the event that will give us the smallest left-side angle.
+       * All ring construction starts as low as possible heading to the right,
+       * so by always turning left as sharp as possible we'll get polygons
+       * without uncessary loops & holes.
+       *
+       * The comparator function has a compute cache such that it avoids
+       * re-computing already-computed values.
+       */
+
+    }, {
+      key: "getLeftmostComparator",
+      value: function getLeftmostComparator(baseEvent) {
+        var _this = this;
+
+        var cache = new Map();
+
+        var fillCache = function fillCache(linkedEvent) {
+          var nextEvent = linkedEvent.otherSE;
+          cache.set(linkedEvent, {
+            sine: sineOfAngle(_this.point, baseEvent.point, nextEvent.point),
+            cosine: cosineOfAngle(_this.point, baseEvent.point, nextEvent.point)
+          });
+        };
+
+        return function (a, b) {
+          if (!cache.has(a)) fillCache(a);
+          if (!cache.has(b)) fillCache(b);
+
+          var _cache$get = cache.get(a),
+              asine = _cache$get.sine,
+              acosine = _cache$get.cosine;
+
+          var _cache$get2 = cache.get(b),
+              bsine = _cache$get2.sine,
+              bcosine = _cache$get2.cosine; // both on or above x-axis
+
+
+          if (asine >= 0 && bsine >= 0) {
+            if (acosine < bcosine) return 1;
+            if (acosine > bcosine) return -1;
+            return 0;
+          } // both below x-axis
+
+
+          if (asine < 0 && bsine < 0) {
+            if (acosine < bcosine) return -1;
+            if (acosine > bcosine) return 1;
+            return 0;
+          } // one above x-axis, one below
+
+
+          if (bsine < asine) return -1;
+          if (bsine > asine) return 1;
+          return 0;
+        };
+      }
+    }]);
+
+    return SweepEvent;
+  }();
+
+  // segments and sweep events when all else is identical
+
+  var segmentId = 0;
+
+  var Segment = /*#__PURE__*/function () {
+    _createClass(Segment, null, [{
+      key: "compare",
+
+      /* This compare() function is for ordering segments in the sweep
+       * line tree, and does so according to the following criteria:
+       *
+       * Consider the vertical line that lies an infinestimal step to the
+       * right of the right-more of the two left endpoints of the input
+       * segments. Imagine slowly moving a point up from negative infinity
+       * in the increasing y direction. Which of the two segments will that
+       * point intersect first? That segment comes 'before' the other one.
+       *
+       * If neither segment would be intersected by such a line, (if one
+       * or more of the segments are vertical) then the line to be considered
+       * is directly on the right-more of the two left inputs.
+       */
+      value: function compare(a, b) {
+        var alx = a.leftSE.point.x;
+        var blx = b.leftSE.point.x;
+        var arx = a.rightSE.point.x;
+        var brx = b.rightSE.point.x; // check if they're even in the same vertical plane
+
+        if (brx < alx) return 1;
+        if (arx < blx) return -1;
+        var aly = a.leftSE.point.y;
+        var bly = b.leftSE.point.y;
+        var ary = a.rightSE.point.y;
+        var bry = b.rightSE.point.y; // is left endpoint of segment B the right-more?
+
+        if (alx < blx) {
+          // are the two segments in the same horizontal plane?
+          if (bly < aly && bly < ary) return 1;
+          if (bly > aly && bly > ary) return -1; // is the B left endpoint colinear to segment A?
+
+          var aCmpBLeft = a.comparePoint(b.leftSE.point);
+          if (aCmpBLeft < 0) return 1;
+          if (aCmpBLeft > 0) return -1; // is the A right endpoint colinear to segment B ?
+
+          var bCmpARight = b.comparePoint(a.rightSE.point);
+          if (bCmpARight !== 0) return bCmpARight; // colinear segments, consider the one with left-more
+          // left endpoint to be first (arbitrary?)
+
+          return -1;
+        } // is left endpoint of segment A the right-more?
+
+
+        if (alx > blx) {
+          if (aly < bly && aly < bry) return -1;
+          if (aly > bly && aly > bry) return 1; // is the A left endpoint colinear to segment B?
+
+          var bCmpALeft = b.comparePoint(a.leftSE.point);
+          if (bCmpALeft !== 0) return bCmpALeft; // is the B right endpoint colinear to segment A?
+
+          var aCmpBRight = a.comparePoint(b.rightSE.point);
+          if (aCmpBRight < 0) return 1;
+          if (aCmpBRight > 0) return -1; // colinear segments, consider the one with left-more
+          // left endpoint to be first (arbitrary?)
+
+          return 1;
+        } // if we get here, the two left endpoints are in the same
+        // vertical plane, ie alx === blx
+        // consider the lower left-endpoint to come first
+
+
+        if (aly < bly) return -1;
+        if (aly > bly) return 1; // left endpoints are identical
+        // check for colinearity by using the left-more right endpoint
+        // is the A right endpoint more left-more?
+
+        if (arx < brx) {
+          var _bCmpARight = b.comparePoint(a.rightSE.point);
+
+          if (_bCmpARight !== 0) return _bCmpARight;
+        } // is the B right endpoint more left-more?
+
+
+        if (arx > brx) {
+          var _aCmpBRight = a.comparePoint(b.rightSE.point);
+
+          if (_aCmpBRight < 0) return 1;
+          if (_aCmpBRight > 0) return -1;
+        }
+
+        if (arx !== brx) {
+          // are these two [almost] vertical segments with opposite orientation?
+          // if so, the one with the lower right endpoint comes first
+          var ay = ary - aly;
+          var ax = arx - alx;
+          var by = bry - bly;
+          var bx = brx - blx;
+          if (ay > ax && by < bx) return 1;
+          if (ay < ax && by > bx) return -1;
+        } // we have colinear segments with matching orientation
+        // consider the one with more left-more right endpoint to be first
+
+
+        if (arx > brx) return 1;
+        if (arx < brx) return -1; // if we get here, two two right endpoints are in the same
+        // vertical plane, ie arx === brx
+        // consider the lower right-endpoint to come first
+
+        if (ary < bry) return -1;
+        if (ary > bry) return 1; // right endpoints identical as well, so the segments are idential
+        // fall back on creation order as consistent tie-breaker
+
+        if (a.id < b.id) return -1;
+        if (a.id > b.id) return 1; // identical segment, ie a === b
+
+        return 0;
+      }
+      /* Warning: a reference to ringWindings input will be stored,
+       *  and possibly will be later modified */
+
+    }]);
+
+    function Segment(leftSE, rightSE, rings, windings) {
+      _classCallCheck(this, Segment);
+
+      this.id = ++segmentId;
+      this.leftSE = leftSE;
+      leftSE.segment = this;
+      leftSE.otherSE = rightSE;
+      this.rightSE = rightSE;
+      rightSE.segment = this;
+      rightSE.otherSE = leftSE;
+      this.rings = rings;
+      this.windings = windings; // left unset for performance, set later in algorithm
+      // this.ringOut, this.consumedBy, this.prev
+    }
+
+    _createClass(Segment, [{
+      key: "replaceRightSE",
+
+      /* When a segment is split, the rightSE is replaced with a new sweep event */
+      value: function replaceRightSE(newRightSE) {
+        this.rightSE = newRightSE;
+        this.rightSE.segment = this;
+        this.rightSE.otherSE = this.leftSE;
+        this.leftSE.otherSE = this.rightSE;
+      }
+    }, {
+      key: "bbox",
+      value: function bbox() {
+        var y1 = this.leftSE.point.y;
+        var y2 = this.rightSE.point.y;
+        return {
+          ll: {
+            x: this.leftSE.point.x,
+            y: y1 < y2 ? y1 : y2
+          },
+          ur: {
+            x: this.rightSE.point.x,
+            y: y1 > y2 ? y1 : y2
+          }
+        };
+      }
+      /* A vector from the left point to the right */
+
+    }, {
+      key: "vector",
+      value: function vector() {
+        return {
+          x: this.rightSE.point.x - this.leftSE.point.x,
+          y: this.rightSE.point.y - this.leftSE.point.y
+        };
+      }
+    }, {
+      key: "isAnEndpoint",
+      value: function isAnEndpoint(pt) {
+        return pt.x === this.leftSE.point.x && pt.y === this.leftSE.point.y || pt.x === this.rightSE.point.x && pt.y === this.rightSE.point.y;
+      }
+      /* Compare this segment with a point.
+       *
+       * A point P is considered to be colinear to a segment if there
+       * exists a distance D such that if we travel along the segment
+       * from one * endpoint towards the other a distance D, we find
+       * ourselves at point P.
+       *
+       * Return value indicates:
+       *
+       *   1: point lies above the segment (to the left of vertical)
+       *   0: point is colinear to segment
+       *  -1: point lies below the segment (to the right of vertical)
+       */
+
+    }, {
+      key: "comparePoint",
+      value: function comparePoint(point) {
+        if (this.isAnEndpoint(point)) return 0;
+        var lPt = this.leftSE.point;
+        var rPt = this.rightSE.point;
+        var v = this.vector(); // Exactly vertical segments.
+
+        if (lPt.x === rPt.x) {
+          if (point.x === lPt.x) return 0;
+          return point.x < lPt.x ? 1 : -1;
+        } // Nearly vertical segments with an intersection.
+        // Check to see where a point on the line with matching Y coordinate is.
+
+
+        var yDist = (point.y - lPt.y) / v.y;
+        var xFromYDist = lPt.x + yDist * v.x;
+        if (point.x === xFromYDist) return 0; // General case.
+        // Check to see where a point on the line with matching X coordinate is.
+
+        var xDist = (point.x - lPt.x) / v.x;
+        var yFromXDist = lPt.y + xDist * v.y;
+        if (point.y === yFromXDist) return 0;
+        return point.y < yFromXDist ? -1 : 1;
+      }
+      /**
+       * Given another segment, returns the first non-trivial intersection
+       * between the two segments (in terms of sweep line ordering), if it exists.
+       *
+       * A 'non-trivial' intersection is one that will cause one or both of the
+       * segments to be split(). As such, 'trivial' vs. 'non-trivial' intersection:
+       *
+       *   * endpoint of segA with endpoint of segB --> trivial
+       *   * endpoint of segA with point along segB --> non-trivial
+       *   * endpoint of segB with point along segA --> non-trivial
+       *   * point along segA with point along segB --> non-trivial
+       *
+       * If no non-trivial intersection exists, return null
+       * Else, return null.
+       */
+
+    }, {
+      key: "getIntersection",
+      value: function getIntersection(other) {
+        // If bboxes don't overlap, there can't be any intersections
+        var tBbox = this.bbox();
+        var oBbox = other.bbox();
+        var bboxOverlap = getBboxOverlap(tBbox, oBbox);
+        if (bboxOverlap === null) return null; // We first check to see if the endpoints can be considered intersections.
+        // This will 'snap' intersections to endpoints if possible, and will
+        // handle cases of colinearity.
+
+        var tlp = this.leftSE.point;
+        var trp = this.rightSE.point;
+        var olp = other.leftSE.point;
+        var orp = other.rightSE.point; // does each endpoint touch the other segment?
+        // note that we restrict the 'touching' definition to only allow segments
+        // to touch endpoints that lie forward from where we are in the sweep line pass
+
+        var touchesOtherLSE = isInBbox(tBbox, olp) && this.comparePoint(olp) === 0;
+        var touchesThisLSE = isInBbox(oBbox, tlp) && other.comparePoint(tlp) === 0;
+        var touchesOtherRSE = isInBbox(tBbox, orp) && this.comparePoint(orp) === 0;
+        var touchesThisRSE = isInBbox(oBbox, trp) && other.comparePoint(trp) === 0; // do left endpoints match?
+
+        if (touchesThisLSE && touchesOtherLSE) {
+          // these two cases are for colinear segments with matching left
+          // endpoints, and one segment being longer than the other
+          if (touchesThisRSE && !touchesOtherRSE) return trp;
+          if (!touchesThisRSE && touchesOtherRSE) return orp; // either the two segments match exactly (two trival intersections)
+          // or just on their left endpoint (one trivial intersection
+
+          return null;
+        } // does this left endpoint matches (other doesn't)
+
+
+        if (touchesThisLSE) {
+          // check for segments that just intersect on opposing endpoints
+          if (touchesOtherRSE) {
+            if (tlp.x === orp.x && tlp.y === orp.y) return null;
+          } // t-intersection on left endpoint
+
+
+          return tlp;
+        } // does other left endpoint matches (this doesn't)
+
+
+        if (touchesOtherLSE) {
+          // check for segments that just intersect on opposing endpoints
+          if (touchesThisRSE) {
+            if (trp.x === olp.x && trp.y === olp.y) return null;
+          } // t-intersection on left endpoint
+
+
+          return olp;
+        } // trivial intersection on right endpoints
+
+
+        if (touchesThisRSE && touchesOtherRSE) return null; // t-intersections on just one right endpoint
+
+        if (touchesThisRSE) return trp;
+        if (touchesOtherRSE) return orp; // None of our endpoints intersect. Look for a general intersection between
+        // infinite lines laid over the segments
+
+        var pt = intersection(tlp, this.vector(), olp, other.vector()); // are the segments parrallel? Note that if they were colinear with overlap,
+        // they would have an endpoint intersection and that case was already handled above
+
+        if (pt === null) return null; // is the intersection found between the lines not on the segments?
+
+        if (!isInBbox(bboxOverlap, pt)) return null; // round the the computed point if needed
+
+        return rounder.round(pt.x, pt.y);
+      }
+      /**
+       * Split the given segment into multiple segments on the given points.
+       *  * Each existing segment will retain its leftSE and a new rightSE will be
+       *    generated for it.
+       *  * A new segment will be generated which will adopt the original segment's
+       *    rightSE, and a new leftSE will be generated for it.
+       *  * If there are more than two points given to split on, new segments
+       *    in the middle will be generated with new leftSE and rightSE's.
+       *  * An array of the newly generated SweepEvents will be returned.
+       *
+       * Warning: input array of points is modified
+       */
+
+    }, {
+      key: "split",
+      value: function split(point) {
+        var newEvents = [];
+        var alreadyLinked = point.events !== undefined;
+        var newLeftSE = new SweepEvent(point, true);
+        var newRightSE = new SweepEvent(point, false);
+        var oldRightSE = this.rightSE;
+        this.replaceRightSE(newRightSE);
+        newEvents.push(newRightSE);
+        newEvents.push(newLeftSE);
+        var newSeg = new Segment(newLeftSE, oldRightSE, this.rings.slice(), this.windings.slice()); // when splitting a nearly vertical downward-facing segment,
+        // sometimes one of the resulting new segments is vertical, in which
+        // case its left and right events may need to be swapped
+
+        if (SweepEvent.comparePoints(newSeg.leftSE.point, newSeg.rightSE.point) > 0) {
+          newSeg.swapEvents();
+        }
+
+        if (SweepEvent.comparePoints(this.leftSE.point, this.rightSE.point) > 0) {
+          this.swapEvents();
+        } // in the point we just used to create new sweep events with was already
+        // linked to other events, we need to check if either of the affected
+        // segments should be consumed
+
+
+        if (alreadyLinked) {
+          newLeftSE.checkForConsuming();
+          newRightSE.checkForConsuming();
+        }
+
+        return newEvents;
+      }
+      /* Swap which event is left and right */
+
+    }, {
+      key: "swapEvents",
+      value: function swapEvents() {
+        var tmpEvt = this.rightSE;
+        this.rightSE = this.leftSE;
+        this.leftSE = tmpEvt;
+        this.leftSE.isLeft = true;
+        this.rightSE.isLeft = false;
+
+        for (var i = 0, iMax = this.windings.length; i < iMax; i++) {
+          this.windings[i] *= -1;
+        }
+      }
+      /* Consume another segment. We take their rings under our wing
+       * and mark them as consumed. Use for perfectly overlapping segments */
+
+    }, {
+      key: "consume",
+      value: function consume(other) {
+        var consumer = this;
+        var consumee = other;
+
+        while (consumer.consumedBy) {
+          consumer = consumer.consumedBy;
+        }
+
+        while (consumee.consumedBy) {
+          consumee = consumee.consumedBy;
+        }
+
+        var cmp = Segment.compare(consumer, consumee);
+        if (cmp === 0) return; // already consumed
+        // the winner of the consumption is the earlier segment
+        // according to sweep line ordering
+
+        if (cmp > 0) {
+          var tmp = consumer;
+          consumer = consumee;
+          consumee = tmp;
+        } // make sure a segment doesn't consume it's prev
+
+
+        if (consumer.prev === consumee) {
+          var _tmp = consumer;
+          consumer = consumee;
+          consumee = _tmp;
+        }
+
+        for (var i = 0, iMax = consumee.rings.length; i < iMax; i++) {
+          var ring = consumee.rings[i];
+          var winding = consumee.windings[i];
+          var index = consumer.rings.indexOf(ring);
+
+          if (index === -1) {
+            consumer.rings.push(ring);
+            consumer.windings.push(winding);
+          } else consumer.windings[index] += winding;
+        }
+
+        consumee.rings = null;
+        consumee.windings = null;
+        consumee.consumedBy = consumer; // mark sweep events consumed as to maintain ordering in sweep event queue
+
+        consumee.leftSE.consumedBy = consumer.leftSE;
+        consumee.rightSE.consumedBy = consumer.rightSE;
+      }
+      /* The first segment previous segment chain that is in the result */
+
+    }, {
+      key: "prevInResult",
+      value: function prevInResult() {
+        if (this._prevInResult !== undefined) return this._prevInResult;
+        if (!this.prev) this._prevInResult = null;else if (this.prev.isInResult()) this._prevInResult = this.prev;else this._prevInResult = this.prev.prevInResult();
+        return this._prevInResult;
+      }
+    }, {
+      key: "beforeState",
+      value: function beforeState() {
+        if (this._beforeState !== undefined) return this._beforeState;
+        if (!this.prev) this._beforeState = {
+          rings: [],
+          windings: [],
+          multiPolys: []
+        };else {
+          var seg = this.prev.consumedBy || this.prev;
+          this._beforeState = seg.afterState();
+        }
+        return this._beforeState;
+      }
+    }, {
+      key: "afterState",
+      value: function afterState() {
+        if (this._afterState !== undefined) return this._afterState;
+        var beforeState = this.beforeState();
+        this._afterState = {
+          rings: beforeState.rings.slice(0),
+          windings: beforeState.windings.slice(0),
+          multiPolys: []
+        };
+        var ringsAfter = this._afterState.rings;
+        var windingsAfter = this._afterState.windings;
+        var mpsAfter = this._afterState.multiPolys; // calculate ringsAfter, windingsAfter
+
+        for (var i = 0, iMax = this.rings.length; i < iMax; i++) {
+          var ring = this.rings[i];
+          var winding = this.windings[i];
+          var index = ringsAfter.indexOf(ring);
+
+          if (index === -1) {
+            ringsAfter.push(ring);
+            windingsAfter.push(winding);
+          } else windingsAfter[index] += winding;
+        } // calcualte polysAfter
+
+
+        var polysAfter = [];
+        var polysExclude = [];
+
+        for (var _i = 0, _iMax = ringsAfter.length; _i < _iMax; _i++) {
+          if (windingsAfter[_i] === 0) continue; // non-zero rule
+
+          var _ring = ringsAfter[_i];
+          var poly = _ring.poly;
+          if (polysExclude.indexOf(poly) !== -1) continue;
+          if (_ring.isExterior) polysAfter.push(poly);else {
+            if (polysExclude.indexOf(poly) === -1) polysExclude.push(poly);
+
+            var _index = polysAfter.indexOf(_ring.poly);
+
+            if (_index !== -1) polysAfter.splice(_index, 1);
+          }
+        } // calculate multiPolysAfter
+
+
+        for (var _i2 = 0, _iMax2 = polysAfter.length; _i2 < _iMax2; _i2++) {
+          var mp = polysAfter[_i2].multiPoly;
+          if (mpsAfter.indexOf(mp) === -1) mpsAfter.push(mp);
+        }
+
+        return this._afterState;
+      }
+      /* Is this segment part of the final result? */
+
+    }, {
+      key: "isInResult",
+      value: function isInResult() {
+        // if we've been consumed, we're not in the result
+        if (this.consumedBy) return false;
+        if (this._isInResult !== undefined) return this._isInResult;
+        var mpsBefore = this.beforeState().multiPolys;
+        var mpsAfter = this.afterState().multiPolys;
+
+        switch (operation.type) {
+          case 'union':
+            {
+              // UNION - included iff:
+              //  * On one side of us there is 0 poly interiors AND
+              //  * On the other side there is 1 or more.
+              var noBefores = mpsBefore.length === 0;
+              var noAfters = mpsAfter.length === 0;
+              this._isInResult = noBefores !== noAfters;
+              break;
+            }
+
+          case 'intersection':
+            {
+              // INTERSECTION - included iff:
+              //  * on one side of us all multipolys are rep. with poly interiors AND
+              //  * on the other side of us, not all multipolys are repsented
+              //    with poly interiors
+              var least;
+              var most;
+
+              if (mpsBefore.length < mpsAfter.length) {
+                least = mpsBefore.length;
+                most = mpsAfter.length;
+              } else {
+                least = mpsAfter.length;
+                most = mpsBefore.length;
+              }
+
+              this._isInResult = most === operation.numMultiPolys && least < most;
+              break;
+            }
+
+          case 'xor':
+            {
+              // XOR - included iff:
+              //  * the difference between the number of multipolys represented
+              //    with poly interiors on our two sides is an odd number
+              var diff = Math.abs(mpsBefore.length - mpsAfter.length);
+              this._isInResult = diff % 2 === 1;
+              break;
+            }
+
+          case 'difference':
+            {
+              // DIFFERENCE included iff:
+              //  * on exactly one side, we have just the subject
+              var isJustSubject = function isJustSubject(mps) {
+                return mps.length === 1 && mps[0].isSubject;
+              };
+
+              this._isInResult = isJustSubject(mpsBefore) !== isJustSubject(mpsAfter);
+              break;
+            }
+
+          default:
+            throw new Error("Unrecognized operation type found ".concat(operation.type));
+        }
+
+        return this._isInResult;
+      }
+    }], [{
+      key: "fromRing",
+      value: function fromRing(pt1, pt2, ring) {
+        var leftPt, rightPt, winding; // ordering the two points according to sweep line ordering
+
+        var cmpPts = SweepEvent.comparePoints(pt1, pt2);
+
+        if (cmpPts < 0) {
+          leftPt = pt1;
+          rightPt = pt2;
+          winding = 1;
+        } else if (cmpPts > 0) {
+          leftPt = pt2;
+          rightPt = pt1;
+          winding = -1;
+        } else throw new Error("Tried to create degenerate segment at [".concat(pt1.x, ", ").concat(pt1.y, "]"));
+
+        var leftSE = new SweepEvent(leftPt, true);
+        var rightSE = new SweepEvent(rightPt, false);
+        return new Segment(leftSE, rightSE, [ring], [winding]);
+      }
+    }]);
+
+    return Segment;
+  }();
+
+  var RingIn = /*#__PURE__*/function () {
+    function RingIn(geomRing, poly, isExterior) {
+      _classCallCheck(this, RingIn);
+
+      if (!Array.isArray(geomRing) || geomRing.length === 0) {
+        throw new Error('Input geometry is not a valid Polygon or MultiPolygon');
+      }
+
+      this.poly = poly;
+      this.isExterior = isExterior;
+      this.segments = [];
+
+      if (typeof geomRing[0][0] !== 'number' || typeof geomRing[0][1] !== 'number') {
+        throw new Error('Input geometry is not a valid Polygon or MultiPolygon');
+      }
+
+      var firstPoint = rounder.round(geomRing[0][0], geomRing[0][1]);
+      this.bbox = {
+        ll: {
+          x: firstPoint.x,
+          y: firstPoint.y
+        },
+        ur: {
+          x: firstPoint.x,
+          y: firstPoint.y
+        }
+      };
+      var prevPoint = firstPoint;
+
+      for (var i = 1, iMax = geomRing.length; i < iMax; i++) {
+        if (typeof geomRing[i][0] !== 'number' || typeof geomRing[i][1] !== 'number') {
+          throw new Error('Input geometry is not a valid Polygon or MultiPolygon');
+        }
+
+        var point = rounder.round(geomRing[i][0], geomRing[i][1]); // skip repeated points
+
+        if (point.x === prevPoint.x && point.y === prevPoint.y) continue;
+        this.segments.push(Segment.fromRing(prevPoint, point, this));
+        if (point.x < this.bbox.ll.x) this.bbox.ll.x = point.x;
+        if (point.y < this.bbox.ll.y) this.bbox.ll.y = point.y;
+        if (point.x > this.bbox.ur.x) this.bbox.ur.x = point.x;
+        if (point.y > this.bbox.ur.y) this.bbox.ur.y = point.y;
+        prevPoint = point;
+      } // add segment from last to first if last is not the same as first
+
+
+      if (firstPoint.x !== prevPoint.x || firstPoint.y !== prevPoint.y) {
+        this.segments.push(Segment.fromRing(prevPoint, firstPoint, this));
+      }
+    }
+
+    _createClass(RingIn, [{
+      key: "getSweepEvents",
+      value: function getSweepEvents() {
+        var sweepEvents = [];
+
+        for (var i = 0, iMax = this.segments.length; i < iMax; i++) {
+          var segment = this.segments[i];
+          sweepEvents.push(segment.leftSE);
+          sweepEvents.push(segment.rightSE);
+        }
+
+        return sweepEvents;
+      }
+    }]);
+
+    return RingIn;
+  }();
+  var PolyIn = /*#__PURE__*/function () {
+    function PolyIn(geomPoly, multiPoly) {
+      _classCallCheck(this, PolyIn);
+
+      if (!Array.isArray(geomPoly)) {
+        throw new Error('Input geometry is not a valid Polygon or MultiPolygon');
+      }
+
+      this.exteriorRing = new RingIn(geomPoly[0], this, true); // copy by value
+
+      this.bbox = {
+        ll: {
+          x: this.exteriorRing.bbox.ll.x,
+          y: this.exteriorRing.bbox.ll.y
+        },
+        ur: {
+          x: this.exteriorRing.bbox.ur.x,
+          y: this.exteriorRing.bbox.ur.y
+        }
+      };
+      this.interiorRings = [];
+
+      for (var i = 1, iMax = geomPoly.length; i < iMax; i++) {
+        var ring = new RingIn(geomPoly[i], this, false);
+        if (ring.bbox.ll.x < this.bbox.ll.x) this.bbox.ll.x = ring.bbox.ll.x;
+        if (ring.bbox.ll.y < this.bbox.ll.y) this.bbox.ll.y = ring.bbox.ll.y;
+        if (ring.bbox.ur.x > this.bbox.ur.x) this.bbox.ur.x = ring.bbox.ur.x;
+        if (ring.bbox.ur.y > this.bbox.ur.y) this.bbox.ur.y = ring.bbox.ur.y;
+        this.interiorRings.push(ring);
+      }
+
+      this.multiPoly = multiPoly;
+    }
+
+    _createClass(PolyIn, [{
+      key: "getSweepEvents",
+      value: function getSweepEvents() {
+        var sweepEvents = this.exteriorRing.getSweepEvents();
+
+        for (var i = 0, iMax = this.interiorRings.length; i < iMax; i++) {
+          var ringSweepEvents = this.interiorRings[i].getSweepEvents();
+
+          for (var j = 0, jMax = ringSweepEvents.length; j < jMax; j++) {
+            sweepEvents.push(ringSweepEvents[j]);
+          }
+        }
+
+        return sweepEvents;
+      }
+    }]);
+
+    return PolyIn;
+  }();
+  var MultiPolyIn = /*#__PURE__*/function () {
+    function MultiPolyIn(geom, isSubject) {
+      _classCallCheck(this, MultiPolyIn);
+
+      if (!Array.isArray(geom)) {
+        throw new Error('Input geometry is not a valid Polygon or MultiPolygon');
+      }
+
+      try {
+        // if the input looks like a polygon, convert it to a multipolygon
+        if (typeof geom[0][0][0] === 'number') geom = [geom];
+      } catch (ex) {// The input is either malformed or has empty arrays.
+        // In either case, it will be handled later on.
+      }
+
+      this.polys = [];
+      this.bbox = {
+        ll: {
+          x: Number.POSITIVE_INFINITY,
+          y: Number.POSITIVE_INFINITY
+        },
+        ur: {
+          x: Number.NEGATIVE_INFINITY,
+          y: Number.NEGATIVE_INFINITY
+        }
+      };
+
+      for (var i = 0, iMax = geom.length; i < iMax; i++) {
+        var poly = new PolyIn(geom[i], this);
+        if (poly.bbox.ll.x < this.bbox.ll.x) this.bbox.ll.x = poly.bbox.ll.x;
+        if (poly.bbox.ll.y < this.bbox.ll.y) this.bbox.ll.y = poly.bbox.ll.y;
+        if (poly.bbox.ur.x > this.bbox.ur.x) this.bbox.ur.x = poly.bbox.ur.x;
+        if (poly.bbox.ur.y > this.bbox.ur.y) this.bbox.ur.y = poly.bbox.ur.y;
+        this.polys.push(poly);
+      }
+
+      this.isSubject = isSubject;
+    }
+
+    _createClass(MultiPolyIn, [{
+      key: "getSweepEvents",
+      value: function getSweepEvents() {
+        var sweepEvents = [];
+
+        for (var i = 0, iMax = this.polys.length; i < iMax; i++) {
+          var polySweepEvents = this.polys[i].getSweepEvents();
+
+          for (var j = 0, jMax = polySweepEvents.length; j < jMax; j++) {
+            sweepEvents.push(polySweepEvents[j]);
+          }
+        }
+
+        return sweepEvents;
+      }
+    }]);
+
+    return MultiPolyIn;
+  }();
+
+  var RingOut = /*#__PURE__*/function () {
+    _createClass(RingOut, null, [{
+      key: "factory",
+
+      /* Given the segments from the sweep line pass, compute & return a series
+       * of closed rings from all the segments marked to be part of the result */
+      value: function factory(allSegments) {
+        var ringsOut = [];
+
+        for (var i = 0, iMax = allSegments.length; i < iMax; i++) {
+          var segment = allSegments[i];
+          if (!segment.isInResult() || segment.ringOut) continue;
+          var prevEvent = null;
+          var event = segment.leftSE;
+          var nextEvent = segment.rightSE;
+          var events = [event];
+          var startingPoint = event.point;
+          var intersectionLEs = [];
+          /* Walk the chain of linked events to form a closed ring */
+
+          while (true) {
+            prevEvent = event;
+            event = nextEvent;
+            events.push(event);
+            /* Is the ring complete? */
+
+            if (event.point === startingPoint) break;
+
+            while (true) {
+              var availableLEs = event.getAvailableLinkedEvents();
+              /* Did we hit a dead end? This shouldn't happen. Indicates some earlier
+               * part of the algorithm malfunctioned... please file a bug report. */
+
+              if (availableLEs.length === 0) {
+                var firstPt = events[0].point;
+                var lastPt = events[events.length - 1].point;
+                throw new Error("Unable to complete output ring starting at [".concat(firstPt.x, ",") + " ".concat(firstPt.y, "]. Last matching segment found ends at") + " [".concat(lastPt.x, ", ").concat(lastPt.y, "]."));
+              }
+              /* Only one way to go, so cotinue on the path */
+
+
+              if (availableLEs.length === 1) {
+                nextEvent = availableLEs[0].otherSE;
+                break;
+              }
+              /* We must have an intersection. Check for a completed loop */
+
+
+              var indexLE = null;
+
+              for (var j = 0, jMax = intersectionLEs.length; j < jMax; j++) {
+                if (intersectionLEs[j].point === event.point) {
+                  indexLE = j;
+                  break;
+                }
+              }
+              /* Found a completed loop. Cut that off and make a ring */
+
+
+              if (indexLE !== null) {
+                var intersectionLE = intersectionLEs.splice(indexLE)[0];
+                var ringEvents = events.splice(intersectionLE.index);
+                ringEvents.unshift(ringEvents[0].otherSE);
+                ringsOut.push(new RingOut(ringEvents.reverse()));
+                continue;
+              }
+              /* register the intersection */
+
+
+              intersectionLEs.push({
+                index: events.length,
+                point: event.point
+              });
+              /* Choose the left-most option to continue the walk */
+
+              var comparator = event.getLeftmostComparator(prevEvent);
+              nextEvent = availableLEs.sort(comparator)[0].otherSE;
+              break;
+            }
+          }
+
+          ringsOut.push(new RingOut(events));
+        }
+
+        return ringsOut;
+      }
+    }]);
+
+    function RingOut(events) {
+      _classCallCheck(this, RingOut);
+
+      this.events = events;
+
+      for (var i = 0, iMax = events.length; i < iMax; i++) {
+        events[i].segment.ringOut = this;
+      }
+
+      this.poly = null;
+    }
+
+    _createClass(RingOut, [{
+      key: "getGeom",
+      value: function getGeom() {
+        // Remove superfluous points (ie extra points along a straight line),
+        var prevPt = this.events[0].point;
+        var points = [prevPt];
+
+        for (var i = 1, iMax = this.events.length - 1; i < iMax; i++) {
+          var _pt = this.events[i].point;
+          var _nextPt = this.events[i + 1].point;
+          if (compareVectorAngles(_pt, prevPt, _nextPt) === 0) continue;
+          points.push(_pt);
+          prevPt = _pt;
+        } // ring was all (within rounding error of angle calc) colinear points
+
+
+        if (points.length === 1) return null; // check if the starting point is necessary
+
+        var pt = points[0];
+        var nextPt = points[1];
+        if (compareVectorAngles(pt, prevPt, nextPt) === 0) points.shift();
+        points.push(points[0]);
+        var step = this.isExteriorRing() ? 1 : -1;
+        var iStart = this.isExteriorRing() ? 0 : points.length - 1;
+        var iEnd = this.isExteriorRing() ? points.length : -1;
+        var orderedPoints = [];
+
+        for (var _i = iStart; _i != iEnd; _i += step) {
+          orderedPoints.push([points[_i].x, points[_i].y]);
+        }
+
+        return orderedPoints;
+      }
+    }, {
+      key: "isExteriorRing",
+      value: function isExteriorRing() {
+        if (this._isExteriorRing === undefined) {
+          var enclosing = this.enclosingRing();
+          this._isExteriorRing = enclosing ? !enclosing.isExteriorRing() : true;
+        }
+
+        return this._isExteriorRing;
+      }
+    }, {
+      key: "enclosingRing",
+      value: function enclosingRing() {
+        if (this._enclosingRing === undefined) {
+          this._enclosingRing = this._calcEnclosingRing();
+        }
+
+        return this._enclosingRing;
+      }
+      /* Returns the ring that encloses this one, if any */
+
+    }, {
+      key: "_calcEnclosingRing",
+      value: function _calcEnclosingRing() {
+        // start with the ealier sweep line event so that the prevSeg
+        // chain doesn't lead us inside of a loop of ours
+        var leftMostEvt = this.events[0];
+
+        for (var i = 1, iMax = this.events.length; i < iMax; i++) {
+          var evt = this.events[i];
+          if (SweepEvent.compare(leftMostEvt, evt) > 0) leftMostEvt = evt;
+        }
+
+        var prevSeg = leftMostEvt.segment.prevInResult();
+        var prevPrevSeg = prevSeg ? prevSeg.prevInResult() : null;
+
+        while (true) {
+          // no segment found, thus no ring can enclose us
+          if (!prevSeg) return null; // no segments below prev segment found, thus the ring of the prev
+          // segment must loop back around and enclose us
+
+          if (!prevPrevSeg) return prevSeg.ringOut; // if the two segments are of different rings, the ring of the prev
+          // segment must either loop around us or the ring of the prev prev
+          // seg, which would make us and the ring of the prev peers
+
+          if (prevPrevSeg.ringOut !== prevSeg.ringOut) {
+            if (prevPrevSeg.ringOut.enclosingRing() !== prevSeg.ringOut) {
+              return prevSeg.ringOut;
+            } else return prevSeg.ringOut.enclosingRing();
+          } // two segments are from the same ring, so this was a penisula
+          // of that ring. iterate downward, keep searching
+
+
+          prevSeg = prevPrevSeg.prevInResult();
+          prevPrevSeg = prevSeg ? prevSeg.prevInResult() : null;
+        }
+      }
+    }]);
+
+    return RingOut;
+  }();
+  var PolyOut = /*#__PURE__*/function () {
+    function PolyOut(exteriorRing) {
+      _classCallCheck(this, PolyOut);
+
+      this.exteriorRing = exteriorRing;
+      exteriorRing.poly = this;
+      this.interiorRings = [];
+    }
+
+    _createClass(PolyOut, [{
+      key: "addInterior",
+      value: function addInterior(ring) {
+        this.interiorRings.push(ring);
+        ring.poly = this;
+      }
+    }, {
+      key: "getGeom",
+      value: function getGeom() {
+        var geom = [this.exteriorRing.getGeom()]; // exterior ring was all (within rounding error of angle calc) colinear points
+
+        if (geom[0] === null) return null;
+
+        for (var i = 0, iMax = this.interiorRings.length; i < iMax; i++) {
+          var ringGeom = this.interiorRings[i].getGeom(); // interior ring was all (within rounding error of angle calc) colinear points
+
+          if (ringGeom === null) continue;
+          geom.push(ringGeom);
+        }
+
+        return geom;
+      }
+    }]);
+
+    return PolyOut;
+  }();
+  var MultiPolyOut = /*#__PURE__*/function () {
+    function MultiPolyOut(rings) {
+      _classCallCheck(this, MultiPolyOut);
+
+      this.rings = rings;
+      this.polys = this._composePolys(rings);
+    }
+
+    _createClass(MultiPolyOut, [{
+      key: "getGeom",
+      value: function getGeom() {
+        var geom = [];
+
+        for (var i = 0, iMax = this.polys.length; i < iMax; i++) {
+          var polyGeom = this.polys[i].getGeom(); // exterior ring was all (within rounding error of angle calc) colinear points
+
+          if (polyGeom === null) continue;
+          geom.push(polyGeom);
+        }
+
+        return geom;
+      }
+    }, {
+      key: "_composePolys",
+      value: function _composePolys(rings) {
+        var polys = [];
+
+        for (var i = 0, iMax = rings.length; i < iMax; i++) {
+          var ring = rings[i];
+          if (ring.poly) continue;
+          if (ring.isExteriorRing()) polys.push(new PolyOut(ring));else {
+            var enclosingRing = ring.enclosingRing();
+            if (!enclosingRing.poly) polys.push(new PolyOut(enclosingRing));
+            enclosingRing.poly.addInterior(ring);
+          }
+        }
+
+        return polys;
+      }
+    }]);
+
+    return MultiPolyOut;
+  }();
+
+  /**
+   * NOTE:  We must be careful not to change any segments while
+   *        they are in the SplayTree. AFAIK, there's no way to tell
+   *        the tree to rebalance itself - thus before splitting
+   *        a segment that's in the tree, we remove it from the tree,
+   *        do the split, then re-insert it. (Even though splitting a
+   *        segment *shouldn't* change its correct position in the
+   *        sweep line tree, the reality is because of rounding errors,
+   *        it sometimes does.)
+   */
+
+  var SweepLine = /*#__PURE__*/function () {
+    function SweepLine(queue) {
+      var comparator = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : Segment.compare;
+
+      _classCallCheck(this, SweepLine);
+
+      this.queue = queue;
+      this.tree = new Tree(comparator);
+      this.segments = [];
+    }
+
+    _createClass(SweepLine, [{
+      key: "process",
+      value: function process(event) {
+        var segment = event.segment;
+        var newEvents = []; // if we've already been consumed by another segment,
+        // clean up our body parts and get out
+
+        if (event.consumedBy) {
+          if (event.isLeft) this.queue.remove(event.otherSE);else this.tree.remove(segment);
+          return newEvents;
+        }
+
+        var node = event.isLeft ? this.tree.insert(segment) : this.tree.find(segment);
+        if (!node) throw new Error("Unable to find segment #".concat(segment.id, " ") + "[".concat(segment.leftSE.point.x, ", ").concat(segment.leftSE.point.y, "] -> ") + "[".concat(segment.rightSE.point.x, ", ").concat(segment.rightSE.point.y, "] ") + 'in SweepLine tree. Please submit a bug report.');
+        var prevNode = node;
+        var nextNode = node;
+        var prevSeg = undefined;
+        var nextSeg = undefined; // skip consumed segments still in tree
+
+        while (prevSeg === undefined) {
+          prevNode = this.tree.prev(prevNode);
+          if (prevNode === null) prevSeg = null;else if (prevNode.key.consumedBy === undefined) prevSeg = prevNode.key;
+        } // skip consumed segments still in tree
+
+
+        while (nextSeg === undefined) {
+          nextNode = this.tree.next(nextNode);
+          if (nextNode === null) nextSeg = null;else if (nextNode.key.consumedBy === undefined) nextSeg = nextNode.key;
+        }
+
+        if (event.isLeft) {
+          // Check for intersections against the previous segment in the sweep line
+          var prevMySplitter = null;
+
+          if (prevSeg) {
+            var prevInter = prevSeg.getIntersection(segment);
+
+            if (prevInter !== null) {
+              if (!segment.isAnEndpoint(prevInter)) prevMySplitter = prevInter;
+
+              if (!prevSeg.isAnEndpoint(prevInter)) {
+                var newEventsFromSplit = this._splitSafely(prevSeg, prevInter);
+
+                for (var i = 0, iMax = newEventsFromSplit.length; i < iMax; i++) {
+                  newEvents.push(newEventsFromSplit[i]);
+                }
+              }
+            }
+          } // Check for intersections against the next segment in the sweep line
+
+
+          var nextMySplitter = null;
+
+          if (nextSeg) {
+            var nextInter = nextSeg.getIntersection(segment);
+
+            if (nextInter !== null) {
+              if (!segment.isAnEndpoint(nextInter)) nextMySplitter = nextInter;
+
+              if (!nextSeg.isAnEndpoint(nextInter)) {
+                var _newEventsFromSplit = this._splitSafely(nextSeg, nextInter);
+
+                for (var _i = 0, _iMax = _newEventsFromSplit.length; _i < _iMax; _i++) {
+                  newEvents.push(_newEventsFromSplit[_i]);
+                }
+              }
+            }
+          } // For simplicity, even if we find more than one intersection we only
+          // spilt on the 'earliest' (sweep-line style) of the intersections.
+          // The other intersection will be handled in a future process().
+
+
+          if (prevMySplitter !== null || nextMySplitter !== null) {
+            var mySplitter = null;
+            if (prevMySplitter === null) mySplitter = nextMySplitter;else if (nextMySplitter === null) mySplitter = prevMySplitter;else {
+              var cmpSplitters = SweepEvent.comparePoints(prevMySplitter, nextMySplitter);
+              mySplitter = cmpSplitters <= 0 ? prevMySplitter : nextMySplitter;
+            } // Rounding errors can cause changes in ordering,
+            // so remove afected segments and right sweep events before splitting
+
+            this.queue.remove(segment.rightSE);
+            newEvents.push(segment.rightSE);
+
+            var _newEventsFromSplit2 = segment.split(mySplitter);
+
+            for (var _i2 = 0, _iMax2 = _newEventsFromSplit2.length; _i2 < _iMax2; _i2++) {
+              newEvents.push(_newEventsFromSplit2[_i2]);
+            }
+          }
+
+          if (newEvents.length > 0) {
+            // We found some intersections, so re-do the current event to
+            // make sure sweep line ordering is totally consistent for later
+            // use with the segment 'prev' pointers
+            this.tree.remove(segment);
+            newEvents.push(event);
+          } else {
+            // done with left event
+            this.segments.push(segment);
+            segment.prev = prevSeg;
+          }
+        } else {
+          // event.isRight
+          // since we're about to be removed from the sweep line, check for
+          // intersections between our previous and next segments
+          if (prevSeg && nextSeg) {
+            var inter = prevSeg.getIntersection(nextSeg);
+
+            if (inter !== null) {
+              if (!prevSeg.isAnEndpoint(inter)) {
+                var _newEventsFromSplit3 = this._splitSafely(prevSeg, inter);
+
+                for (var _i3 = 0, _iMax3 = _newEventsFromSplit3.length; _i3 < _iMax3; _i3++) {
+                  newEvents.push(_newEventsFromSplit3[_i3]);
+                }
+              }
+
+              if (!nextSeg.isAnEndpoint(inter)) {
+                var _newEventsFromSplit4 = this._splitSafely(nextSeg, inter);
+
+                for (var _i4 = 0, _iMax4 = _newEventsFromSplit4.length; _i4 < _iMax4; _i4++) {
+                  newEvents.push(_newEventsFromSplit4[_i4]);
+                }
+              }
+            }
+          }
+
+          this.tree.remove(segment);
+        }
+
+        return newEvents;
+      }
+      /* Safely split a segment that is currently in the datastructures
+       * IE - a segment other than the one that is currently being processed. */
+
+    }, {
+      key: "_splitSafely",
+      value: function _splitSafely(seg, pt) {
+        // Rounding errors can cause changes in ordering,
+        // so remove afected segments and right sweep events before splitting
+        // removeNode() doesn't work, so have re-find the seg
+        // https://github.com/w8r/splay-tree/pull/5
+        this.tree.remove(seg);
+        var rightSE = seg.rightSE;
+        this.queue.remove(rightSE);
+        var newEvents = seg.split(pt);
+        newEvents.push(rightSE); // splitting can trigger consumption
+
+        if (seg.consumedBy === undefined) this.tree.insert(seg);
+        return newEvents;
+      }
+    }]);
+
+    return SweepLine;
+  }();
+
+  var POLYGON_CLIPPING_MAX_QUEUE_SIZE = typeof process !== 'undefined' && process.env.POLYGON_CLIPPING_MAX_QUEUE_SIZE || 1000000;
+  var POLYGON_CLIPPING_MAX_SWEEPLINE_SEGMENTS = typeof process !== 'undefined' && process.env.POLYGON_CLIPPING_MAX_SWEEPLINE_SEGMENTS || 1000000;
+  var Operation = /*#__PURE__*/function () {
+    function Operation() {
+      _classCallCheck(this, Operation);
+    }
+
+    _createClass(Operation, [{
+      key: "run",
+      value: function run(type, geom, moreGeoms) {
+        operation.type = type;
+        rounder.reset();
+        /* Convert inputs to MultiPoly objects */
+
+        var multipolys = [new MultiPolyIn(geom, true)];
+
+        for (var i = 0, iMax = moreGeoms.length; i < iMax; i++) {
+          multipolys.push(new MultiPolyIn(moreGeoms[i], false));
+        }
+
+        operation.numMultiPolys = multipolys.length;
+        /* BBox optimization for difference operation
+         * If the bbox of a multipolygon that's part of the clipping doesn't
+         * intersect the bbox of the subject at all, we can just drop that
+         * multiploygon. */
+
+        if (operation.type === 'difference') {
+          // in place removal
+          var subject = multipolys[0];
+          var _i = 1;
+
+          while (_i < multipolys.length) {
+            if (getBboxOverlap(multipolys[_i].bbox, subject.bbox) !== null) _i++;else multipolys.splice(_i, 1);
+          }
+        }
+        /* BBox optimization for intersection operation
+         * If we can find any pair of multipolygons whose bbox does not overlap,
+         * then the result will be empty. */
+
+
+        if (operation.type === 'intersection') {
+          // TODO: this is O(n^2) in number of polygons. By sorting the bboxes,
+          //       it could be optimized to O(n * ln(n))
+          for (var _i2 = 0, _iMax = multipolys.length; _i2 < _iMax; _i2++) {
+            var mpA = multipolys[_i2];
+
+            for (var j = _i2 + 1, jMax = multipolys.length; j < jMax; j++) {
+              if (getBboxOverlap(mpA.bbox, multipolys[j].bbox) === null) return [];
+            }
+          }
+        }
+        /* Put segment endpoints in a priority queue */
+
+
+        var queue = new Tree(SweepEvent.compare);
+
+        for (var _i3 = 0, _iMax2 = multipolys.length; _i3 < _iMax2; _i3++) {
+          var sweepEvents = multipolys[_i3].getSweepEvents();
+
+          for (var _j = 0, _jMax = sweepEvents.length; _j < _jMax; _j++) {
+            queue.insert(sweepEvents[_j]);
+
+            if (queue.size > POLYGON_CLIPPING_MAX_QUEUE_SIZE) {
+              // prevents an infinite loop, an otherwise common manifestation of bugs
+              throw new Error('Infinite loop when putting segment endpoints in a priority queue ' + '(queue size too big). Please file a bug report.');
+            }
+          }
+        }
+        /* Pass the sweep line over those endpoints */
+
+
+        var sweepLine = new SweepLine(queue);
+        var prevQueueSize = queue.size;
+        var node = queue.pop();
+
+        while (node) {
+          var evt = node.key;
+
+          if (queue.size === prevQueueSize) {
+            // prevents an infinite loop, an otherwise common manifestation of bugs
+            var seg = evt.segment;
+            throw new Error("Unable to pop() ".concat(evt.isLeft ? 'left' : 'right', " SweepEvent ") + "[".concat(evt.point.x, ", ").concat(evt.point.y, "] from segment #").concat(seg.id, " ") + "[".concat(seg.leftSE.point.x, ", ").concat(seg.leftSE.point.y, "] -> ") + "[".concat(seg.rightSE.point.x, ", ").concat(seg.rightSE.point.y, "] from queue. ") + 'Please file a bug report.');
+          }
+
+          if (queue.size > POLYGON_CLIPPING_MAX_QUEUE_SIZE) {
+            // prevents an infinite loop, an otherwise common manifestation of bugs
+            throw new Error('Infinite loop when passing sweep line over endpoints ' + '(queue size too big). Please file a bug report.');
+          }
+
+          if (sweepLine.segments.length > POLYGON_CLIPPING_MAX_SWEEPLINE_SEGMENTS) {
+            // prevents an infinite loop, an otherwise common manifestation of bugs
+            throw new Error('Infinite loop when passing sweep line over endpoints ' + '(too many sweep line segments). Please file a bug report.');
+          }
+
+          var newEvents = sweepLine.process(evt);
+
+          for (var _i4 = 0, _iMax3 = newEvents.length; _i4 < _iMax3; _i4++) {
+            var _evt = newEvents[_i4];
+            if (_evt.consumedBy === undefined) queue.insert(_evt);
+          }
+
+          prevQueueSize = queue.size;
+          node = queue.pop();
+        } // free some memory we don't need anymore
+
+
+        rounder.reset();
+        /* Collect and compile segments we're keeping into a multipolygon */
+
+        var ringsOut = RingOut.factory(sweepLine.segments);
+        var result = new MultiPolyOut(ringsOut);
+        return result.getGeom();
+      }
+    }]);
+
+    return Operation;
+  }(); // singleton available by import
+
+  var operation = new Operation();
+
+  var union = function union(geom) {
+    for (var _len = arguments.length, moreGeoms = new Array(_len > 1 ? _len - 1 : 0), _key = 1; _key < _len; _key++) {
+      moreGeoms[_key - 1] = arguments[_key];
+    }
+
+    return operation.run('union', geom, moreGeoms);
+  };
+
+  var intersection$1 = function intersection(geom) {
+    for (var _len2 = arguments.length, moreGeoms = new Array(_len2 > 1 ? _len2 - 1 : 0), _key2 = 1; _key2 < _len2; _key2++) {
+      moreGeoms[_key2 - 1] = arguments[_key2];
+    }
+
+    return operation.run('intersection', geom, moreGeoms);
+  };
+
+  var xor = function xor(geom) {
+    for (var _len3 = arguments.length, moreGeoms = new Array(_len3 > 1 ? _len3 - 1 : 0), _key3 = 1; _key3 < _len3; _key3++) {
+      moreGeoms[_key3 - 1] = arguments[_key3];
+    }
+
+    return operation.run('xor', geom, moreGeoms);
+  };
+
+  var difference = function difference(subjectGeom) {
+    for (var _len4 = arguments.length, clippingGeoms = new Array(_len4 > 1 ? _len4 - 1 : 0), _key4 = 1; _key4 < _len4; _key4++) {
+      clippingGeoms[_key4 - 1] = arguments[_key4];
+    }
+
+    return operation.run('difference', subjectGeom, clippingGeoms);
+  };
+
+  var index = {
+    union: union,
+    intersection: intersection$1,
+    xor: xor,
+    difference: difference
+  };
+
+  return index;
+
+})));
+
+}).call(this)}).call(this,require('_process'))
+},{"_process":241}],241:[function(require,module,exports){
 // shim for using process in browser
 var process = module.exports = {};
 
@@ -36578,7 +39785,7 @@ process.chdir = function (dir) {
 };
 process.umask = function() { return 0; };
 
-},{}],226:[function(require,module,exports){
+},{}],242:[function(require,module,exports){
 (function (global, factory) {
 	typeof exports === 'object' && typeof module !== 'undefined' ? module.exports = factory() :
 	typeof define === 'function' && define.amd ? define(factory) :
@@ -36643,7 +39850,7 @@ return quickselect;
 
 })));
 
-},{}],227:[function(require,module,exports){
+},{}],243:[function(require,module,exports){
 'use strict';
 
 module.exports = rbush;
@@ -37207,7 +40414,7 @@ function multiSelect(arr, left, right, n, compare) {
     }
 }
 
-},{"quickselect":226}],228:[function(require,module,exports){
+},{"quickselect":242}],244:[function(require,module,exports){
 module.exports = function strsearch2regexp (str) {
   return str
     .replace('.', '\\.')
@@ -37234,7 +40441,7 @@ module.exports = function strsearch2regexp (str) {
     .replace('y', '[yýÿ]')
 }
 
-},{}],229:[function(require,module,exports){
+},{}],245:[function(require,module,exports){
 (function (setImmediate,clearImmediate){(function (){
 var nextTick = require('process/browser.js').nextTick;
 var apply = Function.prototype.apply;
@@ -37313,7 +40520,7 @@ exports.clearImmediate = typeof clearImmediate === "function" ? clearImmediate :
   delete immediateIds[id];
 };
 }).call(this)}).call(this,require("timers").setImmediate,require("timers").clearImmediate)
-},{"process/browser.js":225,"timers":229}],230:[function(require,module,exports){
+},{"process/browser.js":241,"timers":245}],246:[function(require,module,exports){
 (function (global){(function (){
 (function webpackUniversalModuleDefinition(root, factory) {
 	if(typeof exports === 'object' && typeof module === 'object')
@@ -46749,7 +49956,7 @@ module.exports = function (Twig) {
 /******/ ]);
 });
 }).call(this)}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"fs":41,"path":224}],231:[function(require,module,exports){
+},{"fs":57,"path":239}],247:[function(require,module,exports){
 "use strict";
 
 var isPrototype = require("../prototype/is");
@@ -46770,7 +49977,7 @@ module.exports = function (value) {
 	return !isPrototype(value);
 };
 
-},{"../prototype/is":234}],232:[function(require,module,exports){
+},{"../prototype/is":250}],248:[function(require,module,exports){
 "use strict";
 
 var isValue = require("../value/is");
@@ -46783,7 +49990,7 @@ module.exports = function (value) {
 	return hasOwnProperty.call(possibleTypes, typeof value);
 };
 
-},{"../value/is":235}],233:[function(require,module,exports){
+},{"../value/is":251}],249:[function(require,module,exports){
 "use strict";
 
 var isFunction = require("../function/is");
@@ -46796,7 +50003,7 @@ module.exports = function (value) {
 	return true;
 };
 
-},{"../function/is":231}],234:[function(require,module,exports){
+},{"../function/is":247}],250:[function(require,module,exports){
 "use strict";
 
 var isObject = require("../object/is");
@@ -46811,7 +50018,7 @@ module.exports = function (value) {
 	}
 };
 
-},{"../object/is":232}],235:[function(require,module,exports){
+},{"../object/is":248}],251:[function(require,module,exports){
 "use strict";
 
 // ES3 safe
@@ -46819,7 +50026,7 @@ var _undefined = void 0;
 
 module.exports = function (value) { return value !== _undefined && value !== null; };
 
-},{}],236:[function(require,module,exports){
+},{}],252:[function(require,module,exports){
 // weightSort(arr, [options | weightKey])
 // Parameters:
 // arr ... an array of form [ [ weight, var], ... ]
@@ -46970,12 +50177,12 @@ if (typeof window !== 'undefined') {
   window.weight_sort = weightSort // legacy
 }
 
-},{}],237:[function(require,module,exports){
+},{}],253:[function(require,module,exports){
 module.exports.RADIUS = 6378137;
 module.exports.FLATTENING = 1/298.257223563;
 module.exports.POLAR_RADIUS = 6356752.3142;
 
-},{}],238:[function(require,module,exports){
+},{}],254:[function(require,module,exports){
 function DOMParser(options){
 	this.options = options ||{locator:{}};
 	
@@ -47228,7 +50435,7 @@ function appendElement (hander,node) {
 	exports.DOMParser = DOMParser;
 //}
 
-},{"./dom":239,"./sax":240}],239:[function(require,module,exports){
+},{"./dom":255,"./sax":256}],255:[function(require,module,exports){
 /*
  * DOM Level 2
  * Object DOMException
@@ -48474,7 +51681,7 @@ try{
 	exports.XMLSerializer = XMLSerializer;
 //}
 
-},{}],240:[function(require,module,exports){
+},{}],256:[function(require,module,exports){
 //[4]   	NameStartChar	   ::=   	":" | [A-Z] | "_" | [a-z] | [#xC0-#xD6] | [#xD8-#xF6] | [#xF8-#x2FF] | [#x370-#x37D] | [#x37F-#x1FFF] | [#x200C-#x200D] | [#x2070-#x218F] | [#x2C00-#x2FEF] | [#x3001-#xD7FF] | [#xF900-#xFDCF] | [#xFDF0-#xFFFD] | [#x10000-#xEFFFF]
 //[4a]   	NameChar	   ::=   	NameStartChar | "-" | "." | [0-9] | #xB7 | [#x0300-#x036F] | [#x203F-#x2040]
 //[5]   	Name	   ::=   	NameStartChar (NameChar)*
@@ -49109,7 +52316,7 @@ function split(source,start){
 exports.XMLReader = XMLReader;
 
 
-},{}],241:[function(require,module,exports){
+},{}],257:[function(require,module,exports){
 /* global L */
 
 const isTrue = require('./isTrue')
@@ -49189,6 +52396,10 @@ class DecoratorPattern {
               options.pathOptions = styleToLeaflet(symbolOptions[patternId], data.twigData)
               symbol = L.Symbol.dash(options)
               break
+            case 'streak':
+              options.pathOptions = styleToLeaflet(symbolOptions[patternId], data.twigData)
+              symbol = L.Symbol.streak(options)
+              break
             case 'arrowHead':
               options.pathOptions = styleToLeaflet(symbolOptions[patternId], data.twigData)
               symbol = L.Symbol.arrowHead(options)
@@ -49242,7 +52453,7 @@ class DecoratorPattern {
 
 module.exports = DecoratorPattern
 
-},{"./isTrue":251,"./parseLength":252,"./styleToLeaflet":255}],242:[function(require,module,exports){
+},{"./isTrue":267,"./parseLength":268,"./styleToLeaflet":271}],258:[function(require,module,exports){
 const Sublayer = require('./Sublayer')
 
 class Memberlayer extends Sublayer {
@@ -49312,9 +52523,9 @@ class Memberlayer extends Sublayer {
 
 module.exports = Memberlayer
 
-},{"./Sublayer":247}],243:[function(require,module,exports){
+},{"./Sublayer":263}],259:[function(require,module,exports){
 var css = ".leaflet-popup-content {\n  max-height: 250px;\n  overflow: auto;\n}\n.leaflet-popup-content pre {\n  font-size: 8px;\n}\n.overpass-layer-icon > img,\n.overpass-layer-icon > svg {\n  display: block;\n}\n.overpass-layer-icon div.sign {\n  position: relative;\n  font-size: 12px;\n  text-align: center;\n  transform: translate(-50%, -50%);\n  display: flex;\n  justify-content: center;\n}\n/*  top: -37px; */\n"; (require("browserify-css").createStyle(css, { "href": "src/OverpassLayer.css" }, { "insertAt": "bottom" })); module.exports = css;
-},{"browserify-css":42}],244:[function(require,module,exports){
+},{"browserify-css":58}],260:[function(require,module,exports){
 /* global overpassFrontend:false */
 /* eslint camelcase: 0 */
 require('./OverpassLayer.css')
@@ -49470,6 +52681,8 @@ class OverpassLayer {
         metersPerPixel: 40075016.686 * Math.abs(Math.cos(this.map.getCenter().lat / 180 * Math.PI)) / Math.pow(2, this.map.getZoom() + 8)
       }
     }
+
+    this.emit('globalTwigData', this.globalTwigData)
   }
 
   check_update_map () {
@@ -49663,9 +52876,9 @@ OverpassLayer.twig = twig
 
 module.exports = OverpassLayer
 
-},{"./Memberlayer":242,"./OverpassLayer.css":243,"./Sublayer":247,"./compileFeature":249,"./compileTemplate":250,"boundingbox":40,"event-emitter":60,"html-escape":64,"overpass-frontend":199,"twig":230}],245:[function(require,module,exports){
+},{"./Memberlayer":258,"./OverpassLayer.css":259,"./Sublayer":263,"./compileFeature":265,"./compileTemplate":266,"boundingbox":56,"event-emitter":76,"html-escape":80,"overpass-frontend":214,"twig":246}],261:[function(require,module,exports){
 var css = "ul.overpass-layer-list {\n  margin-top: 0;\n  margin-bottom: 0;\n  padding-left: 0;\n}\nul.overpass-layer-list > li {\n  position: relative;\n  list-style: none;\n  min-height: 30px;\n  padding-left: 40px;\n}\nul.overpass-layer-list > li.selected {\n  background: #e0e0e0;\n}\nul.overpass-layer-list > li > .marker {\n  position: absolute;\n  margin-left: -35px;\n  width: 30px;\n  height: 30px;\n  text-align: center;\n  display: block;\n  color: black;\n  text-decoration: none;\n}\n\nul.overpass-layer-list > li > .marker > .sign {\n  text-align: center;\n  position: absolute;\n  top: 3px;\n  font-size: 15px;\n  left: 0;\n  right: 0;\n  z-index: 1;\n  display: inline-block;\n}\nul.overpass-layer-list > li > .content > a.title {\n  display: inline-block;\n  color: black;\n  text-decoration: none;\n}\nul.overpass-layer-list > li > .content > a.title:hover,\nul.overpass-layer-list > li > .content > a.title:active {\n  text-decoration: underline;\n}\nul.overpass-layer-list > li > .content > div.description {\n  font-style: italic;\n  color: #707070;\n  float: right;\n  text-align: right;\n}\nul.overpass-layer-list > li:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n.hoverable {\n  cursor: pointer;\n}\n"; (require("browserify-css").createStyle(css, { "href": "src/OverpassLayerList.css" }, { "insertAt": "bottom" })); module.exports = css;
-},{"browserify-css":42}],246:[function(require,module,exports){
+},{"browserify-css":58}],262:[function(require,module,exports){
 /* eslint camelcase: 0 */
 
 require('./OverpassLayerList.css')
@@ -49857,7 +53070,7 @@ class OverpassLayerList {
 
 module.exports = OverpassLayerList
 
-},{"./OverpassLayerList.css":245,"./isTrue":251}],247:[function(require,module,exports){
+},{"./OverpassLayerList.css":261,"./isTrue":267}],263:[function(require,module,exports){
 /* global L */
 
 const ee = require('event-emitter')
@@ -50696,7 +53909,7 @@ ee(Sublayer.prototype)
 
 module.exports = Sublayer
 
-},{"./DecoratorPattern":241,"./SublayerFeature":248,"./pointOnFeature":253,"./strToStyle":254,"./styleToLeaflet":255,"boundingbox":40,"event-emitter":60,"nearest-point-on-geometry":68,"overpass-frontend":199}],248:[function(require,module,exports){
+},{"./DecoratorPattern":257,"./SublayerFeature":264,"./pointOnFeature":269,"./strToStyle":270,"./styleToLeaflet":271,"boundingbox":56,"event-emitter":76,"nearest-point-on-geometry":207,"overpass-frontend":214}],264:[function(require,module,exports){
 class SublayerFeature {
   constructor (object, sublayer) {
     this.object = object
@@ -50722,7 +53935,7 @@ class SublayerFeature {
 
 module.exports = SublayerFeature
 
-},{}],249:[function(require,module,exports){
+},{}],265:[function(require,module,exports){
 const compileTemplate = require('./compileTemplate')
 
 function compileFeature (feature, twig, options = {}) {
@@ -50766,7 +53979,7 @@ function compileFeature (feature, twig, options = {}) {
 
 module.exports = compileFeature
 
-},{"./compileTemplate":250}],250:[function(require,module,exports){
+},{"./compileTemplate":266}],266:[function(require,module,exports){
 module.exports = function compileTemplate (template, twig, options = {}) {
   if (typeof template === 'string' && template.search('{') !== -1) {
     let result
@@ -50792,7 +54005,7 @@ module.exports = function compileTemplate (template, twig, options = {}) {
   return template
 }
 
-},{}],251:[function(require,module,exports){
+},{}],267:[function(require,module,exports){
 function isTrue (value) {
   if (value === null || typeof value === 'undefined') {
     return false
@@ -50822,7 +54035,7 @@ function isTrue (value) {
 window.isTrue = isTrue
 module.exports = isTrue
 
-},{}],252:[function(require,module,exports){
+},{}],268:[function(require,module,exports){
 module.exports = function parseLength (value, metersPerPixel) {
   const m = ('' + value).trim().match(/^([+-]?[0-9]+(?:\.[0-9]+)?)\s*(px|m)$/)
   if (m) {
@@ -50838,7 +54051,7 @@ module.exports = function parseLength (value, metersPerPixel) {
   return parseFloat(value)
 }
 
-},{}],253:[function(require,module,exports){
+},{}],269:[function(require,module,exports){
 const turf = {
   along: require('@turf/along').default,
   length: require('@turf/length').default,
@@ -50863,7 +54076,7 @@ module.exports = function pointOnFeature (ob, leafletFeatureOptions) {
   }
 }
 
-},{"@turf/along":4,"@turf/length":25,"@turf/point-on-feature":35}],254:[function(require,module,exports){
+},{"@turf/along":4,"@turf/length":35,"@turf/point-on-feature":49}],270:[function(require,module,exports){
 function strToStyle (style) {
   const str = style.split('\n')
   style = {}
@@ -50886,7 +54099,7 @@ function strToStyle (style) {
 
 module.exports = strToStyle
 
-},{}],255:[function(require,module,exports){
+},{}],271:[function(require,module,exports){
 const isTrue = require('./isTrue')
 const parseLength = require('./parseLength')
 
@@ -50968,4 +54181,4 @@ function styleToLeaflet (style, twigData) {
 
 module.exports = styleToLeaflet
 
-},{"./isTrue":251,"./parseLength":252}]},{},[1]);
+},{"./isTrue":267,"./parseLength":268}]},{},[1]);
