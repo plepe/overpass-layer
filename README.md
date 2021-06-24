@@ -96,7 +96,7 @@ Types:
 * color: A CSS color value, e.g. "#f00", "#ff0000", "#ff0000ff", "rgb(255, 0, 0)", rgb(255, 0, 0, 1), "red", ...
 * float: a number, e.g. `1`, `0.5`.
 * string: an arbitrary text.
-* length: a number with an optional unit. Availble units: 'px' (default, a distance in display pixels), 'm' (meters in world coordinate system)
+* length: a number with an optional unit. Availble units: 'px' (default, a distance in display pixels), 'm' (meters in world coordinate system), '%' (percentage of total length - if supported)
 
 ### TwigJS templates
 The data of an object is available as patterns. Tags and Meta information is only available, if these properties have been downloaded (see option 'properties'). Variables will automatically be HTML escaped, if not the filter `raw` is used, e.g.: `{{ tags.name|raw }}`.
@@ -259,9 +259,9 @@ Include script:
 Each style can have several patterns with this additional options (where X identifies the pattern. X is an arbitrary string without dashes, e.g. '', '0', 'A', 'foobar'):
 
 * patternX: false/empty: no pattern, 'arrowHead', 'dash', 'marker'
-* patternX-offset: Offset of the first pattern symbol, from the start point of the line (type `length`). Default: 0.
-* patternX-endOffset: Minimum offset of the last pattern symbol, from the end point of the line (type `length`). Default: 0.
-* patternX-repeat: Repetition interval of the pattern symbols (type `length`). Defines the distance between each consecutive symbol's anchor point.
+* patternX-offset: Offset of the first pattern symbol, from the start point of the line (type `length`; support for percentage). Default: 0.
+* patternX-endOffset: Minimum offset of the last pattern symbol, from the end point of the line (type `length`; support for percentage). Default: 0.
+* patternX-repeat: Repetition interval of the pattern symbols (type `length`; support for percentage). Defines the distance between each consecutive symbol's anchor point.
 * patternX-lineOffset: Left (negative) or Right (positive) offset (type `length`). Default: 0.
 
 Depending on the type of pattern, the following options are available:
