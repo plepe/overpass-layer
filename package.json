@@ -21,7 +21,7 @@
     "leaflet-polylinedecorator": "git+https://github.com/plepe/Leaflet.PolylineDecorator.git",
     "leaflet-polylineoffset": "^1.1.1",
     "standard": "^16.0.3",
-    "watchify": "^3.11.1"
+    "watchify": "^4.0.0"
   },
   "main": "index.js",
   "scripts": {
