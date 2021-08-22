@@ -103,6 +103,10 @@ class Sublayer {
 
         node.onmouseover = () => {
           if (this.currentHover) {
+            if (this.currentHover.id === id) {
+              return
+            }
+
             this.currentHover.hide()
           }
 
