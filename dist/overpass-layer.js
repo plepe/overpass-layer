@@ -341,8 +341,8 @@ var helpers_1 = require("@turf/helpers");
  * This uses the [Haversine formula](http://en.wikipedia.org/wiki/Haversine_formula) to account for global curvature.
  *
  * @name distance
- * @param {Coord} from origin point
- * @param {Coord} to destination point
+ * @param {Coord | Point} from origin point or coordinate
+ * @param {Coord | Point} to destination point or coordinate
  * @param {Object} [options={}] Optional parameters
  * @param {string} [options.units='kilometers'] can be degrees, radians, miles, or kilometers
  * @returns {number} distance between the two points
@@ -406,7 +406,7 @@ exports.factors = {
     millimetres: exports.earthRadius * 1000,
     nauticalmiles: exports.earthRadius / 1852,
     radians: 1,
-    yards: exports.earthRadius / 1.0936,
+    yards: exports.earthRadius * 1.0936,
 };
 /**
  * Units of measurement factors based on 1 meter.
@@ -429,7 +429,7 @@ exports.unitsFactors = {
     millimetres: 1000,
     nauticalmiles: 1 / 1852,
     radians: 1 / exports.earthRadius,
-    yards: 1 / 1.0936,
+    yards: 1.0936133,
 };
 /**
  * Area of measurement factors based on 1 square meter.
@@ -1364,7 +1364,7 @@ function bboxClip(feature, bbox) {
     var coords = geom.coordinates;
     switch (type) {
         case "LineString":
-        case "MultiLineString":
+        case "MultiLineString": {
             var lines_1 = [];
             if (type === "LineString") {
                 coords = [coords];
@@ -1376,6 +1376,7 @@ function bboxClip(feature, bbox) {
                 return helpers_1.lineString(lines_1[0], properties);
             }
             return helpers_1.multiLineString(lines_1, properties);
+        }
         case "Polygon":
             return helpers_1.polygon(clipPolygon(coords, bbox), properties);
         case "MultiPolygon":
@@ -1407,11 +1408,13 @@ function clipPolygon(rings, bbox) {
 
 },{"./lib/lineclip":11,"@turf/helpers":12,"@turf/invariant":13}],11:[function(require,module,exports){
 "use strict";
-// Cohen-Sutherland line clippign algorithm, adapted to efficiently
+// Cohen-Sutherland line clipping algorithm, adapted to efficiently
 // handle polylines rather than just segments
 Object.defineProperty(exports, "__esModule", { value: true });
 function lineclip(points, bbox, result) {
-    var len = points.length, codeA = bitCode(points[0], bbox), part = [], i, a, b, codeB, lastCode;
+    var len = points.length, codeA = bitCode(points[0], bbox), part = [], i, codeB, lastCode;
+    var a;
+    var b;
     if (!result)
         result = [];
     for (i = 1; i < len; i++) {
@@ -3953,11 +3956,13 @@ exports.default = destination;
 },{"@turf/helpers":30,"@turf/invariant":34}],23:[function(require,module,exports){
 'use strict';
 
-function _interopDefault (ex) { return (ex && (typeof ex === 'object') && 'default' in ex) ? ex['default'] : ex; }
-
-var polygonClipping = _interopDefault(require('polygon-clipping'));
+var polygonClipping = require('polygon-clipping');
 var helpers = require('@turf/helpers');
 var invariant = require('@turf/invariant');
+
+function _interopDefaultLegacy (e) { return e && typeof e === 'object' && 'default' in e ? e : { 'default': e }; }
+
+var polygonClipping__default = /*#__PURE__*/_interopDefaultLegacy(polygonClipping);
 
 /**
  * Finds the difference between two {@link Polygon|polygons} by clipping the second polygon from the first.
@@ -3998,7 +4003,7 @@ function difference(polygon1, polygon2) {
   var geom2 = invariant.getGeom(polygon2);
   var properties = polygon1.properties || {};
 
-  var differenced = polygonClipping.difference(
+  var differenced = polygonClipping__default['default'].difference(
     geom1.coordinates,
     geom2.coordinates
   );
@@ -4008,6 +4013,7 @@ function difference(polygon1, polygon2) {
 }
 
 module.exports = difference;
+module.exports.default = difference;
 
 },{"@turf/helpers":24,"@turf/invariant":25,"polygon-clipping":240}],24:[function(require,module,exports){
 arguments[4][8][0].apply(exports,arguments)
@@ -6555,23 +6561,23 @@ function findPoint(geojson, options) {
   throw new Error("geojson is invalid");
 }
 
+exports.coordAll = coordAll;
 exports.coordEach = coordEach;
 exports.coordReduce = coordReduce;
-exports.propEach = propEach;
-exports.propReduce = propReduce;
 exports.featureEach = featureEach;
 exports.featureReduce = featureReduce;
-exports.coordAll = coordAll;
-exports.geomEach = geomEach;
-exports.geomReduce = geomReduce;
+exports.findPoint = findPoint;
+exports.findSegment = findSegment;
 exports.flattenEach = flattenEach;
 exports.flattenReduce = flattenReduce;
-exports.segmentEach = segmentEach;
-exports.segmentReduce = segmentReduce;
+exports.geomEach = geomEach;
+exports.geomReduce = geomReduce;
 exports.lineEach = lineEach;
 exports.lineReduce = lineReduce;
-exports.findSegment = findSegment;
-exports.findPoint = findPoint;
+exports.propEach = propEach;
+exports.propReduce = propReduce;
+exports.segmentEach = segmentEach;
+exports.segmentReduce = segmentReduce;
 
 },{"@turf/helpers":37}],40:[function(require,module,exports){
 "use strict";
@@ -8615,7 +8621,7 @@ var helpers_1 = require("@turf/helpers");
  * @param {Feature<Polygon|MultiPolygon>} polygon2 Polygon feature to difference from polygon1
  * @param {Object} [options={}] Optional Parameters
  * @param {Object} [options.properties={}] Translate Properties to output Feature
- * @returns {Feature<(Polygon|MultiPolygon)>} a combined {@link Polygon} or {@link MultiPolygon} feature
+ * @returns {Feature<(Polygon|MultiPolygon)>} a combined {@link Polygon} or {@link MultiPolygon} feature, or null if the inputs are empty
  * @example
  * var poly1 = turf.polygon([[
  *     [-82.574787, 35.594087],
@@ -27333,6 +27339,7 @@ module.exports = osmtogeojson;
 
     /* istanbul ignore file */
 
+    var hasQueueMicrotask = typeof queueMicrotask === 'function' && queueMicrotask;
     var hasSetImmediate = typeof setImmediate === 'function' && setImmediate;
     var hasNextTick = typeof process === 'object' && typeof process.nextTick === 'function';
 
@@ -27346,7 +27353,9 @@ module.exports = osmtogeojson;
 
     var _defer;
 
-    if (hasSetImmediate) {
+    if (hasQueueMicrotask) {
+        _defer = queueMicrotask;
+    } else if (hasSetImmediate) {
         _defer = setImmediate;
     } else if (hasNextTick) {
         _defer = process.nextTick;
@@ -27798,12 +27807,19 @@ module.exports = osmtogeojson;
      * @returns {Promise} a promise, if a callback is omitted
      * @example
      *
-     * var obj = {dev: "/dev.json", test: "/test.json", prod: "/prod.json"};
-     * var configs = {};
+     * // dev.json is a file containing a valid json object config for dev environment
+     * // dev.json is a file containing a valid json object config for test environment
+     * // prod.json is a file containing a valid json object config for prod environment
+     * // invalid.json is a file with a malformed json object
      *
-     * async.forEachOf(obj, function (value, key, callback) {
-     *     fs.readFile(__dirname + value, "utf8", function (err, data) {
-     *         if (err) return callback(err);
+     * let configs = {}; //global variable
+     * let validConfigFileMap = {dev: 'dev.json', test: 'test.json', prod: 'prod.json'};
+     * let invalidConfigFileMap = {dev: 'dev.json', test: 'test.json', invalid: 'invalid.json'};
+     *
+     * // asynchronous function that reads a json file and parses the contents as json object
+     * function parseFile(file, key, callback) {
+     *     fs.readFile(file, "utf8", function(err, data) {
+     *         if (err) return calback(err);
      *         try {
      *             configs[key] = JSON.parse(data);
      *         } catch (e) {
@@ -27811,11 +27827,73 @@ module.exports = osmtogeojson;
      *         }
      *         callback();
      *     });
-     * }, function (err) {
-     *     if (err) console.error(err.message);
-     *     // configs is now a map of JSON data
-     *     doSomethingWith(configs);
+     * }
+     *
+     * // Using callbacks
+     * async.forEachOf(validConfigFileMap, parseFile, function (err) {
+     *     if (err) {
+     *         console.error(err);
+     *     } else {
+     *         console.log(configs);
+     *         // configs is now a map of JSON data, e.g.
+     *         // { dev: //parsed dev.json, test: //parsed test.json, prod: //parsed prod.json}
+     *     }
      * });
+     *
+     * //Error handing
+     * async.forEachOf(invalidConfigFileMap, parseFile, function (err) {
+     *     if (err) {
+     *         console.error(err);
+     *         // JSON parse error exception
+     *     } else {
+     *         console.log(configs);
+     *     }
+     * });
+     *
+     * // Using Promises
+     * async.forEachOf(validConfigFileMap, parseFile)
+     * .then( () => {
+     *     console.log(configs);
+     *     // configs is now a map of JSON data, e.g.
+     *     // { dev: //parsed dev.json, test: //parsed test.json, prod: //parsed prod.json}
+     * }).catch( err => {
+     *     console.error(err);
+     * });
+     *
+     * //Error handing
+     * async.forEachOf(invalidConfigFileMap, parseFile)
+     * .then( () => {
+     *     console.log(configs);
+     * }).catch( err => {
+     *     console.error(err);
+     *     // JSON parse error exception
+     * });
+     *
+     * // Using async/await
+     * async () => {
+     *     try {
+     *         let result = await async.forEachOf(validConfigFileMap, parseFile);
+     *         console.log(configs);
+     *         // configs is now a map of JSON data, e.g.
+     *         // { dev: //parsed dev.json, test: //parsed test.json, prod: //parsed prod.json}
+     *     }
+     *     catch (err) {
+     *         console.log(err);
+     *     }
+     * }
+     *
+     * //Error handing
+     * async () => {
+     *     try {
+     *         let result = await async.forEachOf(invalidConfigFileMap, parseFile);
+     *         console.log(configs);
+     *     }
+     *     catch (err) {
+     *         console.log(err);
+     *         // JSON parse error exception
+     *     }
+     * }
+     *
      */
     function eachOf(coll, iteratee, callback) {
         var eachOfImplementation = isArrayLike(coll) ? eachOfArrayLike : eachOfGeneric;
@@ -27857,9 +27935,89 @@ module.exports = osmtogeojson;
      * @returns {Promise} a promise, if no callback is passed
      * @example
      *
-     * async.map(['file1','file2','file3'], fs.stat, function(err, results) {
-     *     // results is now an array of stats for each file
+     * // file1.txt is a file that is 1000 bytes in size
+     * // file2.txt is a file that is 2000 bytes in size
+     * // file3.txt is a file that is 3000 bytes in size
+     * // file4.txt does not exist
+     *
+     * const fileList = ['file1.txt','file2.txt','file3.txt'];
+     * const withMissingFileList = ['file1.txt','file2.txt','file4.txt'];
+     *
+     * // asynchronous function that returns the file size in bytes
+     * function getFileSizeInBytes(file, callback) {
+     *     fs.stat(file, function(err, stat) {
+     *         if (err) {
+     *             return callback(err);
+     *         }
+     *         callback(null, stat.size);
+     *     });
+     * }
+     *
+     * // Using callbacks
+     * async.map(fileList, getFileSizeInBytes, function(err, results) {
+     *     if (err) {
+     *         console.log(err);
+     *     } else {
+     *         console.log(results);
+     *         // results is now an array of the file size in bytes for each file, e.g.
+     *         // [ 1000, 2000, 3000]
+     *     }
      * });
+     *
+     * // Error Handling
+     * async.map(withMissingFileList, getFileSizeInBytes, function(err, results) {
+     *     if (err) {
+     *         console.log(err);
+     *         // [ Error: ENOENT: no such file or directory ]
+     *     } else {
+     *         console.log(results);
+     *     }
+     * });
+     *
+     * // Using Promises
+     * async.map(fileList, getFileSizeInBytes)
+     * .then( results => {
+     *     console.log(results);
+     *     // results is now an array of the file size in bytes for each file, e.g.
+     *     // [ 1000, 2000, 3000]
+     * }).catch( err => {
+     *     console.log(err);
+     * });
+     *
+     * // Error Handling
+     * async.map(withMissingFileList, getFileSizeInBytes)
+     * .then( results => {
+     *     console.log(results);
+     * }).catch( err => {
+     *     console.log(err);
+     *     // [ Error: ENOENT: no such file or directory ]
+     * });
+     *
+     * // Using async/await
+     * async () => {
+     *     try {
+     *         let results = await async.map(fileList, getFileSizeInBytes);
+     *         console.log(results);
+     *         // results is now an array of the file size in bytes for each file, e.g.
+     *         // [ 1000, 2000, 3000]
+     *     }
+     *     catch (err) {
+     *         console.log(err);
+     *     }
+     * }
+     *
+     * // Error Handling
+     * async () => {
+     *     try {
+     *         let results = await async.map(withMissingFileList, getFileSizeInBytes);
+     *         console.log(results);
+     *     }
+     *     catch (err) {
+     *         console.log(err);
+     *         // [ Error: ENOENT: no such file or directory ]
+     *     }
+     * }
+     *
      */
     function map (coll, iteratee, callback) {
         return _asyncMap(eachOf$1, coll, iteratee, callback)
@@ -28033,15 +28191,40 @@ module.exports = osmtogeojson;
      * @returns {Promise} a promise, if a callback is not passed
      * @example
      *
+     * //Using Callbacks
      * async.auto({
-     *     // this function will just be passed a callback
-     *     readData: async.apply(fs.readFile, 'data.txt', 'utf-8'),
-     *     showData: ['readData', function(results, cb) {
-     *         // results.readData is the file's contents
-     *         // ...
+     *     get_data: function(callback) {
+     *         // async code to get some data
+     *         callback(null, 'data', 'converted to array');
+     *     },
+     *     make_folder: function(callback) {
+     *         // async code to create a directory to store a file in
+     *         // this is run at the same time as getting the data
+     *         callback(null, 'folder');
+     *     },
+     *     write_file: ['get_data', 'make_folder', function(results, callback) {
+     *         // once there is some data and the directory exists,
+     *         // write the data to a file in the directory
+     *         callback(null, 'filename');
+     *     }],
+     *     email_link: ['write_file', function(results, callback) {
+     *         // once the file is written let's email a link to it...
+     *         callback(null, {'file':results.write_file, 'email':'user@example.com'});
      *     }]
-     * }, callback);
+     * }, function(err, results) {
+     *     if (err) {
+     *         console.log('err = ', err);
+     *     }
+     *     console.log('results = ', results);
+     *     // results = {
+     *     //     get_data: ['data', 'converted to array']
+     *     //     make_folder; 'folder',
+     *     //     write_file: 'filename'
+     *     //     email_link: { file: 'filename', email: 'user@example.com' }
+     *     // }
+     * });
      *
+     * //Using Promises
      * async.auto({
      *     get_data: function(callback) {
      *         console.log('in get_data');
@@ -28055,21 +28238,62 @@ module.exports = osmtogeojson;
      *         callback(null, 'folder');
      *     },
      *     write_file: ['get_data', 'make_folder', function(results, callback) {
-     *         console.log('in write_file', JSON.stringify(results));
      *         // once there is some data and the directory exists,
      *         // write the data to a file in the directory
      *         callback(null, 'filename');
      *     }],
      *     email_link: ['write_file', function(results, callback) {
-     *         console.log('in email_link', JSON.stringify(results));
      *         // once the file is written let's email a link to it...
-     *         // results.write_file contains the filename returned by write_file.
      *         callback(null, {'file':results.write_file, 'email':'user@example.com'});
      *     }]
-     * }, function(err, results) {
-     *     console.log('err = ', err);
+     * }).then(results => {
      *     console.log('results = ', results);
+     *     // results = {
+     *     //     get_data: ['data', 'converted to array']
+     *     //     make_folder; 'folder',
+     *     //     write_file: 'filename'
+     *     //     email_link: { file: 'filename', email: 'user@example.com' }
+     *     // }
+     * }).catch(err => {
+     *     console.log('err = ', err);
      * });
+     *
+     * //Using async/await
+     * async () => {
+     *     try {
+     *         let results = await async.auto({
+     *             get_data: function(callback) {
+     *                 // async code to get some data
+     *                 callback(null, 'data', 'converted to array');
+     *             },
+     *             make_folder: function(callback) {
+     *                 // async code to create a directory to store a file in
+     *                 // this is run at the same time as getting the data
+     *                 callback(null, 'folder');
+     *             },
+     *             write_file: ['get_data', 'make_folder', function(results, callback) {
+     *                 // once there is some data and the directory exists,
+     *                 // write the data to a file in the directory
+     *                 callback(null, 'filename');
+     *             }],
+     *             email_link: ['write_file', function(results, callback) {
+     *                 // once the file is written let's email a link to it...
+     *                 callback(null, {'file':results.write_file, 'email':'user@example.com'});
+     *             }]
+     *         });
+     *         console.log('results = ', results);
+     *         // results = {
+     *         //     get_data: ['data', 'converted to array']
+     *         //     make_folder; 'folder',
+     *         //     write_file: 'filename'
+     *         //     email_link: { file: 'filename', email: 'user@example.com' }
+     *         // }
+     *     }
+     *     catch (err) {
+     *         console.log(err);
+     *     }
+     * }
+     *
      */
     function auto(tasks, concurrency, callback) {
         if (typeof concurrency !== 'number') {
@@ -28877,7 +29101,7 @@ module.exports = osmtogeojson;
      * @param {AsyncFunction} iteratee - A function applied to each item in the
      * array to produce the next step in the reduction.
      * The `iteratee` should complete with the next state of the reduction.
-     * If the iteratee complete with an error, the reduction is stopped and the
+     * If the iteratee completes with an error, the reduction is stopped and the
      * main `callback` is immediately called with the error.
      * Invoked with (memo, item, callback).
      * @param {Function} [callback] - A callback which is called after all the
@@ -28886,14 +29110,90 @@ module.exports = osmtogeojson;
      * @returns {Promise} a promise, if no callback is passed
      * @example
      *
-     * async.reduce([1,2,3], 0, function(memo, item, callback) {
-     *     // pointless async:
-     *     process.nextTick(function() {
-     *         callback(null, memo + item)
+     * // file1.txt is a file that is 1000 bytes in size
+     * // file2.txt is a file that is 2000 bytes in size
+     * // file3.txt is a file that is 3000 bytes in size
+     * // file4.txt does not exist
+     *
+     * const fileList = ['file1.txt','file2.txt','file3.txt'];
+     * const withMissingFileList = ['file1.txt','file2.txt','file3.txt', 'file4.txt'];
+     *
+     * // asynchronous function that computes the file size in bytes
+     * // file size is added to the memoized value, then returned
+     * function getFileSizeInBytes(memo, file, callback) {
+     *     fs.stat(file, function(err, stat) {
+     *         if (err) {
+     *             return callback(err);
+     *         }
+     *         callback(null, memo + stat.size);
      *     });
-     * }, function(err, result) {
-     *     // result is now equal to the last value of memo, which is 6
+     * }
+     *
+     * // Using callbacks
+     * async.reduce(fileList, 0, getFileSizeInBytes, function(err, result) {
+     *     if (err) {
+     *         console.log(err);
+     *     } else {
+     *         console.log(result);
+     *         // 6000
+     *         // which is the sum of the file sizes of the three files
+     *     }
      * });
+     *
+     * // Error Handling
+     * async.reduce(withMissingFileList, 0, getFileSizeInBytes, function(err, result) {
+     *     if (err) {
+     *         console.log(err);
+     *         // [ Error: ENOENT: no such file or directory ]
+     *     } else {
+     *         console.log(result);
+     *     }
+     * });
+     *
+     * // Using Promises
+     * async.reduce(fileList, 0, getFileSizeInBytes)
+     * .then( result => {
+     *     console.log(result);
+     *     // 6000
+     *     // which is the sum of the file sizes of the three files
+     * }).catch( err => {
+     *     console.log(err);
+     * });
+     *
+     * // Error Handling
+     * async.reduce(withMissingFileList, 0, getFileSizeInBytes)
+     * .then( result => {
+     *     console.log(result);
+     * }).catch( err => {
+     *     console.log(err);
+     *     // [ Error: ENOENT: no such file or directory ]
+     * });
+     *
+     * // Using async/await
+     * async () => {
+     *     try {
+     *         let result = await async.reduce(fileList, 0, getFileSizeInBytes);
+     *         console.log(result);
+     *         // 6000
+     *         // which is the sum of the file sizes of the three files
+     *     }
+     *     catch (err) {
+     *         console.log(err);
+     *     }
+     * }
+     *
+     * // Error Handling
+     * async () => {
+     *     try {
+     *         let result = await async.reduce(withMissingFileList, 0, getFileSizeInBytes);
+     *         console.log(result);
+     *     }
+     *     catch (err) {
+     *         console.log(err);
+     *         // [ Error: ENOENT: no such file or directory ]
+     *     }
+     * }
+     *
      */
     function reduce(coll, memo, iteratee, callback) {
         callback = once(callback);
@@ -29097,9 +29397,77 @@ module.exports = osmtogeojson;
      * @returns A Promise, if no callback is passed
      * @example
      *
-     * async.concat(['dir1','dir2','dir3'], fs.readdir, function(err, files) {
-     *     // files is now a list of filenames that exist in the 3 directories
+     * // dir1 is a directory that contains file1.txt, file2.txt
+     * // dir2 is a directory that contains file3.txt, file4.txt
+     * // dir3 is a directory that contains file5.txt
+     * // dir4 does not exist
+     *
+     * let directoryList = ['dir1','dir2','dir3'];
+     * let withMissingDirectoryList = ['dir1','dir2','dir3', 'dir4'];
+     *
+     * // Using callbacks
+     * async.concat(directoryList, fs.readdir, function(err, results) {
+     *    if (err) {
+     *        console.log(err);
+     *    } else {
+     *        console.log(results);
+     *        // [ 'file1.txt', 'file2.txt', 'file3.txt', 'file4.txt', file5.txt ]
+     *    }
      * });
+     *
+     * // Error Handling
+     * async.concat(withMissingDirectoryList, fs.readdir, function(err, results) {
+     *    if (err) {
+     *        console.log(err);
+     *        // [ Error: ENOENT: no such file or directory ]
+     *        // since dir4 does not exist
+     *    } else {
+     *        console.log(results);
+     *    }
+     * });
+     *
+     * // Using Promises
+     * async.concat(directoryList, fs.readdir)
+     * .then(results => {
+     *     console.log(results);
+     *     // [ 'file1.txt', 'file2.txt', 'file3.txt', 'file4.txt', file5.txt ]
+     * }).catch(err => {
+     *      console.log(err);
+     * });
+     *
+     * // Error Handling
+     * async.concat(withMissingDirectoryList, fs.readdir)
+     * .then(results => {
+     *     console.log(results);
+     * }).catch(err => {
+     *     console.log(err);
+     *     // [ Error: ENOENT: no such file or directory ]
+     *     // since dir4 does not exist
+     * });
+     *
+     * // Using async/await
+     * async () => {
+     *     try {
+     *         let results = await async.concat(directoryList, fs.readdir);
+     *         console.log(results);
+     *         // [ 'file1.txt', 'file2.txt', 'file3.txt', 'file4.txt', file5.txt ]
+     *     } catch (err) {
+     *         console.log(err);
+     *     }
+     * }
+     *
+     * // Error Handling
+     * async () => {
+     *     try {
+     *         let results = await async.concat(withMissingDirectoryList, fs.readdir);
+     *         console.log(results);
+     *     } catch (err) {
+     *         console.log(err);
+     *         // [ Error: ENOENT: no such file or directory ]
+     *         // since dir4 does not exist
+     *     }
+     * }
+     *
      */
     function concat(coll, iteratee, callback) {
         return concatLimit$1(coll, Infinity, iteratee, callback)
@@ -29231,13 +29599,48 @@ module.exports = osmtogeojson;
      * @returns A Promise, if no callback is passed
      * @example
      *
-     * async.detect(['file1','file2','file3'], function(filePath, callback) {
-     *     fs.access(filePath, function(err) {
-     *         callback(null, !err)
-     *     });
-     * }, function(err, result) {
+     * // dir1 is a directory that contains file1.txt, file2.txt
+     * // dir2 is a directory that contains file3.txt, file4.txt
+     * // dir3 is a directory that contains file5.txt
+     *
+     * // asynchronous function that checks if a file exists
+     * function fileExists(file, callback) {
+     *    fs.access(file, fs.constants.F_OK, (err) => {
+     *        callback(null, !err);
+     *    });
+     * }
+     *
+     * async.detect(['file3.txt','file2.txt','dir1/file1.txt'], fileExists,
+     *    function(err, result) {
+     *        console.log(result);
+     *        // dir1/file1.txt
+     *        // result now equals the first file in the list that exists
+     *    }
+     *);
+     *
+     * // Using Promises
+     * async.detect(['file3.txt','file2.txt','dir1/file1.txt'], fileExists)
+     * .then(result => {
+     *     console.log(result);
+     *     // dir1/file1.txt
      *     // result now equals the first file in the list that exists
+     * }).catch(err => {
+     *     console.log(err);
      * });
+     *
+     * // Using async/await
+     * async () => {
+     *     try {
+     *         let result = await async.detect(['file3.txt','file2.txt','dir1/file1.txt'], fileExists);
+     *         console.log(result);
+     *         // dir1/file1.txt
+     *         // result now equals the file in the list that exists
+     *     }
+     *     catch (err) {
+     *         console.log(err);
+     *     }
+     * }
+     *
      */
     function detect(coll, iteratee, callback) {
         return _createTester(bool => bool, (res, item) => item)(eachOf$1, coll, iteratee, callback)
@@ -29301,12 +29704,15 @@ module.exports = osmtogeojson;
 
     function consoleFunc(name) {
         return (fn, ...args) => wrapAsync(fn)(...args, (err, ...resultArgs) => {
+            /* istanbul ignore else */
             if (typeof console === 'object') {
+                /* istanbul ignore else */
                 if (err) {
+                    /* istanbul ignore else */
                     if (console.error) {
                         console.error(err);
                     }
-                } else if (console[name]) {
+                } else if (console[name]) { /* istanbul ignore else */
                     resultArgs.forEach(x => console[name](x));
                 }
             }
@@ -29451,37 +29857,78 @@ module.exports = osmtogeojson;
      * @returns {Promise} a promise, if a callback is omitted
      * @example
      *
-     * // assuming openFiles is an array of file names and saveFile is a function
-     * // to save the modified contents of that file:
+     * // dir1 is a directory that contains file1.txt, file2.txt
+     * // dir2 is a directory that contains file3.txt, file4.txt
+     * // dir3 is a directory that contains file5.txt
+     * // dir4 does not exist
      *
-     * async.each(openFiles, saveFile, function(err){
-     *   // if any of the saves produced an error, err would equal that error
-     * });
+     * const fileList = [ 'dir1/file2.txt', 'dir2/file3.txt', 'dir/file5.txt'];
+     * const withMissingFileList = ['dir1/file1.txt', 'dir4/file2.txt'];
      *
-     * // assuming openFiles is an array of file names
-     * async.each(openFiles, function(file, callback) {
+     * // asynchronous function that deletes a file
+     * const deleteFile = function(file, callback) {
+     *     fs.unlink(file, callback);
+     * };
      *
-     *     // Perform operation on file here.
-     *     console.log('Processing file ' + file);
-     *
-     *     if( file.length > 32 ) {
-     *       console.log('This file name is too long');
-     *       callback('File name too long');
-     *     } else {
-     *       // Do work to process file here
-     *       console.log('File processed');
-     *       callback();
-     *     }
-     * }, function(err) {
-     *     // if any of the file processing produced an error, err would equal that error
+     * // Using callbacks
+     * async.each(fileList, deleteFile, function(err) {
      *     if( err ) {
-     *       // One of the iterations produced an error.
-     *       // All processing will now stop.
-     *       console.log('A file failed to process');
+     *         console.log(err);
      *     } else {
-     *       console.log('All files have been processed successfully');
+     *         console.log('All files have been deleted successfully');
      *     }
      * });
+     *
+     * // Error Handling
+     * async.each(withMissingFileList, deleteFile, function(err){
+     *     console.log(err);
+     *     // [ Error: ENOENT: no such file or directory ]
+     *     // since dir4/file2.txt does not exist
+     *     // dir1/file1.txt could have been deleted
+     * });
+     *
+     * // Using Promises
+     * async.each(fileList, deleteFile)
+     * .then( () => {
+     *     console.log('All files have been deleted successfully');
+     * }).catch( err => {
+     *     console.log(err);
+     * });
+     *
+     * // Error Handling
+     * async.each(fileList, deleteFile)
+     * .then( () => {
+     *     console.log('All files have been deleted successfully');
+     * }).catch( err => {
+     *     console.log(err);
+     *     // [ Error: ENOENT: no such file or directory ]
+     *     // since dir4/file2.txt does not exist
+     *     // dir1/file1.txt could have been deleted
+     * });
+     *
+     * // Using async/await
+     * async () => {
+     *     try {
+     *         await async.each(files, deleteFile);
+     *     }
+     *     catch (err) {
+     *         console.log(err);
+     *     }
+     * }
+     *
+     * // Error Handling
+     * async () => {
+     *     try {
+     *         await async.each(withMissingFileList, deleteFile);
+     *     }
+     *     catch (err) {
+     *         console.log(err);
+     *         // [ Error: ENOENT: no such file or directory ]
+     *         // since dir4/file2.txt does not exist
+     *         // dir1/file1.txt could have been deleted
+     *     }
+     * }
+     *
      */
     function eachLimit(coll, iteratee, callback) {
         return eachOf$1(coll, _withoutIndex(wrapAsync(iteratee)), callback);
@@ -29616,13 +30063,78 @@ module.exports = osmtogeojson;
      * @returns {Promise} a promise, if no callback provided
      * @example
      *
-     * async.every(['file1','file2','file3'], function(filePath, callback) {
-     *     fs.access(filePath, function(err) {
-     *         callback(null, !err)
-     *     });
-     * }, function(err, result) {
-     *     // if result is true then every file exists
+     * // dir1 is a directory that contains file1.txt, file2.txt
+     * // dir2 is a directory that contains file3.txt, file4.txt
+     * // dir3 is a directory that contains file5.txt
+     * // dir4 does not exist
+     *
+     * const fileList = ['dir1/file1.txt','dir2/file3.txt','dir3/file5.txt'];
+     * const withMissingFileList = ['file1.txt','file2.txt','file4.txt'];
+     *
+     * // asynchronous function that checks if a file exists
+     * function fileExists(file, callback) {
+     *    fs.access(file, fs.constants.F_OK, (err) => {
+     *        callback(null, !err);
+     *    });
+     * }
+     *
+     * // Using callbacks
+     * async.every(fileList, fileExists, function(err, result) {
+     *     console.log(result);
+     *     // true
+     *     // result is true since every file exists
      * });
+     *
+     * async.every(withMissingFileList, fileExists, function(err, result) {
+     *     console.log(result);
+     *     // false
+     *     // result is false since NOT every file exists
+     * });
+     *
+     * // Using Promises
+     * async.every(fileList, fileExists)
+     * .then( result => {
+     *     console.log(result);
+     *     // true
+     *     // result is true since every file exists
+     * }).catch( err => {
+     *     console.log(err);
+     * });
+     *
+     * async.every(withMissingFileList, fileExists)
+     * .then( result => {
+     *     console.log(result);
+     *     // false
+     *     // result is false since NOT every file exists
+     * }).catch( err => {
+     *     console.log(err);
+     * });
+     *
+     * // Using async/await
+     * async () => {
+     *     try {
+     *         let result = await async.every(fileList, fileExists);
+     *         console.log(result);
+     *         // true
+     *         // result is true since every file exists
+     *     }
+     *     catch (err) {
+     *         console.log(err);
+     *     }
+     * }
+     *
+     * async () => {
+     *     try {
+     *         let result = await async.every(withMissingFileList, fileExists);
+     *         console.log(result);
+     *         // false
+     *         // result is false since NOT every file exists
+     *     }
+     *     catch (err) {
+     *         console.log(err);
+     *     }
+     * }
+     *
      */
     function every(coll, iteratee, callback) {
         return _createTester(bool => !bool, res => !res)(eachOf$1, coll, iteratee, callback)
@@ -29740,13 +30252,53 @@ module.exports = osmtogeojson;
      * @returns {Promise} a promise, if no callback provided
      * @example
      *
-     * async.filter(['file1','file2','file3'], function(filePath, callback) {
-     *     fs.access(filePath, function(err) {
-     *         callback(null, !err)
-     *     });
-     * }, function(err, results) {
-     *     // results now equals an array of the existing files
+     * // dir1 is a directory that contains file1.txt, file2.txt
+     * // dir2 is a directory that contains file3.txt, file4.txt
+     * // dir3 is a directory that contains file5.txt
+     *
+     * const files = ['dir1/file1.txt','dir2/file3.txt','dir3/file6.txt'];
+     *
+     * // asynchronous function that checks if a file exists
+     * function fileExists(file, callback) {
+     *    fs.access(file, fs.constants.F_OK, (err) => {
+     *        callback(null, !err);
+     *    });
+     * }
+     *
+     * // Using callbacks
+     * async.filter(files, fileExists, function(err, results) {
+     *    if(err) {
+     *        console.log(err);
+     *    } else {
+     *        console.log(results);
+     *        // [ 'dir1/file1.txt', 'dir2/file3.txt' ]
+     *        // results is now an array of the existing files
+     *    }
      * });
+     *
+     * // Using Promises
+     * async.filter(files, fileExists)
+     * .then(results => {
+     *     console.log(results);
+     *     // [ 'dir1/file1.txt', 'dir2/file3.txt' ]
+     *     // results is now an array of the existing files
+     * }).catch(err => {
+     *     console.log(err);
+     * });
+     *
+     * // Using async/await
+     * async () => {
+     *     try {
+     *         let results = await async.filter(files, fileExists);
+     *         console.log(results);
+     *         // [ 'dir1/file1.txt', 'dir2/file3.txt' ]
+     *         // results is now an array of the existing files
+     *     }
+     *     catch (err) {
+     *         console.log(err);
+     *     }
+     * }
+     *
      */
     function filter (coll, iteratee, callback) {
         return _filter(eachOf$1, coll, iteratee, callback)
@@ -29923,15 +30475,69 @@ module.exports = osmtogeojson;
      * @returns {Promise} a promise, if no callback is passed
      * @example
      *
-     * async.groupBy(['userId1', 'userId2', 'userId3'], function(userId, callback) {
-     *     db.findById(userId, function(err, user) {
-     *         if (err) return callback(err);
-     *         return callback(null, user.age);
+     * // dir1 is a directory that contains file1.txt, file2.txt
+     * // dir2 is a directory that contains file3.txt, file4.txt
+     * // dir3 is a directory that contains file5.txt
+     * // dir4 does not exist
+     *
+     * const files = ['dir1/file1.txt','dir2','dir4']
+     *
+     * // asynchronous function that detects file type as none, file, or directory
+     * function detectFile(file, callback) {
+     *     fs.stat(file, function(err, stat) {
+     *         if (err) {
+     *             return callback(null, 'none');
+     *         }
+     *         callback(null, stat.isDirectory() ? 'directory' : 'file');
      *     });
-     * }, function(err, result) {
-     *     // result is object containing the userIds grouped by age
-     *     // e.g. { 30: ['userId1', 'userId3'], 42: ['userId2']};
+     * }
+     *
+     * //Using callbacks
+     * async.groupBy(files, detectFile, function(err, result) {
+     *     if(err) {
+     *         console.log(err);
+     *     } else {
+     *	       console.log(result);
+     *         // {
+     *         //     file: [ 'dir1/file1.txt' ],
+     *         //     none: [ 'dir4' ],
+     *         //     directory: [ 'dir2']
+     *         // }
+     *         // result is object containing the files grouped by type
+     *     }
      * });
+     *
+     * // Using Promises
+     * async.groupBy(files, detectFile)
+     * .then( result => {
+     *     console.log(result);
+     *     // {
+     *     //     file: [ 'dir1/file1.txt' ],
+     *     //     none: [ 'dir4' ],
+     *     //     directory: [ 'dir2']
+     *     // }
+     *     // result is object containing the files grouped by type
+     * }).catch( err => {
+     *     console.log(err);
+     * });
+     *
+     * // Using async/await
+     * async () => {
+     *     try {
+     *         let result = await async.groupBy(files, detectFile);
+     *         console.log(result);
+     *         // {
+     *         //     file: [ 'dir1/file1.txt' ],
+     *         //     none: [ 'dir4' ],
+     *         //     directory: [ 'dir2']
+     *         // }
+     *         // result is object containing the files grouped by type
+     *     }
+     *     catch (err) {
+     *         console.log(err);
+     *     }
+     * }
+     *
      */
     function groupBy (coll, iteratee, callback) {
         return groupByLimit$1(coll, Infinity, iteratee, callback)
@@ -29952,7 +30558,7 @@ module.exports = osmtogeojson;
      * The iteratee should complete with a `key` to group the value under.
      * Invoked with (value, callback).
      * @param {Function} [callback] - A callback which is called when all `iteratee`
-     * functions have finished, or an error occurs. Result is an `Object` whoses
+     * functions have finished, or an error occurs. Result is an `Object` whose
      * properties are arrays of values which returned the corresponding key.
      * @returns {Promise} a promise, if no callback is passed
      */
@@ -30056,20 +30662,110 @@ module.exports = osmtogeojson;
      * @returns {Promise} a promise, if no callback is passed
      * @example
      *
-     * async.mapValues({
-     *     f1: 'file1',
-     *     f2: 'file2',
-     *     f3: 'file3'
-     * }, function (file, key, callback) {
-     *   fs.stat(file, callback);
-     * }, function(err, result) {
-     *     // result is now a map of stats for each file, e.g.
-     *     // {
-     *     //     f1: [stats for file1],
-     *     //     f2: [stats for file2],
-     *     //     f3: [stats for file3]
-     *     // }
+     * // file1.txt is a file that is 1000 bytes in size
+     * // file2.txt is a file that is 2000 bytes in size
+     * // file3.txt is a file that is 3000 bytes in size
+     * // file4.txt does not exist
+     *
+     * const fileMap = {
+     *     f1: 'file1.txt',
+     *     f2: 'file2.txt',
+     *     f3: 'file3.txt'
+     * };
+     *
+     * const withMissingFileMap = {
+     *     f1: 'file1.txt',
+     *     f2: 'file2.txt',
+     *     f3: 'file4.txt'
+     * };
+     *
+     * // asynchronous function that returns the file size in bytes
+     * function getFileSizeInBytes(file, key, callback) {
+     *     fs.stat(file, function(err, stat) {
+     *         if (err) {
+     *             return callback(err);
+     *         }
+     *         callback(null, stat.size);
+     *     });
+     * }
+     *
+     * // Using callbacks
+     * async.mapValues(fileMap, getFileSizeInBytes, function(err, result) {
+     *     if (err) {
+     *         console.log(err);
+     *     } else {
+     *         console.log(result);
+     *         // result is now a map of file size in bytes for each file, e.g.
+     *         // {
+     *         //     f1: 1000,
+     *         //     f2: 2000,
+     *         //     f3: 3000
+     *         // }
+     *     }
      * });
+     *
+     * // Error handling
+     * async.mapValues(withMissingFileMap, getFileSizeInBytes, function(err, result) {
+     *     if (err) {
+     *         console.log(err);
+     *         // [ Error: ENOENT: no such file or directory ]
+     *     } else {
+     *         console.log(result);
+     *     }
+     * });
+     *
+     * // Using Promises
+     * async.mapValues(fileMap, getFileSizeInBytes)
+     * .then( result => {
+     *     console.log(result);
+     *     // result is now a map of file size in bytes for each file, e.g.
+     *     // {
+     *     //     f1: 1000,
+     *     //     f2: 2000,
+     *     //     f3: 3000
+     *     // }
+     * }).catch (err => {
+     *     console.log(err);
+     * });
+     *
+     * // Error Handling
+     * async.mapValues(withMissingFileMap, getFileSizeInBytes)
+     * .then( result => {
+     *     console.log(result);
+     * }).catch (err => {
+     *     console.log(err);
+     *     // [ Error: ENOENT: no such file or directory ]
+     * });
+     *
+     * // Using async/await
+     * async () => {
+     *     try {
+     *         let result = await async.mapValues(fileMap, getFileSizeInBytes);
+     *         console.log(result);
+     *         // result is now a map of file size in bytes for each file, e.g.
+     *         // {
+     *         //     f1: 1000,
+     *         //     f2: 2000,
+     *         //     f3: 3000
+     *         // }
+     *     }
+     *     catch (err) {
+     *         console.log(err);
+     *     }
+     * }
+     *
+     * // Error Handling
+     * async () => {
+     *     try {
+     *         let result = await async.mapValues(withMissingFileMap, getFileSizeInBytes);
+     *         console.log(result);
+     *     }
+     *     catch (err) {
+     *         console.log(err);
+     *         // [ Error: ENOENT: no such file or directory ]
+     *     }
+     * }
+     *
      */
     function mapValues(obj, iteratee, callback) {
         return mapValuesLimit$1(obj, Infinity, iteratee, callback)
@@ -30212,7 +30908,7 @@ module.exports = osmtogeojson;
 
     var nextTick = wrap(_defer$1);
 
-    var parallel = awaitify((eachfn, tasks, callback) => {
+    var _parallel = awaitify((eachfn, tasks, callback) => {
         var results = isArrayLike(tasks) ? [] : {};
 
         eachfn(tasks, (task, key, taskCb) => {
@@ -30262,6 +30958,8 @@ module.exports = osmtogeojson;
      * @returns {Promise} a promise, if a callback is not passed
      *
      * @example
+     *
+     * //Using Callbacks
      * async.parallel([
      *     function(callback) {
      *         setTimeout(function() {
@@ -30273,10 +30971,9 @@ module.exports = osmtogeojson;
      *             callback(null, 'two');
      *         }, 100);
      *     }
-     * ],
-     * // optional callback
-     * function(err, results) {
-     *     // the results array will equal ['one','two'] even though
+     * ], function(err, results) {
+     *     console.log(results);
+     *     // results is equal to ['one','two'] even though
      *     // the second function had a shorter timeout.
      * });
      *
@@ -30293,11 +30990,99 @@ module.exports = osmtogeojson;
      *         }, 100);
      *     }
      * }, function(err, results) {
-     *     // results is now equals to: {one: 1, two: 2}
+     *     console.log(results);
+     *     // results is equal to: { one: 1, two: 2 }
      * });
+     *
+     * //Using Promises
+     * async.parallel([
+     *     function(callback) {
+     *         setTimeout(function() {
+     *             callback(null, 'one');
+     *         }, 200);
+     *     },
+     *     function(callback) {
+     *         setTimeout(function() {
+     *             callback(null, 'two');
+     *         }, 100);
+     *     }
+     * ]).then(results => {
+     *     console.log(results);
+     *     // results is equal to ['one','two'] even though
+     *     // the second function had a shorter timeout.
+     * }).catch(err => {
+     *     console.log(err);
+     * });
+     *
+     * // an example using an object instead of an array
+     * async.parallel({
+     *     one: function(callback) {
+     *         setTimeout(function() {
+     *             callback(null, 1);
+     *         }, 200);
+     *     },
+     *     two: function(callback) {
+     *         setTimeout(function() {
+     *             callback(null, 2);
+     *         }, 100);
+     *     }
+     * }).then(results => {
+     *     console.log(results);
+     *     // results is equal to: { one: 1, two: 2 }
+     * }).catch(err => {
+     *     console.log(err);
+     * });
+     *
+     * //Using async/await
+     * async () => {
+     *     try {
+     *         let results = await async.parallel([
+     *             function(callback) {
+     *                 setTimeout(function() {
+     *                     callback(null, 'one');
+     *                 }, 200);
+     *             },
+     *             function(callback) {
+     *                 setTimeout(function() {
+     *                     callback(null, 'two');
+     *                 }, 100);
+     *             }
+     *         ]);
+     *         console.log(results);
+     *         // results is equal to ['one','two'] even though
+     *         // the second function had a shorter timeout.
+     *     }
+     *     catch (err) {
+     *         console.log(err);
+     *     }
+     * }
+     *
+     * // an example using an object instead of an array
+     * async () => {
+     *     try {
+     *         let results = await async.parallel({
+     *             one: function(callback) {
+     *                 setTimeout(function() {
+     *                     callback(null, 1);
+     *                 }, 200);
+     *             },
+     *            two: function(callback) {
+     *                 setTimeout(function() {
+     *                     callback(null, 2);
+     *                 }, 100);
+     *            }
+     *         });
+     *         console.log(results);
+     *         // results is equal to: { one: 1, two: 2 }
+     *     }
+     *     catch (err) {
+     *         console.log(err);
+     *     }
+     * }
+     *
      */
-    function parallel$1(tasks, callback) {
-        return parallel(eachOf$1, tasks, callback);
+    function parallel(tasks, callback) {
+        return _parallel(eachOf$1, tasks, callback);
     }
 
     /**
@@ -30321,7 +31106,7 @@ module.exports = osmtogeojson;
      * @returns {Promise} a promise, if a callback is not passed
      */
     function parallelLimit(tasks, limit, callback) {
-        return parallel(eachOfLimit(limit), tasks, callback);
+        return _parallel(eachOfLimit(limit), tasks, callback);
     }
 
     /**
@@ -30352,7 +31137,7 @@ module.exports = osmtogeojson;
      * Invoke with `queue.unshift(task, [callback])`.
      * @property {AsyncFunction} pushAsync - the same as `q.push`, except this returns
      * a promise that rejects if an error occurs.
-     * @property {AsyncFunction} unshirtAsync - the same as `q.unshift`, except this returns
+     * @property {AsyncFunction} unshiftAsync - the same as `q.unshift`, except this returns
      * a promise that rejects if an error occurs.
      * @property {Function} remove - remove items from the queue that match a test
      * function.  The test function will be passed an object with a `data` property,
@@ -30391,7 +31176,7 @@ module.exports = osmtogeojson;
      * should be pushed to the queue after calling this function. Invoke with `queue.kill()`.
      *
      * @example
-     * const q = aync.queue(worker, 2)
+     * const q = async.queue(worker, 2)
      * q.push(item1)
      * q.push(item2)
      * q.push(item3)
@@ -30614,6 +31399,7 @@ module.exports = osmtogeojson;
     function priorityQueue(worker, concurrency) {
         // Start with a normal queue
         var q = queue$1(worker, concurrency);
+        var processingScheduled = false;
 
         q._tasks = new Heap();
 
@@ -30641,7 +31427,13 @@ module.exports = osmtogeojson;
                 q._tasks.push(item);
             }
 
-            setImmediate$1(q.process);
+            if (!processingScheduled) {
+                processingScheduled = true;
+                setImmediate$1(() => {
+                    processingScheduled = false;
+                    q.process();
+                });
+            }
         };
 
         // Remove unshift function
@@ -30712,7 +31504,7 @@ module.exports = osmtogeojson;
      * @param {AsyncFunction} iteratee - A function applied to each item in the
      * array to produce the next step in the reduction.
      * The `iteratee` should complete with the next state of the reduction.
-     * If the iteratee complete with an error, the reduction is stopped and the
+     * If the iteratee completes with an error, the reduction is stopped and the
      * main `callback` is immediately called with the error.
      * Invoked with (memo, item, callback).
      * @param {Function} [callback] - A callback which is called after all the
@@ -30894,14 +31686,48 @@ module.exports = osmtogeojson;
      * @returns {Promise} a promise, if no callback is passed
      * @example
      *
-     * async.reject(['file1','file2','file3'], function(filePath, callback) {
-     *     fs.access(filePath, function(err) {
-     *         callback(null, !err)
-     *     });
-     * }, function(err, results) {
-     *     // results now equals an array of missing files
-     *     createFiles(results);
+     * // dir1 is a directory that contains file1.txt, file2.txt
+     * // dir2 is a directory that contains file3.txt, file4.txt
+     * // dir3 is a directory that contains file5.txt
+     *
+     * const fileList = ['dir1/file1.txt','dir2/file3.txt','dir3/file6.txt'];
+     *
+     * // asynchronous function that checks if a file exists
+     * function fileExists(file, callback) {
+     *    fs.access(file, fs.constants.F_OK, (err) => {
+     *        callback(null, !err);
+     *    });
+     * }
+     *
+     * // Using callbacks
+     * async.reject(fileList, fileExists, function(err, results) {
+     *    // [ 'dir3/file6.txt' ]
+     *    // results now equals an array of the non-existing files
      * });
+     *
+     * // Using Promises
+     * async.reject(fileList, fileExists)
+     * .then( results => {
+     *     console.log(results);
+     *     // [ 'dir3/file6.txt' ]
+     *     // results now equals an array of the non-existing files
+     * }).catch( err => {
+     *     console.log(err);
+     * });
+     *
+     * // Using async/await
+     * async () => {
+     *     try {
+     *         let results = await async.reject(fileList, fileExists);
+     *         console.log(results);
+     *         // [ 'dir3/file6.txt' ]
+     *         // results now equals an array of the non-existing files
+     *     }
+     *     catch (err) {
+     *         console.log(err);
+     *     }
+     * }
+     *
      */
     function reject$1 (coll, iteratee, callback) {
         return reject(eachOf$1, coll, iteratee, callback)
@@ -31194,38 +32020,138 @@ module.exports = osmtogeojson;
      * with (err, result).
      * @return {Promise} a promise, if no callback is passed
      * @example
+     *
+     * //Using Callbacks
      * async.series([
      *     function(callback) {
-     *         // do some stuff ...
-     *         callback(null, 'one');
+     *         setTimeout(function() {
+     *             // do some async task
+     *             callback(null, 'one');
+     *         }, 200);
      *     },
      *     function(callback) {
-     *         // do some more stuff ...
-     *         callback(null, 'two');
+     *         setTimeout(function() {
+     *             // then do another async task
+     *             callback(null, 'two');
+     *         }, 100);
      *     }
-     * ],
-     * // optional callback
-     * function(err, results) {
-     *     // results is now equal to ['one', 'two']
+     * ], function(err, results) {
+     *     console.log(results);
+     *     // results is equal to ['one','two']
      * });
      *
+     * // an example using objects instead of arrays
      * async.series({
      *     one: function(callback) {
      *         setTimeout(function() {
+     *             // do some async task
      *             callback(null, 1);
      *         }, 200);
      *     },
-     *     two: function(callback){
+     *     two: function(callback) {
      *         setTimeout(function() {
+     *             // then do another async task
      *             callback(null, 2);
      *         }, 100);
      *     }
      * }, function(err, results) {
-     *     // results is now equal to: {one: 1, two: 2}
+     *     console.log(results);
+     *     // results is equal to: { one: 1, two: 2 }
      * });
+     *
+     * //Using Promises
+     * async.series([
+     *     function(callback) {
+     *         setTimeout(function() {
+     *             callback(null, 'one');
+     *         }, 200);
+     *     },
+     *     function(callback) {
+     *         setTimeout(function() {
+     *             callback(null, 'two');
+     *         }, 100);
+     *     }
+     * ]).then(results => {
+     *     console.log(results);
+     *     // results is equal to ['one','two']
+     * }).catch(err => {
+     *     console.log(err);
+     * });
+     *
+     * // an example using an object instead of an array
+     * async.series({
+     *     one: function(callback) {
+     *         setTimeout(function() {
+     *             // do some async task
+     *             callback(null, 1);
+     *         }, 200);
+     *     },
+     *     two: function(callback) {
+     *         setTimeout(function() {
+     *             // then do another async task
+     *             callback(null, 2);
+     *         }, 100);
+     *     }
+     * }).then(results => {
+     *     console.log(results);
+     *     // results is equal to: { one: 1, two: 2 }
+     * }).catch(err => {
+     *     console.log(err);
+     * });
+     *
+     * //Using async/await
+     * async () => {
+     *     try {
+     *         let results = await async.series([
+     *             function(callback) {
+     *                 setTimeout(function() {
+     *                     // do some async task
+     *                     callback(null, 'one');
+     *                 }, 200);
+     *             },
+     *             function(callback) {
+     *                 setTimeout(function() {
+     *                     // then do another async task
+     *                     callback(null, 'two');
+     *                 }, 100);
+     *             }
+     *         ]);
+     *         console.log(results);
+     *         // results is equal to ['one','two']
+     *     }
+     *     catch (err) {
+     *         console.log(err);
+     *     }
+     * }
+     *
+     * // an example using an object instead of an array
+     * async () => {
+     *     try {
+     *         let results = await async.parallel({
+     *             one: function(callback) {
+     *                 setTimeout(function() {
+     *                     // do some async task
+     *                     callback(null, 1);
+     *                 }, 200);
+     *             },
+     *            two: function(callback) {
+     *                 setTimeout(function() {
+     *                     // then do another async task
+     *                     callback(null, 2);
+     *                 }, 100);
+     *            }
+     *         });
+     *         console.log(results);
+     *         // results is equal to: { one: 1, two: 2 }
+     *     }
+     *     catch (err) {
+     *         console.log(err);
+     *     }
+     * }
+     *
      */
     function series(tasks, callback) {
-        return parallel(eachOfSeries$1, tasks, callback);
+        return _parallel(eachOfSeries$1, tasks, callback);
     }
 
     /**
@@ -31251,13 +32177,79 @@ module.exports = osmtogeojson;
      * @returns {Promise} a promise, if no callback provided
      * @example
      *
-     * async.some(['file1','file2','file3'], function(filePath, callback) {
-     *     fs.access(filePath, function(err) {
-     *         callback(null, !err)
-     *     });
-     * }, function(err, result) {
-     *     // if result is true then at least one of the files exists
+     * // dir1 is a directory that contains file1.txt, file2.txt
+     * // dir2 is a directory that contains file3.txt, file4.txt
+     * // dir3 is a directory that contains file5.txt
+     * // dir4 does not exist
+     *
+     * // asynchronous function that checks if a file exists
+     * function fileExists(file, callback) {
+     *    fs.access(file, fs.constants.F_OK, (err) => {
+     *        callback(null, !err);
+     *    });
+     * }
+     *
+     * // Using callbacks
+     * async.some(['dir1/missing.txt','dir2/missing.txt','dir3/file5.txt'], fileExists,
+     *    function(err, result) {
+     *        console.log(result);
+     *        // true
+     *        // result is true since some file in the list exists
+     *    }
+     *);
+     *
+     * async.some(['dir1/missing.txt','dir2/missing.txt','dir4/missing.txt'], fileExists,
+     *    function(err, result) {
+     *        console.log(result);
+     *        // false
+     *        // result is false since none of the files exists
+     *    }
+     *);
+     *
+     * // Using Promises
+     * async.some(['dir1/missing.txt','dir2/missing.txt','dir3/file5.txt'], fileExists)
+     * .then( result => {
+     *     console.log(result);
+     *     // true
+     *     // result is true since some file in the list exists
+     * }).catch( err => {
+     *     console.log(err);
      * });
+     *
+     * async.some(['dir1/missing.txt','dir2/missing.txt','dir4/missing.txt'], fileExists)
+     * .then( result => {
+     *     console.log(result);
+     *     // false
+     *     // result is false since none of the files exists
+     * }).catch( err => {
+     *     console.log(err);
+     * });
+     *
+     * // Using async/await
+     * async () => {
+     *     try {
+     *         let result = await async.some(['dir1/missing.txt','dir2/missing.txt','dir3/file5.txt'], fileExists);
+     *         console.log(result);
+     *         // true
+     *         // result is true since some file in the list exists
+     *     }
+     *     catch (err) {
+     *         console.log(err);
+     *     }
+     * }
+     *
+     * async () => {
+     *     try {
+     *         let result = await async.some(['dir1/missing.txt','dir2/missing.txt','dir4/missing.txt'], fileExists);
+     *         console.log(result);
+     *         // false
+     *         // result is false since none of the files exists
+     *     }
+     *     catch (err) {
+     *         console.log(err);
+     *     }
+     * }
+     *
      */
     function some(coll, iteratee, callback) {
         return _createTester(Boolean, res => res)(eachOf$1, coll, iteratee, callback)
@@ -31339,31 +32331,133 @@ module.exports = osmtogeojson;
      * @returns {Promise} a promise, if no callback passed
      * @example
      *
-     * async.sortBy(['file1','file2','file3'], function(file, callback) {
-     *     fs.stat(file, function(err, stats) {
-     *         callback(err, stats.mtime);
+     * // bigfile.txt is a file that is 251100 bytes in size
+     * // mediumfile.txt is a file that is 11000 bytes in size
+     * // smallfile.txt is a file that is 121 bytes in size
+     *
+     * // asynchronous function that returns the file size in bytes
+     * function getFileSizeInBytes(file, callback) {
+     *     fs.stat(file, function(err, stat) {
+     *         if (err) {
+     *             return callback(err);
+     *         }
+     *         callback(null, stat.size);
      *     });
-     * }, function(err, results) {
-     *     // results is now the original array of files sorted by
-     *     // modified date
-     * });
+     * }
+     *
+     * // Using callbacks
+     * async.sortBy(['mediumfile.txt','smallfile.txt','bigfile.txt'], getFileSizeInBytes,
+     *     function(err, results) {
+     *         if (err) {
+     *             console.log(err);
+     *         } else {
+     *             console.log(results);
+     *             // results is now the original array of files sorted by
+     *             // file size (ascending by default), e.g.
+     *             // [ 'smallfile.txt', 'mediumfile.txt', 'bigfile.txt']
+     *         }
+     *     }
+     * );
      *
      * // By modifying the callback parameter the
      * // sorting order can be influenced:
      *
      * // ascending order
-     * async.sortBy([1,9,3,5], function(x, callback) {
-     *     callback(null, x);
-     * }, function(err,result) {
-     *     // result callback
-     * });
+     * async.sortBy(['mediumfile.txt','smallfile.txt','bigfile.txt'], function(file, callback) {
+     *     getFileSizeInBytes(file, function(getFileSizeErr, fileSize) {
+     *         if (getFileSizeErr) return callback(getFileSizeErr);
+     *         callback(null, fileSize);
+     *     });
+     * }, function(err, results) {
+     *         if (err) {
+     *             console.log(err);
+     *         } else {
+     *             console.log(results);
+     *             // results is now the original array of files sorted by
+     *             // file size (ascending by default), e.g.
+     *             // [ 'smallfile.txt', 'mediumfile.txt', 'bigfile.txt']
+     *         }
+     *     }
+     * );
      *
      * // descending order
-     * async.sortBy([1,9,3,5], function(x, callback) {
-     *     callback(null, x*-1);    //<- x*-1 instead of x, turns the order around
-     * }, function(err,result) {
-     *     // result callback
+     * async.sortBy(['bigfile.txt','mediumfile.txt','smallfile.txt'], function(file, callback) {
+     *     getFileSizeInBytes(file, function(getFileSizeErr, fileSize) {
+     *         if (getFileSizeErr) {
+     *             return callback(getFileSizeErr);
+     *         }
+     *         callback(null, fileSize * -1);
+     *     });
+     * }, function(err, results) {
+     *         if (err) {
+     *             console.log(err);
+     *         } else {
+     *             console.log(results);
+     *             // results is now the original array of files sorted by
+     *             // file size (ascending by default), e.g.
+     *             // [ 'bigfile.txt', 'mediumfile.txt', 'smallfile.txt']
+     *         }
+     *     }
+     * );
+     *
+     * // Error handling
+     * async.sortBy(['mediumfile.txt','smallfile.txt','missingfile.txt'], getFileSizeInBytes,
+     *     function(err, results) {
+     *         if (err) {
+     *             console.log(err);
+     *             // [ Error: ENOENT: no such file or directory ]
+     *         } else {
+     *             console.log(results);
+     *         }
+     *     }
+     * );
+     *
+     * // Using Promises
+     * async.sortBy(['mediumfile.txt','smallfile.txt','bigfile.txt'], getFileSizeInBytes)
+     * .then( results => {
+     *     console.log(results);
+     *     // results is now the original array of files sorted by
+     *     // file size (ascending by default), e.g.
+     *     // [ 'smallfile.txt', 'mediumfile.txt', 'bigfile.txt']
+     * }).catch( err => {
+     *     console.log(err);
      * });
+     *
+     * // Error handling
+     * async.sortBy(['mediumfile.txt','smallfile.txt','missingfile.txt'], getFileSizeInBytes)
+     * .then( results => {
+     *     console.log(results);
+     * }).catch( err => {
+     *     console.log(err);
+     *     // [ Error: ENOENT: no such file or directory ]
+     * });
+     *
+     * // Using async/await
+     * (async () => {
+     *     try {
+     *         let results = await async.sortBy(['bigfile.txt','mediumfile.txt','smallfile.txt'], getFileSizeInBytes);
+     *         console.log(results);
+     *         // results is now the original array of files sorted by
+     *         // file size (ascending by default), e.g.
+     *         // [ 'smallfile.txt', 'mediumfile.txt', 'bigfile.txt']
+     *     }
+     *     catch (err) {
+     *         console.log(err);
+     *     }
+     * })();
+     *
+     * // Error handling
+     * async () => {
+     *     try {
+     *         let results = await async.sortBy(['missingfile.txt','mediumfile.txt','smallfile.txt'], getFileSizeInBytes);
+     *         console.log(results);
+     *     }
+     *     catch (err) {
+     *         console.log(err);
+     *         // [ Error: ENOENT: no such file or directory ]
+     *     }
+     * }
+     *
      */
     function sortBy (coll, iteratee, callback) {
         var _iteratee = wrapAsync(iteratee);
@@ -31564,26 +32658,118 @@ module.exports = osmtogeojson;
      * @returns {Promise} a promise, if no callback provided
      * @example
      *
-     * async.transform([1,2,3], function(acc, item, index, callback) {
-     *     // pointless async:
-     *     process.nextTick(function() {
-     *         acc[index] = item * 2
-     *         callback(null)
+     * // file1.txt is a file that is 1000 bytes in size
+     * // file2.txt is a file that is 2000 bytes in size
+     * // file3.txt is a file that is 3000 bytes in size
+     *
+     * // helper function that returns human-readable size format from bytes
+     * function formatBytes(bytes, decimals = 2) {
+     *   // implementation not included for brevity
+     *   return humanReadbleFilesize;
+     * }
+     *
+     * const fileList = ['file1.txt','file2.txt','file3.txt'];
+     *
+     * // asynchronous function that returns the file size, transformed to human-readable format
+     * // e.g. 1024 bytes = 1KB, 1234 bytes = 1.21 KB, 1048576 bytes = 1MB, etc.
+     * function transformFileSize(acc, value, key, callback) {
+     *     fs.stat(value, function(err, stat) {
+     *         if (err) {
+     *             return callback(err);
+     *         }
+     *         acc[key] = formatBytes(stat.size);
+     *         callback(null);
      *     });
-     * }, function(err, result) {
-     *     // result is now equal to [2, 4, 6]
+     * }
+     *
+     * // Using callbacks
+     * async.transform(fileList, transformFileSize, function(err, result) {
+     *     if(err) {
+     *         console.log(err);
+     *     } else {
+     *         console.log(result);
+     *         // [ '1000 Bytes', '1.95 KB', '2.93 KB' ]
+     *     }
      * });
+     *
+     * // Using Promises
+     * async.transform(fileList, transformFileSize)
+     * .then(result => {
+     *     console.log(result);
+     *     // [ '1000 Bytes', '1.95 KB', '2.93 KB' ]
+     * }).catch(err => {
+     *     console.log(err);
+     * });
+     *
+     * // Using async/await
+     * (async () => {
+     *     try {
+     *         let result = await async.transform(fileList, transformFileSize);
+     *         console.log(result);
+     *         // [ '1000 Bytes', '1.95 KB', '2.93 KB' ]
+     *     }
+     *     catch (err) {
+     *         console.log(err);
+     *     }
+     * })();
      *
      * @example
      *
-     * async.transform({a: 1, b: 2, c: 3}, function (obj, val, key, callback) {
-     *     setImmediate(function () {
-     *         obj[key] = val * 2;
-     *         callback();
-     *     })
-     * }, function (err, result) {
-     *     // result is equal to {a: 2, b: 4, c: 6}
-     * })
+     * // file1.txt is a file that is 1000 bytes in size
+     * // file2.txt is a file that is 2000 bytes in size
+     * // file3.txt is a file that is 3000 bytes in size
+     *
+     * // helper function that returns human-readable size format from bytes
+     * function formatBytes(bytes, decimals = 2) {
+     *   // implementation not included for brevity
+     *   return humanReadbleFilesize;
+     * }
+     *
+     * const fileMap = { f1: 'file1.txt', f2: 'file2.txt', f3: 'file3.txt' };
+     *
+     * // asynchronous function that returns the file size, transformed to human-readable format
+     * // e.g. 1024 bytes = 1KB, 1234 bytes = 1.21 KB, 1048576 bytes = 1MB, etc.
+     * function transformFileSize(acc, value, key, callback) {
+     *     fs.stat(value, function(err, stat) {
+     *         if (err) {
+     *             return callback(err);
+     *         }
+     *         acc[key] = formatBytes(stat.size);
+     *         callback(null);
+     *     });
+     * }
+     *
+     * // Using callbacks
+     * async.transform(fileMap, transformFileSize, function(err, result) {
+     *     if(err) {
+     *         console.log(err);
+     *     } else {
+     *         console.log(result);
+     *         // { f1: '1000 Bytes', f2: '1.95 KB', f3: '2.93 KB' }
+     *     }
+     * });
+     *
+     * // Using Promises
+     * async.transform(fileMap, transformFileSize)
+     * .then(result => {
+     *     console.log(result);
+     *     // { f1: '1000 Bytes', f2: '1.95 KB', f3: '2.93 KB' }
+     * }).catch(err => {
+     *     console.log(err);
+     * });
+     *
+     * // Using async/await
+     * async () => {
+     *     try {
+     *         let result = await async.transform(fileMap, transformFileSize);
+     *         console.log(result);
+     *         // { f1: '1000 Bytes', f2: '1.95 KB', f3: '2.93 KB' }
+     *     }
+     *     catch (err) {
+     *         console.log(err);
+     *     }
+     * }
+     *
      */
     function transform (coll, accumulator, iteratee, callback) {
         if (arguments.length <= 3 && typeof accumulator === 'function') {
@@ -31761,7 +32947,7 @@ module.exports = osmtogeojson;
      * @example
      * const results = []
      * let finished = false
-     * async.until(function test(page, cb) {
+     * async.until(function test(cb) {
      *     cb(null, finished)
      * }, function iter(next) {
      *     fetchPage(url, (err, body) => {
@@ -31945,7 +33131,7 @@ module.exports = osmtogeojson;
         mapValuesSeries,
         memoize,
         nextTick,
-        parallel: parallel$1,
+        parallel,
         parallelLimit,
         priorityQueue,
         queue: queue$1,
@@ -32053,7 +33239,7 @@ module.exports = osmtogeojson;
     exports.mapValuesSeries = mapValuesSeries;
     exports.memoize = memoize;
     exports.nextTick = nextTick;
-    exports.parallel = parallel$1;
+    exports.parallel = parallel;
     exports.parallelLimit = parallelLimit;
     exports.priorityQueue = priorityQueue;
     exports.queue = queue$1;
@@ -32692,6 +33878,30 @@ const Filter = require('./Filter')
  * An error occured
  * @event OverpassFrontend#error
  * @param {Error} error
+ * @param {OverpassFrontend#Context} [context] - context of the request
+ */
+
+/**
+ * A request to Overpass API is started
+ * @event OverpassFrontend#start
+ * @param {object} reserved
+ * @param {OverpassFrontend#Context} context - context of the request
+ */
+
+/**
+ * A request to Overpass API was rejected
+ * @event OverpassFrontend#reject
+ * @param {OverpassFrontend#QueryStatus} queryStatus
+ * @param {OverpassFrontend#Context} context - context of the request
+ */
+
+/**
+ * Status of a query to Overpass API
+ * @typedef {Object} OverpassFrontend#QueryStatus
+ * @property {int} [status] - result status (e.g. 429 for reject, ...)
+ * @property {int} [errorCount] - the nth error in a row
+ * @property {boolean} [retry] - true, if the request will be retried (after a 429 error)
+ * @property {int} [retryTimeout] - if the query will be retried, the next request will be delayed for n ms
  */
 
 /**
@@ -32703,6 +33913,7 @@ const Filter = require('./Filter')
  * @param {string} osm3sMeta.timestamp_osm_base RFC8601 timestamp of OpenStreetMap data
  * @param {string} osm3sMeta.copyright Copyright statement
  * @param {BoundingBox} [osm3sMeta.bounds] Bounding Box (only when loading from file)
+ * @param {OverpassFrontend#Context} [context] - context of the request
  */
 
 /**
@@ -32720,7 +33931,8 @@ const Filter = require('./Filter')
  * @param {number} [options.effortWay=4] The effort for request a way.
  * @param {number} [options.effortRelation=64] The effort for request a relation.
  * @param {number} [options.timeGap=10] A short time gap between two requests to the Overpass API (milliseconds).
- * @param {number} [options.timeGap429=1000] A longer time after a 429 response from Overpass API (milliseconds).
+ * @param {number} [options.timeGap429=500] A longer time gap after a 429 response from Overpass API (milliseconds).
+ * @param {number} [options.timeGap429Exp=3] If we keep getting 429 responses, increase the time exponentially with the specified factor (e.g. 2: 500ms, 1000ms, 2000ms, ...; 3: 500ms, 1500ms, 4500ms, ...)
  * @param {number} [options.loadChunkSize=1000] When loading a file (instead connecting to an Overpass URL) load elements in chunks of n items.
  * @property {boolean} hasStretchLon180=false Are there any map features in the cache which stretch over lon=180/-180?
  */
@@ -32733,7 +33945,8 @@ class OverpassFrontend {
       effortWay: 4,
       effortRelation: 64,
       timeGap: 10,
-      timeGap429: 1000,
+      timeGap429: 500,
+      timeGap429Exp: 3,
       loadChunkSize: 1000
     }
     for (const k in options) {
@@ -33029,6 +34242,8 @@ class OverpassFrontend {
         query,
         this._handleResult.bind(this, context)
       )
+
+      this.emit('start', {}, context)
     }.bind(this), this.options.timeGap)
   }
 
@@ -33039,22 +34254,42 @@ class OverpassFrontend {
       err = results.remark
     }
 
+    const status = {}
+
     if (err !== null) {
       this.errorCount++
+
+      status.status = err.status
+      status.errorCount = this.errorCount
 
       if (this.errorCount <= 3) {
         // retry
         if (err.status === 429) {
           this.requestIsActive = true
+          const timeGap = this.options.timeGap429Exp ** (this.errorCount - 1) * this.options.timeGap429
+
+          status.retry = true
+          status.retryTimeout = timeGap
+          this.emit('reject', status, context)
 
           global.setTimeout(() => {
             this.requestIsActive = false
             this._overpassProcess()
-          }, this.options.timeGap429 - this.options.timeGap)
+          }, timeGap - this.options.timeGap)
         } else {
+          this.emit('error', err, context)
+
           this._overpassProcess()
         }
       } else {
+        if (err.status === 429) {
+          status.retry = false
+
+          this.emit('reject', status, context)
+        }
+
+        this.emit('error', status, context)
+
         // abort
         // call finalCallback for the request
         context.subRequests.forEach(function (subRequest) {
@@ -33063,12 +34298,12 @@ class OverpassFrontend {
       }
 
       return
-    } else {
-      this.errorCount = 0
     }
 
+    this.errorCount = 0
+
     const osm3sMeta = copyOsm3sMetaFrom(results)
-    this.emit('load', osm3sMeta)
+    this.emit('load', osm3sMeta, context)
 
     let subRequestsIndex = 0
     let partIndex = 0
@@ -33960,6 +35195,15 @@ class OverpassRelation extends OverpassObject {
         const member = data.members[i]
 
         this.members.push(member)
+
+        // fix referenced ways from 'out geom' output
+        if (member.type === 'way' && typeof member.ref === 'string') {
+          const m = member.ref.match(/^_fullGeom([0-9]+)$/)
+          if (m) {
+            member.ref = parseInt(m[1])
+          }
+        }
+
         this.members[i].id = member.type.substr(0, 1) + member.ref
       }
     }
@@ -33969,13 +35213,18 @@ class OverpassRelation extends OverpassObject {
 
       this.memberFeatures = data.members.map(
         (member, sequence) => {
+          let obProperties = OverpassFrontend.ID_ONLY
           const ob = JSON.parse(JSON.stringify(member))
           ob.id = ob.ref
           delete ob.ref
           delete ob.role
 
+          if (ob.geometry) {
+            obProperties |= OverpassFrontend.GEOM
+          }
+
           const memberOb = this.overpass.createOrUpdateOSMObject(ob, {
-            properties: options.properties & OverpassFrontend.GEOM
+            properties: obProperties
           })
 
           // call notifyMemberOf only once per member
@@ -34468,7 +35717,7 @@ class OverpassWay extends OverpassObject {
           type: 'node'
         }
 
-        if (data.geometry) {
+        if (data.geometry && data.geometry[i]) {
           obProperties = obProperties | OverpassFrontend.GEOM
           ob.lat = data.geometry[i].lat
           ob.lon = data.geometry[i].lon
@@ -34658,11 +35907,14 @@ class OverpassWay extends OverpassObject {
       options.shiftWorld = [0, 0]
     }
 
-    const geom = this.geometry.map(g => {
-      return { lat: g.lat, lon: g.lon + options.shiftWorld[g.lon < 0 ? 0 : 1] }
-    })
+    const geom = this.geometry
+      .filter(g => g)
+      .map(g => {
+        return { lat: g.lat, lon: g.lon + options.shiftWorld[g.lon < 0 ? 0 : 1] }
+      })
 
-    if (this.geometry[this.geometry.length - 1].lat === this.geometry[0].lat &&
+    if (this.geometry[this.geometry.length - 1] && this.geometry[0] &&
+       this.geometry[this.geometry.length - 1].lat === this.geometry[0].lat &&
        this.geometry[this.geometry.length - 1].lon === this.geometry[0].lon) {
       return L.polygon(geom, options)
     }
@@ -36088,13 +37340,46 @@ module.exports = function convertFromXML (xml) {
 
           element.tags[child.getAttribute('k')] = child.getAttribute('v')
         } else if (child.nodeName === 'member') {
-          element.members.push({
+          const member = {
             type: child.getAttribute('type'),
             ref: parseInt(child.getAttribute('ref')),
             role: child.getAttribute('role')
-          })
+          }
+
+          if (child.hasAttribute('lat')) {
+            member.lat = parseFloat(child.getAttribute('lat'))
+            member.lon = parseFloat(child.getAttribute('lon'))
+          }
+
+          let memberChild = child.firstChild
+          if (member.type === 'way' && memberChild) {
+            member.geometry = []
+            while (memberChild) {
+              if (memberChild.nodeName === 'nd') {
+                member.geometry.push({
+                  lat: parseFloat(memberChild.getAttribute('lat')),
+                  lon: parseFloat(memberChild.getAttribute('lon'))
+                })
+              }
+
+              memberChild = memberChild.nextSibling
+            }
+          }
+
+          element.members.push(member)
         } else if (child.nodeName === 'nd') {
           element.nodes.push(parseInt(child.getAttribute('ref')))
+
+          if (child.hasAttribute('lat')) {
+            if (!element.geometry) {
+              element.geometry = []
+            }
+
+            element.geometry.push({
+              lat: parseFloat(child.getAttribute('lat')),
+              lon: parseFloat(child.getAttribute('lon'))
+            })
+          }
         }
 
         child = child.nextSibling
@@ -53176,6 +54461,10 @@ class Sublayer {
 
         node.onmouseover = () => {
           if (this.currentHover) {
+            if (this.currentHover.id === id) {
+              return
+            }
+
             this.currentHover.hide()
           }
 
@@ -54037,9 +55326,12 @@ module.exports = isTrue
 
 },{}],268:[function(require,module,exports){
 module.exports = function parseLength (value, metersPerPixel) {
-  const m = ('' + value).trim().match(/^([+-]?[0-9]+(?:\.[0-9]+)?)\s*(px|m)$/)
+  const m = ('' + value).trim().match(/^([+-]?[0-9]+(?:\.[0-9]+)?)\s*(px|m|%)$/)
+
   if (m) {
     switch (m[2]) {
+      case '%':
+        return value
       case 'm':
         return parseFloat(m[1]) / metersPerPixel
       case 'px':
