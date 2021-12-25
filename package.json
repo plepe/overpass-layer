@@ -4,6 +4,7 @@
   "description": "Show a Leaflet layer using OpenStreetMap data from Overpass API via OverpassFrontend.",
   "dependencies": {
     "@turf/along": "^6.5.0",
+    "@turf/intersect": "^6.5.0",
     "@turf/length": "^6.5.0",
     "@turf/point-on-feature": "^5.1.5",
     "boundingbox": "^1.2.5",
@@ -11,7 +12,7 @@
     "event-emitter": "^0.3.5",
     "html-escape": "^2.0.0",
     "nearest-point-on-geometry": "^1.0.1",
-    "overpass-frontend": "^2.5.0",
+    "overpass-frontend": "^2.6.1",
     "twig": "^1.15.4"
   },
   "devDependencies": {
