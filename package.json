@@ -12,7 +12,7 @@
     "event-emitter": "^0.3.5",
     "html-escape": "^2.0.0",
     "nearest-point-on-geometry": "^1.0.1",
-    "overpass-frontend": "^2.6.1",
+    "overpass-frontend": "^2.7.0",
     "twig": "^1.15.4"
   },
   "devDependencies": {
