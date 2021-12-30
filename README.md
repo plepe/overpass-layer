@@ -10,6 +10,7 @@ var overpassFrontend = new OverpassFrontend('//overpass-api.de/api/interpreter')
 
 // Create the layer
 var layer = new OverpassLayer({
+  overpassFrontend: overpassFrontend,
   query: 'nwr[building]',
   minZoom: 16,
   feature: {

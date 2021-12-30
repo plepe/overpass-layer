@@ -21,7 +21,7 @@ class OverpassLayer {
 
     this.options = options
 
-    this.overpassFrontend = 'overpassFrontend' in this.options ? this.options.overpassFrontend : overpassFrontend
+    this.overpassFrontend = 'overpassFrontend' in this.options ? this.options.overpassFrontend : global.overpassFrontend
     this.options.minZoom = 'minZoom' in this.options ? this.options.minZoom : 16
     this.options.maxZoom = 'maxZoom' in this.options ? this.options.maxZoom : undefined
     this.options.feature = 'feature' in this.options ? this.options.feature : {}
