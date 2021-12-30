@@ -83,6 +83,11 @@ class OverpassLayer {
     }
   }
 
+  setBounds (bounds) {
+    this.options.bounds = bounds
+    this.check_update_map()
+  }
+
   setLayout (id, layout) {
     this.options.layouts[id] = compileTemplate(layout, twig, { autoescape: false })
   }

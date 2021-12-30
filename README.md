@@ -143,6 +143,10 @@ If you set an arbitrary value within a twig template (e.g.: `{% set foo = "bar" 
 ## method addTo(map)
 Add layer to the given map.
 
+## method setBounds(bounds)
+Forces a boundary (as with option `bounds`). Accept a boundary of the type
+GeoJSON.
+
 ## method remove()
 Removes the OverpassLayer and all its features.
 
