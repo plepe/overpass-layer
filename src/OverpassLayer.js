@@ -1,4 +1,3 @@
-/* global overpassFrontend:false */
 /* eslint camelcase: 0 */
 require('./OverpassLayer.css')
 
@@ -182,7 +181,6 @@ class OverpassLayer {
         }
         return
       }
-
     }
 
     if (this.map.getZoom() < this.options.minZoom ||
