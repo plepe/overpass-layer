@@ -7,6 +7,9 @@ const BoundingBox = require('boundingbox')
 const twig = require('twig')
 const OverpassFrontend = require('overpass-frontend')
 const escapeHtml = require('html-escape')
+const turf = {
+  intersect: require('@turf/intersect').default
+}
 
 const Sublayer = require('./Sublayer')
 const Memberlayer = require('./Memberlayer')
@@ -78,6 +81,11 @@ class OverpassLayer {
       this.memberlayer = new Memberlayer(this, memberOptions)
       this.subLayers.member = this.memberlayer
     }
+  }
+
+  setBounds (bounds) {
+    this.options.bounds = bounds
+    this.check_update_map()
   }
 
   setLayout (id, layout) {
@@ -163,7 +171,19 @@ class OverpassLayer {
     }
 
     const queryOptions = JSON.parse(JSON.stringify(this.options.queryOptions))
-    const bounds = new BoundingBox(this.map.getBounds())
+    let bounds = new BoundingBox(this.map.getBounds())
+
+    if (this.options.bounds) {
+      bounds = turf.intersect(bounds.toGeoJSON(), this.options.bounds)
+
+      if (!bounds) {
+        for (const k in this.subLayers) {
+          this.subLayers[k].hideAll()
+        }
+        return
+      }
+
+    }
 
     if (this.map.getZoom() < this.options.minZoom ||
        (this.options.maxZoom !== undefined && this.map.getZoom() > this.options.maxZoom)) {

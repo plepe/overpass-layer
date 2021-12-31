@@ -39,6 +39,7 @@ Options:
 * overpassFrontend: An OverpassFrontend object (defaults to the global variable `overpassFrontend`)
 * minZoom: Show layer only from the given zoom level (default: 16)
 * maxZoom: Show layer only up to the given zoom level (default: no limit)
+* bounds: Show only items intersecting this GeoJSON polygon/multipolygon (default: `null`).
 * styles: Array of style-id which should be shown. Default: `['default']`. May be overridden by a feature dependant styles array. Can be a comma-separated string.
 * updateAssets: a function which will be called for all map feature specific HTML contexts. It can be used to update URLs of imgs. It will be passed the following parameters: domNode (the node which should be updated), objectData (data of the map feature), layer (the layer object).
 * feature: an object describing how the feature will be formated resp. styled. Each of the values may be either a function which will be passed an OverpassObject or a string which will be processed with the templating language TwigJS:
@@ -142,6 +143,10 @@ If you set an arbitrary value within a twig template (e.g.: `{% set foo = "bar" 
 
 ## method addTo(map)
 Add layer to the given map.
+
+## method setBounds(bounds)
+Forces a boundary (as with option `bounds`). Accept a boundary of the type
+GeoJSON.
 
 ## method remove()
 Removes the OverpassLayer and all its features.
