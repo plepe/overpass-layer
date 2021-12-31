@@ -35,6 +35,12 @@
     "lint": "standard --fix src/*.js form.js && standard --global OverpassLayer --global OverpassLayerList --global map --fix demo/*.js",
     "start": "http-server ./ -p 3000"
   },
+  "files": [
+    "src",
+    "dist/overpass-layer.js",
+    "img/map_pointer.png",
+    "index.js"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/plepe/overpass-layer.git"
