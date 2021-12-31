@@ -1,7 +1,7 @@
 /* global L */
 
 const ee = require('event-emitter')
-const OverpassFrontend = require('overpass-frontend')
+const OverpassFrontend = require('overpass-frontend/src/defines')
 const nearestPointOnGeometry = require('nearest-point-on-geometry')
 const BoundingBox = require('boundingbox')
 
