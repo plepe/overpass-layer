@@ -1,3 +1,7 @@
+Version 3.1.0, 2021-12-31
+=========================
+* Set custom bounds (as GeoJSON polygon / multipolygon) either with the option `bounds` or the function `setBounds()`
+
 Version 3.0.0, 2021-01-06
 =========================
 * Popup-Content and other layouts are now rendered via Twig
