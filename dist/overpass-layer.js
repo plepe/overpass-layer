@@ -13,7 +13,7 @@ if (typeof window !== 'undefined') {
 OverpassLayer.List = OverpassLayerList
 module.exports = OverpassLayer
 
-},{"./src/OverpassLayer":260,"./src/OverpassLayerList":262,"overpass-frontend":214}],2:[function(require,module,exports){
+},{"./src/OverpassLayer":281,"./src/OverpassLayerList":283,"overpass-frontend":232}],2:[function(require,module,exports){
 var wgs84 = require('wgs84');
 
 module.exports.geometry = geometry;
@@ -103,7 +103,7 @@ function ringArea(coords) {
 function rad(_) {
     return _ * Math.PI / 180;
 }
-},{"wgs84":253}],3:[function(require,module,exports){
+},{"wgs84":274}],3:[function(require,module,exports){
 var geojsonArea = require('@mapbox/geojson-area');
 
 module.exports = rewind;
@@ -1336,196 +1336,6 @@ exports.getType = getType;
 },{"@turf/helpers":8}],10:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-var helpers_1 = require("@turf/helpers");
-var invariant_1 = require("@turf/invariant");
-var lineclip_1 = require("./lib/lineclip");
-/**
- * Takes a {@link Feature} and a bbox and clips the feature to the bbox using
- * [lineclip](https://github.com/mapbox/lineclip).
- * May result in degenerate edges when clipping Polygons.
- *
- * @name bboxClip
- * @param {Feature<LineString|MultiLineString|Polygon|MultiPolygon>} feature feature to clip to the bbox
- * @param {BBox} bbox extent in [minX, minY, maxX, maxY] order
- * @returns {Feature<LineString|MultiLineString|Polygon|MultiPolygon>} clipped Feature
- * @example
- * var bbox = [0, 0, 10, 10];
- * var poly = turf.polygon([[[2, 2], [8, 4], [12, 8], [3, 7], [2, 2]]]);
- *
- * var clipped = turf.bboxClip(poly, bbox);
- *
- * //addToMap
- * var addToMap = [bbox, poly, clipped]
- */
-function bboxClip(feature, bbox) {
-    var geom = invariant_1.getGeom(feature);
-    var type = geom.type;
-    var properties = feature.type === "Feature" ? feature.properties : {};
-    var coords = geom.coordinates;
-    switch (type) {
-        case "LineString":
-        case "MultiLineString": {
-            var lines_1 = [];
-            if (type === "LineString") {
-                coords = [coords];
-            }
-            coords.forEach(function (line) {
-                lineclip_1.lineclip(line, bbox, lines_1);
-            });
-            if (lines_1.length === 1) {
-                return helpers_1.lineString(lines_1[0], properties);
-            }
-            return helpers_1.multiLineString(lines_1, properties);
-        }
-        case "Polygon":
-            return helpers_1.polygon(clipPolygon(coords, bbox), properties);
-        case "MultiPolygon":
-            return helpers_1.multiPolygon(coords.map(function (poly) {
-                return clipPolygon(poly, bbox);
-            }), properties);
-        default:
-            throw new Error("geometry " + type + " not supported");
-    }
-}
-exports.default = bboxClip;
-function clipPolygon(rings, bbox) {
-    var outRings = [];
-    for (var _i = 0, rings_1 = rings; _i < rings_1.length; _i++) {
-        var ring = rings_1[_i];
-        var clipped = lineclip_1.polygonclip(ring, bbox);
-        if (clipped.length > 0) {
-            if (clipped[0][0] !== clipped[clipped.length - 1][0] ||
-                clipped[0][1] !== clipped[clipped.length - 1][1]) {
-                clipped.push(clipped[0]);
-            }
-            if (clipped.length >= 4) {
-                outRings.push(clipped);
-            }
-        }
-    }
-    return outRings;
-}
-
-},{"./lib/lineclip":11,"@turf/helpers":12,"@turf/invariant":13}],11:[function(require,module,exports){
-"use strict";
-// Cohen-Sutherland line clipping algorithm, adapted to efficiently
-// handle polylines rather than just segments
-Object.defineProperty(exports, "__esModule", { value: true });
-function lineclip(points, bbox, result) {
-    var len = points.length, codeA = bitCode(points[0], bbox), part = [], i, codeB, lastCode;
-    var a;
-    var b;
-    if (!result)
-        result = [];
-    for (i = 1; i < len; i++) {
-        a = points[i - 1];
-        b = points[i];
-        codeB = lastCode = bitCode(b, bbox);
-        while (true) {
-            if (!(codeA | codeB)) {
-                // accept
-                part.push(a);
-                if (codeB !== lastCode) {
-                    // segment went outside
-                    part.push(b);
-                    if (i < len - 1) {
-                        // start a new line
-                        result.push(part);
-                        part = [];
-                    }
-                }
-                else if (i === len - 1) {
-                    part.push(b);
-                }
-                break;
-            }
-            else if (codeA & codeB) {
-                // trivial reject
-                break;
-            }
-            else if (codeA) {
-                // a outside, intersect with clip edge
-                a = intersect(a, b, codeA, bbox);
-                codeA = bitCode(a, bbox);
-            }
-            else {
-                // b outside
-                b = intersect(a, b, codeB, bbox);
-                codeB = bitCode(b, bbox);
-            }
-        }
-        codeA = lastCode;
-    }
-    if (part.length)
-        result.push(part);
-    return result;
-}
-exports.lineclip = lineclip;
-// Sutherland-Hodgeman polygon clipping algorithm
-function polygonclip(points, bbox) {
-    var result, edge, prev, prevInside, i, p, inside;
-    // clip against each side of the clip rectangle
-    for (edge = 1; edge <= 8; edge *= 2) {
-        result = [];
-        prev = points[points.length - 1];
-        prevInside = !(bitCode(prev, bbox) & edge);
-        for (i = 0; i < points.length; i++) {
-            p = points[i];
-            inside = !(bitCode(p, bbox) & edge);
-            // if segment goes through the clip window, add an intersection
-            if (inside !== prevInside)
-                result.push(intersect(prev, p, edge, bbox));
-            if (inside)
-                result.push(p); // add a point if it's inside
-            prev = p;
-            prevInside = inside;
-        }
-        points = result;
-        if (!points.length)
-            break;
-    }
-    return result;
-}
-exports.polygonclip = polygonclip;
-// intersect a segment against one of the 4 lines that make up the bbox
-function intersect(a, b, edge, bbox) {
-    return edge & 8
-        ? [a[0] + ((b[0] - a[0]) * (bbox[3] - a[1])) / (b[1] - a[1]), bbox[3]] // top
-        : edge & 4
-            ? [a[0] + ((b[0] - a[0]) * (bbox[1] - a[1])) / (b[1] - a[1]), bbox[1]] // bottom
-            : edge & 2
-                ? [bbox[2], a[1] + ((b[1] - a[1]) * (bbox[2] - a[0])) / (b[0] - a[0])] // right
-                : edge & 1
-                    ? [bbox[0], a[1] + ((b[1] - a[1]) * (bbox[0] - a[0])) / (b[0] - a[0])] // left
-                    : null;
-}
-// bit code reflects the point position relative to the bbox:
-//         left  mid  right
-//    top  1001  1000  1010
-//    mid  0001  0000  0010
-// bottom  0101  0100  0110
-function bitCode(p, bbox) {
-    var code = 0;
-    if (p[0] < bbox[0])
-        code |= 1;
-    // left
-    else if (p[0] > bbox[2])
-        code |= 2; // right
-    if (p[1] < bbox[1])
-        code |= 4;
-    // bottom
-    else if (p[1] > bbox[3])
-        code |= 8; // top
-    return code;
-}
-
-},{}],12:[function(require,module,exports){
-arguments[4][8][0].apply(exports,arguments)
-},{"dup":8}],13:[function(require,module,exports){
-arguments[4][9][0].apply(exports,arguments)
-},{"@turf/helpers":12,"dup":9}],14:[function(require,module,exports){
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
 var meta_1 = require("@turf/meta");
 /**
  * Takes a set of features, calculates the bbox of all input features, and returns a bounding box.
@@ -1561,7 +1371,7 @@ function bbox(geojson) {
 }
 exports.default = bbox;
 
-},{"@turf/meta":42}],15:[function(require,module,exports){
+},{"@turf/meta":57}],11:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 var helpers_1 = require("@turf/helpers");
@@ -1623,7 +1433,182 @@ function calculateFinalBearing(start, end) {
 }
 exports.default = bearing;
 
-},{"@turf/helpers":30,"@turf/invariant":34}],16:[function(require,module,exports){
+},{"@turf/helpers":45,"@turf/invariant":49}],12:[function(require,module,exports){
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+var boolean_point_in_polygon_1 = __importDefault(require("@turf/boolean-point-in-polygon"));
+var line_intersect_1 = __importDefault(require("@turf/line-intersect"));
+var meta_1 = require("@turf/meta");
+var polygon_to_line_1 = __importDefault(require("@turf/polygon-to-line"));
+/**
+ * Boolean-disjoint returns (TRUE) if the intersection of the two geometries is an empty set.
+ *
+ * @name booleanDisjoint
+ * @param {Geometry|Feature<any>} feature1 GeoJSON Feature or Geometry
+ * @param {Geometry|Feature<any>} feature2 GeoJSON Feature or Geometry
+ * @returns {boolean} true/false
+ * @example
+ * var point = turf.point([2, 2]);
+ * var line = turf.lineString([[1, 1], [1, 2], [1, 3], [1, 4]]);
+ *
+ * turf.booleanDisjoint(line, point);
+ * //=true
+ */
+function booleanDisjoint(feature1, feature2) {
+    var bool = true;
+    meta_1.flattenEach(feature1, function (flatten1) {
+        meta_1.flattenEach(feature2, function (flatten2) {
+            if (bool === false) {
+                return false;
+            }
+            bool = disjoint(flatten1.geometry, flatten2.geometry);
+        });
+    });
+    return bool;
+}
+/**
+ * Disjoint operation for simple Geometries (Point/LineString/Polygon)
+ *
+ * @private
+ * @param {Geometry<any>} geom1 GeoJSON Geometry
+ * @param {Geometry<any>} geom2 GeoJSON Geometry
+ * @returns {boolean} true/false
+ */
+function disjoint(geom1, geom2) {
+    switch (geom1.type) {
+        case "Point":
+            switch (geom2.type) {
+                case "Point":
+                    return !compareCoords(geom1.coordinates, geom2.coordinates);
+                case "LineString":
+                    return !isPointOnLine(geom2, geom1);
+                case "Polygon":
+                    return !boolean_point_in_polygon_1.default(geom1, geom2);
+            }
+            /* istanbul ignore next */
+            break;
+        case "LineString":
+            switch (geom2.type) {
+                case "Point":
+                    return !isPointOnLine(geom1, geom2);
+                case "LineString":
+                    return !isLineOnLine(geom1, geom2);
+                case "Polygon":
+                    return !isLineInPoly(geom2, geom1);
+            }
+            /* istanbul ignore next */
+            break;
+        case "Polygon":
+            switch (geom2.type) {
+                case "Point":
+                    return !boolean_point_in_polygon_1.default(geom2, geom1);
+                case "LineString":
+                    return !isLineInPoly(geom1, geom2);
+                case "Polygon":
+                    return !isPolyInPoly(geom2, geom1);
+            }
+    }
+    return false;
+}
+// http://stackoverflow.com/a/11908158/1979085
+function isPointOnLine(lineString, pt) {
+    for (var i = 0; i < lineString.coordinates.length - 1; i++) {
+        if (isPointOnLineSegment(lineString.coordinates[i], lineString.coordinates[i + 1], pt.coordinates)) {
+            return true;
+        }
+    }
+    return false;
+}
+function isLineOnLine(lineString1, lineString2) {
+    var doLinesIntersect = line_intersect_1.default(lineString1, lineString2);
+    if (doLinesIntersect.features.length > 0) {
+        return true;
+    }
+    return false;
+}
+function isLineInPoly(polygon, lineString) {
+    for (var _i = 0, _a = lineString.coordinates; _i < _a.length; _i++) {
+        var coord = _a[_i];
+        if (boolean_point_in_polygon_1.default(coord, polygon)) {
+            return true;
+        }
+    }
+    var doLinesIntersect = line_intersect_1.default(lineString, polygon_to_line_1.default(polygon));
+    if (doLinesIntersect.features.length > 0) {
+        return true;
+    }
+    return false;
+}
+/**
+ * Is Polygon (geom1) in Polygon (geom2)
+ * Only takes into account outer rings
+ * See http://stackoverflow.com/a/4833823/1979085
+ *
+ * @private
+ * @param {Geometry|Feature<Polygon>} feature1 Polygon1
+ * @param {Geometry|Feature<Polygon>} feature2 Polygon2
+ * @returns {boolean} true/false
+ */
+function isPolyInPoly(feature1, feature2) {
+    for (var _i = 0, _a = feature1.coordinates[0]; _i < _a.length; _i++) {
+        var coord1 = _a[_i];
+        if (boolean_point_in_polygon_1.default(coord1, feature2)) {
+            return true;
+        }
+    }
+    for (var _b = 0, _c = feature2.coordinates[0]; _b < _c.length; _b++) {
+        var coord2 = _c[_b];
+        if (boolean_point_in_polygon_1.default(coord2, feature1)) {
+            return true;
+        }
+    }
+    var doLinesIntersect = line_intersect_1.default(polygon_to_line_1.default(feature1), polygon_to_line_1.default(feature2));
+    if (doLinesIntersect.features.length > 0) {
+        return true;
+    }
+    return false;
+}
+function isPointOnLineSegment(lineSegmentStart, lineSegmentEnd, pt) {
+    var dxc = pt[0] - lineSegmentStart[0];
+    var dyc = pt[1] - lineSegmentStart[1];
+    var dxl = lineSegmentEnd[0] - lineSegmentStart[0];
+    var dyl = lineSegmentEnd[1] - lineSegmentStart[1];
+    var cross = dxc * dyl - dyc * dxl;
+    if (cross !== 0) {
+        return false;
+    }
+    if (Math.abs(dxl) >= Math.abs(dyl)) {
+        if (dxl > 0) {
+            return lineSegmentStart[0] <= pt[0] && pt[0] <= lineSegmentEnd[0];
+        }
+        else {
+            return lineSegmentEnd[0] <= pt[0] && pt[0] <= lineSegmentStart[0];
+        }
+    }
+    else if (dyl > 0) {
+        return lineSegmentStart[1] <= pt[1] && pt[1] <= lineSegmentEnd[1];
+    }
+    else {
+        return lineSegmentEnd[1] <= pt[1] && pt[1] <= lineSegmentStart[1];
+    }
+}
+/**
+ * compareCoords
+ *
+ * @private
+ * @param {Position} pair1 point [x,y]
+ * @param {Position} pair2 point [x,y]
+ * @returns {boolean} true/false if coord pairs match
+ */
+function compareCoords(pair1, pair2) {
+    return pair1[0] === pair2[0] && pair1[1] === pair2[1];
+}
+exports.default = booleanDisjoint;
+
+},{"@turf/boolean-point-in-polygon":13,"@turf/line-intersect":16,"@turf/meta":18,"@turf/polygon-to-line":68}],13:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 var invariant_1 = require("@turf/invariant");
@@ -1708,7 +1693,8 @@ exports.default = booleanPointInPolygon;
  */
 function inRing(pt, ring, ignoreBoundary) {
     var isInside = false;
-    if (ring[0][0] === ring[ring.length - 1][0] && ring[0][1] === ring[ring.length - 1][1]) {
+    if (ring[0][0] === ring[ring.length - 1][0] &&
+        ring[0][1] === ring[ring.length - 1][1]) {
         ring = ring.slice(0, ring.length - 1);
     }
     for (var i = 0, j = ring.length - 1; i < ring.length; j = i++) {
@@ -1716,13 +1702,14 @@ function inRing(pt, ring, ignoreBoundary) {
         var yi = ring[i][1];
         var xj = ring[j][0];
         var yj = ring[j][1];
-        var onBoundary = (pt[1] * (xi - xj) + yi * (xj - pt[0]) + yj * (pt[0] - xi) === 0) &&
-            ((xi - pt[0]) * (xj - pt[0]) <= 0) && ((yi - pt[1]) * (yj - pt[1]) <= 0);
+        var onBoundary = pt[1] * (xi - xj) + yi * (xj - pt[0]) + yj * (pt[0] - xi) === 0 &&
+            (xi - pt[0]) * (xj - pt[0]) <= 0 &&
+            (yi - pt[1]) * (yj - pt[1]) <= 0;
         if (onBoundary) {
             return !ignoreBoundary;
         }
-        var intersect = ((yi > pt[1]) !== (yj > pt[1])) &&
-            (pt[0] < (xj - xi) * (pt[1] - yi) / (yj - yi) + xi);
+        var intersect = yi > pt[1] !== yj > pt[1] &&
+            pt[0] < ((xj - xi) * (pt[1] - yi)) / (yj - yi) + xi;
         if (intersect) {
             isInside = !isInside;
         }
@@ -1738,3110 +1725,14 @@ function inRing(pt, ring, ignoreBoundary) {
  * @returns {boolean} true/false if point is inside BBox
  */
 function inBBox(pt, bbox) {
-    return bbox[0] <= pt[0] &&
-        bbox[1] <= pt[1] &&
-        bbox[2] >= pt[0] &&
-        bbox[3] >= pt[1];
+    return (bbox[0] <= pt[0] && bbox[1] <= pt[1] && bbox[2] >= pt[0] && bbox[3] >= pt[1]);
 }
 
-},{"@turf/invariant":34}],17:[function(require,module,exports){
-'use strict';
-
-function _interopDefault (ex) { return (ex && (typeof ex === 'object') && 'default' in ex) ? ex['default'] : ex; }
-
-var bbox = _interopDefault(require('@turf/bbox'));
-var helpers = require('@turf/helpers');
-
-/**
- * Takes a {@link Feature} or {@link FeatureCollection} and returns the absolute center point of all features.
- *
- * @name center
- * @param {GeoJSON} geojson GeoJSON to be centered
- * @param {Object} [options={}] Optional parameters
- * @param {Object} [options.properties={}] an Object that is used as the {@link Feature}'s properties
- * @returns {Feature<Point>} a Point feature at the absolute center point of all input features
- * @example
- * var features = turf.featureCollection([
- *   turf.point( [-97.522259, 35.4691]),
- *   turf.point( [-97.502754, 35.463455]),
- *   turf.point( [-97.508269, 35.463245])
- * ]);
- *
- * var center = turf.center(features);
- *
- * //addToMap
- * var addToMap = [features, center]
- * center.properties['marker-size'] = 'large';
- * center.properties['marker-color'] = '#000';
- */
-function center(geojson, options) {
-    // Optional parameters
-    options = options || {};
-    if (!helpers.isObject(options)) throw new Error('options is invalid');
-    var properties = options.properties;
-
-    // Input validation
-    if (!geojson) throw new Error('geojson is required');
-
-    var ext = bbox(geojson);
-    var x = (ext[0] + ext[2]) / 2;
-    var y = (ext[1] + ext[3]) / 2;
-    return helpers.point([x, y], properties);
-}
-
-module.exports = center;
-module.exports.default = center;
-
-},{"@turf/bbox":18,"@turf/helpers":19}],18:[function(require,module,exports){
-'use strict';
-
-var meta = require('@turf/meta');
-
-/**
- * Takes a set of features, calculates the bbox of all input features, and returns a bounding box.
- *
- * @name bbox
- * @param {GeoJSON} geojson any GeoJSON object
- * @returns {BBox} bbox extent in [minX, minY, maxX, maxY] order
- * @example
- * var line = turf.lineString([[-74, 40], [-78, 42], [-82, 35]]);
- * var bbox = turf.bbox(line);
- * var bboxPolygon = turf.bboxPolygon(bbox);
- *
- * //addToMap
- * var addToMap = [line, bboxPolygon]
- */
-function bbox(geojson) {
-    var BBox = [Infinity, Infinity, -Infinity, -Infinity];
-    meta.coordEach(geojson, function (coord) {
-        if (BBox[0] > coord[0]) BBox[0] = coord[0];
-        if (BBox[1] > coord[1]) BBox[1] = coord[1];
-        if (BBox[2] < coord[0]) BBox[2] = coord[0];
-        if (BBox[3] < coord[1]) BBox[3] = coord[1];
-    });
-    return BBox;
-}
-
-module.exports = bbox;
-module.exports.default = bbox;
-
-},{"@turf/meta":20}],19:[function(require,module,exports){
-'use strict';
-
-Object.defineProperty(exports, '__esModule', { value: true });
-
-/**
- * Earth Radius used with the Harvesine formula and approximates using a spherical (non-ellipsoid) Earth.
- */
-var earthRadius = 6371008.8;
-
-/**
- * Unit of measurement factors using a spherical (non-ellipsoid) earth radius.
- */
-var factors = {
-    meters: earthRadius,
-    metres: earthRadius,
-    millimeters: earthRadius * 1000,
-    millimetres: earthRadius * 1000,
-    centimeters: earthRadius * 100,
-    centimetres: earthRadius * 100,
-    kilometers: earthRadius / 1000,
-    kilometres: earthRadius / 1000,
-    miles: earthRadius / 1609.344,
-    nauticalmiles: earthRadius / 1852,
-    inches: earthRadius * 39.370,
-    yards: earthRadius / 1.0936,
-    feet: earthRadius * 3.28084,
-    radians: 1,
-    degrees: earthRadius / 111325,
-};
-
-/**
- * Units of measurement factors based on 1 meter.
- */
-var unitsFactors = {
-    meters: 1,
-    metres: 1,
-    millimeters: 1000,
-    millimetres: 1000,
-    centimeters: 100,
-    centimetres: 100,
-    kilometers: 1 / 1000,
-    kilometres: 1 / 1000,
-    miles: 1 / 1609.344,
-    nauticalmiles: 1 / 1852,
-    inches: 39.370,
-    yards: 1 / 1.0936,
-    feet: 3.28084,
-    radians: 1 / earthRadius,
-    degrees: 1 / 111325,
-};
-
-/**
- * Area of measurement factors based on 1 square meter.
- */
-var areaFactors = {
-    meters: 1,
-    metres: 1,
-    millimeters: 1000000,
-    millimetres: 1000000,
-    centimeters: 10000,
-    centimetres: 10000,
-    kilometers: 0.000001,
-    kilometres: 0.000001,
-    acres: 0.000247105,
-    miles: 3.86e-7,
-    yards: 1.195990046,
-    feet: 10.763910417,
-    inches: 1550.003100006
-};
-
-/**
- * Wraps a GeoJSON {@link Geometry} in a GeoJSON {@link Feature}.
- *
- * @name feature
- * @param {Geometry} geometry input geometry
- * @param {Object} [properties={}] an Object of key-value pairs to add as properties
- * @param {Object} [options={}] Optional Parameters
- * @param {Array<number>} [options.bbox] Bounding Box Array [west, south, east, north] associated with the Feature
- * @param {string|number} [options.id] Identifier associated with the Feature
- * @returns {Feature} a GeoJSON Feature
- * @example
- * var geometry = {
- *   "type": "Point",
- *   "coordinates": [110, 50]
- * };
- *
- * var feature = turf.feature(geometry);
- *
- * //=feature
- */
-function feature(geometry, properties, options) {
-    // Optional Parameters
-    options = options || {};
-    if (!isObject(options)) throw new Error('options is invalid');
-    var bbox = options.bbox;
-    var id = options.id;
-
-    // Validation
-    if (geometry === undefined) throw new Error('geometry is required');
-    if (properties && properties.constructor !== Object) throw new Error('properties must be an Object');
-    if (bbox) validateBBox(bbox);
-    if (id) validateId(id);
-
-    // Main
-    var feat = {type: 'Feature'};
-    if (id) feat.id = id;
-    if (bbox) feat.bbox = bbox;
-    feat.properties = properties || {};
-    feat.geometry = geometry;
-    return feat;
-}
-
-/**
- * Creates a GeoJSON {@link Geometry} from a Geometry string type & coordinates.
- * For GeometryCollection type use `helpers.geometryCollection`
- *
- * @name geometry
- * @param {string} type Geometry Type
- * @param {Array<number>} coordinates Coordinates
- * @param {Object} [options={}] Optional Parameters
- * @param {Array<number>} [options.bbox] Bounding Box Array [west, south, east, north] associated with the Geometry
- * @returns {Geometry} a GeoJSON Geometry
- * @example
- * var type = 'Point';
- * var coordinates = [110, 50];
- *
- * var geometry = turf.geometry(type, coordinates);
- *
- * //=geometry
- */
-function geometry(type, coordinates, options) {
-    // Optional Parameters
-    options = options || {};
-    if (!isObject(options)) throw new Error('options is invalid');
-    var bbox = options.bbox;
-
-    // Validation
-    if (!type) throw new Error('type is required');
-    if (!coordinates) throw new Error('coordinates is required');
-    if (!Array.isArray(coordinates)) throw new Error('coordinates must be an Array');
-    if (bbox) validateBBox(bbox);
-
-    // Main
-    var geom;
-    switch (type) {
-    case 'Point': geom = point(coordinates).geometry; break;
-    case 'LineString': geom = lineString(coordinates).geometry; break;
-    case 'Polygon': geom = polygon(coordinates).geometry; break;
-    case 'MultiPoint': geom = multiPoint(coordinates).geometry; break;
-    case 'MultiLineString': geom = multiLineString(coordinates).geometry; break;
-    case 'MultiPolygon': geom = multiPolygon(coordinates).geometry; break;
-    default: throw new Error(type + ' is invalid');
-    }
-    if (bbox) geom.bbox = bbox;
-    return geom;
-}
-
-/**
- * Creates a {@link Point} {@link Feature} from a Position.
- *
- * @name point
- * @param {Array<number>} coordinates longitude, latitude position (each in decimal degrees)
- * @param {Object} [properties={}] an Object of key-value pairs to add as properties
- * @param {Object} [options={}] Optional Parameters
- * @param {Array<number>} [options.bbox] Bounding Box Array [west, south, east, north] associated with the Feature
- * @param {string|number} [options.id] Identifier associated with the Feature
- * @returns {Feature<Point>} a Point feature
- * @example
- * var point = turf.point([-75.343, 39.984]);
- *
- * //=point
- */
-function point(coordinates, properties, options) {
-    if (!coordinates) throw new Error('coordinates is required');
-    if (!Array.isArray(coordinates)) throw new Error('coordinates must be an Array');
-    if (coordinates.length < 2) throw new Error('coordinates must be at least 2 numbers long');
-    if (!isNumber(coordinates[0]) || !isNumber(coordinates[1])) throw new Error('coordinates must contain numbers');
-
-    return feature({
-        type: 'Point',
-        coordinates: coordinates
-    }, properties, options);
-}
-
-/**
- * Creates a {@link Point} {@link FeatureCollection} from an Array of Point coordinates.
- *
- * @name points
- * @param {Array<Array<number>>} coordinates an array of Points
- * @param {Object} [properties={}] Translate these properties to each Feature
- * @param {Object} [options={}] Optional Parameters
- * @param {Array<number>} [options.bbox] Bounding Box Array [west, south, east, north] associated with the FeatureCollection
- * @param {string|number} [options.id] Identifier associated with the FeatureCollection
- * @returns {FeatureCollection<Point>} Point Feature
- * @example
- * var points = turf.points([
- *   [-75, 39],
- *   [-80, 45],
- *   [-78, 50]
- * ]);
- *
- * //=points
- */
-function points(coordinates, properties, options) {
-    if (!coordinates) throw new Error('coordinates is required');
-    if (!Array.isArray(coordinates)) throw new Error('coordinates must be an Array');
-
-    return featureCollection(coordinates.map(function (coords) {
-        return point(coords, properties);
-    }), options);
-}
-
-/**
- * Creates a {@link Polygon} {@link Feature} from an Array of LinearRings.
- *
- * @name polygon
- * @param {Array<Array<Array<number>>>} coordinates an array of LinearRings
- * @param {Object} [properties={}] an Object of key-value pairs to add as properties
- * @param {Object} [options={}] Optional Parameters
- * @param {Array<number>} [options.bbox] Bounding Box Array [west, south, east, north] associated with the Feature
- * @param {string|number} [options.id] Identifier associated with the Feature
- * @returns {Feature<Polygon>} Polygon Feature
- * @example
- * var polygon = turf.polygon([[[-5, 52], [-4, 56], [-2, 51], [-7, 54], [-5, 52]]], { name: 'poly1' });
- *
- * //=polygon
- */
-function polygon(coordinates, properties, options) {
-    if (!coordinates) throw new Error('coordinates is required');
-
-    for (var i = 0; i < coordinates.length; i++) {
-        var ring = coordinates[i];
-        if (ring.length < 4) {
-            throw new Error('Each LinearRing of a Polygon must have 4 or more Positions.');
-        }
-        for (var j = 0; j < ring[ring.length - 1].length; j++) {
-            // Check if first point of Polygon contains two numbers
-            if (i === 0 && j === 0 && !isNumber(ring[0][0]) || !isNumber(ring[0][1])) throw new Error('coordinates must contain numbers');
-            if (ring[ring.length - 1][j] !== ring[0][j]) {
-                throw new Error('First and last Position are not equivalent.');
-            }
-        }
-    }
-
-    return feature({
-        type: 'Polygon',
-        coordinates: coordinates
-    }, properties, options);
-}
-
-/**
- * Creates a {@link Polygon} {@link FeatureCollection} from an Array of Polygon coordinates.
- *
- * @name polygons
- * @param {Array<Array<Array<Array<number>>>>} coordinates an array of Polygon coordinates
- * @param {Object} [properties={}] an Object of key-value pairs to add as properties
- * @param {Object} [options={}] Optional Parameters
- * @param {Array<number>} [options.bbox] Bounding Box Array [west, south, east, north] associated with the Feature
- * @param {string|number} [options.id] Identifier associated with the FeatureCollection
- * @returns {FeatureCollection<Polygon>} Polygon FeatureCollection
- * @example
- * var polygons = turf.polygons([
- *   [[[-5, 52], [-4, 56], [-2, 51], [-7, 54], [-5, 52]]],
- *   [[[-15, 42], [-14, 46], [-12, 41], [-17, 44], [-15, 42]]],
- * ]);
- *
- * //=polygons
- */
-function polygons(coordinates, properties, options) {
-    if (!coordinates) throw new Error('coordinates is required');
-    if (!Array.isArray(coordinates)) throw new Error('coordinates must be an Array');
-
-    return featureCollection(coordinates.map(function (coords) {
-        return polygon(coords, properties);
-    }), options);
-}
-
-/**
- * Creates a {@link LineString} {@link Feature} from an Array of Positions.
- *
- * @name lineString
- * @param {Array<Array<number>>} coordinates an array of Positions
- * @param {Object} [properties={}] an Object of key-value pairs to add as properties
- * @param {Object} [options={}] Optional Parameters
- * @param {Array<number>} [options.bbox] Bounding Box Array [west, south, east, north] associated with the Feature
- * @param {string|number} [options.id] Identifier associated with the Feature
- * @returns {Feature<LineString>} LineString Feature
- * @example
- * var linestring1 = turf.lineString([[-24, 63], [-23, 60], [-25, 65], [-20, 69]], {name: 'line 1'});
- * var linestring2 = turf.lineString([[-14, 43], [-13, 40], [-15, 45], [-10, 49]], {name: 'line 2'});
- *
- * //=linestring1
- * //=linestring2
- */
-function lineString(coordinates, properties, options) {
-    if (!coordinates) throw new Error('coordinates is required');
-    if (coordinates.length < 2) throw new Error('coordinates must be an array of two or more positions');
-    // Check if first point of LineString contains two numbers
-    if (!isNumber(coordinates[0][1]) || !isNumber(coordinates[0][1])) throw new Error('coordinates must contain numbers');
-
-    return feature({
-        type: 'LineString',
-        coordinates: coordinates
-    }, properties, options);
-}
-
-/**
- * Creates a {@link LineString} {@link FeatureCollection} from an Array of LineString coordinates.
- *
- * @name lineStrings
- * @param {Array<Array<number>>} coordinates an array of LinearRings
- * @param {Object} [properties={}] an Object of key-value pairs to add as properties
- * @param {Object} [options={}] Optional Parameters
- * @param {Array<number>} [options.bbox] Bounding Box Array [west, south, east, north] associated with the FeatureCollection
- * @param {string|number} [options.id] Identifier associated with the FeatureCollection
- * @returns {FeatureCollection<LineString>} LineString FeatureCollection
- * @example
- * var linestrings = turf.lineStrings([
- *   [[-24, 63], [-23, 60], [-25, 65], [-20, 69]],
- *   [[-14, 43], [-13, 40], [-15, 45], [-10, 49]]
- * ]);
- *
- * //=linestrings
- */
-function lineStrings(coordinates, properties, options) {
-    if (!coordinates) throw new Error('coordinates is required');
-    if (!Array.isArray(coordinates)) throw new Error('coordinates must be an Array');
-
-    return featureCollection(coordinates.map(function (coords) {
-        return lineString(coords, properties);
-    }), options);
-}
-
-/**
- * Takes one or more {@link Feature|Features} and creates a {@link FeatureCollection}.
- *
- * @name featureCollection
- * @param {Feature[]} features input features
- * @param {Object} [options={}] Optional Parameters
- * @param {Array<number>} [options.bbox] Bounding Box Array [west, south, east, north] associated with the Feature
- * @param {string|number} [options.id] Identifier associated with the Feature
- * @returns {FeatureCollection} FeatureCollection of Features
- * @example
- * var locationA = turf.point([-75.343, 39.984], {name: 'Location A'});
- * var locationB = turf.point([-75.833, 39.284], {name: 'Location B'});
- * var locationC = turf.point([-75.534, 39.123], {name: 'Location C'});
- *
- * var collection = turf.featureCollection([
- *   locationA,
- *   locationB,
- *   locationC
- * ]);
- *
- * //=collection
- */
-function featureCollection(features, options) {
-    // Optional Parameters
-    options = options || {};
-    if (!isObject(options)) throw new Error('options is invalid');
-    var bbox = options.bbox;
-    var id = options.id;
-
-    // Validation
-    if (!features) throw new Error('No features passed');
-    if (!Array.isArray(features)) throw new Error('features must be an Array');
-    if (bbox) validateBBox(bbox);
-    if (id) validateId(id);
-
-    // Main
-    var fc = {type: 'FeatureCollection'};
-    if (id) fc.id = id;
-    if (bbox) fc.bbox = bbox;
-    fc.features = features;
-    return fc;
-}
-
-/**
- * Creates a {@link Feature<MultiLineString>} based on a
- * coordinate array. Properties can be added optionally.
- *
- * @name multiLineString
- * @param {Array<Array<Array<number>>>} coordinates an array of LineStrings
- * @param {Object} [properties={}] an Object of key-value pairs to add as properties
- * @param {Object} [options={}] Optional Parameters
- * @param {Array<number>} [options.bbox] Bounding Box Array [west, south, east, north] associated with the Feature
- * @param {string|number} [options.id] Identifier associated with the Feature
- * @returns {Feature<MultiLineString>} a MultiLineString feature
- * @throws {Error} if no coordinates are passed
- * @example
- * var multiLine = turf.multiLineString([[[0,0],[10,10]]]);
- *
- * //=multiLine
- */
-function multiLineString(coordinates, properties, options) {
-    if (!coordinates) throw new Error('coordinates is required');
-
-    return feature({
-        type: 'MultiLineString',
-        coordinates: coordinates
-    }, properties, options);
-}
-
-/**
- * Creates a {@link Feature<MultiPoint>} based on a
- * coordinate array. Properties can be added optionally.
- *
- * @name multiPoint
- * @param {Array<Array<number>>} coordinates an array of Positions
- * @param {Object} [properties={}] an Object of key-value pairs to add as properties
- * @param {Object} [options={}] Optional Parameters
- * @param {Array<number>} [options.bbox] Bounding Box Array [west, south, east, north] associated with the Feature
- * @param {string|number} [options.id] Identifier associated with the Feature
- * @returns {Feature<MultiPoint>} a MultiPoint feature
- * @throws {Error} if no coordinates are passed
- * @example
- * var multiPt = turf.multiPoint([[0,0],[10,10]]);
- *
- * //=multiPt
- */
-function multiPoint(coordinates, properties, options) {
-    if (!coordinates) throw new Error('coordinates is required');
-
-    return feature({
-        type: 'MultiPoint',
-        coordinates: coordinates
-    }, properties, options);
-}
-
-/**
- * Creates a {@link Feature<MultiPolygon>} based on a
- * coordinate array. Properties can be added optionally.
- *
- * @name multiPolygon
- * @param {Array<Array<Array<Array<number>>>>} coordinates an array of Polygons
- * @param {Object} [properties={}] an Object of key-value pairs to add as properties
- * @param {Object} [options={}] Optional Parameters
- * @param {Array<number>} [options.bbox] Bounding Box Array [west, south, east, north] associated with the Feature
- * @param {string|number} [options.id] Identifier associated with the Feature
- * @returns {Feature<MultiPolygon>} a multipolygon feature
- * @throws {Error} if no coordinates are passed
- * @example
- * var multiPoly = turf.multiPolygon([[[[0,0],[0,10],[10,10],[10,0],[0,0]]]]);
- *
- * //=multiPoly
- *
- */
-function multiPolygon(coordinates, properties, options) {
-    if (!coordinates) throw new Error('coordinates is required');
-
-    return feature({
-        type: 'MultiPolygon',
-        coordinates: coordinates
-    }, properties, options);
-}
-
-/**
- * Creates a {@link Feature<GeometryCollection>} based on a
- * coordinate array. Properties can be added optionally.
- *
- * @name geometryCollection
- * @param {Array<Geometry>} geometries an array of GeoJSON Geometries
- * @param {Object} [properties={}] an Object of key-value pairs to add as properties
- * @param {Object} [options={}] Optional Parameters
- * @param {Array<number>} [options.bbox] Bounding Box Array [west, south, east, north] associated with the Feature
- * @param {string|number} [options.id] Identifier associated with the Feature
- * @returns {Feature<GeometryCollection>} a GeoJSON GeometryCollection Feature
- * @example
- * var pt = {
- *     "type": "Point",
- *       "coordinates": [100, 0]
- *     };
- * var line = {
- *     "type": "LineString",
- *     "coordinates": [ [101, 0], [102, 1] ]
- *   };
- * var collection = turf.geometryCollection([pt, line]);
- *
- * //=collection
- */
-function geometryCollection(geometries, properties, options) {
-    if (!geometries) throw new Error('geometries is required');
-    if (!Array.isArray(geometries)) throw new Error('geometries must be an Array');
-
-    return feature({
-        type: 'GeometryCollection',
-        geometries: geometries
-    }, properties, options);
-}
-
-/**
- * Round number to precision
- *
- * @param {number} num Number
- * @param {number} [precision=0] Precision
- * @returns {number} rounded number
- * @example
- * turf.round(120.4321)
- * //=120
- *
- * turf.round(120.4321, 2)
- * //=120.43
- */
-function round(num, precision) {
-    if (num === undefined || num === null || isNaN(num)) throw new Error('num is required');
-    if (precision && !(precision >= 0)) throw new Error('precision must be a positive number');
-    var multiplier = Math.pow(10, precision || 0);
-    return Math.round(num * multiplier) / multiplier;
-}
-
-/**
- * Convert a distance measurement (assuming a spherical Earth) from radians to a more friendly unit.
- * Valid units: miles, nauticalmiles, inches, yards, meters, metres, kilometers, centimeters, feet
- *
- * @name radiansToLength
- * @param {number} radians in radians across the sphere
- * @param {string} [units='kilometers'] can be degrees, radians, miles, or kilometers inches, yards, metres, meters, kilometres, kilometers.
- * @returns {number} distance
- */
-function radiansToLength(radians, units) {
-    if (radians === undefined || radians === null) throw new Error('radians is required');
-
-    if (units && typeof units !== 'string') throw new Error('units must be a string');
-    var factor = factors[units || 'kilometers'];
-    if (!factor) throw new Error(units + ' units is invalid');
-    return radians * factor;
-}
-
-/**
- * Convert a distance measurement (assuming a spherical Earth) from a real-world unit into radians
- * Valid units: miles, nauticalmiles, inches, yards, meters, metres, kilometers, centimeters, feet
- *
- * @name lengthToRadians
- * @param {number} distance in real units
- * @param {string} [units='kilometers'] can be degrees, radians, miles, or kilometers inches, yards, metres, meters, kilometres, kilometers.
- * @returns {number} radians
- */
-function lengthToRadians(distance, units) {
-    if (distance === undefined || distance === null) throw new Error('distance is required');
-
-    if (units && typeof units !== 'string') throw new Error('units must be a string');
-    var factor = factors[units || 'kilometers'];
-    if (!factor) throw new Error(units + ' units is invalid');
-    return distance / factor;
-}
-
-/**
- * Convert a distance measurement (assuming a spherical Earth) from a real-world unit into degrees
- * Valid units: miles, nauticalmiles, inches, yards, meters, metres, centimeters, kilometres, feet
- *
- * @name lengthToDegrees
- * @param {number} distance in real units
- * @param {string} [units='kilometers'] can be degrees, radians, miles, or kilometers inches, yards, metres, meters, kilometres, kilometers.
- * @returns {number} degrees
- */
-function lengthToDegrees(distance, units) {
-    return radiansToDegrees(lengthToRadians(distance, units));
-}
-
-/**
- * Converts any bearing angle from the north line direction (positive clockwise)
- * and returns an angle between 0-360 degrees (positive clockwise), 0 being the north line
- *
- * @name bearingToAzimuth
- * @param {number} bearing angle, between -180 and +180 degrees
- * @returns {number} angle between 0 and 360 degrees
- */
-function bearingToAzimuth(bearing) {
-    if (bearing === null || bearing === undefined) throw new Error('bearing is required');
-
-    var angle = bearing % 360;
-    if (angle < 0) angle += 360;
-    return angle;
-}
-
-/**
- * Converts an angle in radians to degrees
- *
- * @name radiansToDegrees
- * @param {number} radians angle in radians
- * @returns {number} degrees between 0 and 360 degrees
- */
-function radiansToDegrees(radians) {
-    if (radians === null || radians === undefined) throw new Error('radians is required');
-
-    var degrees = radians % (2 * Math.PI);
-    return degrees * 180 / Math.PI;
-}
-
-/**
- * Converts an angle in degrees to radians
- *
- * @name degreesToRadians
- * @param {number} degrees angle between 0 and 360 degrees
- * @returns {number} angle in radians
- */
-function degreesToRadians(degrees) {
-    if (degrees === null || degrees === undefined) throw new Error('degrees is required');
-
-    var radians = degrees % 360;
-    return radians * Math.PI / 180;
-}
-
-/**
- * Converts a length to the requested unit.
- * Valid units: miles, nauticalmiles, inches, yards, meters, metres, kilometers, centimeters, feet
- *
- * @param {number} length to be converted
- * @param {string} originalUnit of the length
- * @param {string} [finalUnit='kilometers'] returned unit
- * @returns {number} the converted length
- */
-function convertLength(length, originalUnit, finalUnit) {
-    if (length === null || length === undefined) throw new Error('length is required');
-    if (!(length >= 0)) throw new Error('length must be a positive number');
-
-    return radiansToLength(lengthToRadians(length, originalUnit), finalUnit || 'kilometers');
-}
-
-/**
- * Converts a area to the requested unit.
- * Valid units: kilometers, kilometres, meters, metres, centimetres, millimeters, acres, miles, yards, feet, inches
- * @param {number} area to be converted
- * @param {string} [originalUnit='meters'] of the distance
- * @param {string} [finalUnit='kilometers'] returned unit
- * @returns {number} the converted distance
- */
-function convertArea(area, originalUnit, finalUnit) {
-    if (area === null || area === undefined) throw new Error('area is required');
-    if (!(area >= 0)) throw new Error('area must be a positive number');
-
-    var startFactor = areaFactors[originalUnit || 'meters'];
-    if (!startFactor) throw new Error('invalid original units');
-
-    var finalFactor = areaFactors[finalUnit || 'kilometers'];
-    if (!finalFactor) throw new Error('invalid final units');
-
-    return (area / startFactor) * finalFactor;
-}
-
-/**
- * isNumber
- *
- * @param {*} num Number to validate
- * @returns {boolean} true/false
- * @example
- * turf.isNumber(123)
- * //=true
- * turf.isNumber('foo')
- * //=false
- */
-function isNumber(num) {
-    return !isNaN(num) && num !== null && !Array.isArray(num);
-}
-
-/**
- * isObject
- *
- * @param {*} input variable to validate
- * @returns {boolean} true/false
- * @example
- * turf.isObject({elevation: 10})
- * //=true
- * turf.isObject('foo')
- * //=false
- */
-function isObject(input) {
-    return (!!input) && (input.constructor === Object);
-}
-
-/**
- * Validate BBox
- *
- * @private
- * @param {Array<number>} bbox BBox to validate
- * @returns {void}
- * @throws Error if BBox is not valid
- * @example
- * validateBBox([-180, -40, 110, 50])
- * //=OK
- * validateBBox([-180, -40])
- * //=Error
- * validateBBox('Foo')
- * //=Error
- * validateBBox(5)
- * //=Error
- * validateBBox(null)
- * //=Error
- * validateBBox(undefined)
- * //=Error
- */
-function validateBBox(bbox) {
-    if (!bbox) throw new Error('bbox is required');
-    if (!Array.isArray(bbox)) throw new Error('bbox must be an Array');
-    if (bbox.length !== 4 && bbox.length !== 6) throw new Error('bbox must be an Array of 4 or 6 numbers');
-    bbox.forEach(function (num) {
-        if (!isNumber(num)) throw new Error('bbox must only contain numbers');
-    });
-}
-
-/**
- * Validate Id
- *
- * @private
- * @param {string|number} id Id to validate
- * @returns {void}
- * @throws Error if Id is not valid
- * @example
- * validateId([-180, -40, 110, 50])
- * //=Error
- * validateId([-180, -40])
- * //=Error
- * validateId('Foo')
- * //=OK
- * validateId(5)
- * //=OK
- * validateId(null)
- * //=Error
- * validateId(undefined)
- * //=Error
- */
-function validateId(id) {
-    if (!id) throw new Error('id is required');
-    if (['string', 'number'].indexOf(typeof id) === -1) throw new Error('id must be a number or a string');
-}
-
-// Deprecated methods
-function radians2degrees() {
-    throw new Error('method has been renamed to `radiansToDegrees`');
-}
-
-function degrees2radians() {
-    throw new Error('method has been renamed to `degreesToRadians`');
-}
-
-function distanceToDegrees() {
-    throw new Error('method has been renamed to `lengthToDegrees`');
-}
-
-function distanceToRadians() {
-    throw new Error('method has been renamed to `lengthToRadians`');
-}
-
-function radiansToDistance() {
-    throw new Error('method has been renamed to `radiansToLength`');
-}
-
-function bearingToAngle() {
-    throw new Error('method has been renamed to `bearingToAzimuth`');
-}
-
-function convertDistance() {
-    throw new Error('method has been renamed to `convertLength`');
-}
-
-exports.earthRadius = earthRadius;
-exports.factors = factors;
-exports.unitsFactors = unitsFactors;
-exports.areaFactors = areaFactors;
-exports.feature = feature;
-exports.geometry = geometry;
-exports.point = point;
-exports.points = points;
-exports.polygon = polygon;
-exports.polygons = polygons;
-exports.lineString = lineString;
-exports.lineStrings = lineStrings;
-exports.featureCollection = featureCollection;
-exports.multiLineString = multiLineString;
-exports.multiPoint = multiPoint;
-exports.multiPolygon = multiPolygon;
-exports.geometryCollection = geometryCollection;
-exports.round = round;
-exports.radiansToLength = radiansToLength;
-exports.lengthToRadians = lengthToRadians;
-exports.lengthToDegrees = lengthToDegrees;
-exports.bearingToAzimuth = bearingToAzimuth;
-exports.radiansToDegrees = radiansToDegrees;
-exports.degreesToRadians = degreesToRadians;
-exports.convertLength = convertLength;
-exports.convertArea = convertArea;
-exports.isNumber = isNumber;
-exports.isObject = isObject;
-exports.validateBBox = validateBBox;
-exports.validateId = validateId;
-exports.radians2degrees = radians2degrees;
-exports.degrees2radians = degrees2radians;
-exports.distanceToDegrees = distanceToDegrees;
-exports.distanceToRadians = distanceToRadians;
-exports.radiansToDistance = radiansToDistance;
-exports.bearingToAngle = bearingToAngle;
-exports.convertDistance = convertDistance;
-
-},{}],20:[function(require,module,exports){
-'use strict';
-
-Object.defineProperty(exports, '__esModule', { value: true });
-
-var helpers = require('@turf/helpers');
-
-/**
- * Callback for coordEach
- *
- * @callback coordEachCallback
- * @param {Array<number>} currentCoord The current coordinate being processed.
- * @param {number} coordIndex The current index of the coordinate being processed.
- * @param {number} featureIndex The current index of the Feature being processed.
- * @param {number} multiFeatureIndex The current index of the Multi-Feature being processed.
- * @param {number} geometryIndex The current index of the Geometry being processed.
- */
-
-/**
- * Iterate over coordinates in any GeoJSON object, similar to Array.forEach()
- *
- * @name coordEach
- * @param {FeatureCollection|Feature|Geometry} geojson any GeoJSON object
- * @param {Function} callback a method that takes (currentCoord, coordIndex, featureIndex, multiFeatureIndex)
- * @param {boolean} [excludeWrapCoord=false] whether or not to include the final coordinate of LinearRings that wraps the ring in its iteration.
- * @returns {void}
- * @example
- * var features = turf.featureCollection([
- *   turf.point([26, 37], {"foo": "bar"}),
- *   turf.point([36, 53], {"hello": "world"})
- * ]);
- *
- * turf.coordEach(features, function (currentCoord, coordIndex, featureIndex, multiFeatureIndex, geometryIndex) {
- *   //=currentCoord
- *   //=coordIndex
- *   //=featureIndex
- *   //=multiFeatureIndex
- *   //=geometryIndex
- * });
- */
-function coordEach(geojson, callback, excludeWrapCoord) {
-    // Handles null Geometry -- Skips this GeoJSON
-    if (geojson === null) return;
-    var j, k, l, geometry, stopG, coords,
-        geometryMaybeCollection,
-        wrapShrink = 0,
-        coordIndex = 0,
-        isGeometryCollection,
-        type = geojson.type,
-        isFeatureCollection = type === 'FeatureCollection',
-        isFeature = type === 'Feature',
-        stop = isFeatureCollection ? geojson.features.length : 1;
-
-    // This logic may look a little weird. The reason why it is that way
-    // is because it's trying to be fast. GeoJSON supports multiple kinds
-    // of objects at its root: FeatureCollection, Features, Geometries.
-    // This function has the responsibility of handling all of them, and that
-    // means that some of the `for` loops you see below actually just don't apply
-    // to certain inputs. For instance, if you give this just a
-    // Point geometry, then both loops are short-circuited and all we do
-    // is gradually rename the input until it's called 'geometry'.
-    //
-    // This also aims to allocate as few resources as possible: just a
-    // few numbers and booleans, rather than any temporary arrays as would
-    // be required with the normalization approach.
-    for (var featureIndex = 0; featureIndex < stop; featureIndex++) {
-        geometryMaybeCollection = (isFeatureCollection ? geojson.features[featureIndex].geometry :
-            (isFeature ? geojson.geometry : geojson));
-        isGeometryCollection = (geometryMaybeCollection) ? geometryMaybeCollection.type === 'GeometryCollection' : false;
-        stopG = isGeometryCollection ? geometryMaybeCollection.geometries.length : 1;
-
-        for (var geomIndex = 0; geomIndex < stopG; geomIndex++) {
-            var multiFeatureIndex = 0;
-            var geometryIndex = 0;
-            geometry = isGeometryCollection ?
-                geometryMaybeCollection.geometries[geomIndex] : geometryMaybeCollection;
-
-            // Handles null Geometry -- Skips this geometry
-            if (geometry === null) continue;
-            coords = geometry.coordinates;
-            var geomType = geometry.type;
-
-            wrapShrink = (excludeWrapCoord && (geomType === 'Polygon' || geomType === 'MultiPolygon')) ? 1 : 0;
-
-            switch (geomType) {
-            case null:
-                break;
-            case 'Point':
-                if (callback(coords, coordIndex, featureIndex, multiFeatureIndex, geometryIndex) === false) return false;
-                coordIndex++;
-                multiFeatureIndex++;
-                break;
-            case 'LineString':
-            case 'MultiPoint':
-                for (j = 0; j < coords.length; j++) {
-                    if (callback(coords[j], coordIndex, featureIndex, multiFeatureIndex, geometryIndex) === false) return false;
-                    coordIndex++;
-                    if (geomType === 'MultiPoint') multiFeatureIndex++;
-                }
-                if (geomType === 'LineString') multiFeatureIndex++;
-                break;
-            case 'Polygon':
-            case 'MultiLineString':
-                for (j = 0; j < coords.length; j++) {
-                    for (k = 0; k < coords[j].length - wrapShrink; k++) {
-                        if (callback(coords[j][k], coordIndex, featureIndex, multiFeatureIndex, geometryIndex) === false) return false;
-                        coordIndex++;
-                    }
-                    if (geomType === 'MultiLineString') multiFeatureIndex++;
-                    if (geomType === 'Polygon') geometryIndex++;
-                }
-                if (geomType === 'Polygon') multiFeatureIndex++;
-                break;
-            case 'MultiPolygon':
-                for (j = 0; j < coords.length; j++) {
-                    if (geomType === 'MultiPolygon') geometryIndex = 0;
-                    for (k = 0; k < coords[j].length; k++) {
-                        for (l = 0; l < coords[j][k].length - wrapShrink; l++) {
-                            if (callback(coords[j][k][l], coordIndex, featureIndex, multiFeatureIndex, geometryIndex) === false) return false;
-                            coordIndex++;
-                        }
-                        geometryIndex++;
-                    }
-                    multiFeatureIndex++;
-                }
-                break;
-            case 'GeometryCollection':
-                for (j = 0; j < geometry.geometries.length; j++)
-                    if (coordEach(geometry.geometries[j], callback, excludeWrapCoord) === false) return false;
-                break;
-            default:
-                throw new Error('Unknown Geometry Type');
-            }
-        }
-    }
-}
-
-/**
- * Callback for coordReduce
- *
- * The first time the callback function is called, the values provided as arguments depend
- * on whether the reduce method has an initialValue argument.
- *
- * If an initialValue is provided to the reduce method:
- *  - The previousValue argument is initialValue.
- *  - The currentValue argument is the value of the first element present in the array.
- *
- * If an initialValue is not provided:
- *  - The previousValue argument is the value of the first element present in the array.
- *  - The currentValue argument is the value of the second element present in the array.
- *
- * @callback coordReduceCallback
- * @param {*} previousValue The accumulated value previously returned in the last invocation
- * of the callback, or initialValue, if supplied.
- * @param {Array<number>} currentCoord The current coordinate being processed.
- * @param {number} coordIndex The current index of the coordinate being processed.
- * Starts at index 0, if an initialValue is provided, and at index 1 otherwise.
- * @param {number} featureIndex The current index of the Feature being processed.
- * @param {number} multiFeatureIndex The current index of the Multi-Feature being processed.
- * @param {number} geometryIndex The current index of the Geometry being processed.
- */
-
-/**
- * Reduce coordinates in any GeoJSON object, similar to Array.reduce()
- *
- * @name coordReduce
- * @param {FeatureCollection|Geometry|Feature} geojson any GeoJSON object
- * @param {Function} callback a method that takes (previousValue, currentCoord, coordIndex)
- * @param {*} [initialValue] Value to use as the first argument to the first call of the callback.
- * @param {boolean} [excludeWrapCoord=false] whether or not to include the final coordinate of LinearRings that wraps the ring in its iteration.
- * @returns {*} The value that results from the reduction.
- * @example
- * var features = turf.featureCollection([
- *   turf.point([26, 37], {"foo": "bar"}),
- *   turf.point([36, 53], {"hello": "world"})
- * ]);
- *
- * turf.coordReduce(features, function (previousValue, currentCoord, coordIndex, featureIndex, multiFeatureIndex, geometryIndex) {
- *   //=previousValue
- *   //=currentCoord
- *   //=coordIndex
- *   //=featureIndex
- *   //=multiFeatureIndex
- *   //=geometryIndex
- *   return currentCoord;
- * });
- */
-function coordReduce(geojson, callback, initialValue, excludeWrapCoord) {
-    var previousValue = initialValue;
-    coordEach(geojson, function (currentCoord, coordIndex, featureIndex, multiFeatureIndex, geometryIndex) {
-        if (coordIndex === 0 && initialValue === undefined) previousValue = currentCoord;
-        else previousValue = callback(previousValue, currentCoord, coordIndex, featureIndex, multiFeatureIndex, geometryIndex);
-    }, excludeWrapCoord);
-    return previousValue;
-}
-
-/**
- * Callback for propEach
- *
- * @callback propEachCallback
- * @param {Object} currentProperties The current Properties being processed.
- * @param {number} featureIndex The current index of the Feature being processed.
- */
-
-/**
- * Iterate over properties in any GeoJSON object, similar to Array.forEach()
- *
- * @name propEach
- * @param {FeatureCollection|Feature} geojson any GeoJSON object
- * @param {Function} callback a method that takes (currentProperties, featureIndex)
- * @returns {void}
- * @example
- * var features = turf.featureCollection([
- *     turf.point([26, 37], {foo: 'bar'}),
- *     turf.point([36, 53], {hello: 'world'})
- * ]);
- *
- * turf.propEach(features, function (currentProperties, featureIndex) {
- *   //=currentProperties
- *   //=featureIndex
- * });
- */
-function propEach(geojson, callback) {
-    var i;
-    switch (geojson.type) {
-    case 'FeatureCollection':
-        for (i = 0; i < geojson.features.length; i++) {
-            if (callback(geojson.features[i].properties, i) === false) break;
-        }
-        break;
-    case 'Feature':
-        callback(geojson.properties, 0);
-        break;
-    }
-}
-
-
-/**
- * Callback for propReduce
- *
- * The first time the callback function is called, the values provided as arguments depend
- * on whether the reduce method has an initialValue argument.
- *
- * If an initialValue is provided to the reduce method:
- *  - The previousValue argument is initialValue.
- *  - The currentValue argument is the value of the first element present in the array.
- *
- * If an initialValue is not provided:
- *  - The previousValue argument is the value of the first element present in the array.
- *  - The currentValue argument is the value of the second element present in the array.
- *
- * @callback propReduceCallback
- * @param {*} previousValue The accumulated value previously returned in the last invocation
- * of the callback, or initialValue, if supplied.
- * @param {*} currentProperties The current Properties being processed.
- * @param {number} featureIndex The current index of the Feature being processed.
- */
-
-/**
- * Reduce properties in any GeoJSON object into a single value,
- * similar to how Array.reduce works. However, in this case we lazily run
- * the reduction, so an array of all properties is unnecessary.
- *
- * @name propReduce
- * @param {FeatureCollection|Feature} geojson any GeoJSON object
- * @param {Function} callback a method that takes (previousValue, currentProperties, featureIndex)
- * @param {*} [initialValue] Value to use as the first argument to the first call of the callback.
- * @returns {*} The value that results from the reduction.
- * @example
- * var features = turf.featureCollection([
- *     turf.point([26, 37], {foo: 'bar'}),
- *     turf.point([36, 53], {hello: 'world'})
- * ]);
- *
- * turf.propReduce(features, function (previousValue, currentProperties, featureIndex) {
- *   //=previousValue
- *   //=currentProperties
- *   //=featureIndex
- *   return currentProperties
- * });
- */
-function propReduce(geojson, callback, initialValue) {
-    var previousValue = initialValue;
-    propEach(geojson, function (currentProperties, featureIndex) {
-        if (featureIndex === 0 && initialValue === undefined) previousValue = currentProperties;
-        else previousValue = callback(previousValue, currentProperties, featureIndex);
-    });
-    return previousValue;
-}
-
-/**
- * Callback for featureEach
- *
- * @callback featureEachCallback
- * @param {Feature<any>} currentFeature The current Feature being processed.
- * @param {number} featureIndex The current index of the Feature being processed.
- */
-
-/**
- * Iterate over features in any GeoJSON object, similar to
- * Array.forEach.
- *
- * @name featureEach
- * @param {FeatureCollection|Feature|Geometry} geojson any GeoJSON object
- * @param {Function} callback a method that takes (currentFeature, featureIndex)
- * @returns {void}
- * @example
- * var features = turf.featureCollection([
- *   turf.point([26, 37], {foo: 'bar'}),
- *   turf.point([36, 53], {hello: 'world'})
- * ]);
- *
- * turf.featureEach(features, function (currentFeature, featureIndex) {
- *   //=currentFeature
- *   //=featureIndex
- * });
- */
-function featureEach(geojson, callback) {
-    if (geojson.type === 'Feature') {
-        callback(geojson, 0);
-    } else if (geojson.type === 'FeatureCollection') {
-        for (var i = 0; i < geojson.features.length; i++) {
-            if (callback(geojson.features[i], i) === false) break;
-        }
-    }
-}
-
-/**
- * Callback for featureReduce
- *
- * The first time the callback function is called, the values provided as arguments depend
- * on whether the reduce method has an initialValue argument.
- *
- * If an initialValue is provided to the reduce method:
- *  - The previousValue argument is initialValue.
- *  - The currentValue argument is the value of the first element present in the array.
- *
- * If an initialValue is not provided:
- *  - The previousValue argument is the value of the first element present in the array.
- *  - The currentValue argument is the value of the second element present in the array.
- *
- * @callback featureReduceCallback
- * @param {*} previousValue The accumulated value previously returned in the last invocation
- * of the callback, or initialValue, if supplied.
- * @param {Feature} currentFeature The current Feature being processed.
- * @param {number} featureIndex The current index of the Feature being processed.
- */
-
-/**
- * Reduce features in any GeoJSON object, similar to Array.reduce().
- *
- * @name featureReduce
- * @param {FeatureCollection|Feature|Geometry} geojson any GeoJSON object
- * @param {Function} callback a method that takes (previousValue, currentFeature, featureIndex)
- * @param {*} [initialValue] Value to use as the first argument to the first call of the callback.
- * @returns {*} The value that results from the reduction.
- * @example
- * var features = turf.featureCollection([
- *   turf.point([26, 37], {"foo": "bar"}),
- *   turf.point([36, 53], {"hello": "world"})
- * ]);
- *
- * turf.featureReduce(features, function (previousValue, currentFeature, featureIndex) {
- *   //=previousValue
- *   //=currentFeature
- *   //=featureIndex
- *   return currentFeature
- * });
- */
-function featureReduce(geojson, callback, initialValue) {
-    var previousValue = initialValue;
-    featureEach(geojson, function (currentFeature, featureIndex) {
-        if (featureIndex === 0 && initialValue === undefined) previousValue = currentFeature;
-        else previousValue = callback(previousValue, currentFeature, featureIndex);
-    });
-    return previousValue;
-}
-
-/**
- * Get all coordinates from any GeoJSON object.
- *
- * @name coordAll
- * @param {FeatureCollection|Feature|Geometry} geojson any GeoJSON object
- * @returns {Array<Array<number>>} coordinate position array
- * @example
- * var features = turf.featureCollection([
- *   turf.point([26, 37], {foo: 'bar'}),
- *   turf.point([36, 53], {hello: 'world'})
- * ]);
- *
- * var coords = turf.coordAll(features);
- * //= [[26, 37], [36, 53]]
- */
-function coordAll(geojson) {
-    var coords = [];
-    coordEach(geojson, function (coord) {
-        coords.push(coord);
-    });
-    return coords;
-}
-
-/**
- * Callback for geomEach
- *
- * @callback geomEachCallback
- * @param {Geometry} currentGeometry The current Geometry being processed.
- * @param {number} featureIndex The current index of the Feature being processed.
- * @param {Object} featureProperties The current Feature Properties being processed.
- * @param {Array<number>} featureBBox The current Feature BBox being processed.
- * @param {number|string} featureId The current Feature Id being processed.
- */
-
-/**
- * Iterate over each geometry in any GeoJSON object, similar to Array.forEach()
- *
- * @name geomEach
- * @param {FeatureCollection|Feature|Geometry} geojson any GeoJSON object
- * @param {Function} callback a method that takes (currentGeometry, featureIndex, featureProperties, featureBBox, featureId)
- * @returns {void}
- * @example
- * var features = turf.featureCollection([
- *     turf.point([26, 37], {foo: 'bar'}),
- *     turf.point([36, 53], {hello: 'world'})
- * ]);
- *
- * turf.geomEach(features, function (currentGeometry, featureIndex, featureProperties, featureBBox, featureId) {
- *   //=currentGeometry
- *   //=featureIndex
- *   //=featureProperties
- *   //=featureBBox
- *   //=featureId
- * });
- */
-function geomEach(geojson, callback) {
-    var i, j, g, geometry, stopG,
-        geometryMaybeCollection,
-        isGeometryCollection,
-        featureProperties,
-        featureBBox,
-        featureId,
-        featureIndex = 0,
-        isFeatureCollection = geojson.type === 'FeatureCollection',
-        isFeature = geojson.type === 'Feature',
-        stop = isFeatureCollection ? geojson.features.length : 1;
-
-    // This logic may look a little weird. The reason why it is that way
-    // is because it's trying to be fast. GeoJSON supports multiple kinds
-    // of objects at its root: FeatureCollection, Features, Geometries.
-    // This function has the responsibility of handling all of them, and that
-    // means that some of the `for` loops you see below actually just don't apply
-    // to certain inputs. For instance, if you give this just a
-    // Point geometry, then both loops are short-circuited and all we do
-    // is gradually rename the input until it's called 'geometry'.
-    //
-    // This also aims to allocate as few resources as possible: just a
-    // few numbers and booleans, rather than any temporary arrays as would
-    // be required with the normalization approach.
-    for (i = 0; i < stop; i++) {
-
-        geometryMaybeCollection = (isFeatureCollection ? geojson.features[i].geometry :
-            (isFeature ? geojson.geometry : geojson));
-        featureProperties = (isFeatureCollection ? geojson.features[i].properties :
-            (isFeature ? geojson.properties : {}));
-        featureBBox = (isFeatureCollection ? geojson.features[i].bbox :
-            (isFeature ? geojson.bbox : undefined));
-        featureId = (isFeatureCollection ? geojson.features[i].id :
-            (isFeature ? geojson.id : undefined));
-        isGeometryCollection = (geometryMaybeCollection) ? geometryMaybeCollection.type === 'GeometryCollection' : false;
-        stopG = isGeometryCollection ? geometryMaybeCollection.geometries.length : 1;
-
-        for (g = 0; g < stopG; g++) {
-            geometry = isGeometryCollection ?
-                geometryMaybeCollection.geometries[g] : geometryMaybeCollection;
-
-            // Handle null Geometry
-            if (geometry === null) {
-                if (callback(null, featureIndex, featureProperties, featureBBox, featureId) === false) return false;
-                continue;
-            }
-            switch (geometry.type) {
-            case 'Point':
-            case 'LineString':
-            case 'MultiPoint':
-            case 'Polygon':
-            case 'MultiLineString':
-            case 'MultiPolygon': {
-                if (callback(geometry, featureIndex, featureProperties, featureBBox, featureId) === false) return false;
-                break;
-            }
-            case 'GeometryCollection': {
-                for (j = 0; j < geometry.geometries.length; j++) {
-                    if (callback(geometry.geometries[j], featureIndex, featureProperties, featureBBox, featureId) === false) return false;
-                }
-                break;
-            }
-            default:
-                throw new Error('Unknown Geometry Type');
-            }
-        }
-        // Only increase `featureIndex` per each feature
-        featureIndex++;
-    }
-}
-
-/**
- * Callback for geomReduce
- *
- * The first time the callback function is called, the values provided as arguments depend
- * on whether the reduce method has an initialValue argument.
- *
- * If an initialValue is provided to the reduce method:
- *  - The previousValue argument is initialValue.
- *  - The currentValue argument is the value of the first element present in the array.
- *
- * If an initialValue is not provided:
- *  - The previousValue argument is the value of the first element present in the array.
- *  - The currentValue argument is the value of the second element present in the array.
- *
- * @callback geomReduceCallback
- * @param {*} previousValue The accumulated value previously returned in the last invocation
- * of the callback, or initialValue, if supplied.
- * @param {Geometry} currentGeometry The current Geometry being processed.
- * @param {number} featureIndex The current index of the Feature being processed.
- * @param {Object} featureProperties The current Feature Properties being processed.
- * @param {Array<number>} featureBBox The current Feature BBox being processed.
- * @param {number|string} featureId The current Feature Id being processed.
- */
-
-/**
- * Reduce geometry in any GeoJSON object, similar to Array.reduce().
- *
- * @name geomReduce
- * @param {FeatureCollection|Feature|Geometry} geojson any GeoJSON object
- * @param {Function} callback a method that takes (previousValue, currentGeometry, featureIndex, featureProperties, featureBBox, featureId)
- * @param {*} [initialValue] Value to use as the first argument to the first call of the callback.
- * @returns {*} The value that results from the reduction.
- * @example
- * var features = turf.featureCollection([
- *     turf.point([26, 37], {foo: 'bar'}),
- *     turf.point([36, 53], {hello: 'world'})
- * ]);
- *
- * turf.geomReduce(features, function (previousValue, currentGeometry, featureIndex, featureProperties, featureBBox, featureId) {
- *   //=previousValue
- *   //=currentGeometry
- *   //=featureIndex
- *   //=featureProperties
- *   //=featureBBox
- *   //=featureId
- *   return currentGeometry
- * });
- */
-function geomReduce(geojson, callback, initialValue) {
-    var previousValue = initialValue;
-    geomEach(geojson, function (currentGeometry, featureIndex, featureProperties, featureBBox, featureId) {
-        if (featureIndex === 0 && initialValue === undefined) previousValue = currentGeometry;
-        else previousValue = callback(previousValue, currentGeometry, featureIndex, featureProperties, featureBBox, featureId);
-    });
-    return previousValue;
-}
-
-/**
- * Callback for flattenEach
- *
- * @callback flattenEachCallback
- * @param {Feature} currentFeature The current flattened feature being processed.
- * @param {number} featureIndex The current index of the Feature being processed.
- * @param {number} multiFeatureIndex The current index of the Multi-Feature being processed.
- */
-
-/**
- * Iterate over flattened features in any GeoJSON object, similar to
- * Array.forEach.
- *
- * @name flattenEach
- * @param {FeatureCollection|Feature|Geometry} geojson any GeoJSON object
- * @param {Function} callback a method that takes (currentFeature, featureIndex, multiFeatureIndex)
- * @example
- * var features = turf.featureCollection([
- *     turf.point([26, 37], {foo: 'bar'}),
- *     turf.multiPoint([[40, 30], [36, 53]], {hello: 'world'})
- * ]);
- *
- * turf.flattenEach(features, function (currentFeature, featureIndex, multiFeatureIndex) {
- *   //=currentFeature
- *   //=featureIndex
- *   //=multiFeatureIndex
- * });
- */
-function flattenEach(geojson, callback) {
-    geomEach(geojson, function (geometry, featureIndex, properties, bbox, id) {
-        // Callback for single geometry
-        var type = (geometry === null) ? null : geometry.type;
-        switch (type) {
-        case null:
-        case 'Point':
-        case 'LineString':
-        case 'Polygon':
-            if (callback(helpers.feature(geometry, properties, {bbox: bbox, id: id}), featureIndex, 0) === false) return false;
-            return;
-        }
-
-        var geomType;
-
-        // Callback for multi-geometry
-        switch (type) {
-        case 'MultiPoint':
-            geomType = 'Point';
-            break;
-        case 'MultiLineString':
-            geomType = 'LineString';
-            break;
-        case 'MultiPolygon':
-            geomType = 'Polygon';
-            break;
-        }
-
-        for (var multiFeatureIndex = 0; multiFeatureIndex < geometry.coordinates.length; multiFeatureIndex++) {
-            var coordinate = geometry.coordinates[multiFeatureIndex];
-            var geom = {
-                type: geomType,
-                coordinates: coordinate
-            };
-            if (callback(helpers.feature(geom, properties), featureIndex, multiFeatureIndex) === false) return false;
-        }
-    });
-}
-
-/**
- * Callback for flattenReduce
- *
- * The first time the callback function is called, the values provided as arguments depend
- * on whether the reduce method has an initialValue argument.
- *
- * If an initialValue is provided to the reduce method:
- *  - The previousValue argument is initialValue.
- *  - The currentValue argument is the value of the first element present in the array.
- *
- * If an initialValue is not provided:
- *  - The previousValue argument is the value of the first element present in the array.
- *  - The currentValue argument is the value of the second element present in the array.
- *
- * @callback flattenReduceCallback
- * @param {*} previousValue The accumulated value previously returned in the last invocation
- * of the callback, or initialValue, if supplied.
- * @param {Feature} currentFeature The current Feature being processed.
- * @param {number} featureIndex The current index of the Feature being processed.
- * @param {number} multiFeatureIndex The current index of the Multi-Feature being processed.
- */
-
-/**
- * Reduce flattened features in any GeoJSON object, similar to Array.reduce().
- *
- * @name flattenReduce
- * @param {FeatureCollection|Feature|Geometry} geojson any GeoJSON object
- * @param {Function} callback a method that takes (previousValue, currentFeature, featureIndex, multiFeatureIndex)
- * @param {*} [initialValue] Value to use as the first argument to the first call of the callback.
- * @returns {*} The value that results from the reduction.
- * @example
- * var features = turf.featureCollection([
- *     turf.point([26, 37], {foo: 'bar'}),
- *     turf.multiPoint([[40, 30], [36, 53]], {hello: 'world'})
- * ]);
- *
- * turf.flattenReduce(features, function (previousValue, currentFeature, featureIndex, multiFeatureIndex) {
- *   //=previousValue
- *   //=currentFeature
- *   //=featureIndex
- *   //=multiFeatureIndex
- *   return currentFeature
- * });
- */
-function flattenReduce(geojson, callback, initialValue) {
-    var previousValue = initialValue;
-    flattenEach(geojson, function (currentFeature, featureIndex, multiFeatureIndex) {
-        if (featureIndex === 0 && multiFeatureIndex === 0 && initialValue === undefined) previousValue = currentFeature;
-        else previousValue = callback(previousValue, currentFeature, featureIndex, multiFeatureIndex);
-    });
-    return previousValue;
-}
-
-/**
- * Callback for segmentEach
- *
- * @callback segmentEachCallback
- * @param {Feature<LineString>} currentSegment The current Segment being processed.
- * @param {number} featureIndex The current index of the Feature being processed.
- * @param {number} multiFeatureIndex The current index of the Multi-Feature being processed.
- * @param {number} geometryIndex The current index of the Geometry being processed.
- * @param {number} segmentIndex The current index of the Segment being processed.
- * @returns {void}
- */
-
-/**
- * Iterate over 2-vertex line segment in any GeoJSON object, similar to Array.forEach()
- * (Multi)Point geometries do not contain segments therefore they are ignored during this operation.
- *
- * @param {FeatureCollection|Feature|Geometry} geojson any GeoJSON
- * @param {Function} callback a method that takes (currentSegment, featureIndex, multiFeatureIndex, geometryIndex, segmentIndex)
- * @returns {void}
- * @example
- * var polygon = turf.polygon([[[-50, 5], [-40, -10], [-50, -10], [-40, 5], [-50, 5]]]);
- *
- * // Iterate over GeoJSON by 2-vertex segments
- * turf.segmentEach(polygon, function (currentSegment, featureIndex, multiFeatureIndex, geometryIndex, segmentIndex) {
- *   //=currentSegment
- *   //=featureIndex
- *   //=multiFeatureIndex
- *   //=geometryIndex
- *   //=segmentIndex
- * });
- *
- * // Calculate the total number of segments
- * var total = 0;
- * turf.segmentEach(polygon, function () {
- *     total++;
- * });
- */
-function segmentEach(geojson, callback) {
-    flattenEach(geojson, function (feature$$1, featureIndex, multiFeatureIndex) {
-        var segmentIndex = 0;
-
-        // Exclude null Geometries
-        if (!feature$$1.geometry) return;
-        // (Multi)Point geometries do not contain segments therefore they are ignored during this operation.
-        var type = feature$$1.geometry.type;
-        if (type === 'Point' || type === 'MultiPoint') return;
-
-        // Generate 2-vertex line segments
-        var previousCoords;
-        if (coordEach(feature$$1, function (currentCoord, coordIndex, featureIndexCoord, mutliPartIndexCoord, geometryIndex) {
-            // Simulating a meta.coordReduce() since `reduce` operations cannot be stopped by returning `false`
-            if (previousCoords === undefined) {
-                previousCoords = currentCoord;
-                return;
-            }
-            var currentSegment = helpers.lineString([previousCoords, currentCoord], feature$$1.properties);
-            if (callback(currentSegment, featureIndex, multiFeatureIndex, geometryIndex, segmentIndex) === false) return false;
-            segmentIndex++;
-            previousCoords = currentCoord;
-        }) === false) return false;
-    });
-}
-
-/**
- * Callback for segmentReduce
- *
- * The first time the callback function is called, the values provided as arguments depend
- * on whether the reduce method has an initialValue argument.
- *
- * If an initialValue is provided to the reduce method:
- *  - The previousValue argument is initialValue.
- *  - The currentValue argument is the value of the first element present in the array.
- *
- * If an initialValue is not provided:
- *  - The previousValue argument is the value of the first element present in the array.
- *  - The currentValue argument is the value of the second element present in the array.
- *
- * @callback segmentReduceCallback
- * @param {*} previousValue The accumulated value previously returned in the last invocation
- * of the callback, or initialValue, if supplied.
- * @param {Feature<LineString>} currentSegment The current Segment being processed.
- * @param {number} featureIndex The current index of the Feature being processed.
- * @param {number} multiFeatureIndex The current index of the Multi-Feature being processed.
- * @param {number} geometryIndex The current index of the Geometry being processed.
- * @param {number} segmentIndex The current index of the Segment being processed.
- */
-
-/**
- * Reduce 2-vertex line segment in any GeoJSON object, similar to Array.reduce()
- * (Multi)Point geometries do not contain segments therefore they are ignored during this operation.
- *
- * @param {FeatureCollection|Feature|Geometry} geojson any GeoJSON
- * @param {Function} callback a method that takes (previousValue, currentSegment, currentIndex)
- * @param {*} [initialValue] Value to use as the first argument to the first call of the callback.
- * @returns {void}
- * @example
- * var polygon = turf.polygon([[[-50, 5], [-40, -10], [-50, -10], [-40, 5], [-50, 5]]]);
- *
- * // Iterate over GeoJSON by 2-vertex segments
- * turf.segmentReduce(polygon, function (previousSegment, currentSegment, featureIndex, multiFeatureIndex, geometryIndex, segmentIndex) {
- *   //= previousSegment
- *   //= currentSegment
- *   //= featureIndex
- *   //= multiFeatureIndex
- *   //= geometryIndex
- *   //= segmentInex
- *   return currentSegment
- * });
- *
- * // Calculate the total number of segments
- * var initialValue = 0
- * var total = turf.segmentReduce(polygon, function (previousValue) {
- *     previousValue++;
- *     return previousValue;
- * }, initialValue);
- */
-function segmentReduce(geojson, callback, initialValue) {
-    var previousValue = initialValue;
-    var started = false;
-    segmentEach(geojson, function (currentSegment, featureIndex, multiFeatureIndex, geometryIndex, segmentIndex) {
-        if (started === false && initialValue === undefined) previousValue = currentSegment;
-        else previousValue = callback(previousValue, currentSegment, featureIndex, multiFeatureIndex, geometryIndex, segmentIndex);
-        started = true;
-    });
-    return previousValue;
-}
-
-/**
- * Callback for lineEach
- *
- * @callback lineEachCallback
- * @param {Feature<LineString>} currentLine The current LineString|LinearRing being processed
- * @param {number} featureIndex The current index of the Feature being processed
- * @param {number} multiFeatureIndex The current index of the Multi-Feature being processed
- * @param {number} geometryIndex The current index of the Geometry being processed
- */
-
-/**
- * Iterate over line or ring coordinates in LineString, Polygon, MultiLineString, MultiPolygon Features or Geometries,
- * similar to Array.forEach.
- *
- * @name lineEach
- * @param {Geometry|Feature<LineString|Polygon|MultiLineString|MultiPolygon>} geojson object
- * @param {Function} callback a method that takes (currentLine, featureIndex, multiFeatureIndex, geometryIndex)
- * @example
- * var multiLine = turf.multiLineString([
- *   [[26, 37], [35, 45]],
- *   [[36, 53], [38, 50], [41, 55]]
- * ]);
- *
- * turf.lineEach(multiLine, function (currentLine, featureIndex, multiFeatureIndex, geometryIndex) {
- *   //=currentLine
- *   //=featureIndex
- *   //=multiFeatureIndex
- *   //=geometryIndex
- * });
- */
-function lineEach(geojson, callback) {
-    // validation
-    if (!geojson) throw new Error('geojson is required');
-
-    flattenEach(geojson, function (feature$$1, featureIndex, multiFeatureIndex) {
-        if (feature$$1.geometry === null) return;
-        var type = feature$$1.geometry.type;
-        var coords = feature$$1.geometry.coordinates;
-        switch (type) {
-        case 'LineString':
-            if (callback(feature$$1, featureIndex, multiFeatureIndex, 0, 0) === false) return false;
-            break;
-        case 'Polygon':
-            for (var geometryIndex = 0; geometryIndex < coords.length; geometryIndex++) {
-                if (callback(helpers.lineString(coords[geometryIndex], feature$$1.properties), featureIndex, multiFeatureIndex, geometryIndex) === false) return false;
-            }
-            break;
-        }
-    });
-}
-
-/**
- * Callback for lineReduce
- *
- * The first time the callback function is called, the values provided as arguments depend
- * on whether the reduce method has an initialValue argument.
- *
- * If an initialValue is provided to the reduce method:
- *  - The previousValue argument is initialValue.
- *  - The currentValue argument is the value of the first element present in the array.
- *
- * If an initialValue is not provided:
- *  - The previousValue argument is the value of the first element present in the array.
- *  - The currentValue argument is the value of the second element present in the array.
- *
- * @callback lineReduceCallback
- * @param {*} previousValue The accumulated value previously returned in the last invocation
- * of the callback, or initialValue, if supplied.
- * @param {Feature<LineString>} currentLine The current LineString|LinearRing being processed.
- * @param {number} featureIndex The current index of the Feature being processed
- * @param {number} multiFeatureIndex The current index of the Multi-Feature being processed
- * @param {number} geometryIndex The current index of the Geometry being processed
- */
-
-/**
- * Reduce features in any GeoJSON object, similar to Array.reduce().
- *
- * @name lineReduce
- * @param {Geometry|Feature<LineString|Polygon|MultiLineString|MultiPolygon>} geojson object
- * @param {Function} callback a method that takes (previousValue, currentLine, featureIndex, multiFeatureIndex, geometryIndex)
- * @param {*} [initialValue] Value to use as the first argument to the first call of the callback.
- * @returns {*} The value that results from the reduction.
- * @example
- * var multiPoly = turf.multiPolygon([
- *   turf.polygon([[[12,48],[2,41],[24,38],[12,48]], [[9,44],[13,41],[13,45],[9,44]]]),
- *   turf.polygon([[[5, 5], [0, 0], [2, 2], [4, 4], [5, 5]]])
- * ]);
- *
- * turf.lineReduce(multiPoly, function (previousValue, currentLine, featureIndex, multiFeatureIndex, geometryIndex) {
- *   //=previousValue
- *   //=currentLine
- *   //=featureIndex
- *   //=multiFeatureIndex
- *   //=geometryIndex
- *   return currentLine
- * });
- */
-function lineReduce(geojson, callback, initialValue) {
-    var previousValue = initialValue;
-    lineEach(geojson, function (currentLine, featureIndex, multiFeatureIndex, geometryIndex) {
-        if (featureIndex === 0 && initialValue === undefined) previousValue = currentLine;
-        else previousValue = callback(previousValue, currentLine, featureIndex, multiFeatureIndex, geometryIndex);
-    });
-    return previousValue;
-}
-
-/**
- * Finds a particular 2-vertex LineString Segment from a GeoJSON using `@turf/meta` indexes.
- *
- * Negative indexes are permitted.
- * Point & MultiPoint will always return null.
- *
- * @param {FeatureCollection|Feature|Geometry} geojson Any GeoJSON Feature or Geometry
- * @param {Object} [options={}] Optional parameters
- * @param {number} [options.featureIndex=0] Feature Index
- * @param {number} [options.multiFeatureIndex=0] Multi-Feature Index
- * @param {number} [options.geometryIndex=0] Geometry Index
- * @param {number} [options.segmentIndex=0] Segment Index
- * @param {Object} [options.properties={}] Translate Properties to output LineString
- * @param {BBox} [options.bbox={}] Translate BBox to output LineString
- * @param {number|string} [options.id={}] Translate Id to output LineString
- * @returns {Feature<LineString>} 2-vertex GeoJSON Feature LineString
- * @example
- * var multiLine = turf.multiLineString([
- *     [[10, 10], [50, 30], [30, 40]],
- *     [[-10, -10], [-50, -30], [-30, -40]]
- * ]);
- *
- * // First Segment (defaults are 0)
- * turf.findSegment(multiLine);
- * // => Feature<LineString<[[10, 10], [50, 30]]>>
- *
- * // First Segment of 2nd Multi Feature
- * turf.findSegment(multiLine, {multiFeatureIndex: 1});
- * // => Feature<LineString<[[-10, -10], [-50, -30]]>>
- *
- * // Last Segment of Last Multi Feature
- * turf.findSegment(multiLine, {multiFeatureIndex: -1, segmentIndex: -1});
- * // => Feature<LineString<[[-50, -30], [-30, -40]]>>
- */
-function findSegment(geojson, options) {
-    // Optional Parameters
-    options = options || {};
-    if (!helpers.isObject(options)) throw new Error('options is invalid');
-    var featureIndex = options.featureIndex || 0;
-    var multiFeatureIndex = options.multiFeatureIndex || 0;
-    var geometryIndex = options.geometryIndex || 0;
-    var segmentIndex = options.segmentIndex || 0;
-
-    // Find FeatureIndex
-    var properties = options.properties;
-    var geometry;
-
-    switch (geojson.type) {
-    case 'FeatureCollection':
-        if (featureIndex < 0) featureIndex = geojson.features.length + featureIndex;
-        properties = properties || geojson.features[featureIndex].properties;
-        geometry = geojson.features[featureIndex].geometry;
-        break;
-    case 'Feature':
-        properties = properties || geojson.properties;
-        geometry = geojson.geometry;
-        break;
-    case 'Point':
-    case 'MultiPoint':
-        return null;
-    case 'LineString':
-    case 'Polygon':
-    case 'MultiLineString':
-    case 'MultiPolygon':
-        geometry = geojson;
-        break;
-    default:
-        throw new Error('geojson is invalid');
-    }
-
-    // Find SegmentIndex
-    if (geometry === null) return null;
-    var coords = geometry.coordinates;
-    switch (geometry.type) {
-    case 'Point':
-    case 'MultiPoint':
-        return null;
-    case 'LineString':
-        if (segmentIndex < 0) segmentIndex = coords.length + segmentIndex - 1;
-        return helpers.lineString([coords[segmentIndex], coords[segmentIndex + 1]], properties, options);
-    case 'Polygon':
-        if (geometryIndex < 0) geometryIndex = coords.length + geometryIndex;
-        if (segmentIndex < 0) segmentIndex = coords[geometryIndex].length + segmentIndex - 1;
-        return helpers.lineString([coords[geometryIndex][segmentIndex], coords[geometryIndex][segmentIndex + 1]], properties, options);
-    case 'MultiLineString':
-        if (multiFeatureIndex < 0) multiFeatureIndex = coords.length + multiFeatureIndex;
-        if (segmentIndex < 0) segmentIndex = coords[multiFeatureIndex].length + segmentIndex - 1;
-        return helpers.lineString([coords[multiFeatureIndex][segmentIndex], coords[multiFeatureIndex][segmentIndex + 1]], properties, options);
-    case 'MultiPolygon':
-        if (multiFeatureIndex < 0) multiFeatureIndex = coords.length + multiFeatureIndex;
-        if (geometryIndex < 0) geometryIndex = coords[multiFeatureIndex].length + geometryIndex;
-        if (segmentIndex < 0) segmentIndex = coords[multiFeatureIndex][geometryIndex].length - segmentIndex - 1;
-        return helpers.lineString([coords[multiFeatureIndex][geometryIndex][segmentIndex], coords[multiFeatureIndex][geometryIndex][segmentIndex + 1]], properties, options);
-    }
-    throw new Error('geojson is invalid');
-}
-
-/**
- * Finds a particular Point from a GeoJSON using `@turf/meta` indexes.
- *
- * Negative indexes are permitted.
- *
- * @param {FeatureCollection|Feature|Geometry} geojson Any GeoJSON Feature or Geometry
- * @param {Object} [options={}] Optional parameters
- * @param {number} [options.featureIndex=0] Feature Index
- * @param {number} [options.multiFeatureIndex=0] Multi-Feature Index
- * @param {number} [options.geometryIndex=0] Geometry Index
- * @param {number} [options.coordIndex=0] Coord Index
- * @param {Object} [options.properties={}] Translate Properties to output Point
- * @param {BBox} [options.bbox={}] Translate BBox to output Point
- * @param {number|string} [options.id={}] Translate Id to output Point
- * @returns {Feature<Point>} 2-vertex GeoJSON Feature Point
- * @example
- * var multiLine = turf.multiLineString([
- *     [[10, 10], [50, 30], [30, 40]],
- *     [[-10, -10], [-50, -30], [-30, -40]]
- * ]);
- *
- * // First Segment (defaults are 0)
- * turf.findPoint(multiLine);
- * // => Feature<Point<[10, 10]>>
- *
- * // First Segment of the 2nd Multi-Feature
- * turf.findPoint(multiLine, {multiFeatureIndex: 1});
- * // => Feature<Point<[-10, -10]>>
- *
- * // Last Segment of last Multi-Feature
- * turf.findPoint(multiLine, {multiFeatureIndex: -1, coordIndex: -1});
- * // => Feature<Point<[-30, -40]>>
- */
-function findPoint(geojson, options) {
-    // Optional Parameters
-    options = options || {};
-    if (!helpers.isObject(options)) throw new Error('options is invalid');
-    var featureIndex = options.featureIndex || 0;
-    var multiFeatureIndex = options.multiFeatureIndex || 0;
-    var geometryIndex = options.geometryIndex || 0;
-    var coordIndex = options.coordIndex || 0;
-
-    // Find FeatureIndex
-    var properties = options.properties;
-    var geometry;
-
-    switch (geojson.type) {
-    case 'FeatureCollection':
-        if (featureIndex < 0) featureIndex = geojson.features.length + featureIndex;
-        properties = properties || geojson.features[featureIndex].properties;
-        geometry = geojson.features[featureIndex].geometry;
-        break;
-    case 'Feature':
-        properties = properties || geojson.properties;
-        geometry = geojson.geometry;
-        break;
-    case 'Point':
-    case 'MultiPoint':
-        return null;
-    case 'LineString':
-    case 'Polygon':
-    case 'MultiLineString':
-    case 'MultiPolygon':
-        geometry = geojson;
-        break;
-    default:
-        throw new Error('geojson is invalid');
-    }
-
-    // Find Coord Index
-    if (geometry === null) return null;
-    var coords = geometry.coordinates;
-    switch (geometry.type) {
-    case 'Point':
-        return helpers.point(coords, properties, options);
-    case 'MultiPoint':
-        if (multiFeatureIndex < 0) multiFeatureIndex = coords.length + multiFeatureIndex;
-        return helpers.point(coords[multiFeatureIndex], properties, options);
-    case 'LineString':
-        if (coordIndex < 0) coordIndex = coords.length + coordIndex;
-        return helpers.point(coords[coordIndex], properties, options);
-    case 'Polygon':
-        if (geometryIndex < 0) geometryIndex = coords.length + geometryIndex;
-        if (coordIndex < 0) coordIndex = coords[geometryIndex].length + coordIndex;
-        return helpers.point(coords[geometryIndex][coordIndex], properties, options);
-    case 'MultiLineString':
-        if (multiFeatureIndex < 0) multiFeatureIndex = coords.length + multiFeatureIndex;
-        if (coordIndex < 0) coordIndex = coords[multiFeatureIndex].length + coordIndex;
-        return helpers.point(coords[multiFeatureIndex][coordIndex], properties, options);
-    case 'MultiPolygon':
-        if (multiFeatureIndex < 0) multiFeatureIndex = coords.length + multiFeatureIndex;
-        if (geometryIndex < 0) geometryIndex = coords[multiFeatureIndex].length + geometryIndex;
-        if (coordIndex < 0) coordIndex = coords[multiFeatureIndex][geometryIndex].length - coordIndex;
-        return helpers.point(coords[multiFeatureIndex][geometryIndex][coordIndex], properties, options);
-    }
-    throw new Error('geojson is invalid');
-}
-
-exports.coordEach = coordEach;
-exports.coordReduce = coordReduce;
-exports.propEach = propEach;
-exports.propReduce = propReduce;
-exports.featureEach = featureEach;
-exports.featureReduce = featureReduce;
-exports.coordAll = coordAll;
-exports.geomEach = geomEach;
-exports.geomReduce = geomReduce;
-exports.flattenEach = flattenEach;
-exports.flattenReduce = flattenReduce;
-exports.segmentEach = segmentEach;
-exports.segmentReduce = segmentReduce;
-exports.lineEach = lineEach;
-exports.lineReduce = lineReduce;
-exports.findSegment = findSegment;
-exports.findPoint = findPoint;
-
-},{"@turf/helpers":19}],21:[function(require,module,exports){
-'use strict';
-
-/**
- * Returns a cloned copy of the passed GeoJSON Object, including possible 'Foreign Members'.
- * ~3-5x faster than the common JSON.parse + JSON.stringify combo method.
- *
- * @name clone
- * @param {GeoJSON} geojson GeoJSON Object
- * @returns {GeoJSON} cloned GeoJSON Object
- * @example
- * var line = turf.lineString([[-74, 40], [-78, 42], [-82, 35]], {color: 'red'});
- *
- * var lineCloned = turf.clone(line);
- */
-function clone(geojson) {
-    if (!geojson) throw new Error('geojson is required');
-
-    switch (geojson.type) {
-    case 'Feature':
-        return cloneFeature(geojson);
-    case 'FeatureCollection':
-        return cloneFeatureCollection(geojson);
-    case 'Point':
-    case 'LineString':
-    case 'Polygon':
-    case 'MultiPoint':
-    case 'MultiLineString':
-    case 'MultiPolygon':
-    case 'GeometryCollection':
-        return cloneGeometry(geojson);
-    default:
-        throw new Error('unknown GeoJSON type');
-    }
-}
-
-/**
- * Clone Feature
- *
- * @private
- * @param {Feature<any>} geojson GeoJSON Feature
- * @returns {Feature<any>} cloned Feature
- */
-function cloneFeature(geojson) {
-    var cloned = {type: 'Feature'};
-    // Preserve Foreign Members
-    Object.keys(geojson).forEach(function (key) {
-        switch (key) {
-        case 'type':
-        case 'properties':
-        case 'geometry':
-            return;
-        default:
-            cloned[key] = geojson[key];
-        }
-    });
-    // Add properties & geometry last
-    cloned.properties = cloneProperties(geojson.properties);
-    cloned.geometry = cloneGeometry(geojson.geometry);
-    return cloned;
-}
-
-/**
- * Clone Properties
- *
- * @private
- * @param {Object} properties GeoJSON Properties
- * @returns {Object} cloned Properties
- */
-function cloneProperties(properties) {
-    var cloned = {};
-    if (!properties) return cloned;
-    Object.keys(properties).forEach(function (key) {
-        var value = properties[key];
-        if (typeof value === 'object') {
-            if (value === null) {
-                // handle null
-                cloned[key] = null;
-            } else if (value.length) {
-                // handle Array
-                cloned[key] = value.map(function (item) {
-                    return item;
-                });
-            } else {
-                // handle generic Object
-                cloned[key] = cloneProperties(value);
-            }
-        } else cloned[key] = value;
-    });
-    return cloned;
-}
-
-/**
- * Clone Feature Collection
- *
- * @private
- * @param {FeatureCollection<any>} geojson GeoJSON Feature Collection
- * @returns {FeatureCollection<any>} cloned Feature Collection
- */
-function cloneFeatureCollection(geojson) {
-    var cloned = {type: 'FeatureCollection'};
-
-    // Preserve Foreign Members
-    Object.keys(geojson).forEach(function (key) {
-        switch (key) {
-        case 'type':
-        case 'features':
-            return;
-        default:
-            cloned[key] = geojson[key];
-        }
-    });
-    // Add features
-    cloned.features = geojson.features.map(function (feature) {
-        return cloneFeature(feature);
-    });
-    return cloned;
-}
-
-/**
- * Clone Geometry
- *
- * @private
- * @param {Geometry<any>} geometry GeoJSON Geometry
- * @returns {Geometry<any>} cloned Geometry
- */
-function cloneGeometry(geometry) {
-    var geom = {type: geometry.type};
-    if (geometry.bbox) geom.bbox = geometry.bbox;
-
-    if (geometry.type === 'GeometryCollection') {
-        geom.geometries = geometry.geometries.map(function (geom) {
-            return cloneGeometry(geom);
-        });
-        return geom;
-    }
-    geom.coordinates = deepSlice(geometry.coordinates);
-    return geom;
-}
-
-/**
- * Deep Slice coordinates
- *
- * @private
- * @param {Coordinates} coords Coordinates
- * @returns {Coordinates} all coordinates sliced
- */
-function deepSlice(coords) {
-    if (typeof coords[0] !== 'object') { return coords.slice(); }
-    return coords.map(function (coord) {
-        return deepSlice(coord);
-    });
-}
-
-module.exports = clone;
-module.exports.default = clone;
-
-},{}],22:[function(require,module,exports){
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-// http://en.wikipedia.org/wiki/Haversine_formula
-// http://www.movable-type.co.uk/scripts/latlong.html
-var helpers_1 = require("@turf/helpers");
-var invariant_1 = require("@turf/invariant");
-/**
- * Takes a {@link Point} and calculates the location of a destination point given a distance in
- * degrees, radians, miles, or kilometers; and bearing in degrees.
- * This uses the [Haversine formula](http://en.wikipedia.org/wiki/Haversine_formula) to account for global curvature.
- *
- * @name destination
- * @param {Coord} origin starting point
- * @param {number} distance distance from the origin point
- * @param {number} bearing ranging from -180 to 180
- * @param {Object} [options={}] Optional parameters
- * @param {string} [options.units='kilometers'] miles, kilometers, degrees, or radians
- * @param {Object} [options.properties={}] Translate properties to Point
- * @returns {Feature<Point>} destination point
- * @example
- * var point = turf.point([-75.343, 39.984]);
- * var distance = 50;
- * var bearing = 90;
- * var options = {units: 'miles'};
- *
- * var destination = turf.destination(point, distance, bearing, options);
- *
- * //addToMap
- * var addToMap = [point, destination]
- * destination.properties['marker-color'] = '#f00';
- * point.properties['marker-color'] = '#0f0';
- */
-function destination(origin, distance, bearing, options) {
-    if (options === void 0) { options = {}; }
-    // Handle input
-    var coordinates1 = invariant_1.getCoord(origin);
-    var longitude1 = helpers_1.degreesToRadians(coordinates1[0]);
-    var latitude1 = helpers_1.degreesToRadians(coordinates1[1]);
-    var bearingRad = helpers_1.degreesToRadians(bearing);
-    var radians = helpers_1.lengthToRadians(distance, options.units);
-    // Main
-    var latitude2 = Math.asin(Math.sin(latitude1) * Math.cos(radians) +
-        Math.cos(latitude1) * Math.sin(radians) * Math.cos(bearingRad));
-    var longitude2 = longitude1 + Math.atan2(Math.sin(bearingRad) * Math.sin(radians) * Math.cos(latitude1), Math.cos(radians) - Math.sin(latitude1) * Math.sin(latitude2));
-    var lng = helpers_1.radiansToDegrees(longitude2);
-    var lat = helpers_1.radiansToDegrees(latitude2);
-    return helpers_1.point([lng, lat], options.properties);
-}
-exports.default = destination;
-
-},{"@turf/helpers":30,"@turf/invariant":34}],23:[function(require,module,exports){
-'use strict';
-
-var polygonClipping = require('polygon-clipping');
-var helpers = require('@turf/helpers');
-var invariant = require('@turf/invariant');
-
-function _interopDefaultLegacy (e) { return e && typeof e === 'object' && 'default' in e ? e : { 'default': e }; }
-
-var polygonClipping__default = /*#__PURE__*/_interopDefaultLegacy(polygonClipping);
-
-/**
- * Finds the difference between two {@link Polygon|polygons} by clipping the second polygon from the first.
- *
- * @name difference
- * @param {Feature<Polygon|MultiPolygon>} polygon1 input Polygon feature
- * @param {Feature<Polygon|MultiPolygon>} polygon2 Polygon feature to difference from polygon1
- * @returns {Feature<Polygon|MultiPolygon>|null} a Polygon or MultiPolygon feature showing the area of `polygon1` excluding the area of `polygon2` (if empty returns `null`)
- * @example
- * var polygon1 = turf.polygon([[
- *   [128, -26],
- *   [141, -26],
- *   [141, -21],
- *   [128, -21],
- *   [128, -26]
- * ]], {
- *   "fill": "#F00",
- *   "fill-opacity": 0.1
- * });
- * var polygon2 = turf.polygon([[
- *   [126, -28],
- *   [140, -28],
- *   [140, -20],
- *   [126, -20],
- *   [126, -28]
- * ]], {
- *   "fill": "#00F",
- *   "fill-opacity": 0.1
- * });
- *
- * var difference = turf.difference(polygon1, polygon2);
- *
- * //addToMap
- * var addToMap = [polygon1, polygon2, difference];
- */
-function difference(polygon1, polygon2) {
-  var geom1 = invariant.getGeom(polygon1);
-  var geom2 = invariant.getGeom(polygon2);
-  var properties = polygon1.properties || {};
-
-  var differenced = polygonClipping__default['default'].difference(
-    geom1.coordinates,
-    geom2.coordinates
-  );
-  if (differenced.length === 0) return null;
-  if (differenced.length === 1) return helpers.polygon(differenced[0], properties);
-  return helpers.multiPolygon(differenced, properties);
-}
-
-module.exports = difference;
-module.exports.default = difference;
-
-},{"@turf/helpers":24,"@turf/invariant":25,"polygon-clipping":240}],24:[function(require,module,exports){
+},{"@turf/invariant":15}],14:[function(require,module,exports){
 arguments[4][8][0].apply(exports,arguments)
-},{"dup":8}],25:[function(require,module,exports){
+},{"dup":8}],15:[function(require,module,exports){
 arguments[4][9][0].apply(exports,arguments)
-},{"@turf/helpers":24,"dup":9}],26:[function(require,module,exports){
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-var invariant_1 = require("@turf/invariant");
-var helpers_1 = require("@turf/helpers");
-//http://en.wikipedia.org/wiki/Haversine_formula
-//http://www.movable-type.co.uk/scripts/latlong.html
-/**
- * Calculates the distance between two {@link Point|points} in degrees, radians, miles, or kilometers.
- * This uses the [Haversine formula](http://en.wikipedia.org/wiki/Haversine_formula) to account for global curvature.
- *
- * @name distance
- * @param {Coord} from origin point
- * @param {Coord} to destination point
- * @param {Object} [options={}] Optional parameters
- * @param {string} [options.units='kilometers'] can be degrees, radians, miles, or kilometers
- * @returns {number} distance between the two points
- * @example
- * var from = turf.point([-75.343, 39.984]);
- * var to = turf.point([-75.534, 39.123]);
- * var options = {units: 'miles'};
- *
- * var distance = turf.distance(from, to, options);
- *
- * //addToMap
- * var addToMap = [from, to];
- * from.properties.distance = distance;
- * to.properties.distance = distance;
- */
-function distance(from, to, options) {
-    if (options === void 0) { options = {}; }
-    var coordinates1 = invariant_1.getCoord(from);
-    var coordinates2 = invariant_1.getCoord(to);
-    var dLat = helpers_1.degreesToRadians((coordinates2[1] - coordinates1[1]));
-    var dLon = helpers_1.degreesToRadians((coordinates2[0] - coordinates1[0]));
-    var lat1 = helpers_1.degreesToRadians(coordinates1[1]);
-    var lat2 = helpers_1.degreesToRadians(coordinates2[1]);
-    var a = Math.pow(Math.sin(dLat / 2), 2) +
-        Math.pow(Math.sin(dLon / 2), 2) * Math.cos(lat1) * Math.cos(lat2);
-    return helpers_1.radiansToLength(2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)), options.units);
-}
-exports.default = distance;
-
-},{"@turf/helpers":30,"@turf/invariant":34}],27:[function(require,module,exports){
-'use strict';
-
-var meta = require('@turf/meta');
-var helpers = require('@turf/helpers');
-
-/**
- * Takes a feature or set of features and returns all positions as {@link Point|points}.
- *
- * @name explode
- * @param {GeoJSON} geojson input features
- * @returns {FeatureCollection<point>} points representing the exploded input features
- * @throws {Error} if it encounters an unknown geometry type
- * @example
- * var polygon = turf.polygon([[[-81, 41], [-88, 36], [-84, 31], [-80, 33], [-77, 39], [-81, 41]]]);
- *
- * var explode = turf.explode(polygon);
- *
- * //addToMap
- * var addToMap = [polygon, explode]
- */
-function explode(geojson) {
-    var points = [];
-    if (geojson.type === 'FeatureCollection') {
-        meta.featureEach(geojson, function (feature) {
-            meta.coordEach(feature, function (coord) {
-                points.push(helpers.point(coord, feature.properties));
-            });
-        });
-    } else {
-        meta.coordEach(geojson, function (coord) {
-            points.push(helpers.point(coord, geojson.properties));
-        });
-    }
-    return helpers.featureCollection(points);
-}
-
-module.exports = explode;
-module.exports.default = explode;
-
-},{"@turf/helpers":28,"@turf/meta":29}],28:[function(require,module,exports){
-arguments[4][19][0].apply(exports,arguments)
-},{"dup":19}],29:[function(require,module,exports){
-arguments[4][20][0].apply(exports,arguments)
-},{"@turf/helpers":28,"dup":20}],30:[function(require,module,exports){
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-/**
- * @module helpers
- */
-/**
- * Earth Radius used with the Harvesine formula and approximates using a spherical (non-ellipsoid) Earth.
- *
- * @memberof helpers
- * @type {number}
- */
-exports.earthRadius = 6371008.8;
-/**
- * Unit of measurement factors using a spherical (non-ellipsoid) earth radius.
- *
- * @memberof helpers
- * @type {Object}
- */
-exports.factors = {
-    centimeters: exports.earthRadius * 100,
-    centimetres: exports.earthRadius * 100,
-    degrees: exports.earthRadius / 111325,
-    feet: exports.earthRadius * 3.28084,
-    inches: exports.earthRadius * 39.370,
-    kilometers: exports.earthRadius / 1000,
-    kilometres: exports.earthRadius / 1000,
-    meters: exports.earthRadius,
-    metres: exports.earthRadius,
-    miles: exports.earthRadius / 1609.344,
-    millimeters: exports.earthRadius * 1000,
-    millimetres: exports.earthRadius * 1000,
-    nauticalmiles: exports.earthRadius / 1852,
-    radians: 1,
-    yards: exports.earthRadius / 1.0936,
-};
-/**
- * Units of measurement factors based on 1 meter.
- *
- * @memberof helpers
- * @type {Object}
- */
-exports.unitsFactors = {
-    centimeters: 100,
-    centimetres: 100,
-    degrees: 1 / 111325,
-    feet: 3.28084,
-    inches: 39.370,
-    kilometers: 1 / 1000,
-    kilometres: 1 / 1000,
-    meters: 1,
-    metres: 1,
-    miles: 1 / 1609.344,
-    millimeters: 1000,
-    millimetres: 1000,
-    nauticalmiles: 1 / 1852,
-    radians: 1 / exports.earthRadius,
-    yards: 1 / 1.0936,
-};
-/**
- * Area of measurement factors based on 1 square meter.
- *
- * @memberof helpers
- * @type {Object}
- */
-exports.areaFactors = {
-    acres: 0.000247105,
-    centimeters: 10000,
-    centimetres: 10000,
-    feet: 10.763910417,
-    inches: 1550.003100006,
-    kilometers: 0.000001,
-    kilometres: 0.000001,
-    meters: 1,
-    metres: 1,
-    miles: 3.86e-7,
-    millimeters: 1000000,
-    millimetres: 1000000,
-    yards: 1.195990046,
-};
-/**
- * Wraps a GeoJSON {@link Geometry} in a GeoJSON {@link Feature}.
- *
- * @name feature
- * @param {Geometry} geometry input geometry
- * @param {Object} [properties={}] an Object of key-value pairs to add as properties
- * @param {Object} [options={}] Optional Parameters
- * @param {Array<number>} [options.bbox] Bounding Box Array [west, south, east, north] associated with the Feature
- * @param {string|number} [options.id] Identifier associated with the Feature
- * @returns {Feature} a GeoJSON Feature
- * @example
- * var geometry = {
- *   "type": "Point",
- *   "coordinates": [110, 50]
- * };
- *
- * var feature = turf.feature(geometry);
- *
- * //=feature
- */
-function feature(geom, properties, options) {
-    if (options === void 0) { options = {}; }
-    var feat = { type: "Feature" };
-    if (options.id === 0 || options.id) {
-        feat.id = options.id;
-    }
-    if (options.bbox) {
-        feat.bbox = options.bbox;
-    }
-    feat.properties = properties || {};
-    feat.geometry = geom;
-    return feat;
-}
-exports.feature = feature;
-/**
- * Creates a GeoJSON {@link Geometry} from a Geometry string type & coordinates.
- * For GeometryCollection type use `helpers.geometryCollection`
- *
- * @name geometry
- * @param {string} type Geometry Type
- * @param {Array<any>} coordinates Coordinates
- * @param {Object} [options={}] Optional Parameters
- * @returns {Geometry} a GeoJSON Geometry
- * @example
- * var type = "Point";
- * var coordinates = [110, 50];
- * var geometry = turf.geometry(type, coordinates);
- * // => geometry
- */
-function geometry(type, coordinates, options) {
-    if (options === void 0) { options = {}; }
-    switch (type) {
-        case "Point": return point(coordinates).geometry;
-        case "LineString": return lineString(coordinates).geometry;
-        case "Polygon": return polygon(coordinates).geometry;
-        case "MultiPoint": return multiPoint(coordinates).geometry;
-        case "MultiLineString": return multiLineString(coordinates).geometry;
-        case "MultiPolygon": return multiPolygon(coordinates).geometry;
-        default: throw new Error(type + " is invalid");
-    }
-}
-exports.geometry = geometry;
-/**
- * Creates a {@link Point} {@link Feature} from a Position.
- *
- * @name point
- * @param {Array<number>} coordinates longitude, latitude position (each in decimal degrees)
- * @param {Object} [properties={}] an Object of key-value pairs to add as properties
- * @param {Object} [options={}] Optional Parameters
- * @param {Array<number>} [options.bbox] Bounding Box Array [west, south, east, north] associated with the Feature
- * @param {string|number} [options.id] Identifier associated with the Feature
- * @returns {Feature<Point>} a Point feature
- * @example
- * var point = turf.point([-75.343, 39.984]);
- *
- * //=point
- */
-function point(coordinates, properties, options) {
-    if (options === void 0) { options = {}; }
-    var geom = {
-        type: "Point",
-        coordinates: coordinates,
-    };
-    return feature(geom, properties, options);
-}
-exports.point = point;
-/**
- * Creates a {@link Point} {@link FeatureCollection} from an Array of Point coordinates.
- *
- * @name points
- * @param {Array<Array<number>>} coordinates an array of Points
- * @param {Object} [properties={}] Translate these properties to each Feature
- * @param {Object} [options={}] Optional Parameters
- * @param {Array<number>} [options.bbox] Bounding Box Array [west, south, east, north]
- * associated with the FeatureCollection
- * @param {string|number} [options.id] Identifier associated with the FeatureCollection
- * @returns {FeatureCollection<Point>} Point Feature
- * @example
- * var points = turf.points([
- *   [-75, 39],
- *   [-80, 45],
- *   [-78, 50]
- * ]);
- *
- * //=points
- */
-function points(coordinates, properties, options) {
-    if (options === void 0) { options = {}; }
-    return featureCollection(coordinates.map(function (coords) {
-        return point(coords, properties);
-    }), options);
-}
-exports.points = points;
-/**
- * Creates a {@link Polygon} {@link Feature} from an Array of LinearRings.
- *
- * @name polygon
- * @param {Array<Array<Array<number>>>} coordinates an array of LinearRings
- * @param {Object} [properties={}] an Object of key-value pairs to add as properties
- * @param {Object} [options={}] Optional Parameters
- * @param {Array<number>} [options.bbox] Bounding Box Array [west, south, east, north] associated with the Feature
- * @param {string|number} [options.id] Identifier associated with the Feature
- * @returns {Feature<Polygon>} Polygon Feature
- * @example
- * var polygon = turf.polygon([[[-5, 52], [-4, 56], [-2, 51], [-7, 54], [-5, 52]]], { name: 'poly1' });
- *
- * //=polygon
- */
-function polygon(coordinates, properties, options) {
-    if (options === void 0) { options = {}; }
-    for (var _i = 0, coordinates_1 = coordinates; _i < coordinates_1.length; _i++) {
-        var ring = coordinates_1[_i];
-        if (ring.length < 4) {
-            throw new Error("Each LinearRing of a Polygon must have 4 or more Positions.");
-        }
-        for (var j = 0; j < ring[ring.length - 1].length; j++) {
-            // Check if first point of Polygon contains two numbers
-            if (ring[ring.length - 1][j] !== ring[0][j]) {
-                throw new Error("First and last Position are not equivalent.");
-            }
-        }
-    }
-    var geom = {
-        type: "Polygon",
-        coordinates: coordinates,
-    };
-    return feature(geom, properties, options);
-}
-exports.polygon = polygon;
-/**
- * Creates a {@link Polygon} {@link FeatureCollection} from an Array of Polygon coordinates.
- *
- * @name polygons
- * @param {Array<Array<Array<Array<number>>>>} coordinates an array of Polygon coordinates
- * @param {Object} [properties={}] an Object of key-value pairs to add as properties
- * @param {Object} [options={}] Optional Parameters
- * @param {Array<number>} [options.bbox] Bounding Box Array [west, south, east, north] associated with the Feature
- * @param {string|number} [options.id] Identifier associated with the FeatureCollection
- * @returns {FeatureCollection<Polygon>} Polygon FeatureCollection
- * @example
- * var polygons = turf.polygons([
- *   [[[-5, 52], [-4, 56], [-2, 51], [-7, 54], [-5, 52]]],
- *   [[[-15, 42], [-14, 46], [-12, 41], [-17, 44], [-15, 42]]],
- * ]);
- *
- * //=polygons
- */
-function polygons(coordinates, properties, options) {
-    if (options === void 0) { options = {}; }
-    return featureCollection(coordinates.map(function (coords) {
-        return polygon(coords, properties);
-    }), options);
-}
-exports.polygons = polygons;
-/**
- * Creates a {@link LineString} {@link Feature} from an Array of Positions.
- *
- * @name lineString
- * @param {Array<Array<number>>} coordinates an array of Positions
- * @param {Object} [properties={}] an Object of key-value pairs to add as properties
- * @param {Object} [options={}] Optional Parameters
- * @param {Array<number>} [options.bbox] Bounding Box Array [west, south, east, north] associated with the Feature
- * @param {string|number} [options.id] Identifier associated with the Feature
- * @returns {Feature<LineString>} LineString Feature
- * @example
- * var linestring1 = turf.lineString([[-24, 63], [-23, 60], [-25, 65], [-20, 69]], {name: 'line 1'});
- * var linestring2 = turf.lineString([[-14, 43], [-13, 40], [-15, 45], [-10, 49]], {name: 'line 2'});
- *
- * //=linestring1
- * //=linestring2
- */
-function lineString(coordinates, properties, options) {
-    if (options === void 0) { options = {}; }
-    if (coordinates.length < 2) {
-        throw new Error("coordinates must be an array of two or more positions");
-    }
-    var geom = {
-        type: "LineString",
-        coordinates: coordinates,
-    };
-    return feature(geom, properties, options);
-}
-exports.lineString = lineString;
-/**
- * Creates a {@link LineString} {@link FeatureCollection} from an Array of LineString coordinates.
- *
- * @name lineStrings
- * @param {Array<Array<Array<number>>>} coordinates an array of LinearRings
- * @param {Object} [properties={}] an Object of key-value pairs to add as properties
- * @param {Object} [options={}] Optional Parameters
- * @param {Array<number>} [options.bbox] Bounding Box Array [west, south, east, north]
- * associated with the FeatureCollection
- * @param {string|number} [options.id] Identifier associated with the FeatureCollection
- * @returns {FeatureCollection<LineString>} LineString FeatureCollection
- * @example
- * var linestrings = turf.lineStrings([
- *   [[-24, 63], [-23, 60], [-25, 65], [-20, 69]],
- *   [[-14, 43], [-13, 40], [-15, 45], [-10, 49]]
- * ]);
- *
- * //=linestrings
- */
-function lineStrings(coordinates, properties, options) {
-    if (options === void 0) { options = {}; }
-    return featureCollection(coordinates.map(function (coords) {
-        return lineString(coords, properties);
-    }), options);
-}
-exports.lineStrings = lineStrings;
-/**
- * Takes one or more {@link Feature|Features} and creates a {@link FeatureCollection}.
- *
- * @name featureCollection
- * @param {Feature[]} features input features
- * @param {Object} [options={}] Optional Parameters
- * @param {Array<number>} [options.bbox] Bounding Box Array [west, south, east, north] associated with the Feature
- * @param {string|number} [options.id] Identifier associated with the Feature
- * @returns {FeatureCollection} FeatureCollection of Features
- * @example
- * var locationA = turf.point([-75.343, 39.984], {name: 'Location A'});
- * var locationB = turf.point([-75.833, 39.284], {name: 'Location B'});
- * var locationC = turf.point([-75.534, 39.123], {name: 'Location C'});
- *
- * var collection = turf.featureCollection([
- *   locationA,
- *   locationB,
- *   locationC
- * ]);
- *
- * //=collection
- */
-function featureCollection(features, options) {
-    if (options === void 0) { options = {}; }
-    var fc = { type: "FeatureCollection" };
-    if (options.id) {
-        fc.id = options.id;
-    }
-    if (options.bbox) {
-        fc.bbox = options.bbox;
-    }
-    fc.features = features;
-    return fc;
-}
-exports.featureCollection = featureCollection;
-/**
- * Creates a {@link Feature<MultiLineString>} based on a
- * coordinate array. Properties can be added optionally.
- *
- * @name multiLineString
- * @param {Array<Array<Array<number>>>} coordinates an array of LineStrings
- * @param {Object} [properties={}] an Object of key-value pairs to add as properties
- * @param {Object} [options={}] Optional Parameters
- * @param {Array<number>} [options.bbox] Bounding Box Array [west, south, east, north] associated with the Feature
- * @param {string|number} [options.id] Identifier associated with the Feature
- * @returns {Feature<MultiLineString>} a MultiLineString feature
- * @throws {Error} if no coordinates are passed
- * @example
- * var multiLine = turf.multiLineString([[[0,0],[10,10]]]);
- *
- * //=multiLine
- */
-function multiLineString(coordinates, properties, options) {
-    if (options === void 0) { options = {}; }
-    var geom = {
-        type: "MultiLineString",
-        coordinates: coordinates,
-    };
-    return feature(geom, properties, options);
-}
-exports.multiLineString = multiLineString;
-/**
- * Creates a {@link Feature<MultiPoint>} based on a
- * coordinate array. Properties can be added optionally.
- *
- * @name multiPoint
- * @param {Array<Array<number>>} coordinates an array of Positions
- * @param {Object} [properties={}] an Object of key-value pairs to add as properties
- * @param {Object} [options={}] Optional Parameters
- * @param {Array<number>} [options.bbox] Bounding Box Array [west, south, east, north] associated with the Feature
- * @param {string|number} [options.id] Identifier associated with the Feature
- * @returns {Feature<MultiPoint>} a MultiPoint feature
- * @throws {Error} if no coordinates are passed
- * @example
- * var multiPt = turf.multiPoint([[0,0],[10,10]]);
- *
- * //=multiPt
- */
-function multiPoint(coordinates, properties, options) {
-    if (options === void 0) { options = {}; }
-    var geom = {
-        type: "MultiPoint",
-        coordinates: coordinates,
-    };
-    return feature(geom, properties, options);
-}
-exports.multiPoint = multiPoint;
-/**
- * Creates a {@link Feature<MultiPolygon>} based on a
- * coordinate array. Properties can be added optionally.
- *
- * @name multiPolygon
- * @param {Array<Array<Array<Array<number>>>>} coordinates an array of Polygons
- * @param {Object} [properties={}] an Object of key-value pairs to add as properties
- * @param {Object} [options={}] Optional Parameters
- * @param {Array<number>} [options.bbox] Bounding Box Array [west, south, east, north] associated with the Feature
- * @param {string|number} [options.id] Identifier associated with the Feature
- * @returns {Feature<MultiPolygon>} a multipolygon feature
- * @throws {Error} if no coordinates are passed
- * @example
- * var multiPoly = turf.multiPolygon([[[[0,0],[0,10],[10,10],[10,0],[0,0]]]]);
- *
- * //=multiPoly
- *
- */
-function multiPolygon(coordinates, properties, options) {
-    if (options === void 0) { options = {}; }
-    var geom = {
-        type: "MultiPolygon",
-        coordinates: coordinates,
-    };
-    return feature(geom, properties, options);
-}
-exports.multiPolygon = multiPolygon;
-/**
- * Creates a {@link Feature<GeometryCollection>} based on a
- * coordinate array. Properties can be added optionally.
- *
- * @name geometryCollection
- * @param {Array<Geometry>} geometries an array of GeoJSON Geometries
- * @param {Object} [properties={}] an Object of key-value pairs to add as properties
- * @param {Object} [options={}] Optional Parameters
- * @param {Array<number>} [options.bbox] Bounding Box Array [west, south, east, north] associated with the Feature
- * @param {string|number} [options.id] Identifier associated with the Feature
- * @returns {Feature<GeometryCollection>} a GeoJSON GeometryCollection Feature
- * @example
- * var pt = turf.geometry("Point", [100, 0]);
- * var line = turf.geometry("LineString", [[101, 0], [102, 1]]);
- * var collection = turf.geometryCollection([pt, line]);
- *
- * // => collection
- */
-function geometryCollection(geometries, properties, options) {
-    if (options === void 0) { options = {}; }
-    var geom = {
-        type: "GeometryCollection",
-        geometries: geometries,
-    };
-    return feature(geom, properties, options);
-}
-exports.geometryCollection = geometryCollection;
-/**
- * Round number to precision
- *
- * @param {number} num Number
- * @param {number} [precision=0] Precision
- * @returns {number} rounded number
- * @example
- * turf.round(120.4321)
- * //=120
- *
- * turf.round(120.4321, 2)
- * //=120.43
- */
-function round(num, precision) {
-    if (precision === void 0) { precision = 0; }
-    if (precision && !(precision >= 0)) {
-        throw new Error("precision must be a positive number");
-    }
-    var multiplier = Math.pow(10, precision || 0);
-    return Math.round(num * multiplier) / multiplier;
-}
-exports.round = round;
-/**
- * Convert a distance measurement (assuming a spherical Earth) from radians to a more friendly unit.
- * Valid units: miles, nauticalmiles, inches, yards, meters, metres, kilometers, centimeters, feet
- *
- * @name radiansToLength
- * @param {number} radians in radians across the sphere
- * @param {string} [units="kilometers"] can be degrees, radians, miles, or kilometers inches, yards, metres,
- * meters, kilometres, kilometers.
- * @returns {number} distance
- */
-function radiansToLength(radians, units) {
-    if (units === void 0) { units = "kilometers"; }
-    var factor = exports.factors[units];
-    if (!factor) {
-        throw new Error(units + " units is invalid");
-    }
-    return radians * factor;
-}
-exports.radiansToLength = radiansToLength;
-/**
- * Convert a distance measurement (assuming a spherical Earth) from a real-world unit into radians
- * Valid units: miles, nauticalmiles, inches, yards, meters, metres, kilometers, centimeters, feet
- *
- * @name lengthToRadians
- * @param {number} distance in real units
- * @param {string} [units="kilometers"] can be degrees, radians, miles, or kilometers inches, yards, metres,
- * meters, kilometres, kilometers.
- * @returns {number} radians
- */
-function lengthToRadians(distance, units) {
-    if (units === void 0) { units = "kilometers"; }
-    var factor = exports.factors[units];
-    if (!factor) {
-        throw new Error(units + " units is invalid");
-    }
-    return distance / factor;
-}
-exports.lengthToRadians = lengthToRadians;
-/**
- * Convert a distance measurement (assuming a spherical Earth) from a real-world unit into degrees
- * Valid units: miles, nauticalmiles, inches, yards, meters, metres, centimeters, kilometres, feet
- *
- * @name lengthToDegrees
- * @param {number} distance in real units
- * @param {string} [units="kilometers"] can be degrees, radians, miles, or kilometers inches, yards, metres,
- * meters, kilometres, kilometers.
- * @returns {number} degrees
- */
-function lengthToDegrees(distance, units) {
-    return radiansToDegrees(lengthToRadians(distance, units));
-}
-exports.lengthToDegrees = lengthToDegrees;
-/**
- * Converts any bearing angle from the north line direction (positive clockwise)
- * and returns an angle between 0-360 degrees (positive clockwise), 0 being the north line
- *
- * @name bearingToAzimuth
- * @param {number} bearing angle, between -180 and +180 degrees
- * @returns {number} angle between 0 and 360 degrees
- */
-function bearingToAzimuth(bearing) {
-    var angle = bearing % 360;
-    if (angle < 0) {
-        angle += 360;
-    }
-    return angle;
-}
-exports.bearingToAzimuth = bearingToAzimuth;
-/**
- * Converts an angle in radians to degrees
- *
- * @name radiansToDegrees
- * @param {number} radians angle in radians
- * @returns {number} degrees between 0 and 360 degrees
- */
-function radiansToDegrees(radians) {
-    var degrees = radians % (2 * Math.PI);
-    return degrees * 180 / Math.PI;
-}
-exports.radiansToDegrees = radiansToDegrees;
-/**
- * Converts an angle in degrees to radians
- *
- * @name degreesToRadians
- * @param {number} degrees angle between 0 and 360 degrees
- * @returns {number} angle in radians
- */
-function degreesToRadians(degrees) {
-    var radians = degrees % 360;
-    return radians * Math.PI / 180;
-}
-exports.degreesToRadians = degreesToRadians;
-/**
- * Converts a length to the requested unit.
- * Valid units: miles, nauticalmiles, inches, yards, meters, metres, kilometers, centimeters, feet
- *
- * @param {number} length to be converted
- * @param {Units} [originalUnit="kilometers"] of the length
- * @param {Units} [finalUnit="kilometers"] returned unit
- * @returns {number} the converted length
- */
-function convertLength(length, originalUnit, finalUnit) {
-    if (originalUnit === void 0) { originalUnit = "kilometers"; }
-    if (finalUnit === void 0) { finalUnit = "kilometers"; }
-    if (!(length >= 0)) {
-        throw new Error("length must be a positive number");
-    }
-    return radiansToLength(lengthToRadians(length, originalUnit), finalUnit);
-}
-exports.convertLength = convertLength;
-/**
- * Converts a area to the requested unit.
- * Valid units: kilometers, kilometres, meters, metres, centimetres, millimeters, acres, miles, yards, feet, inches
- * @param {number} area to be converted
- * @param {Units} [originalUnit="meters"] of the distance
- * @param {Units} [finalUnit="kilometers"] returned unit
- * @returns {number} the converted distance
- */
-function convertArea(area, originalUnit, finalUnit) {
-    if (originalUnit === void 0) { originalUnit = "meters"; }
-    if (finalUnit === void 0) { finalUnit = "kilometers"; }
-    if (!(area >= 0)) {
-        throw new Error("area must be a positive number");
-    }
-    var startFactor = exports.areaFactors[originalUnit];
-    if (!startFactor) {
-        throw new Error("invalid original units");
-    }
-    var finalFactor = exports.areaFactors[finalUnit];
-    if (!finalFactor) {
-        throw new Error("invalid final units");
-    }
-    return (area / startFactor) * finalFactor;
-}
-exports.convertArea = convertArea;
-/**
- * isNumber
- *
- * @param {*} num Number to validate
- * @returns {boolean} true/false
- * @example
- * turf.isNumber(123)
- * //=true
- * turf.isNumber('foo')
- * //=false
- */
-function isNumber(num) {
-    return !isNaN(num) && num !== null && !Array.isArray(num) && !/^\s*$/.test(num);
-}
-exports.isNumber = isNumber;
-/**
- * isObject
- *
- * @param {*} input variable to validate
- * @returns {boolean} true/false
- * @example
- * turf.isObject({elevation: 10})
- * //=true
- * turf.isObject('foo')
- * //=false
- */
-function isObject(input) {
-    return (!!input) && (input.constructor === Object);
-}
-exports.isObject = isObject;
-/**
- * Validate BBox
- *
- * @private
- * @param {Array<number>} bbox BBox to validate
- * @returns {void}
- * @throws Error if BBox is not valid
- * @example
- * validateBBox([-180, -40, 110, 50])
- * //=OK
- * validateBBox([-180, -40])
- * //=Error
- * validateBBox('Foo')
- * //=Error
- * validateBBox(5)
- * //=Error
- * validateBBox(null)
- * //=Error
- * validateBBox(undefined)
- * //=Error
- */
-function validateBBox(bbox) {
-    if (!bbox) {
-        throw new Error("bbox is required");
-    }
-    if (!Array.isArray(bbox)) {
-        throw new Error("bbox must be an Array");
-    }
-    if (bbox.length !== 4 && bbox.length !== 6) {
-        throw new Error("bbox must be an Array of 4 or 6 numbers");
-    }
-    bbox.forEach(function (num) {
-        if (!isNumber(num)) {
-            throw new Error("bbox must only contain numbers");
-        }
-    });
-}
-exports.validateBBox = validateBBox;
-/**
- * Validate Id
- *
- * @private
- * @param {string|number} id Id to validate
- * @returns {void}
- * @throws Error if Id is not valid
- * @example
- * validateId([-180, -40, 110, 50])
- * //=Error
- * validateId([-180, -40])
- * //=Error
- * validateId('Foo')
- * //=OK
- * validateId(5)
- * //=OK
- * validateId(null)
- * //=Error
- * validateId(undefined)
- * //=Error
- */
-function validateId(id) {
-    if (!id) {
-        throw new Error("id is required");
-    }
-    if (["string", "number"].indexOf(typeof id) === -1) {
-        throw new Error("id must be a number or a string");
-    }
-}
-exports.validateId = validateId;
-// Deprecated methods
-function radians2degrees() {
-    throw new Error("method has been renamed to `radiansToDegrees`");
-}
-exports.radians2degrees = radians2degrees;
-function degrees2radians() {
-    throw new Error("method has been renamed to `degreesToRadians`");
-}
-exports.degrees2radians = degrees2radians;
-function distanceToDegrees() {
-    throw new Error("method has been renamed to `lengthToDegrees`");
-}
-exports.distanceToDegrees = distanceToDegrees;
-function distanceToRadians() {
-    throw new Error("method has been renamed to `lengthToRadians`");
-}
-exports.distanceToRadians = distanceToRadians;
-function radiansToDistance() {
-    throw new Error("method has been renamed to `radiansToLength`");
-}
-exports.radiansToDistance = radiansToDistance;
-function bearingToAngle() {
-    throw new Error("method has been renamed to `bearingToAzimuth`");
-}
-exports.bearingToAngle = bearingToAngle;
-function convertDistance() {
-    throw new Error("method has been renamed to `convertLength`");
-}
-exports.convertDistance = convertDistance;
-
-},{}],31:[function(require,module,exports){
+},{"@turf/helpers":14,"dup":9}],16:[function(require,module,exports){
 "use strict";
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
@@ -4849,314 +1740,210 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 var helpers_1 = require("@turf/helpers");
 var invariant_1 = require("@turf/invariant");
-var polygon_clipping_1 = __importDefault(require("polygon-clipping"));
+var line_segment_1 = __importDefault(require("@turf/line-segment"));
+var meta_1 = require("@turf/meta");
+var geojson_rbush_1 = __importDefault(require("geojson-rbush"));
 /**
- * Takes two {@link Polygon|polygon} or {@link MultiPolygon|multi-polygon} geometries and
- * finds their polygonal intersection. If they don't intersect, returns null.
+ * Takes any LineString or Polygon GeoJSON and returns the intersecting point(s).
  *
- * @name intersect
- * @param {Feature<Polygon | MultiPolygon>} poly1 the first polygon or multipolygon
- * @param {Feature<Polygon | MultiPolygon>} poly2 the second polygon or multipolygon
- * @param {Object} [options={}] Optional Parameters
- * @param {Object} [options.properties={}] Translate GeoJSON Properties to Feature
- * @returns {Feature|null} returns a feature representing the area they share (either a {@link Polygon} or
- * {@link MultiPolygon}). If they do not share any area, returns `null`.
+ * @name lineIntersect
+ * @param {GeoJSON} line1 any LineString or Polygon
+ * @param {GeoJSON} line2 any LineString or Polygon
+ * @returns {FeatureCollection<Point>} point(s) that intersect both
  * @example
- * var poly1 = turf.polygon([[
- *   [-122.801742, 45.48565],
- *   [-122.801742, 45.60491],
- *   [-122.584762, 45.60491],
- *   [-122.584762, 45.48565],
- *   [-122.801742, 45.48565]
- * ]]);
- *
- * var poly2 = turf.polygon([[
- *   [-122.520217, 45.535693],
- *   [-122.64038, 45.553967],
- *   [-122.720031, 45.526554],
- *   [-122.669906, 45.507309],
- *   [-122.723464, 45.446643],
- *   [-122.532577, 45.408574],
- *   [-122.487258, 45.477466],
- *   [-122.520217, 45.535693]
- * ]]);
- *
- * var intersection = turf.intersect(poly1, poly2);
+ * var line1 = turf.lineString([[126, -11], [129, -21]]);
+ * var line2 = turf.lineString([[123, -18], [131, -14]]);
+ * var intersects = turf.lineIntersect(line1, line2);
  *
  * //addToMap
- * var addToMap = [poly1, poly2, intersection];
+ * var addToMap = [line1, line2, intersects]
  */
-function intersect(poly1, poly2, options) {
-    if (options === void 0) { options = {}; }
-    var geom1 = invariant_1.getGeom(poly1);
-    var geom2 = invariant_1.getGeom(poly2);
-    var intersection = polygon_clipping_1.default.intersection(geom1.coordinates, geom2.coordinates);
-    if (intersection.length === 0)
-        return null;
-    if (intersection.length === 1)
-        return helpers_1.polygon(intersection[0], options.properties);
-    return helpers_1.multiPolygon(intersection, options.properties);
+function lineIntersect(line1, line2) {
+    var unique = {};
+    var results = [];
+    // First, normalize geometries to features
+    // Then, handle simple 2-vertex segments
+    if (line1.type === "LineString") {
+        line1 = helpers_1.feature(line1);
+    }
+    if (line2.type === "LineString") {
+        line2 = helpers_1.feature(line2);
+    }
+    if (line1.type === "Feature" &&
+        line2.type === "Feature" &&
+        line1.geometry !== null &&
+        line2.geometry !== null &&
+        line1.geometry.type === "LineString" &&
+        line2.geometry.type === "LineString" &&
+        line1.geometry.coordinates.length === 2 &&
+        line2.geometry.coordinates.length === 2) {
+        var intersect = intersects(line1, line2);
+        if (intersect) {
+            results.push(intersect);
+        }
+        return helpers_1.featureCollection(results);
+    }
+    // Handles complex GeoJSON Geometries
+    var tree = geojson_rbush_1.default();
+    tree.load(line_segment_1.default(line2));
+    meta_1.featureEach(line_segment_1.default(line1), function (segment) {
+        meta_1.featureEach(tree.search(segment), function (match) {
+            var intersect = intersects(segment, match);
+            if (intersect) {
+                // prevent duplicate points https://github.com/Turfjs/turf/issues/688
+                var key = invariant_1.getCoords(intersect).join(",");
+                if (!unique[key]) {
+                    unique[key] = true;
+                    results.push(intersect);
+                }
+            }
+        });
+    });
+    return helpers_1.featureCollection(results);
 }
-exports.default = intersect;
+/**
+ * Find a point that intersects LineStrings with two coordinates each
+ *
+ * @private
+ * @param {Feature<LineString>} line1 GeoJSON LineString (Must only contain 2 coordinates)
+ * @param {Feature<LineString>} line2 GeoJSON LineString (Must only contain 2 coordinates)
+ * @returns {Feature<Point>} intersecting GeoJSON Point
+ */
+function intersects(line1, line2) {
+    var coords1 = invariant_1.getCoords(line1);
+    var coords2 = invariant_1.getCoords(line2);
+    if (coords1.length !== 2) {
+        throw new Error("<intersects> line1 must only contain 2 coordinates");
+    }
+    if (coords2.length !== 2) {
+        throw new Error("<intersects> line2 must only contain 2 coordinates");
+    }
+    var x1 = coords1[0][0];
+    var y1 = coords1[0][1];
+    var x2 = coords1[1][0];
+    var y2 = coords1[1][1];
+    var x3 = coords2[0][0];
+    var y3 = coords2[0][1];
+    var x4 = coords2[1][0];
+    var y4 = coords2[1][1];
+    var denom = (y4 - y3) * (x2 - x1) - (x4 - x3) * (y2 - y1);
+    var numeA = (x4 - x3) * (y1 - y3) - (y4 - y3) * (x1 - x3);
+    var numeB = (x2 - x1) * (y1 - y3) - (y2 - y1) * (x1 - x3);
+    if (denom === 0) {
+        if (numeA === 0 && numeB === 0) {
+            return null;
+        }
+        return null;
+    }
+    var uA = numeA / denom;
+    var uB = numeB / denom;
+    if (uA >= 0 && uA <= 1 && uB >= 0 && uB <= 1) {
+        var x = x1 + uA * (x2 - x1);
+        var y = y1 + uA * (y2 - y1);
+        return helpers_1.point([x, y]);
+    }
+    return null;
+}
+exports.default = lineIntersect;
 
-},{"@turf/helpers":32,"@turf/invariant":33,"polygon-clipping":240}],32:[function(require,module,exports){
-arguments[4][8][0].apply(exports,arguments)
-},{"dup":8}],33:[function(require,module,exports){
-arguments[4][9][0].apply(exports,arguments)
-},{"@turf/helpers":32,"dup":9}],34:[function(require,module,exports){
+},{"@turf/helpers":14,"@turf/invariant":15,"@turf/line-segment":17,"@turf/meta":18,"geojson-rbush":96}],17:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 var helpers_1 = require("@turf/helpers");
-/**
- * Unwrap a coordinate from a Point Feature, Geometry or a single coordinate.
- *
- * @name getCoord
- * @param {Array<number>|Geometry<Point>|Feature<Point>} coord GeoJSON Point or an Array of numbers
- * @returns {Array<number>} coordinates
- * @example
- * var pt = turf.point([10, 10]);
- *
- * var coord = turf.getCoord(pt);
- * //= [10, 10]
- */
-function getCoord(coord) {
-    if (!coord) {
-        throw new Error("coord is required");
-    }
-    if (!Array.isArray(coord)) {
-        if (coord.type === "Feature" && coord.geometry !== null && coord.geometry.type === "Point") {
-            return coord.geometry.coordinates;
-        }
-        if (coord.type === "Point") {
-            return coord.coordinates;
-        }
-    }
-    if (Array.isArray(coord) && coord.length >= 2 && !Array.isArray(coord[0]) && !Array.isArray(coord[1])) {
-        return coord;
-    }
-    throw new Error("coord must be GeoJSON Point or an Array of numbers");
-}
-exports.getCoord = getCoord;
-/**
- * Unwrap coordinates from a Feature, Geometry Object or an Array
- *
- * @name getCoords
- * @param {Array<any>|Geometry|Feature} coords Feature, Geometry Object or an Array
- * @returns {Array<any>} coordinates
- * @example
- * var poly = turf.polygon([[[119.32, -8.7], [119.55, -8.69], [119.51, -8.54], [119.32, -8.7]]]);
- *
- * var coords = turf.getCoords(poly);
- * //= [[[119.32, -8.7], [119.55, -8.69], [119.51, -8.54], [119.32, -8.7]]]
- */
-function getCoords(coords) {
-    if (Array.isArray(coords)) {
-        return coords;
-    }
-    // Feature
-    if (coords.type === "Feature") {
-        if (coords.geometry !== null) {
-            return coords.geometry.coordinates;
-        }
-    }
-    else {
-        // Geometry
-        if (coords.coordinates) {
-            return coords.coordinates;
-        }
-    }
-    throw new Error("coords must be GeoJSON Feature, Geometry Object or an Array");
-}
-exports.getCoords = getCoords;
-/**
- * Checks if coordinates contains a number
- *
- * @name containsNumber
- * @param {Array<any>} coordinates GeoJSON Coordinates
- * @returns {boolean} true if Array contains a number
- */
-function containsNumber(coordinates) {
-    if (coordinates.length > 1 && helpers_1.isNumber(coordinates[0]) && helpers_1.isNumber(coordinates[1])) {
-        return true;
-    }
-    if (Array.isArray(coordinates[0]) && coordinates[0].length) {
-        return containsNumber(coordinates[0]);
-    }
-    throw new Error("coordinates must only contain numbers");
-}
-exports.containsNumber = containsNumber;
-/**
- * Enforce expectations about types of GeoJSON objects for Turf.
- *
- * @name geojsonType
- * @param {GeoJSON} value any GeoJSON object
- * @param {string} type expected GeoJSON type
- * @param {string} name name of calling function
- * @throws {Error} if value is not the expected type.
- */
-function geojsonType(value, type, name) {
-    if (!type || !name) {
-        throw new Error("type and name required");
-    }
-    if (!value || value.type !== type) {
-        throw new Error("Invalid input to " + name + ": must be a " + type + ", given " + value.type);
-    }
-}
-exports.geojsonType = geojsonType;
-/**
- * Enforce expectations about types of {@link Feature} inputs for Turf.
- * Internally this uses {@link geojsonType} to judge geometry types.
- *
- * @name featureOf
- * @param {Feature} feature a feature with an expected geometry type
- * @param {string} type expected GeoJSON type
- * @param {string} name name of calling function
- * @throws {Error} error if value is not the expected type.
- */
-function featureOf(feature, type, name) {
-    if (!feature) {
-        throw new Error("No feature passed");
-    }
-    if (!name) {
-        throw new Error(".featureOf() requires a name");
-    }
-    if (!feature || feature.type !== "Feature" || !feature.geometry) {
-        throw new Error("Invalid input to " + name + ", Feature with geometry required");
-    }
-    if (!feature.geometry || feature.geometry.type !== type) {
-        throw new Error("Invalid input to " + name + ": must be a " + type + ", given " + feature.geometry.type);
-    }
-}
-exports.featureOf = featureOf;
-/**
- * Enforce expectations about types of {@link FeatureCollection} inputs for Turf.
- * Internally this uses {@link geojsonType} to judge geometry types.
- *
- * @name collectionOf
- * @param {FeatureCollection} featureCollection a FeatureCollection for which features will be judged
- * @param {string} type expected GeoJSON type
- * @param {string} name name of calling function
- * @throws {Error} if value is not the expected type.
- */
-function collectionOf(featureCollection, type, name) {
-    if (!featureCollection) {
-        throw new Error("No featureCollection passed");
-    }
-    if (!name) {
-        throw new Error(".collectionOf() requires a name");
-    }
-    if (!featureCollection || featureCollection.type !== "FeatureCollection") {
-        throw new Error("Invalid input to " + name + ", FeatureCollection required");
-    }
-    for (var _i = 0, _a = featureCollection.features; _i < _a.length; _i++) {
-        var feature = _a[_i];
-        if (!feature || feature.type !== "Feature" || !feature.geometry) {
-            throw new Error("Invalid input to " + name + ", Feature with geometry required");
-        }
-        if (!feature.geometry || feature.geometry.type !== type) {
-            throw new Error("Invalid input to " + name + ": must be a " + type + ", given " + feature.geometry.type);
-        }
-    }
-}
-exports.collectionOf = collectionOf;
-/**
- * Get Geometry from Feature or Geometry Object
- *
- * @param {Feature|Geometry} geojson GeoJSON Feature or Geometry Object
- * @returns {Geometry|null} GeoJSON Geometry Object
- * @throws {Error} if geojson is not a Feature or Geometry Object
- * @example
- * var point = {
- *   "type": "Feature",
- *   "properties": {},
- *   "geometry": {
- *     "type": "Point",
- *     "coordinates": [110, 40]
- *   }
- * }
- * var geom = turf.getGeom(point)
- * //={"type": "Point", "coordinates": [110, 40]}
- */
-function getGeom(geojson) {
-    if (geojson.type === "Feature") {
-        return geojson.geometry;
-    }
-    return geojson;
-}
-exports.getGeom = getGeom;
-/**
- * Get GeoJSON object's type, Geometry type is prioritize.
- *
- * @param {GeoJSON} geojson GeoJSON object
- * @param {string} [name="geojson"] name of the variable to display in error message
- * @returns {string} GeoJSON type
- * @example
- * var point = {
- *   "type": "Feature",
- *   "properties": {},
- *   "geometry": {
- *     "type": "Point",
- *     "coordinates": [110, 40]
- *   }
- * }
- * var geom = turf.getType(point)
- * //="Point"
- */
-function getType(geojson, name) {
-    if (geojson.type === "FeatureCollection") {
-        return "FeatureCollection";
-    }
-    if (geojson.type === "GeometryCollection") {
-        return "GeometryCollection";
-    }
-    if (geojson.type === "Feature" && geojson.geometry !== null) {
-        return geojson.geometry.type;
-    }
-    return geojson.type;
-}
-exports.getType = getType;
-
-},{"@turf/helpers":30}],35:[function(require,module,exports){
-"use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-var distance_1 = __importDefault(require("@turf/distance"));
+var invariant_1 = require("@turf/invariant");
 var meta_1 = require("@turf/meta");
 /**
- * Takes a {@link GeoJSON} and measures its length in the specified units, {@link (Multi)Point}'s distance are ignored.
+ * Creates a {@link FeatureCollection} of 2-vertex {@link LineString} segments from a
+ * {@link LineString|(Multi)LineString} or {@link Polygon|(Multi)Polygon}.
  *
- * @name length
- * @param {Feature<LineString|MultiLineString>} geojson GeoJSON to measure
- * @param {Object} [options={}] Optional parameters
- * @param {string} [options.units=kilometers] can be degrees, radians, miles, or kilometers
- * @returns {number} length of GeoJSON
+ * @name lineSegment
+ * @param {GeoJSON} geojson GeoJSON Polygon or LineString
+ * @returns {FeatureCollection<LineString>} 2-vertex line segments
  * @example
- * var line = turf.lineString([[115, -32], [131, -22], [143, -25], [150, -34]]);
- * var length = turf.length(line, {units: 'miles'});
+ * var polygon = turf.polygon([[[-50, 5], [-40, -10], [-50, -10], [-40, 5], [-50, 5]]]);
+ * var segments = turf.lineSegment(polygon);
  *
  * //addToMap
- * var addToMap = [line];
- * line.properties.distance = length;
+ * var addToMap = [polygon, segments]
  */
-function length(geojson, options) {
-    if (options === void 0) { options = {}; }
-    // Calculate distance from 2-vertex line segments
-    return meta_1.segmentReduce(geojson, function (previousValue, segment) {
-        var coords = segment.geometry.coordinates;
-        return previousValue + distance_1.default(coords[0], coords[1], options);
-    }, 0);
+function lineSegment(geojson) {
+    if (!geojson) {
+        throw new Error("geojson is required");
+    }
+    var results = [];
+    meta_1.flattenEach(geojson, function (feature) {
+        lineSegmentFeature(feature, results);
+    });
+    return helpers_1.featureCollection(results);
 }
-exports.default = length;
+/**
+ * Line Segment
+ *
+ * @private
+ * @param {Feature<LineString|Polygon>} geojson Line or polygon feature
+ * @param {Array} results push to results
+ * @returns {void}
+ */
+function lineSegmentFeature(geojson, results) {
+    var coords = [];
+    var geometry = geojson.geometry;
+    if (geometry !== null) {
+        switch (geometry.type) {
+            case "Polygon":
+                coords = invariant_1.getCoords(geometry);
+                break;
+            case "LineString":
+                coords = [invariant_1.getCoords(geometry)];
+        }
+        coords.forEach(function (coord) {
+            var segments = createSegments(coord, geojson.properties);
+            segments.forEach(function (segment) {
+                segment.id = results.length;
+                results.push(segment);
+            });
+        });
+    }
+}
+/**
+ * Create Segments from LineString coordinates
+ *
+ * @private
+ * @param {Array<Array<number>>} coords LineString coordinates
+ * @param {*} properties GeoJSON properties
+ * @returns {Array<Feature<LineString>>} line segments
+ */
+function createSegments(coords, properties) {
+    var segments = [];
+    coords.reduce(function (previousCoords, currentCoords) {
+        var segment = helpers_1.lineString([previousCoords, currentCoords], properties);
+        segment.bbox = bbox(previousCoords, currentCoords);
+        segments.push(segment);
+        return currentCoords;
+    });
+    return segments;
+}
+/**
+ * Create BBox between two coordinates (faster than @turf/bbox)
+ *
+ * @private
+ * @param {Array<number>} coords1 Point coordinate
+ * @param {Array<number>} coords2 Point coordinate
+ * @returns {BBox} [west, south, east, north]
+ */
+function bbox(coords1, coords2) {
+    var x1 = coords1[0];
+    var y1 = coords1[1];
+    var x2 = coords2[0];
+    var y2 = coords2[1];
+    var west = x1 < x2 ? x1 : x2;
+    var south = y1 < y2 ? y1 : y2;
+    var east = x1 > x2 ? x1 : x2;
+    var north = y1 > y2 ? y1 : y2;
+    return [west, south, east, north];
+}
+exports.default = lineSegment;
 
-},{"@turf/distance":36,"@turf/meta":39}],36:[function(require,module,exports){
-arguments[4][7][0].apply(exports,arguments)
-},{"@turf/helpers":37,"@turf/invariant":38,"dup":7}],37:[function(require,module,exports){
-arguments[4][8][0].apply(exports,arguments)
-},{"dup":8}],38:[function(require,module,exports){
-arguments[4][9][0].apply(exports,arguments)
-},{"@turf/helpers":37,"dup":9}],39:[function(require,module,exports){
+},{"@turf/helpers":14,"@turf/invariant":15,"@turf/meta":18}],18:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, '__esModule', { value: true });
@@ -6579,7 +3366,3961 @@ exports.propReduce = propReduce;
 exports.segmentEach = segmentEach;
 exports.segmentReduce = segmentReduce;
 
-},{"@turf/helpers":37}],40:[function(require,module,exports){
+},{"@turf/helpers":14}],19:[function(require,module,exports){
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+var boolean_disjoint_1 = __importDefault(require("@turf/boolean-disjoint"));
+var meta_1 = require("@turf/meta");
+/**
+ * Boolean-intersects returns (TRUE) two geometries intersect.
+ *
+ * @name booleanIntersects
+ * @param {Geometry|Feature<any>} feature1 GeoJSON Feature or Geometry
+ * @param {Geometry|Feature<any>} feature2 GeoJSON Feature or Geometry
+ * @returns {boolean} true/false
+ * @example
+ * var point = turf.point([2, 2]);
+ * var line = turf.lineString([[1, 1], [1, 2], [1, 3], [1, 4]]);
+ *
+ * turf.booleanIntersects(line, point);
+ * //=true
+ */
+function booleanIntersects(feature1, feature2) {
+    var bool = false;
+    meta_1.flattenEach(feature1, function (flatten1) {
+        meta_1.flattenEach(feature2, function (flatten2) {
+            if (bool === true) {
+                return true;
+            }
+            bool = !boolean_disjoint_1.default(flatten1.geometry, flatten2.geometry);
+        });
+    });
+    return bool;
+}
+exports.default = booleanIntersects;
+
+},{"@turf/boolean-disjoint":12,"@turf/meta":21}],20:[function(require,module,exports){
+arguments[4][8][0].apply(exports,arguments)
+},{"dup":8}],21:[function(require,module,exports){
+arguments[4][18][0].apply(exports,arguments)
+},{"@turf/helpers":20,"dup":18}],22:[function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+var invariant_1 = require("@turf/invariant");
+// http://en.wikipedia.org/wiki/Even%E2%80%93odd_rule
+// modified from: https://github.com/substack/point-in-polygon/blob/master/index.js
+// which was modified from http://www.ecse.rpi.edu/Homepages/wrf/Research/Short_Notes/pnpoly.html
+/**
+ * Takes a {@link Point} and a {@link Polygon} or {@link MultiPolygon} and determines if the point
+ * resides inside the polygon. The polygon can be convex or concave. The function accounts for holes.
+ *
+ * @name booleanPointInPolygon
+ * @param {Coord} point input point
+ * @param {Feature<Polygon|MultiPolygon>} polygon input polygon or multipolygon
+ * @param {Object} [options={}] Optional parameters
+ * @param {boolean} [options.ignoreBoundary=false] True if polygon boundary should be ignored when determining if
+ * the point is inside the polygon otherwise false.
+ * @returns {boolean} `true` if the Point is inside the Polygon; `false` if the Point is not inside the Polygon
+ * @example
+ * var pt = turf.point([-77, 44]);
+ * var poly = turf.polygon([[
+ *   [-81, 41],
+ *   [-81, 47],
+ *   [-72, 47],
+ *   [-72, 41],
+ *   [-81, 41]
+ * ]]);
+ *
+ * turf.booleanPointInPolygon(pt, poly);
+ * //= true
+ */
+function booleanPointInPolygon(point, polygon, options) {
+    if (options === void 0) { options = {}; }
+    // validation
+    if (!point) {
+        throw new Error("point is required");
+    }
+    if (!polygon) {
+        throw new Error("polygon is required");
+    }
+    var pt = invariant_1.getCoord(point);
+    var geom = invariant_1.getGeom(polygon);
+    var type = geom.type;
+    var bbox = polygon.bbox;
+    var polys = geom.coordinates;
+    // Quick elimination if point is not inside bbox
+    if (bbox && inBBox(pt, bbox) === false) {
+        return false;
+    }
+    // normalize to multipolygon
+    if (type === "Polygon") {
+        polys = [polys];
+    }
+    var insidePoly = false;
+    for (var i = 0; i < polys.length && !insidePoly; i++) {
+        // check if it is in the outer ring first
+        if (inRing(pt, polys[i][0], options.ignoreBoundary)) {
+            var inHole = false;
+            var k = 1;
+            // check for the point in any of the holes
+            while (k < polys[i].length && !inHole) {
+                if (inRing(pt, polys[i][k], !options.ignoreBoundary)) {
+                    inHole = true;
+                }
+                k++;
+            }
+            if (!inHole) {
+                insidePoly = true;
+            }
+        }
+    }
+    return insidePoly;
+}
+exports.default = booleanPointInPolygon;
+/**
+ * inRing
+ *
+ * @private
+ * @param {Array<number>} pt [x,y]
+ * @param {Array<Array<number>>} ring [[x,y], [x,y],..]
+ * @param {boolean} ignoreBoundary ignoreBoundary
+ * @returns {boolean} inRing
+ */
+function inRing(pt, ring, ignoreBoundary) {
+    var isInside = false;
+    if (ring[0][0] === ring[ring.length - 1][0] && ring[0][1] === ring[ring.length - 1][1]) {
+        ring = ring.slice(0, ring.length - 1);
+    }
+    for (var i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+        var xi = ring[i][0];
+        var yi = ring[i][1];
+        var xj = ring[j][0];
+        var yj = ring[j][1];
+        var onBoundary = (pt[1] * (xi - xj) + yi * (xj - pt[0]) + yj * (pt[0] - xi) === 0) &&
+            ((xi - pt[0]) * (xj - pt[0]) <= 0) && ((yi - pt[1]) * (yj - pt[1]) <= 0);
+        if (onBoundary) {
+            return !ignoreBoundary;
+        }
+        var intersect = ((yi > pt[1]) !== (yj > pt[1])) &&
+            (pt[0] < (xj - xi) * (pt[1] - yi) / (yj - yi) + xi);
+        if (intersect) {
+            isInside = !isInside;
+        }
+    }
+    return isInside;
+}
+/**
+ * inBBox
+ *
+ * @private
+ * @param {Position} pt point [x,y]
+ * @param {BBox} bbox BBox [west, south, east, north]
+ * @returns {boolean} true/false if point is inside BBox
+ */
+function inBBox(pt, bbox) {
+    return bbox[0] <= pt[0] &&
+        bbox[1] <= pt[1] &&
+        bbox[2] >= pt[0] &&
+        bbox[3] >= pt[1];
+}
+
+},{"@turf/invariant":49}],23:[function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+var invariant_1 = require("@turf/invariant");
+/**
+ * Returns true if a point is on a line. Accepts a optional parameter to ignore the
+ * start and end vertices of the linestring.
+ *
+ * @name booleanPointOnLine
+ * @param {Coord} pt GeoJSON Point
+ * @param {Feature<LineString>} line GeoJSON LineString
+ * @param {Object} [options={}] Optional parameters
+ * @param {boolean} [options.ignoreEndVertices=false] whether to ignore the start and end vertices.
+ * @param {number} [options.epsilon] Fractional number to compare with the cross product result. Useful for dealing with floating points such as lng/lat points
+ * @returns {boolean} true/false
+ * @example
+ * var pt = turf.point([0, 0]);
+ * var line = turf.lineString([[-1, -1],[1, 1],[1.5, 2.2]]);
+ * var isPointOnLine = turf.booleanPointOnLine(pt, line);
+ * //=true
+ */
+function booleanPointOnLine(pt, line, options) {
+    if (options === void 0) { options = {}; }
+    // Normalize inputs
+    var ptCoords = invariant_1.getCoord(pt);
+    var lineCoords = invariant_1.getCoords(line);
+    // Main
+    for (var i = 0; i < lineCoords.length - 1; i++) {
+        var ignoreBoundary = false;
+        if (options.ignoreEndVertices) {
+            if (i === 0) {
+                ignoreBoundary = "start";
+            }
+            if (i === lineCoords.length - 2) {
+                ignoreBoundary = "end";
+            }
+            if (i === 0 && i + 1 === lineCoords.length - 1) {
+                ignoreBoundary = "both";
+            }
+        }
+        if (isPointOnLineSegment(lineCoords[i], lineCoords[i + 1], ptCoords, ignoreBoundary, typeof options.epsilon === "undefined" ? null : options.epsilon)) {
+            return true;
+        }
+    }
+    return false;
+}
+// See http://stackoverflow.com/a/4833823/1979085
+// See https://stackoverflow.com/a/328122/1048847
+/**
+ * @private
+ * @param {Position} lineSegmentStart coord pair of start of line
+ * @param {Position} lineSegmentEnd coord pair of end of line
+ * @param {Position} pt coord pair of point to check
+ * @param {boolean|string} excludeBoundary whether the point is allowed to fall on the line ends.
+ * @param {number} epsilon Fractional number to compare with the cross product result. Useful for dealing with floating points such as lng/lat points
+ * If true which end to ignore.
+ * @returns {boolean} true/false
+ */
+function isPointOnLineSegment(lineSegmentStart, lineSegmentEnd, pt, excludeBoundary, epsilon) {
+    var x = pt[0];
+    var y = pt[1];
+    var x1 = lineSegmentStart[0];
+    var y1 = lineSegmentStart[1];
+    var x2 = lineSegmentEnd[0];
+    var y2 = lineSegmentEnd[1];
+    var dxc = pt[0] - x1;
+    var dyc = pt[1] - y1;
+    var dxl = x2 - x1;
+    var dyl = y2 - y1;
+    var cross = dxc * dyl - dyc * dxl;
+    if (epsilon !== null) {
+        if (Math.abs(cross) > epsilon) {
+            return false;
+        }
+    }
+    else if (cross !== 0) {
+        return false;
+    }
+    if (!excludeBoundary) {
+        if (Math.abs(dxl) >= Math.abs(dyl)) {
+            return dxl > 0 ? x1 <= x && x <= x2 : x2 <= x && x <= x1;
+        }
+        return dyl > 0 ? y1 <= y && y <= y2 : y2 <= y && y <= y1;
+    }
+    else if (excludeBoundary === "start") {
+        if (Math.abs(dxl) >= Math.abs(dyl)) {
+            return dxl > 0 ? x1 < x && x <= x2 : x2 <= x && x < x1;
+        }
+        return dyl > 0 ? y1 < y && y <= y2 : y2 <= y && y < y1;
+    }
+    else if (excludeBoundary === "end") {
+        if (Math.abs(dxl) >= Math.abs(dyl)) {
+            return dxl > 0 ? x1 <= x && x < x2 : x2 < x && x <= x1;
+        }
+        return dyl > 0 ? y1 <= y && y < y2 : y2 < y && y <= y1;
+    }
+    else if (excludeBoundary === "both") {
+        if (Math.abs(dxl) >= Math.abs(dyl)) {
+            return dxl > 0 ? x1 < x && x < x2 : x2 < x && x < x1;
+        }
+        return dyl > 0 ? y1 < y && y < y2 : y2 < y && y < y1;
+    }
+    return false;
+}
+exports.default = booleanPointOnLine;
+
+},{"@turf/invariant":25}],24:[function(require,module,exports){
+arguments[4][8][0].apply(exports,arguments)
+},{"dup":8}],25:[function(require,module,exports){
+arguments[4][9][0].apply(exports,arguments)
+},{"@turf/helpers":24,"dup":9}],26:[function(require,module,exports){
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+var bbox_1 = __importDefault(require("@turf/bbox"));
+var boolean_point_on_line_1 = __importDefault(require("@turf/boolean-point-on-line"));
+var boolean_point_in_polygon_1 = __importDefault(require("@turf/boolean-point-in-polygon"));
+var invariant_1 = require("@turf/invariant");
+/**
+ * Boolean-within returns true if the first geometry is completely within the second geometry.
+ * The interiors of both geometries must intersect and, the interior and boundary of the primary (geometry a)
+ * must not intersect the exterior of the secondary (geometry b).
+ * Boolean-within returns the exact opposite result of the `@turf/boolean-contains`.
+ *
+ * @name booleanWithin
+ * @param {Geometry|Feature<any>} feature1 GeoJSON Feature or Geometry
+ * @param {Geometry|Feature<any>} feature2 GeoJSON Feature or Geometry
+ * @returns {boolean} true/false
+ * @example
+ * var line = turf.lineString([[1, 1], [1, 2], [1, 3], [1, 4]]);
+ * var point = turf.point([1, 2]);
+ *
+ * turf.booleanWithin(point, line);
+ * //=true
+ */
+function booleanWithin(feature1, feature2) {
+    var geom1 = invariant_1.getGeom(feature1);
+    var geom2 = invariant_1.getGeom(feature2);
+    var type1 = geom1.type;
+    var type2 = geom2.type;
+    switch (type1) {
+        case "Point":
+            switch (type2) {
+                case "MultiPoint":
+                    return isPointInMultiPoint(geom1, geom2);
+                case "LineString":
+                    return boolean_point_on_line_1.default(geom1, geom2, { ignoreEndVertices: true });
+                case "Polygon":
+                case "MultiPolygon":
+                    return boolean_point_in_polygon_1.default(geom1, geom2, { ignoreBoundary: true });
+                default:
+                    throw new Error("feature2 " + type2 + " geometry not supported");
+            }
+        case "MultiPoint":
+            switch (type2) {
+                case "MultiPoint":
+                    return isMultiPointInMultiPoint(geom1, geom2);
+                case "LineString":
+                    return isMultiPointOnLine(geom1, geom2);
+                case "Polygon":
+                case "MultiPolygon":
+                    return isMultiPointInPoly(geom1, geom2);
+                default:
+                    throw new Error("feature2 " + type2 + " geometry not supported");
+            }
+        case "LineString":
+            switch (type2) {
+                case "LineString":
+                    return isLineOnLine(geom1, geom2);
+                case "Polygon":
+                case "MultiPolygon":
+                    return isLineInPoly(geom1, geom2);
+                default:
+                    throw new Error("feature2 " + type2 + " geometry not supported");
+            }
+        case "Polygon":
+            switch (type2) {
+                case "Polygon":
+                case "MultiPolygon":
+                    return isPolyInPoly(geom1, geom2);
+                default:
+                    throw new Error("feature2 " + type2 + " geometry not supported");
+            }
+        default:
+            throw new Error("feature1 " + type1 + " geometry not supported");
+    }
+}
+function isPointInMultiPoint(point, multiPoint) {
+    var i;
+    var output = false;
+    for (i = 0; i < multiPoint.coordinates.length; i++) {
+        if (compareCoords(multiPoint.coordinates[i], point.coordinates)) {
+            output = true;
+            break;
+        }
+    }
+    return output;
+}
+function isMultiPointInMultiPoint(multiPoint1, multiPoint2) {
+    for (var i = 0; i < multiPoint1.coordinates.length; i++) {
+        var anyMatch = false;
+        for (var i2 = 0; i2 < multiPoint2.coordinates.length; i2++) {
+            if (compareCoords(multiPoint1.coordinates[i], multiPoint2.coordinates[i2])) {
+                anyMatch = true;
+            }
+        }
+        if (!anyMatch) {
+            return false;
+        }
+    }
+    return true;
+}
+function isMultiPointOnLine(multiPoint, lineString) {
+    var foundInsidePoint = false;
+    for (var i = 0; i < multiPoint.coordinates.length; i++) {
+        if (!boolean_point_on_line_1.default(multiPoint.coordinates[i], lineString)) {
+            return false;
+        }
+        if (!foundInsidePoint) {
+            foundInsidePoint = boolean_point_on_line_1.default(multiPoint.coordinates[i], lineString, { ignoreEndVertices: true });
+        }
+    }
+    return foundInsidePoint;
+}
+function isMultiPointInPoly(multiPoint, polygon) {
+    var output = true;
+    var oneInside = false;
+    var isInside = false;
+    for (var i = 0; i < multiPoint.coordinates.length; i++) {
+        isInside = boolean_point_in_polygon_1.default(multiPoint.coordinates[1], polygon);
+        if (!isInside) {
+            output = false;
+            break;
+        }
+        if (!oneInside) {
+            isInside = boolean_point_in_polygon_1.default(multiPoint.coordinates[1], polygon, {
+                ignoreBoundary: true,
+            });
+        }
+    }
+    return output && isInside;
+}
+function isLineOnLine(lineString1, lineString2) {
+    for (var i = 0; i < lineString1.coordinates.length; i++) {
+        if (!boolean_point_on_line_1.default(lineString1.coordinates[i], lineString2)) {
+            return false;
+        }
+    }
+    return true;
+}
+function isLineInPoly(linestring, polygon) {
+    var polyBbox = bbox_1.default(polygon);
+    var lineBbox = bbox_1.default(linestring);
+    if (!doBBoxOverlap(polyBbox, lineBbox)) {
+        return false;
+    }
+    var foundInsidePoint = false;
+    for (var i = 0; i < linestring.coordinates.length - 1; i++) {
+        if (!boolean_point_in_polygon_1.default(linestring.coordinates[i], polygon)) {
+            return false;
+        }
+        if (!foundInsidePoint) {
+            foundInsidePoint = boolean_point_in_polygon_1.default(linestring.coordinates[i], polygon, { ignoreBoundary: true });
+        }
+        if (!foundInsidePoint) {
+            var midpoint = getMidpoint(linestring.coordinates[i], linestring.coordinates[i + 1]);
+            foundInsidePoint = boolean_point_in_polygon_1.default(midpoint, polygon, {
+                ignoreBoundary: true,
+            });
+        }
+    }
+    return foundInsidePoint;
+}
+/**
+ * Is Polygon2 in Polygon1
+ * Only takes into account outer rings
+ *
+ * @private
+ * @param {Polygon} geometry1
+ * @param {Polygon|MultiPolygon} geometry2
+ * @returns {boolean} true/false
+ */
+function isPolyInPoly(geometry1, geometry2) {
+    var poly1Bbox = bbox_1.default(geometry1);
+    var poly2Bbox = bbox_1.default(geometry2);
+    if (!doBBoxOverlap(poly2Bbox, poly1Bbox)) {
+        return false;
+    }
+    for (var i = 0; i < geometry1.coordinates[0].length; i++) {
+        if (!boolean_point_in_polygon_1.default(geometry1.coordinates[0][i], geometry2)) {
+            return false;
+        }
+    }
+    return true;
+}
+function doBBoxOverlap(bbox1, bbox2) {
+    if (bbox1[0] > bbox2[0])
+        return false;
+    if (bbox1[2] < bbox2[2])
+        return false;
+    if (bbox1[1] > bbox2[1])
+        return false;
+    if (bbox1[3] < bbox2[3])
+        return false;
+    return true;
+}
+/**
+ * compareCoords
+ *
+ * @private
+ * @param {Position} pair1 point [x,y]
+ * @param {Position} pair2 point [x,y]
+ * @returns {boolean} true/false if coord pairs match
+ */
+function compareCoords(pair1, pair2) {
+    return pair1[0] === pair2[0] && pair1[1] === pair2[1];
+}
+/**
+ * getMidpoint
+ *
+ * @private
+ * @param {Position} pair1 point [x,y]
+ * @param {Position} pair2 point [x,y]
+ * @returns {Position} midpoint of pair1 and pair2
+ */
+function getMidpoint(pair1, pair2) {
+    return [(pair1[0] + pair2[0]) / 2, (pair1[1] + pair2[1]) / 2];
+}
+exports.default = booleanWithin;
+
+},{"@turf/bbox":27,"@turf/boolean-point-in-polygon":28,"@turf/boolean-point-on-line":23,"@turf/invariant":30}],27:[function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+var meta_1 = require("@turf/meta");
+/**
+ * Takes a set of features, calculates the bbox of all input features, and returns a bounding box.
+ *
+ * @name bbox
+ * @param {GeoJSON} geojson any GeoJSON object
+ * @returns {BBox} bbox extent in [minX, minY, maxX, maxY] order
+ * @example
+ * var line = turf.lineString([[-74, 40], [-78, 42], [-82, 35]]);
+ * var bbox = turf.bbox(line);
+ * var bboxPolygon = turf.bboxPolygon(bbox);
+ *
+ * //addToMap
+ * var addToMap = [line, bboxPolygon]
+ */
+function bbox(geojson) {
+    var result = [Infinity, Infinity, -Infinity, -Infinity];
+    meta_1.coordEach(geojson, function (coord) {
+        if (result[0] > coord[0]) {
+            result[0] = coord[0];
+        }
+        if (result[1] > coord[1]) {
+            result[1] = coord[1];
+        }
+        if (result[2] < coord[0]) {
+            result[2] = coord[0];
+        }
+        if (result[3] < coord[1]) {
+            result[3] = coord[1];
+        }
+    });
+    return result;
+}
+bbox["default"] = bbox;
+exports.default = bbox;
+
+},{"@turf/meta":31}],28:[function(require,module,exports){
+arguments[4][13][0].apply(exports,arguments)
+},{"@turf/invariant":30,"dup":13}],29:[function(require,module,exports){
+arguments[4][8][0].apply(exports,arguments)
+},{"dup":8}],30:[function(require,module,exports){
+arguments[4][9][0].apply(exports,arguments)
+},{"@turf/helpers":29,"dup":9}],31:[function(require,module,exports){
+arguments[4][18][0].apply(exports,arguments)
+},{"@turf/helpers":29,"dup":18}],32:[function(require,module,exports){
+'use strict';
+
+function _interopDefault (ex) { return (ex && (typeof ex === 'object') && 'default' in ex) ? ex['default'] : ex; }
+
+var bbox = _interopDefault(require('@turf/bbox'));
+var helpers = require('@turf/helpers');
+
+/**
+ * Takes a {@link Feature} or {@link FeatureCollection} and returns the absolute center point of all features.
+ *
+ * @name center
+ * @param {GeoJSON} geojson GeoJSON to be centered
+ * @param {Object} [options={}] Optional parameters
+ * @param {Object} [options.properties={}] an Object that is used as the {@link Feature}'s properties
+ * @returns {Feature<Point>} a Point feature at the absolute center point of all input features
+ * @example
+ * var features = turf.featureCollection([
+ *   turf.point( [-97.522259, 35.4691]),
+ *   turf.point( [-97.502754, 35.463455]),
+ *   turf.point( [-97.508269, 35.463245])
+ * ]);
+ *
+ * var center = turf.center(features);
+ *
+ * //addToMap
+ * var addToMap = [features, center]
+ * center.properties['marker-size'] = 'large';
+ * center.properties['marker-color'] = '#000';
+ */
+function center(geojson, options) {
+    // Optional parameters
+    options = options || {};
+    if (!helpers.isObject(options)) throw new Error('options is invalid');
+    var properties = options.properties;
+
+    // Input validation
+    if (!geojson) throw new Error('geojson is required');
+
+    var ext = bbox(geojson);
+    var x = (ext[0] + ext[2]) / 2;
+    var y = (ext[1] + ext[3]) / 2;
+    return helpers.point([x, y], properties);
+}
+
+module.exports = center;
+module.exports.default = center;
+
+},{"@turf/bbox":33,"@turf/helpers":34}],33:[function(require,module,exports){
+'use strict';
+
+var meta = require('@turf/meta');
+
+/**
+ * Takes a set of features, calculates the bbox of all input features, and returns a bounding box.
+ *
+ * @name bbox
+ * @param {GeoJSON} geojson any GeoJSON object
+ * @returns {BBox} bbox extent in [minX, minY, maxX, maxY] order
+ * @example
+ * var line = turf.lineString([[-74, 40], [-78, 42], [-82, 35]]);
+ * var bbox = turf.bbox(line);
+ * var bboxPolygon = turf.bboxPolygon(bbox);
+ *
+ * //addToMap
+ * var addToMap = [line, bboxPolygon]
+ */
+function bbox(geojson) {
+    var BBox = [Infinity, Infinity, -Infinity, -Infinity];
+    meta.coordEach(geojson, function (coord) {
+        if (BBox[0] > coord[0]) BBox[0] = coord[0];
+        if (BBox[1] > coord[1]) BBox[1] = coord[1];
+        if (BBox[2] < coord[0]) BBox[2] = coord[0];
+        if (BBox[3] < coord[1]) BBox[3] = coord[1];
+    });
+    return BBox;
+}
+
+module.exports = bbox;
+module.exports.default = bbox;
+
+},{"@turf/meta":35}],34:[function(require,module,exports){
+'use strict';
+
+Object.defineProperty(exports, '__esModule', { value: true });
+
+/**
+ * Earth Radius used with the Harvesine formula and approximates using a spherical (non-ellipsoid) Earth.
+ */
+var earthRadius = 6371008.8;
+
+/**
+ * Unit of measurement factors using a spherical (non-ellipsoid) earth radius.
+ */
+var factors = {
+    meters: earthRadius,
+    metres: earthRadius,
+    millimeters: earthRadius * 1000,
+    millimetres: earthRadius * 1000,
+    centimeters: earthRadius * 100,
+    centimetres: earthRadius * 100,
+    kilometers: earthRadius / 1000,
+    kilometres: earthRadius / 1000,
+    miles: earthRadius / 1609.344,
+    nauticalmiles: earthRadius / 1852,
+    inches: earthRadius * 39.370,
+    yards: earthRadius / 1.0936,
+    feet: earthRadius * 3.28084,
+    radians: 1,
+    degrees: earthRadius / 111325,
+};
+
+/**
+ * Units of measurement factors based on 1 meter.
+ */
+var unitsFactors = {
+    meters: 1,
+    metres: 1,
+    millimeters: 1000,
+    millimetres: 1000,
+    centimeters: 100,
+    centimetres: 100,
+    kilometers: 1 / 1000,
+    kilometres: 1 / 1000,
+    miles: 1 / 1609.344,
+    nauticalmiles: 1 / 1852,
+    inches: 39.370,
+    yards: 1 / 1.0936,
+    feet: 3.28084,
+    radians: 1 / earthRadius,
+    degrees: 1 / 111325,
+};
+
+/**
+ * Area of measurement factors based on 1 square meter.
+ */
+var areaFactors = {
+    meters: 1,
+    metres: 1,
+    millimeters: 1000000,
+    millimetres: 1000000,
+    centimeters: 10000,
+    centimetres: 10000,
+    kilometers: 0.000001,
+    kilometres: 0.000001,
+    acres: 0.000247105,
+    miles: 3.86e-7,
+    yards: 1.195990046,
+    feet: 10.763910417,
+    inches: 1550.003100006
+};
+
+/**
+ * Wraps a GeoJSON {@link Geometry} in a GeoJSON {@link Feature}.
+ *
+ * @name feature
+ * @param {Geometry} geometry input geometry
+ * @param {Object} [properties={}] an Object of key-value pairs to add as properties
+ * @param {Object} [options={}] Optional Parameters
+ * @param {Array<number>} [options.bbox] Bounding Box Array [west, south, east, north] associated with the Feature
+ * @param {string|number} [options.id] Identifier associated with the Feature
+ * @returns {Feature} a GeoJSON Feature
+ * @example
+ * var geometry = {
+ *   "type": "Point",
+ *   "coordinates": [110, 50]
+ * };
+ *
+ * var feature = turf.feature(geometry);
+ *
+ * //=feature
+ */
+function feature(geometry, properties, options) {
+    // Optional Parameters
+    options = options || {};
+    if (!isObject(options)) throw new Error('options is invalid');
+    var bbox = options.bbox;
+    var id = options.id;
+
+    // Validation
+    if (geometry === undefined) throw new Error('geometry is required');
+    if (properties && properties.constructor !== Object) throw new Error('properties must be an Object');
+    if (bbox) validateBBox(bbox);
+    if (id) validateId(id);
+
+    // Main
+    var feat = {type: 'Feature'};
+    if (id) feat.id = id;
+    if (bbox) feat.bbox = bbox;
+    feat.properties = properties || {};
+    feat.geometry = geometry;
+    return feat;
+}
+
+/**
+ * Creates a GeoJSON {@link Geometry} from a Geometry string type & coordinates.
+ * For GeometryCollection type use `helpers.geometryCollection`
+ *
+ * @name geometry
+ * @param {string} type Geometry Type
+ * @param {Array<number>} coordinates Coordinates
+ * @param {Object} [options={}] Optional Parameters
+ * @param {Array<number>} [options.bbox] Bounding Box Array [west, south, east, north] associated with the Geometry
+ * @returns {Geometry} a GeoJSON Geometry
+ * @example
+ * var type = 'Point';
+ * var coordinates = [110, 50];
+ *
+ * var geometry = turf.geometry(type, coordinates);
+ *
+ * //=geometry
+ */
+function geometry(type, coordinates, options) {
+    // Optional Parameters
+    options = options || {};
+    if (!isObject(options)) throw new Error('options is invalid');
+    var bbox = options.bbox;
+
+    // Validation
+    if (!type) throw new Error('type is required');
+    if (!coordinates) throw new Error('coordinates is required');
+    if (!Array.isArray(coordinates)) throw new Error('coordinates must be an Array');
+    if (bbox) validateBBox(bbox);
+
+    // Main
+    var geom;
+    switch (type) {
+    case 'Point': geom = point(coordinates).geometry; break;
+    case 'LineString': geom = lineString(coordinates).geometry; break;
+    case 'Polygon': geom = polygon(coordinates).geometry; break;
+    case 'MultiPoint': geom = multiPoint(coordinates).geometry; break;
+    case 'MultiLineString': geom = multiLineString(coordinates).geometry; break;
+    case 'MultiPolygon': geom = multiPolygon(coordinates).geometry; break;
+    default: throw new Error(type + ' is invalid');
+    }
+    if (bbox) geom.bbox = bbox;
+    return geom;
+}
+
+/**
+ * Creates a {@link Point} {@link Feature} from a Position.
+ *
+ * @name point
+ * @param {Array<number>} coordinates longitude, latitude position (each in decimal degrees)
+ * @param {Object} [properties={}] an Object of key-value pairs to add as properties
+ * @param {Object} [options={}] Optional Parameters
+ * @param {Array<number>} [options.bbox] Bounding Box Array [west, south, east, north] associated with the Feature
+ * @param {string|number} [options.id] Identifier associated with the Feature
+ * @returns {Feature<Point>} a Point feature
+ * @example
+ * var point = turf.point([-75.343, 39.984]);
+ *
+ * //=point
+ */
+function point(coordinates, properties, options) {
+    if (!coordinates) throw new Error('coordinates is required');
+    if (!Array.isArray(coordinates)) throw new Error('coordinates must be an Array');
+    if (coordinates.length < 2) throw new Error('coordinates must be at least 2 numbers long');
+    if (!isNumber(coordinates[0]) || !isNumber(coordinates[1])) throw new Error('coordinates must contain numbers');
+
+    return feature({
+        type: 'Point',
+        coordinates: coordinates
+    }, properties, options);
+}
+
+/**
+ * Creates a {@link Point} {@link FeatureCollection} from an Array of Point coordinates.
+ *
+ * @name points
+ * @param {Array<Array<number>>} coordinates an array of Points
+ * @param {Object} [properties={}] Translate these properties to each Feature
+ * @param {Object} [options={}] Optional Parameters
+ * @param {Array<number>} [options.bbox] Bounding Box Array [west, south, east, north] associated with the FeatureCollection
+ * @param {string|number} [options.id] Identifier associated with the FeatureCollection
+ * @returns {FeatureCollection<Point>} Point Feature
+ * @example
+ * var points = turf.points([
+ *   [-75, 39],
+ *   [-80, 45],
+ *   [-78, 50]
+ * ]);
+ *
+ * //=points
+ */
+function points(coordinates, properties, options) {
+    if (!coordinates) throw new Error('coordinates is required');
+    if (!Array.isArray(coordinates)) throw new Error('coordinates must be an Array');
+
+    return featureCollection(coordinates.map(function (coords) {
+        return point(coords, properties);
+    }), options);
+}
+
+/**
+ * Creates a {@link Polygon} {@link Feature} from an Array of LinearRings.
+ *
+ * @name polygon
+ * @param {Array<Array<Array<number>>>} coordinates an array of LinearRings
+ * @param {Object} [properties={}] an Object of key-value pairs to add as properties
+ * @param {Object} [options={}] Optional Parameters
+ * @param {Array<number>} [options.bbox] Bounding Box Array [west, south, east, north] associated with the Feature
+ * @param {string|number} [options.id] Identifier associated with the Feature
+ * @returns {Feature<Polygon>} Polygon Feature
+ * @example
+ * var polygon = turf.polygon([[[-5, 52], [-4, 56], [-2, 51], [-7, 54], [-5, 52]]], { name: 'poly1' });
+ *
+ * //=polygon
+ */
+function polygon(coordinates, properties, options) {
+    if (!coordinates) throw new Error('coordinates is required');
+
+    for (var i = 0; i < coordinates.length; i++) {
+        var ring = coordinates[i];
+        if (ring.length < 4) {
+            throw new Error('Each LinearRing of a Polygon must have 4 or more Positions.');
+        }
+        for (var j = 0; j < ring[ring.length - 1].length; j++) {
+            // Check if first point of Polygon contains two numbers
+            if (i === 0 && j === 0 && !isNumber(ring[0][0]) || !isNumber(ring[0][1])) throw new Error('coordinates must contain numbers');
+            if (ring[ring.length - 1][j] !== ring[0][j]) {
+                throw new Error('First and last Position are not equivalent.');
+            }
+        }
+    }
+
+    return feature({
+        type: 'Polygon',
+        coordinates: coordinates
+    }, properties, options);
+}
+
+/**
+ * Creates a {@link Polygon} {@link FeatureCollection} from an Array of Polygon coordinates.
+ *
+ * @name polygons
+ * @param {Array<Array<Array<Array<number>>>>} coordinates an array of Polygon coordinates
+ * @param {Object} [properties={}] an Object of key-value pairs to add as properties
+ * @param {Object} [options={}] Optional Parameters
+ * @param {Array<number>} [options.bbox] Bounding Box Array [west, south, east, north] associated with the Feature
+ * @param {string|number} [options.id] Identifier associated with the FeatureCollection
+ * @returns {FeatureCollection<Polygon>} Polygon FeatureCollection
+ * @example
+ * var polygons = turf.polygons([
+ *   [[[-5, 52], [-4, 56], [-2, 51], [-7, 54], [-5, 52]]],
+ *   [[[-15, 42], [-14, 46], [-12, 41], [-17, 44], [-15, 42]]],
+ * ]);
+ *
+ * //=polygons
+ */
+function polygons(coordinates, properties, options) {
+    if (!coordinates) throw new Error('coordinates is required');
+    if (!Array.isArray(coordinates)) throw new Error('coordinates must be an Array');
+
+    return featureCollection(coordinates.map(function (coords) {
+        return polygon(coords, properties);
+    }), options);
+}
+
+/**
+ * Creates a {@link LineString} {@link Feature} from an Array of Positions.
+ *
+ * @name lineString
+ * @param {Array<Array<number>>} coordinates an array of Positions
+ * @param {Object} [properties={}] an Object of key-value pairs to add as properties
+ * @param {Object} [options={}] Optional Parameters
+ * @param {Array<number>} [options.bbox] Bounding Box Array [west, south, east, north] associated with the Feature
+ * @param {string|number} [options.id] Identifier associated with the Feature
+ * @returns {Feature<LineString>} LineString Feature
+ * @example
+ * var linestring1 = turf.lineString([[-24, 63], [-23, 60], [-25, 65], [-20, 69]], {name: 'line 1'});
+ * var linestring2 = turf.lineString([[-14, 43], [-13, 40], [-15, 45], [-10, 49]], {name: 'line 2'});
+ *
+ * //=linestring1
+ * //=linestring2
+ */
+function lineString(coordinates, properties, options) {
+    if (!coordinates) throw new Error('coordinates is required');
+    if (coordinates.length < 2) throw new Error('coordinates must be an array of two or more positions');
+    // Check if first point of LineString contains two numbers
+    if (!isNumber(coordinates[0][1]) || !isNumber(coordinates[0][1])) throw new Error('coordinates must contain numbers');
+
+    return feature({
+        type: 'LineString',
+        coordinates: coordinates
+    }, properties, options);
+}
+
+/**
+ * Creates a {@link LineString} {@link FeatureCollection} from an Array of LineString coordinates.
+ *
+ * @name lineStrings
+ * @param {Array<Array<number>>} coordinates an array of LinearRings
+ * @param {Object} [properties={}] an Object of key-value pairs to add as properties
+ * @param {Object} [options={}] Optional Parameters
+ * @param {Array<number>} [options.bbox] Bounding Box Array [west, south, east, north] associated with the FeatureCollection
+ * @param {string|number} [options.id] Identifier associated with the FeatureCollection
+ * @returns {FeatureCollection<LineString>} LineString FeatureCollection
+ * @example
+ * var linestrings = turf.lineStrings([
+ *   [[-24, 63], [-23, 60], [-25, 65], [-20, 69]],
+ *   [[-14, 43], [-13, 40], [-15, 45], [-10, 49]]
+ * ]);
+ *
+ * //=linestrings
+ */
+function lineStrings(coordinates, properties, options) {
+    if (!coordinates) throw new Error('coordinates is required');
+    if (!Array.isArray(coordinates)) throw new Error('coordinates must be an Array');
+
+    return featureCollection(coordinates.map(function (coords) {
+        return lineString(coords, properties);
+    }), options);
+}
+
+/**
+ * Takes one or more {@link Feature|Features} and creates a {@link FeatureCollection}.
+ *
+ * @name featureCollection
+ * @param {Feature[]} features input features
+ * @param {Object} [options={}] Optional Parameters
+ * @param {Array<number>} [options.bbox] Bounding Box Array [west, south, east, north] associated with the Feature
+ * @param {string|number} [options.id] Identifier associated with the Feature
+ * @returns {FeatureCollection} FeatureCollection of Features
+ * @example
+ * var locationA = turf.point([-75.343, 39.984], {name: 'Location A'});
+ * var locationB = turf.point([-75.833, 39.284], {name: 'Location B'});
+ * var locationC = turf.point([-75.534, 39.123], {name: 'Location C'});
+ *
+ * var collection = turf.featureCollection([
+ *   locationA,
+ *   locationB,
+ *   locationC
+ * ]);
+ *
+ * //=collection
+ */
+function featureCollection(features, options) {
+    // Optional Parameters
+    options = options || {};
+    if (!isObject(options)) throw new Error('options is invalid');
+    var bbox = options.bbox;
+    var id = options.id;
+
+    // Validation
+    if (!features) throw new Error('No features passed');
+    if (!Array.isArray(features)) throw new Error('features must be an Array');
+    if (bbox) validateBBox(bbox);
+    if (id) validateId(id);
+
+    // Main
+    var fc = {type: 'FeatureCollection'};
+    if (id) fc.id = id;
+    if (bbox) fc.bbox = bbox;
+    fc.features = features;
+    return fc;
+}
+
+/**
+ * Creates a {@link Feature<MultiLineString>} based on a
+ * coordinate array. Properties can be added optionally.
+ *
+ * @name multiLineString
+ * @param {Array<Array<Array<number>>>} coordinates an array of LineStrings
+ * @param {Object} [properties={}] an Object of key-value pairs to add as properties
+ * @param {Object} [options={}] Optional Parameters
+ * @param {Array<number>} [options.bbox] Bounding Box Array [west, south, east, north] associated with the Feature
+ * @param {string|number} [options.id] Identifier associated with the Feature
+ * @returns {Feature<MultiLineString>} a MultiLineString feature
+ * @throws {Error} if no coordinates are passed
+ * @example
+ * var multiLine = turf.multiLineString([[[0,0],[10,10]]]);
+ *
+ * //=multiLine
+ */
+function multiLineString(coordinates, properties, options) {
+    if (!coordinates) throw new Error('coordinates is required');
+
+    return feature({
+        type: 'MultiLineString',
+        coordinates: coordinates
+    }, properties, options);
+}
+
+/**
+ * Creates a {@link Feature<MultiPoint>} based on a
+ * coordinate array. Properties can be added optionally.
+ *
+ * @name multiPoint
+ * @param {Array<Array<number>>} coordinates an array of Positions
+ * @param {Object} [properties={}] an Object of key-value pairs to add as properties
+ * @param {Object} [options={}] Optional Parameters
+ * @param {Array<number>} [options.bbox] Bounding Box Array [west, south, east, north] associated with the Feature
+ * @param {string|number} [options.id] Identifier associated with the Feature
+ * @returns {Feature<MultiPoint>} a MultiPoint feature
+ * @throws {Error} if no coordinates are passed
+ * @example
+ * var multiPt = turf.multiPoint([[0,0],[10,10]]);
+ *
+ * //=multiPt
+ */
+function multiPoint(coordinates, properties, options) {
+    if (!coordinates) throw new Error('coordinates is required');
+
+    return feature({
+        type: 'MultiPoint',
+        coordinates: coordinates
+    }, properties, options);
+}
+
+/**
+ * Creates a {@link Feature<MultiPolygon>} based on a
+ * coordinate array. Properties can be added optionally.
+ *
+ * @name multiPolygon
+ * @param {Array<Array<Array<Array<number>>>>} coordinates an array of Polygons
+ * @param {Object} [properties={}] an Object of key-value pairs to add as properties
+ * @param {Object} [options={}] Optional Parameters
+ * @param {Array<number>} [options.bbox] Bounding Box Array [west, south, east, north] associated with the Feature
+ * @param {string|number} [options.id] Identifier associated with the Feature
+ * @returns {Feature<MultiPolygon>} a multipolygon feature
+ * @throws {Error} if no coordinates are passed
+ * @example
+ * var multiPoly = turf.multiPolygon([[[[0,0],[0,10],[10,10],[10,0],[0,0]]]]);
+ *
+ * //=multiPoly
+ *
+ */
+function multiPolygon(coordinates, properties, options) {
+    if (!coordinates) throw new Error('coordinates is required');
+
+    return feature({
+        type: 'MultiPolygon',
+        coordinates: coordinates
+    }, properties, options);
+}
+
+/**
+ * Creates a {@link Feature<GeometryCollection>} based on a
+ * coordinate array. Properties can be added optionally.
+ *
+ * @name geometryCollection
+ * @param {Array<Geometry>} geometries an array of GeoJSON Geometries
+ * @param {Object} [properties={}] an Object of key-value pairs to add as properties
+ * @param {Object} [options={}] Optional Parameters
+ * @param {Array<number>} [options.bbox] Bounding Box Array [west, south, east, north] associated with the Feature
+ * @param {string|number} [options.id] Identifier associated with the Feature
+ * @returns {Feature<GeometryCollection>} a GeoJSON GeometryCollection Feature
+ * @example
+ * var pt = {
+ *     "type": "Point",
+ *       "coordinates": [100, 0]
+ *     };
+ * var line = {
+ *     "type": "LineString",
+ *     "coordinates": [ [101, 0], [102, 1] ]
+ *   };
+ * var collection = turf.geometryCollection([pt, line]);
+ *
+ * //=collection
+ */
+function geometryCollection(geometries, properties, options) {
+    if (!geometries) throw new Error('geometries is required');
+    if (!Array.isArray(geometries)) throw new Error('geometries must be an Array');
+
+    return feature({
+        type: 'GeometryCollection',
+        geometries: geometries
+    }, properties, options);
+}
+
+/**
+ * Round number to precision
+ *
+ * @param {number} num Number
+ * @param {number} [precision=0] Precision
+ * @returns {number} rounded number
+ * @example
+ * turf.round(120.4321)
+ * //=120
+ *
+ * turf.round(120.4321, 2)
+ * //=120.43
+ */
+function round(num, precision) {
+    if (num === undefined || num === null || isNaN(num)) throw new Error('num is required');
+    if (precision && !(precision >= 0)) throw new Error('precision must be a positive number');
+    var multiplier = Math.pow(10, precision || 0);
+    return Math.round(num * multiplier) / multiplier;
+}
+
+/**
+ * Convert a distance measurement (assuming a spherical Earth) from radians to a more friendly unit.
+ * Valid units: miles, nauticalmiles, inches, yards, meters, metres, kilometers, centimeters, feet
+ *
+ * @name radiansToLength
+ * @param {number} radians in radians across the sphere
+ * @param {string} [units='kilometers'] can be degrees, radians, miles, or kilometers inches, yards, metres, meters, kilometres, kilometers.
+ * @returns {number} distance
+ */
+function radiansToLength(radians, units) {
+    if (radians === undefined || radians === null) throw new Error('radians is required');
+
+    if (units && typeof units !== 'string') throw new Error('units must be a string');
+    var factor = factors[units || 'kilometers'];
+    if (!factor) throw new Error(units + ' units is invalid');
+    return radians * factor;
+}
+
+/**
+ * Convert a distance measurement (assuming a spherical Earth) from a real-world unit into radians
+ * Valid units: miles, nauticalmiles, inches, yards, meters, metres, kilometers, centimeters, feet
+ *
+ * @name lengthToRadians
+ * @param {number} distance in real units
+ * @param {string} [units='kilometers'] can be degrees, radians, miles, or kilometers inches, yards, metres, meters, kilometres, kilometers.
+ * @returns {number} radians
+ */
+function lengthToRadians(distance, units) {
+    if (distance === undefined || distance === null) throw new Error('distance is required');
+
+    if (units && typeof units !== 'string') throw new Error('units must be a string');
+    var factor = factors[units || 'kilometers'];
+    if (!factor) throw new Error(units + ' units is invalid');
+    return distance / factor;
+}
+
+/**
+ * Convert a distance measurement (assuming a spherical Earth) from a real-world unit into degrees
+ * Valid units: miles, nauticalmiles, inches, yards, meters, metres, centimeters, kilometres, feet
+ *
+ * @name lengthToDegrees
+ * @param {number} distance in real units
+ * @param {string} [units='kilometers'] can be degrees, radians, miles, or kilometers inches, yards, metres, meters, kilometres, kilometers.
+ * @returns {number} degrees
+ */
+function lengthToDegrees(distance, units) {
+    return radiansToDegrees(lengthToRadians(distance, units));
+}
+
+/**
+ * Converts any bearing angle from the north line direction (positive clockwise)
+ * and returns an angle between 0-360 degrees (positive clockwise), 0 being the north line
+ *
+ * @name bearingToAzimuth
+ * @param {number} bearing angle, between -180 and +180 degrees
+ * @returns {number} angle between 0 and 360 degrees
+ */
+function bearingToAzimuth(bearing) {
+    if (bearing === null || bearing === undefined) throw new Error('bearing is required');
+
+    var angle = bearing % 360;
+    if (angle < 0) angle += 360;
+    return angle;
+}
+
+/**
+ * Converts an angle in radians to degrees
+ *
+ * @name radiansToDegrees
+ * @param {number} radians angle in radians
+ * @returns {number} degrees between 0 and 360 degrees
+ */
+function radiansToDegrees(radians) {
+    if (radians === null || radians === undefined) throw new Error('radians is required');
+
+    var degrees = radians % (2 * Math.PI);
+    return degrees * 180 / Math.PI;
+}
+
+/**
+ * Converts an angle in degrees to radians
+ *
+ * @name degreesToRadians
+ * @param {number} degrees angle between 0 and 360 degrees
+ * @returns {number} angle in radians
+ */
+function degreesToRadians(degrees) {
+    if (degrees === null || degrees === undefined) throw new Error('degrees is required');
+
+    var radians = degrees % 360;
+    return radians * Math.PI / 180;
+}
+
+/**
+ * Converts a length to the requested unit.
+ * Valid units: miles, nauticalmiles, inches, yards, meters, metres, kilometers, centimeters, feet
+ *
+ * @param {number} length to be converted
+ * @param {string} originalUnit of the length
+ * @param {string} [finalUnit='kilometers'] returned unit
+ * @returns {number} the converted length
+ */
+function convertLength(length, originalUnit, finalUnit) {
+    if (length === null || length === undefined) throw new Error('length is required');
+    if (!(length >= 0)) throw new Error('length must be a positive number');
+
+    return radiansToLength(lengthToRadians(length, originalUnit), finalUnit || 'kilometers');
+}
+
+/**
+ * Converts a area to the requested unit.
+ * Valid units: kilometers, kilometres, meters, metres, centimetres, millimeters, acres, miles, yards, feet, inches
+ * @param {number} area to be converted
+ * @param {string} [originalUnit='meters'] of the distance
+ * @param {string} [finalUnit='kilometers'] returned unit
+ * @returns {number} the converted distance
+ */
+function convertArea(area, originalUnit, finalUnit) {
+    if (area === null || area === undefined) throw new Error('area is required');
+    if (!(area >= 0)) throw new Error('area must be a positive number');
+
+    var startFactor = areaFactors[originalUnit || 'meters'];
+    if (!startFactor) throw new Error('invalid original units');
+
+    var finalFactor = areaFactors[finalUnit || 'kilometers'];
+    if (!finalFactor) throw new Error('invalid final units');
+
+    return (area / startFactor) * finalFactor;
+}
+
+/**
+ * isNumber
+ *
+ * @param {*} num Number to validate
+ * @returns {boolean} true/false
+ * @example
+ * turf.isNumber(123)
+ * //=true
+ * turf.isNumber('foo')
+ * //=false
+ */
+function isNumber(num) {
+    return !isNaN(num) && num !== null && !Array.isArray(num);
+}
+
+/**
+ * isObject
+ *
+ * @param {*} input variable to validate
+ * @returns {boolean} true/false
+ * @example
+ * turf.isObject({elevation: 10})
+ * //=true
+ * turf.isObject('foo')
+ * //=false
+ */
+function isObject(input) {
+    return (!!input) && (input.constructor === Object);
+}
+
+/**
+ * Validate BBox
+ *
+ * @private
+ * @param {Array<number>} bbox BBox to validate
+ * @returns {void}
+ * @throws Error if BBox is not valid
+ * @example
+ * validateBBox([-180, -40, 110, 50])
+ * //=OK
+ * validateBBox([-180, -40])
+ * //=Error
+ * validateBBox('Foo')
+ * //=Error
+ * validateBBox(5)
+ * //=Error
+ * validateBBox(null)
+ * //=Error
+ * validateBBox(undefined)
+ * //=Error
+ */
+function validateBBox(bbox) {
+    if (!bbox) throw new Error('bbox is required');
+    if (!Array.isArray(bbox)) throw new Error('bbox must be an Array');
+    if (bbox.length !== 4 && bbox.length !== 6) throw new Error('bbox must be an Array of 4 or 6 numbers');
+    bbox.forEach(function (num) {
+        if (!isNumber(num)) throw new Error('bbox must only contain numbers');
+    });
+}
+
+/**
+ * Validate Id
+ *
+ * @private
+ * @param {string|number} id Id to validate
+ * @returns {void}
+ * @throws Error if Id is not valid
+ * @example
+ * validateId([-180, -40, 110, 50])
+ * //=Error
+ * validateId([-180, -40])
+ * //=Error
+ * validateId('Foo')
+ * //=OK
+ * validateId(5)
+ * //=OK
+ * validateId(null)
+ * //=Error
+ * validateId(undefined)
+ * //=Error
+ */
+function validateId(id) {
+    if (!id) throw new Error('id is required');
+    if (['string', 'number'].indexOf(typeof id) === -1) throw new Error('id must be a number or a string');
+}
+
+// Deprecated methods
+function radians2degrees() {
+    throw new Error('method has been renamed to `radiansToDegrees`');
+}
+
+function degrees2radians() {
+    throw new Error('method has been renamed to `degreesToRadians`');
+}
+
+function distanceToDegrees() {
+    throw new Error('method has been renamed to `lengthToDegrees`');
+}
+
+function distanceToRadians() {
+    throw new Error('method has been renamed to `lengthToRadians`');
+}
+
+function radiansToDistance() {
+    throw new Error('method has been renamed to `radiansToLength`');
+}
+
+function bearingToAngle() {
+    throw new Error('method has been renamed to `bearingToAzimuth`');
+}
+
+function convertDistance() {
+    throw new Error('method has been renamed to `convertLength`');
+}
+
+exports.earthRadius = earthRadius;
+exports.factors = factors;
+exports.unitsFactors = unitsFactors;
+exports.areaFactors = areaFactors;
+exports.feature = feature;
+exports.geometry = geometry;
+exports.point = point;
+exports.points = points;
+exports.polygon = polygon;
+exports.polygons = polygons;
+exports.lineString = lineString;
+exports.lineStrings = lineStrings;
+exports.featureCollection = featureCollection;
+exports.multiLineString = multiLineString;
+exports.multiPoint = multiPoint;
+exports.multiPolygon = multiPolygon;
+exports.geometryCollection = geometryCollection;
+exports.round = round;
+exports.radiansToLength = radiansToLength;
+exports.lengthToRadians = lengthToRadians;
+exports.lengthToDegrees = lengthToDegrees;
+exports.bearingToAzimuth = bearingToAzimuth;
+exports.radiansToDegrees = radiansToDegrees;
+exports.degreesToRadians = degreesToRadians;
+exports.convertLength = convertLength;
+exports.convertArea = convertArea;
+exports.isNumber = isNumber;
+exports.isObject = isObject;
+exports.validateBBox = validateBBox;
+exports.validateId = validateId;
+exports.radians2degrees = radians2degrees;
+exports.degrees2radians = degrees2radians;
+exports.distanceToDegrees = distanceToDegrees;
+exports.distanceToRadians = distanceToRadians;
+exports.radiansToDistance = radiansToDistance;
+exports.bearingToAngle = bearingToAngle;
+exports.convertDistance = convertDistance;
+
+},{}],35:[function(require,module,exports){
+'use strict';
+
+Object.defineProperty(exports, '__esModule', { value: true });
+
+var helpers = require('@turf/helpers');
+
+/**
+ * Callback for coordEach
+ *
+ * @callback coordEachCallback
+ * @param {Array<number>} currentCoord The current coordinate being processed.
+ * @param {number} coordIndex The current index of the coordinate being processed.
+ * @param {number} featureIndex The current index of the Feature being processed.
+ * @param {number} multiFeatureIndex The current index of the Multi-Feature being processed.
+ * @param {number} geometryIndex The current index of the Geometry being processed.
+ */
+
+/**
+ * Iterate over coordinates in any GeoJSON object, similar to Array.forEach()
+ *
+ * @name coordEach
+ * @param {FeatureCollection|Feature|Geometry} geojson any GeoJSON object
+ * @param {Function} callback a method that takes (currentCoord, coordIndex, featureIndex, multiFeatureIndex)
+ * @param {boolean} [excludeWrapCoord=false] whether or not to include the final coordinate of LinearRings that wraps the ring in its iteration.
+ * @returns {void}
+ * @example
+ * var features = turf.featureCollection([
+ *   turf.point([26, 37], {"foo": "bar"}),
+ *   turf.point([36, 53], {"hello": "world"})
+ * ]);
+ *
+ * turf.coordEach(features, function (currentCoord, coordIndex, featureIndex, multiFeatureIndex, geometryIndex) {
+ *   //=currentCoord
+ *   //=coordIndex
+ *   //=featureIndex
+ *   //=multiFeatureIndex
+ *   //=geometryIndex
+ * });
+ */
+function coordEach(geojson, callback, excludeWrapCoord) {
+    // Handles null Geometry -- Skips this GeoJSON
+    if (geojson === null) return;
+    var j, k, l, geometry, stopG, coords,
+        geometryMaybeCollection,
+        wrapShrink = 0,
+        coordIndex = 0,
+        isGeometryCollection,
+        type = geojson.type,
+        isFeatureCollection = type === 'FeatureCollection',
+        isFeature = type === 'Feature',
+        stop = isFeatureCollection ? geojson.features.length : 1;
+
+    // This logic may look a little weird. The reason why it is that way
+    // is because it's trying to be fast. GeoJSON supports multiple kinds
+    // of objects at its root: FeatureCollection, Features, Geometries.
+    // This function has the responsibility of handling all of them, and that
+    // means that some of the `for` loops you see below actually just don't apply
+    // to certain inputs. For instance, if you give this just a
+    // Point geometry, then both loops are short-circuited and all we do
+    // is gradually rename the input until it's called 'geometry'.
+    //
+    // This also aims to allocate as few resources as possible: just a
+    // few numbers and booleans, rather than any temporary arrays as would
+    // be required with the normalization approach.
+    for (var featureIndex = 0; featureIndex < stop; featureIndex++) {
+        geometryMaybeCollection = (isFeatureCollection ? geojson.features[featureIndex].geometry :
+            (isFeature ? geojson.geometry : geojson));
+        isGeometryCollection = (geometryMaybeCollection) ? geometryMaybeCollection.type === 'GeometryCollection' : false;
+        stopG = isGeometryCollection ? geometryMaybeCollection.geometries.length : 1;
+
+        for (var geomIndex = 0; geomIndex < stopG; geomIndex++) {
+            var multiFeatureIndex = 0;
+            var geometryIndex = 0;
+            geometry = isGeometryCollection ?
+                geometryMaybeCollection.geometries[geomIndex] : geometryMaybeCollection;
+
+            // Handles null Geometry -- Skips this geometry
+            if (geometry === null) continue;
+            coords = geometry.coordinates;
+            var geomType = geometry.type;
+
+            wrapShrink = (excludeWrapCoord && (geomType === 'Polygon' || geomType === 'MultiPolygon')) ? 1 : 0;
+
+            switch (geomType) {
+            case null:
+                break;
+            case 'Point':
+                if (callback(coords, coordIndex, featureIndex, multiFeatureIndex, geometryIndex) === false) return false;
+                coordIndex++;
+                multiFeatureIndex++;
+                break;
+            case 'LineString':
+            case 'MultiPoint':
+                for (j = 0; j < coords.length; j++) {
+                    if (callback(coords[j], coordIndex, featureIndex, multiFeatureIndex, geometryIndex) === false) return false;
+                    coordIndex++;
+                    if (geomType === 'MultiPoint') multiFeatureIndex++;
+                }
+                if (geomType === 'LineString') multiFeatureIndex++;
+                break;
+            case 'Polygon':
+            case 'MultiLineString':
+                for (j = 0; j < coords.length; j++) {
+                    for (k = 0; k < coords[j].length - wrapShrink; k++) {
+                        if (callback(coords[j][k], coordIndex, featureIndex, multiFeatureIndex, geometryIndex) === false) return false;
+                        coordIndex++;
+                    }
+                    if (geomType === 'MultiLineString') multiFeatureIndex++;
+                    if (geomType === 'Polygon') geometryIndex++;
+                }
+                if (geomType === 'Polygon') multiFeatureIndex++;
+                break;
+            case 'MultiPolygon':
+                for (j = 0; j < coords.length; j++) {
+                    if (geomType === 'MultiPolygon') geometryIndex = 0;
+                    for (k = 0; k < coords[j].length; k++) {
+                        for (l = 0; l < coords[j][k].length - wrapShrink; l++) {
+                            if (callback(coords[j][k][l], coordIndex, featureIndex, multiFeatureIndex, geometryIndex) === false) return false;
+                            coordIndex++;
+                        }
+                        geometryIndex++;
+                    }
+                    multiFeatureIndex++;
+                }
+                break;
+            case 'GeometryCollection':
+                for (j = 0; j < geometry.geometries.length; j++)
+                    if (coordEach(geometry.geometries[j], callback, excludeWrapCoord) === false) return false;
+                break;
+            default:
+                throw new Error('Unknown Geometry Type');
+            }
+        }
+    }
+}
+
+/**
+ * Callback for coordReduce
+ *
+ * The first time the callback function is called, the values provided as arguments depend
+ * on whether the reduce method has an initialValue argument.
+ *
+ * If an initialValue is provided to the reduce method:
+ *  - The previousValue argument is initialValue.
+ *  - The currentValue argument is the value of the first element present in the array.
+ *
+ * If an initialValue is not provided:
+ *  - The previousValue argument is the value of the first element present in the array.
+ *  - The currentValue argument is the value of the second element present in the array.
+ *
+ * @callback coordReduceCallback
+ * @param {*} previousValue The accumulated value previously returned in the last invocation
+ * of the callback, or initialValue, if supplied.
+ * @param {Array<number>} currentCoord The current coordinate being processed.
+ * @param {number} coordIndex The current index of the coordinate being processed.
+ * Starts at index 0, if an initialValue is provided, and at index 1 otherwise.
+ * @param {number} featureIndex The current index of the Feature being processed.
+ * @param {number} multiFeatureIndex The current index of the Multi-Feature being processed.
+ * @param {number} geometryIndex The current index of the Geometry being processed.
+ */
+
+/**
+ * Reduce coordinates in any GeoJSON object, similar to Array.reduce()
+ *
+ * @name coordReduce
+ * @param {FeatureCollection|Geometry|Feature} geojson any GeoJSON object
+ * @param {Function} callback a method that takes (previousValue, currentCoord, coordIndex)
+ * @param {*} [initialValue] Value to use as the first argument to the first call of the callback.
+ * @param {boolean} [excludeWrapCoord=false] whether or not to include the final coordinate of LinearRings that wraps the ring in its iteration.
+ * @returns {*} The value that results from the reduction.
+ * @example
+ * var features = turf.featureCollection([
+ *   turf.point([26, 37], {"foo": "bar"}),
+ *   turf.point([36, 53], {"hello": "world"})
+ * ]);
+ *
+ * turf.coordReduce(features, function (previousValue, currentCoord, coordIndex, featureIndex, multiFeatureIndex, geometryIndex) {
+ *   //=previousValue
+ *   //=currentCoord
+ *   //=coordIndex
+ *   //=featureIndex
+ *   //=multiFeatureIndex
+ *   //=geometryIndex
+ *   return currentCoord;
+ * });
+ */
+function coordReduce(geojson, callback, initialValue, excludeWrapCoord) {
+    var previousValue = initialValue;
+    coordEach(geojson, function (currentCoord, coordIndex, featureIndex, multiFeatureIndex, geometryIndex) {
+        if (coordIndex === 0 && initialValue === undefined) previousValue = currentCoord;
+        else previousValue = callback(previousValue, currentCoord, coordIndex, featureIndex, multiFeatureIndex, geometryIndex);
+    }, excludeWrapCoord);
+    return previousValue;
+}
+
+/**
+ * Callback for propEach
+ *
+ * @callback propEachCallback
+ * @param {Object} currentProperties The current Properties being processed.
+ * @param {number} featureIndex The current index of the Feature being processed.
+ */
+
+/**
+ * Iterate over properties in any GeoJSON object, similar to Array.forEach()
+ *
+ * @name propEach
+ * @param {FeatureCollection|Feature} geojson any GeoJSON object
+ * @param {Function} callback a method that takes (currentProperties, featureIndex)
+ * @returns {void}
+ * @example
+ * var features = turf.featureCollection([
+ *     turf.point([26, 37], {foo: 'bar'}),
+ *     turf.point([36, 53], {hello: 'world'})
+ * ]);
+ *
+ * turf.propEach(features, function (currentProperties, featureIndex) {
+ *   //=currentProperties
+ *   //=featureIndex
+ * });
+ */
+function propEach(geojson, callback) {
+    var i;
+    switch (geojson.type) {
+    case 'FeatureCollection':
+        for (i = 0; i < geojson.features.length; i++) {
+            if (callback(geojson.features[i].properties, i) === false) break;
+        }
+        break;
+    case 'Feature':
+        callback(geojson.properties, 0);
+        break;
+    }
+}
+
+
+/**
+ * Callback for propReduce
+ *
+ * The first time the callback function is called, the values provided as arguments depend
+ * on whether the reduce method has an initialValue argument.
+ *
+ * If an initialValue is provided to the reduce method:
+ *  - The previousValue argument is initialValue.
+ *  - The currentValue argument is the value of the first element present in the array.
+ *
+ * If an initialValue is not provided:
+ *  - The previousValue argument is the value of the first element present in the array.
+ *  - The currentValue argument is the value of the second element present in the array.
+ *
+ * @callback propReduceCallback
+ * @param {*} previousValue The accumulated value previously returned in the last invocation
+ * of the callback, or initialValue, if supplied.
+ * @param {*} currentProperties The current Properties being processed.
+ * @param {number} featureIndex The current index of the Feature being processed.
+ */
+
+/**
+ * Reduce properties in any GeoJSON object into a single value,
+ * similar to how Array.reduce works. However, in this case we lazily run
+ * the reduction, so an array of all properties is unnecessary.
+ *
+ * @name propReduce
+ * @param {FeatureCollection|Feature} geojson any GeoJSON object
+ * @param {Function} callback a method that takes (previousValue, currentProperties, featureIndex)
+ * @param {*} [initialValue] Value to use as the first argument to the first call of the callback.
+ * @returns {*} The value that results from the reduction.
+ * @example
+ * var features = turf.featureCollection([
+ *     turf.point([26, 37], {foo: 'bar'}),
+ *     turf.point([36, 53], {hello: 'world'})
+ * ]);
+ *
+ * turf.propReduce(features, function (previousValue, currentProperties, featureIndex) {
+ *   //=previousValue
+ *   //=currentProperties
+ *   //=featureIndex
+ *   return currentProperties
+ * });
+ */
+function propReduce(geojson, callback, initialValue) {
+    var previousValue = initialValue;
+    propEach(geojson, function (currentProperties, featureIndex) {
+        if (featureIndex === 0 && initialValue === undefined) previousValue = currentProperties;
+        else previousValue = callback(previousValue, currentProperties, featureIndex);
+    });
+    return previousValue;
+}
+
+/**
+ * Callback for featureEach
+ *
+ * @callback featureEachCallback
+ * @param {Feature<any>} currentFeature The current Feature being processed.
+ * @param {number} featureIndex The current index of the Feature being processed.
+ */
+
+/**
+ * Iterate over features in any GeoJSON object, similar to
+ * Array.forEach.
+ *
+ * @name featureEach
+ * @param {FeatureCollection|Feature|Geometry} geojson any GeoJSON object
+ * @param {Function} callback a method that takes (currentFeature, featureIndex)
+ * @returns {void}
+ * @example
+ * var features = turf.featureCollection([
+ *   turf.point([26, 37], {foo: 'bar'}),
+ *   turf.point([36, 53], {hello: 'world'})
+ * ]);
+ *
+ * turf.featureEach(features, function (currentFeature, featureIndex) {
+ *   //=currentFeature
+ *   //=featureIndex
+ * });
+ */
+function featureEach(geojson, callback) {
+    if (geojson.type === 'Feature') {
+        callback(geojson, 0);
+    } else if (geojson.type === 'FeatureCollection') {
+        for (var i = 0; i < geojson.features.length; i++) {
+            if (callback(geojson.features[i], i) === false) break;
+        }
+    }
+}
+
+/**
+ * Callback for featureReduce
+ *
+ * The first time the callback function is called, the values provided as arguments depend
+ * on whether the reduce method has an initialValue argument.
+ *
+ * If an initialValue is provided to the reduce method:
+ *  - The previousValue argument is initialValue.
+ *  - The currentValue argument is the value of the first element present in the array.
+ *
+ * If an initialValue is not provided:
+ *  - The previousValue argument is the value of the first element present in the array.
+ *  - The currentValue argument is the value of the second element present in the array.
+ *
+ * @callback featureReduceCallback
+ * @param {*} previousValue The accumulated value previously returned in the last invocation
+ * of the callback, or initialValue, if supplied.
+ * @param {Feature} currentFeature The current Feature being processed.
+ * @param {number} featureIndex The current index of the Feature being processed.
+ */
+
+/**
+ * Reduce features in any GeoJSON object, similar to Array.reduce().
+ *
+ * @name featureReduce
+ * @param {FeatureCollection|Feature|Geometry} geojson any GeoJSON object
+ * @param {Function} callback a method that takes (previousValue, currentFeature, featureIndex)
+ * @param {*} [initialValue] Value to use as the first argument to the first call of the callback.
+ * @returns {*} The value that results from the reduction.
+ * @example
+ * var features = turf.featureCollection([
+ *   turf.point([26, 37], {"foo": "bar"}),
+ *   turf.point([36, 53], {"hello": "world"})
+ * ]);
+ *
+ * turf.featureReduce(features, function (previousValue, currentFeature, featureIndex) {
+ *   //=previousValue
+ *   //=currentFeature
+ *   //=featureIndex
+ *   return currentFeature
+ * });
+ */
+function featureReduce(geojson, callback, initialValue) {
+    var previousValue = initialValue;
+    featureEach(geojson, function (currentFeature, featureIndex) {
+        if (featureIndex === 0 && initialValue === undefined) previousValue = currentFeature;
+        else previousValue = callback(previousValue, currentFeature, featureIndex);
+    });
+    return previousValue;
+}
+
+/**
+ * Get all coordinates from any GeoJSON object.
+ *
+ * @name coordAll
+ * @param {FeatureCollection|Feature|Geometry} geojson any GeoJSON object
+ * @returns {Array<Array<number>>} coordinate position array
+ * @example
+ * var features = turf.featureCollection([
+ *   turf.point([26, 37], {foo: 'bar'}),
+ *   turf.point([36, 53], {hello: 'world'})
+ * ]);
+ *
+ * var coords = turf.coordAll(features);
+ * //= [[26, 37], [36, 53]]
+ */
+function coordAll(geojson) {
+    var coords = [];
+    coordEach(geojson, function (coord) {
+        coords.push(coord);
+    });
+    return coords;
+}
+
+/**
+ * Callback for geomEach
+ *
+ * @callback geomEachCallback
+ * @param {Geometry} currentGeometry The current Geometry being processed.
+ * @param {number} featureIndex The current index of the Feature being processed.
+ * @param {Object} featureProperties The current Feature Properties being processed.
+ * @param {Array<number>} featureBBox The current Feature BBox being processed.
+ * @param {number|string} featureId The current Feature Id being processed.
+ */
+
+/**
+ * Iterate over each geometry in any GeoJSON object, similar to Array.forEach()
+ *
+ * @name geomEach
+ * @param {FeatureCollection|Feature|Geometry} geojson any GeoJSON object
+ * @param {Function} callback a method that takes (currentGeometry, featureIndex, featureProperties, featureBBox, featureId)
+ * @returns {void}
+ * @example
+ * var features = turf.featureCollection([
+ *     turf.point([26, 37], {foo: 'bar'}),
+ *     turf.point([36, 53], {hello: 'world'})
+ * ]);
+ *
+ * turf.geomEach(features, function (currentGeometry, featureIndex, featureProperties, featureBBox, featureId) {
+ *   //=currentGeometry
+ *   //=featureIndex
+ *   //=featureProperties
+ *   //=featureBBox
+ *   //=featureId
+ * });
+ */
+function geomEach(geojson, callback) {
+    var i, j, g, geometry, stopG,
+        geometryMaybeCollection,
+        isGeometryCollection,
+        featureProperties,
+        featureBBox,
+        featureId,
+        featureIndex = 0,
+        isFeatureCollection = geojson.type === 'FeatureCollection',
+        isFeature = geojson.type === 'Feature',
+        stop = isFeatureCollection ? geojson.features.length : 1;
+
+    // This logic may look a little weird. The reason why it is that way
+    // is because it's trying to be fast. GeoJSON supports multiple kinds
+    // of objects at its root: FeatureCollection, Features, Geometries.
+    // This function has the responsibility of handling all of them, and that
+    // means that some of the `for` loops you see below actually just don't apply
+    // to certain inputs. For instance, if you give this just a
+    // Point geometry, then both loops are short-circuited and all we do
+    // is gradually rename the input until it's called 'geometry'.
+    //
+    // This also aims to allocate as few resources as possible: just a
+    // few numbers and booleans, rather than any temporary arrays as would
+    // be required with the normalization approach.
+    for (i = 0; i < stop; i++) {
+
+        geometryMaybeCollection = (isFeatureCollection ? geojson.features[i].geometry :
+            (isFeature ? geojson.geometry : geojson));
+        featureProperties = (isFeatureCollection ? geojson.features[i].properties :
+            (isFeature ? geojson.properties : {}));
+        featureBBox = (isFeatureCollection ? geojson.features[i].bbox :
+            (isFeature ? geojson.bbox : undefined));
+        featureId = (isFeatureCollection ? geojson.features[i].id :
+            (isFeature ? geojson.id : undefined));
+        isGeometryCollection = (geometryMaybeCollection) ? geometryMaybeCollection.type === 'GeometryCollection' : false;
+        stopG = isGeometryCollection ? geometryMaybeCollection.geometries.length : 1;
+
+        for (g = 0; g < stopG; g++) {
+            geometry = isGeometryCollection ?
+                geometryMaybeCollection.geometries[g] : geometryMaybeCollection;
+
+            // Handle null Geometry
+            if (geometry === null) {
+                if (callback(null, featureIndex, featureProperties, featureBBox, featureId) === false) return false;
+                continue;
+            }
+            switch (geometry.type) {
+            case 'Point':
+            case 'LineString':
+            case 'MultiPoint':
+            case 'Polygon':
+            case 'MultiLineString':
+            case 'MultiPolygon': {
+                if (callback(geometry, featureIndex, featureProperties, featureBBox, featureId) === false) return false;
+                break;
+            }
+            case 'GeometryCollection': {
+                for (j = 0; j < geometry.geometries.length; j++) {
+                    if (callback(geometry.geometries[j], featureIndex, featureProperties, featureBBox, featureId) === false) return false;
+                }
+                break;
+            }
+            default:
+                throw new Error('Unknown Geometry Type');
+            }
+        }
+        // Only increase `featureIndex` per each feature
+        featureIndex++;
+    }
+}
+
+/**
+ * Callback for geomReduce
+ *
+ * The first time the callback function is called, the values provided as arguments depend
+ * on whether the reduce method has an initialValue argument.
+ *
+ * If an initialValue is provided to the reduce method:
+ *  - The previousValue argument is initialValue.
+ *  - The currentValue argument is the value of the first element present in the array.
+ *
+ * If an initialValue is not provided:
+ *  - The previousValue argument is the value of the first element present in the array.
+ *  - The currentValue argument is the value of the second element present in the array.
+ *
+ * @callback geomReduceCallback
+ * @param {*} previousValue The accumulated value previously returned in the last invocation
+ * of the callback, or initialValue, if supplied.
+ * @param {Geometry} currentGeometry The current Geometry being processed.
+ * @param {number} featureIndex The current index of the Feature being processed.
+ * @param {Object} featureProperties The current Feature Properties being processed.
+ * @param {Array<number>} featureBBox The current Feature BBox being processed.
+ * @param {number|string} featureId The current Feature Id being processed.
+ */
+
+/**
+ * Reduce geometry in any GeoJSON object, similar to Array.reduce().
+ *
+ * @name geomReduce
+ * @param {FeatureCollection|Feature|Geometry} geojson any GeoJSON object
+ * @param {Function} callback a method that takes (previousValue, currentGeometry, featureIndex, featureProperties, featureBBox, featureId)
+ * @param {*} [initialValue] Value to use as the first argument to the first call of the callback.
+ * @returns {*} The value that results from the reduction.
+ * @example
+ * var features = turf.featureCollection([
+ *     turf.point([26, 37], {foo: 'bar'}),
+ *     turf.point([36, 53], {hello: 'world'})
+ * ]);
+ *
+ * turf.geomReduce(features, function (previousValue, currentGeometry, featureIndex, featureProperties, featureBBox, featureId) {
+ *   //=previousValue
+ *   //=currentGeometry
+ *   //=featureIndex
+ *   //=featureProperties
+ *   //=featureBBox
+ *   //=featureId
+ *   return currentGeometry
+ * });
+ */
+function geomReduce(geojson, callback, initialValue) {
+    var previousValue = initialValue;
+    geomEach(geojson, function (currentGeometry, featureIndex, featureProperties, featureBBox, featureId) {
+        if (featureIndex === 0 && initialValue === undefined) previousValue = currentGeometry;
+        else previousValue = callback(previousValue, currentGeometry, featureIndex, featureProperties, featureBBox, featureId);
+    });
+    return previousValue;
+}
+
+/**
+ * Callback for flattenEach
+ *
+ * @callback flattenEachCallback
+ * @param {Feature} currentFeature The current flattened feature being processed.
+ * @param {number} featureIndex The current index of the Feature being processed.
+ * @param {number} multiFeatureIndex The current index of the Multi-Feature being processed.
+ */
+
+/**
+ * Iterate over flattened features in any GeoJSON object, similar to
+ * Array.forEach.
+ *
+ * @name flattenEach
+ * @param {FeatureCollection|Feature|Geometry} geojson any GeoJSON object
+ * @param {Function} callback a method that takes (currentFeature, featureIndex, multiFeatureIndex)
+ * @example
+ * var features = turf.featureCollection([
+ *     turf.point([26, 37], {foo: 'bar'}),
+ *     turf.multiPoint([[40, 30], [36, 53]], {hello: 'world'})
+ * ]);
+ *
+ * turf.flattenEach(features, function (currentFeature, featureIndex, multiFeatureIndex) {
+ *   //=currentFeature
+ *   //=featureIndex
+ *   //=multiFeatureIndex
+ * });
+ */
+function flattenEach(geojson, callback) {
+    geomEach(geojson, function (geometry, featureIndex, properties, bbox, id) {
+        // Callback for single geometry
+        var type = (geometry === null) ? null : geometry.type;
+        switch (type) {
+        case null:
+        case 'Point':
+        case 'LineString':
+        case 'Polygon':
+            if (callback(helpers.feature(geometry, properties, {bbox: bbox, id: id}), featureIndex, 0) === false) return false;
+            return;
+        }
+
+        var geomType;
+
+        // Callback for multi-geometry
+        switch (type) {
+        case 'MultiPoint':
+            geomType = 'Point';
+            break;
+        case 'MultiLineString':
+            geomType = 'LineString';
+            break;
+        case 'MultiPolygon':
+            geomType = 'Polygon';
+            break;
+        }
+
+        for (var multiFeatureIndex = 0; multiFeatureIndex < geometry.coordinates.length; multiFeatureIndex++) {
+            var coordinate = geometry.coordinates[multiFeatureIndex];
+            var geom = {
+                type: geomType,
+                coordinates: coordinate
+            };
+            if (callback(helpers.feature(geom, properties), featureIndex, multiFeatureIndex) === false) return false;
+        }
+    });
+}
+
+/**
+ * Callback for flattenReduce
+ *
+ * The first time the callback function is called, the values provided as arguments depend
+ * on whether the reduce method has an initialValue argument.
+ *
+ * If an initialValue is provided to the reduce method:
+ *  - The previousValue argument is initialValue.
+ *  - The currentValue argument is the value of the first element present in the array.
+ *
+ * If an initialValue is not provided:
+ *  - The previousValue argument is the value of the first element present in the array.
+ *  - The currentValue argument is the value of the second element present in the array.
+ *
+ * @callback flattenReduceCallback
+ * @param {*} previousValue The accumulated value previously returned in the last invocation
+ * of the callback, or initialValue, if supplied.
+ * @param {Feature} currentFeature The current Feature being processed.
+ * @param {number} featureIndex The current index of the Feature being processed.
+ * @param {number} multiFeatureIndex The current index of the Multi-Feature being processed.
+ */
+
+/**
+ * Reduce flattened features in any GeoJSON object, similar to Array.reduce().
+ *
+ * @name flattenReduce
+ * @param {FeatureCollection|Feature|Geometry} geojson any GeoJSON object
+ * @param {Function} callback a method that takes (previousValue, currentFeature, featureIndex, multiFeatureIndex)
+ * @param {*} [initialValue] Value to use as the first argument to the first call of the callback.
+ * @returns {*} The value that results from the reduction.
+ * @example
+ * var features = turf.featureCollection([
+ *     turf.point([26, 37], {foo: 'bar'}),
+ *     turf.multiPoint([[40, 30], [36, 53]], {hello: 'world'})
+ * ]);
+ *
+ * turf.flattenReduce(features, function (previousValue, currentFeature, featureIndex, multiFeatureIndex) {
+ *   //=previousValue
+ *   //=currentFeature
+ *   //=featureIndex
+ *   //=multiFeatureIndex
+ *   return currentFeature
+ * });
+ */
+function flattenReduce(geojson, callback, initialValue) {
+    var previousValue = initialValue;
+    flattenEach(geojson, function (currentFeature, featureIndex, multiFeatureIndex) {
+        if (featureIndex === 0 && multiFeatureIndex === 0 && initialValue === undefined) previousValue = currentFeature;
+        else previousValue = callback(previousValue, currentFeature, featureIndex, multiFeatureIndex);
+    });
+    return previousValue;
+}
+
+/**
+ * Callback for segmentEach
+ *
+ * @callback segmentEachCallback
+ * @param {Feature<LineString>} currentSegment The current Segment being processed.
+ * @param {number} featureIndex The current index of the Feature being processed.
+ * @param {number} multiFeatureIndex The current index of the Multi-Feature being processed.
+ * @param {number} geometryIndex The current index of the Geometry being processed.
+ * @param {number} segmentIndex The current index of the Segment being processed.
+ * @returns {void}
+ */
+
+/**
+ * Iterate over 2-vertex line segment in any GeoJSON object, similar to Array.forEach()
+ * (Multi)Point geometries do not contain segments therefore they are ignored during this operation.
+ *
+ * @param {FeatureCollection|Feature|Geometry} geojson any GeoJSON
+ * @param {Function} callback a method that takes (currentSegment, featureIndex, multiFeatureIndex, geometryIndex, segmentIndex)
+ * @returns {void}
+ * @example
+ * var polygon = turf.polygon([[[-50, 5], [-40, -10], [-50, -10], [-40, 5], [-50, 5]]]);
+ *
+ * // Iterate over GeoJSON by 2-vertex segments
+ * turf.segmentEach(polygon, function (currentSegment, featureIndex, multiFeatureIndex, geometryIndex, segmentIndex) {
+ *   //=currentSegment
+ *   //=featureIndex
+ *   //=multiFeatureIndex
+ *   //=geometryIndex
+ *   //=segmentIndex
+ * });
+ *
+ * // Calculate the total number of segments
+ * var total = 0;
+ * turf.segmentEach(polygon, function () {
+ *     total++;
+ * });
+ */
+function segmentEach(geojson, callback) {
+    flattenEach(geojson, function (feature$$1, featureIndex, multiFeatureIndex) {
+        var segmentIndex = 0;
+
+        // Exclude null Geometries
+        if (!feature$$1.geometry) return;
+        // (Multi)Point geometries do not contain segments therefore they are ignored during this operation.
+        var type = feature$$1.geometry.type;
+        if (type === 'Point' || type === 'MultiPoint') return;
+
+        // Generate 2-vertex line segments
+        var previousCoords;
+        if (coordEach(feature$$1, function (currentCoord, coordIndex, featureIndexCoord, mutliPartIndexCoord, geometryIndex) {
+            // Simulating a meta.coordReduce() since `reduce` operations cannot be stopped by returning `false`
+            if (previousCoords === undefined) {
+                previousCoords = currentCoord;
+                return;
+            }
+            var currentSegment = helpers.lineString([previousCoords, currentCoord], feature$$1.properties);
+            if (callback(currentSegment, featureIndex, multiFeatureIndex, geometryIndex, segmentIndex) === false) return false;
+            segmentIndex++;
+            previousCoords = currentCoord;
+        }) === false) return false;
+    });
+}
+
+/**
+ * Callback for segmentReduce
+ *
+ * The first time the callback function is called, the values provided as arguments depend
+ * on whether the reduce method has an initialValue argument.
+ *
+ * If an initialValue is provided to the reduce method:
+ *  - The previousValue argument is initialValue.
+ *  - The currentValue argument is the value of the first element present in the array.
+ *
+ * If an initialValue is not provided:
+ *  - The previousValue argument is the value of the first element present in the array.
+ *  - The currentValue argument is the value of the second element present in the array.
+ *
+ * @callback segmentReduceCallback
+ * @param {*} previousValue The accumulated value previously returned in the last invocation
+ * of the callback, or initialValue, if supplied.
+ * @param {Feature<LineString>} currentSegment The current Segment being processed.
+ * @param {number} featureIndex The current index of the Feature being processed.
+ * @param {number} multiFeatureIndex The current index of the Multi-Feature being processed.
+ * @param {number} geometryIndex The current index of the Geometry being processed.
+ * @param {number} segmentIndex The current index of the Segment being processed.
+ */
+
+/**
+ * Reduce 2-vertex line segment in any GeoJSON object, similar to Array.reduce()
+ * (Multi)Point geometries do not contain segments therefore they are ignored during this operation.
+ *
+ * @param {FeatureCollection|Feature|Geometry} geojson any GeoJSON
+ * @param {Function} callback a method that takes (previousValue, currentSegment, currentIndex)
+ * @param {*} [initialValue] Value to use as the first argument to the first call of the callback.
+ * @returns {void}
+ * @example
+ * var polygon = turf.polygon([[[-50, 5], [-40, -10], [-50, -10], [-40, 5], [-50, 5]]]);
+ *
+ * // Iterate over GeoJSON by 2-vertex segments
+ * turf.segmentReduce(polygon, function (previousSegment, currentSegment, featureIndex, multiFeatureIndex, geometryIndex, segmentIndex) {
+ *   //= previousSegment
+ *   //= currentSegment
+ *   //= featureIndex
+ *   //= multiFeatureIndex
+ *   //= geometryIndex
+ *   //= segmentInex
+ *   return currentSegment
+ * });
+ *
+ * // Calculate the total number of segments
+ * var initialValue = 0
+ * var total = turf.segmentReduce(polygon, function (previousValue) {
+ *     previousValue++;
+ *     return previousValue;
+ * }, initialValue);
+ */
+function segmentReduce(geojson, callback, initialValue) {
+    var previousValue = initialValue;
+    var started = false;
+    segmentEach(geojson, function (currentSegment, featureIndex, multiFeatureIndex, geometryIndex, segmentIndex) {
+        if (started === false && initialValue === undefined) previousValue = currentSegment;
+        else previousValue = callback(previousValue, currentSegment, featureIndex, multiFeatureIndex, geometryIndex, segmentIndex);
+        started = true;
+    });
+    return previousValue;
+}
+
+/**
+ * Callback for lineEach
+ *
+ * @callback lineEachCallback
+ * @param {Feature<LineString>} currentLine The current LineString|LinearRing being processed
+ * @param {number} featureIndex The current index of the Feature being processed
+ * @param {number} multiFeatureIndex The current index of the Multi-Feature being processed
+ * @param {number} geometryIndex The current index of the Geometry being processed
+ */
+
+/**
+ * Iterate over line or ring coordinates in LineString, Polygon, MultiLineString, MultiPolygon Features or Geometries,
+ * similar to Array.forEach.
+ *
+ * @name lineEach
+ * @param {Geometry|Feature<LineString|Polygon|MultiLineString|MultiPolygon>} geojson object
+ * @param {Function} callback a method that takes (currentLine, featureIndex, multiFeatureIndex, geometryIndex)
+ * @example
+ * var multiLine = turf.multiLineString([
+ *   [[26, 37], [35, 45]],
+ *   [[36, 53], [38, 50], [41, 55]]
+ * ]);
+ *
+ * turf.lineEach(multiLine, function (currentLine, featureIndex, multiFeatureIndex, geometryIndex) {
+ *   //=currentLine
+ *   //=featureIndex
+ *   //=multiFeatureIndex
+ *   //=geometryIndex
+ * });
+ */
+function lineEach(geojson, callback) {
+    // validation
+    if (!geojson) throw new Error('geojson is required');
+
+    flattenEach(geojson, function (feature$$1, featureIndex, multiFeatureIndex) {
+        if (feature$$1.geometry === null) return;
+        var type = feature$$1.geometry.type;
+        var coords = feature$$1.geometry.coordinates;
+        switch (type) {
+        case 'LineString':
+            if (callback(feature$$1, featureIndex, multiFeatureIndex, 0, 0) === false) return false;
+            break;
+        case 'Polygon':
+            for (var geometryIndex = 0; geometryIndex < coords.length; geometryIndex++) {
+                if (callback(helpers.lineString(coords[geometryIndex], feature$$1.properties), featureIndex, multiFeatureIndex, geometryIndex) === false) return false;
+            }
+            break;
+        }
+    });
+}
+
+/**
+ * Callback for lineReduce
+ *
+ * The first time the callback function is called, the values provided as arguments depend
+ * on whether the reduce method has an initialValue argument.
+ *
+ * If an initialValue is provided to the reduce method:
+ *  - The previousValue argument is initialValue.
+ *  - The currentValue argument is the value of the first element present in the array.
+ *
+ * If an initialValue is not provided:
+ *  - The previousValue argument is the value of the first element present in the array.
+ *  - The currentValue argument is the value of the second element present in the array.
+ *
+ * @callback lineReduceCallback
+ * @param {*} previousValue The accumulated value previously returned in the last invocation
+ * of the callback, or initialValue, if supplied.
+ * @param {Feature<LineString>} currentLine The current LineString|LinearRing being processed.
+ * @param {number} featureIndex The current index of the Feature being processed
+ * @param {number} multiFeatureIndex The current index of the Multi-Feature being processed
+ * @param {number} geometryIndex The current index of the Geometry being processed
+ */
+
+/**
+ * Reduce features in any GeoJSON object, similar to Array.reduce().
+ *
+ * @name lineReduce
+ * @param {Geometry|Feature<LineString|Polygon|MultiLineString|MultiPolygon>} geojson object
+ * @param {Function} callback a method that takes (previousValue, currentLine, featureIndex, multiFeatureIndex, geometryIndex)
+ * @param {*} [initialValue] Value to use as the first argument to the first call of the callback.
+ * @returns {*} The value that results from the reduction.
+ * @example
+ * var multiPoly = turf.multiPolygon([
+ *   turf.polygon([[[12,48],[2,41],[24,38],[12,48]], [[9,44],[13,41],[13,45],[9,44]]]),
+ *   turf.polygon([[[5, 5], [0, 0], [2, 2], [4, 4], [5, 5]]])
+ * ]);
+ *
+ * turf.lineReduce(multiPoly, function (previousValue, currentLine, featureIndex, multiFeatureIndex, geometryIndex) {
+ *   //=previousValue
+ *   //=currentLine
+ *   //=featureIndex
+ *   //=multiFeatureIndex
+ *   //=geometryIndex
+ *   return currentLine
+ * });
+ */
+function lineReduce(geojson, callback, initialValue) {
+    var previousValue = initialValue;
+    lineEach(geojson, function (currentLine, featureIndex, multiFeatureIndex, geometryIndex) {
+        if (featureIndex === 0 && initialValue === undefined) previousValue = currentLine;
+        else previousValue = callback(previousValue, currentLine, featureIndex, multiFeatureIndex, geometryIndex);
+    });
+    return previousValue;
+}
+
+/**
+ * Finds a particular 2-vertex LineString Segment from a GeoJSON using `@turf/meta` indexes.
+ *
+ * Negative indexes are permitted.
+ * Point & MultiPoint will always return null.
+ *
+ * @param {FeatureCollection|Feature|Geometry} geojson Any GeoJSON Feature or Geometry
+ * @param {Object} [options={}] Optional parameters
+ * @param {number} [options.featureIndex=0] Feature Index
+ * @param {number} [options.multiFeatureIndex=0] Multi-Feature Index
+ * @param {number} [options.geometryIndex=0] Geometry Index
+ * @param {number} [options.segmentIndex=0] Segment Index
+ * @param {Object} [options.properties={}] Translate Properties to output LineString
+ * @param {BBox} [options.bbox={}] Translate BBox to output LineString
+ * @param {number|string} [options.id={}] Translate Id to output LineString
+ * @returns {Feature<LineString>} 2-vertex GeoJSON Feature LineString
+ * @example
+ * var multiLine = turf.multiLineString([
+ *     [[10, 10], [50, 30], [30, 40]],
+ *     [[-10, -10], [-50, -30], [-30, -40]]
+ * ]);
+ *
+ * // First Segment (defaults are 0)
+ * turf.findSegment(multiLine);
+ * // => Feature<LineString<[[10, 10], [50, 30]]>>
+ *
+ * // First Segment of 2nd Multi Feature
+ * turf.findSegment(multiLine, {multiFeatureIndex: 1});
+ * // => Feature<LineString<[[-10, -10], [-50, -30]]>>
+ *
+ * // Last Segment of Last Multi Feature
+ * turf.findSegment(multiLine, {multiFeatureIndex: -1, segmentIndex: -1});
+ * // => Feature<LineString<[[-50, -30], [-30, -40]]>>
+ */
+function findSegment(geojson, options) {
+    // Optional Parameters
+    options = options || {};
+    if (!helpers.isObject(options)) throw new Error('options is invalid');
+    var featureIndex = options.featureIndex || 0;
+    var multiFeatureIndex = options.multiFeatureIndex || 0;
+    var geometryIndex = options.geometryIndex || 0;
+    var segmentIndex = options.segmentIndex || 0;
+
+    // Find FeatureIndex
+    var properties = options.properties;
+    var geometry;
+
+    switch (geojson.type) {
+    case 'FeatureCollection':
+        if (featureIndex < 0) featureIndex = geojson.features.length + featureIndex;
+        properties = properties || geojson.features[featureIndex].properties;
+        geometry = geojson.features[featureIndex].geometry;
+        break;
+    case 'Feature':
+        properties = properties || geojson.properties;
+        geometry = geojson.geometry;
+        break;
+    case 'Point':
+    case 'MultiPoint':
+        return null;
+    case 'LineString':
+    case 'Polygon':
+    case 'MultiLineString':
+    case 'MultiPolygon':
+        geometry = geojson;
+        break;
+    default:
+        throw new Error('geojson is invalid');
+    }
+
+    // Find SegmentIndex
+    if (geometry === null) return null;
+    var coords = geometry.coordinates;
+    switch (geometry.type) {
+    case 'Point':
+    case 'MultiPoint':
+        return null;
+    case 'LineString':
+        if (segmentIndex < 0) segmentIndex = coords.length + segmentIndex - 1;
+        return helpers.lineString([coords[segmentIndex], coords[segmentIndex + 1]], properties, options);
+    case 'Polygon':
+        if (geometryIndex < 0) geometryIndex = coords.length + geometryIndex;
+        if (segmentIndex < 0) segmentIndex = coords[geometryIndex].length + segmentIndex - 1;
+        return helpers.lineString([coords[geometryIndex][segmentIndex], coords[geometryIndex][segmentIndex + 1]], properties, options);
+    case 'MultiLineString':
+        if (multiFeatureIndex < 0) multiFeatureIndex = coords.length + multiFeatureIndex;
+        if (segmentIndex < 0) segmentIndex = coords[multiFeatureIndex].length + segmentIndex - 1;
+        return helpers.lineString([coords[multiFeatureIndex][segmentIndex], coords[multiFeatureIndex][segmentIndex + 1]], properties, options);
+    case 'MultiPolygon':
+        if (multiFeatureIndex < 0) multiFeatureIndex = coords.length + multiFeatureIndex;
+        if (geometryIndex < 0) geometryIndex = coords[multiFeatureIndex].length + geometryIndex;
+        if (segmentIndex < 0) segmentIndex = coords[multiFeatureIndex][geometryIndex].length - segmentIndex - 1;
+        return helpers.lineString([coords[multiFeatureIndex][geometryIndex][segmentIndex], coords[multiFeatureIndex][geometryIndex][segmentIndex + 1]], properties, options);
+    }
+    throw new Error('geojson is invalid');
+}
+
+/**
+ * Finds a particular Point from a GeoJSON using `@turf/meta` indexes.
+ *
+ * Negative indexes are permitted.
+ *
+ * @param {FeatureCollection|Feature|Geometry} geojson Any GeoJSON Feature or Geometry
+ * @param {Object} [options={}] Optional parameters
+ * @param {number} [options.featureIndex=0] Feature Index
+ * @param {number} [options.multiFeatureIndex=0] Multi-Feature Index
+ * @param {number} [options.geometryIndex=0] Geometry Index
+ * @param {number} [options.coordIndex=0] Coord Index
+ * @param {Object} [options.properties={}] Translate Properties to output Point
+ * @param {BBox} [options.bbox={}] Translate BBox to output Point
+ * @param {number|string} [options.id={}] Translate Id to output Point
+ * @returns {Feature<Point>} 2-vertex GeoJSON Feature Point
+ * @example
+ * var multiLine = turf.multiLineString([
+ *     [[10, 10], [50, 30], [30, 40]],
+ *     [[-10, -10], [-50, -30], [-30, -40]]
+ * ]);
+ *
+ * // First Segment (defaults are 0)
+ * turf.findPoint(multiLine);
+ * // => Feature<Point<[10, 10]>>
+ *
+ * // First Segment of the 2nd Multi-Feature
+ * turf.findPoint(multiLine, {multiFeatureIndex: 1});
+ * // => Feature<Point<[-10, -10]>>
+ *
+ * // Last Segment of last Multi-Feature
+ * turf.findPoint(multiLine, {multiFeatureIndex: -1, coordIndex: -1});
+ * // => Feature<Point<[-30, -40]>>
+ */
+function findPoint(geojson, options) {
+    // Optional Parameters
+    options = options || {};
+    if (!helpers.isObject(options)) throw new Error('options is invalid');
+    var featureIndex = options.featureIndex || 0;
+    var multiFeatureIndex = options.multiFeatureIndex || 0;
+    var geometryIndex = options.geometryIndex || 0;
+    var coordIndex = options.coordIndex || 0;
+
+    // Find FeatureIndex
+    var properties = options.properties;
+    var geometry;
+
+    switch (geojson.type) {
+    case 'FeatureCollection':
+        if (featureIndex < 0) featureIndex = geojson.features.length + featureIndex;
+        properties = properties || geojson.features[featureIndex].properties;
+        geometry = geojson.features[featureIndex].geometry;
+        break;
+    case 'Feature':
+        properties = properties || geojson.properties;
+        geometry = geojson.geometry;
+        break;
+    case 'Point':
+    case 'MultiPoint':
+        return null;
+    case 'LineString':
+    case 'Polygon':
+    case 'MultiLineString':
+    case 'MultiPolygon':
+        geometry = geojson;
+        break;
+    default:
+        throw new Error('geojson is invalid');
+    }
+
+    // Find Coord Index
+    if (geometry === null) return null;
+    var coords = geometry.coordinates;
+    switch (geometry.type) {
+    case 'Point':
+        return helpers.point(coords, properties, options);
+    case 'MultiPoint':
+        if (multiFeatureIndex < 0) multiFeatureIndex = coords.length + multiFeatureIndex;
+        return helpers.point(coords[multiFeatureIndex], properties, options);
+    case 'LineString':
+        if (coordIndex < 0) coordIndex = coords.length + coordIndex;
+        return helpers.point(coords[coordIndex], properties, options);
+    case 'Polygon':
+        if (geometryIndex < 0) geometryIndex = coords.length + geometryIndex;
+        if (coordIndex < 0) coordIndex = coords[geometryIndex].length + coordIndex;
+        return helpers.point(coords[geometryIndex][coordIndex], properties, options);
+    case 'MultiLineString':
+        if (multiFeatureIndex < 0) multiFeatureIndex = coords.length + multiFeatureIndex;
+        if (coordIndex < 0) coordIndex = coords[multiFeatureIndex].length + coordIndex;
+        return helpers.point(coords[multiFeatureIndex][coordIndex], properties, options);
+    case 'MultiPolygon':
+        if (multiFeatureIndex < 0) multiFeatureIndex = coords.length + multiFeatureIndex;
+        if (geometryIndex < 0) geometryIndex = coords[multiFeatureIndex].length + geometryIndex;
+        if (coordIndex < 0) coordIndex = coords[multiFeatureIndex][geometryIndex].length - coordIndex;
+        return helpers.point(coords[multiFeatureIndex][geometryIndex][coordIndex], properties, options);
+    }
+    throw new Error('geojson is invalid');
+}
+
+exports.coordEach = coordEach;
+exports.coordReduce = coordReduce;
+exports.propEach = propEach;
+exports.propReduce = propReduce;
+exports.featureEach = featureEach;
+exports.featureReduce = featureReduce;
+exports.coordAll = coordAll;
+exports.geomEach = geomEach;
+exports.geomReduce = geomReduce;
+exports.flattenEach = flattenEach;
+exports.flattenReduce = flattenReduce;
+exports.segmentEach = segmentEach;
+exports.segmentReduce = segmentReduce;
+exports.lineEach = lineEach;
+exports.lineReduce = lineReduce;
+exports.findSegment = findSegment;
+exports.findPoint = findPoint;
+
+},{"@turf/helpers":34}],36:[function(require,module,exports){
+'use strict';
+
+/**
+ * Returns a cloned copy of the passed GeoJSON Object, including possible 'Foreign Members'.
+ * ~3-5x faster than the common JSON.parse + JSON.stringify combo method.
+ *
+ * @name clone
+ * @param {GeoJSON} geojson GeoJSON Object
+ * @returns {GeoJSON} cloned GeoJSON Object
+ * @example
+ * var line = turf.lineString([[-74, 40], [-78, 42], [-82, 35]], {color: 'red'});
+ *
+ * var lineCloned = turf.clone(line);
+ */
+function clone(geojson) {
+    if (!geojson) throw new Error('geojson is required');
+
+    switch (geojson.type) {
+    case 'Feature':
+        return cloneFeature(geojson);
+    case 'FeatureCollection':
+        return cloneFeatureCollection(geojson);
+    case 'Point':
+    case 'LineString':
+    case 'Polygon':
+    case 'MultiPoint':
+    case 'MultiLineString':
+    case 'MultiPolygon':
+    case 'GeometryCollection':
+        return cloneGeometry(geojson);
+    default:
+        throw new Error('unknown GeoJSON type');
+    }
+}
+
+/**
+ * Clone Feature
+ *
+ * @private
+ * @param {Feature<any>} geojson GeoJSON Feature
+ * @returns {Feature<any>} cloned Feature
+ */
+function cloneFeature(geojson) {
+    var cloned = {type: 'Feature'};
+    // Preserve Foreign Members
+    Object.keys(geojson).forEach(function (key) {
+        switch (key) {
+        case 'type':
+        case 'properties':
+        case 'geometry':
+            return;
+        default:
+            cloned[key] = geojson[key];
+        }
+    });
+    // Add properties & geometry last
+    cloned.properties = cloneProperties(geojson.properties);
+    cloned.geometry = cloneGeometry(geojson.geometry);
+    return cloned;
+}
+
+/**
+ * Clone Properties
+ *
+ * @private
+ * @param {Object} properties GeoJSON Properties
+ * @returns {Object} cloned Properties
+ */
+function cloneProperties(properties) {
+    var cloned = {};
+    if (!properties) return cloned;
+    Object.keys(properties).forEach(function (key) {
+        var value = properties[key];
+        if (typeof value === 'object') {
+            if (value === null) {
+                // handle null
+                cloned[key] = null;
+            } else if (value.length) {
+                // handle Array
+                cloned[key] = value.map(function (item) {
+                    return item;
+                });
+            } else {
+                // handle generic Object
+                cloned[key] = cloneProperties(value);
+            }
+        } else cloned[key] = value;
+    });
+    return cloned;
+}
+
+/**
+ * Clone Feature Collection
+ *
+ * @private
+ * @param {FeatureCollection<any>} geojson GeoJSON Feature Collection
+ * @returns {FeatureCollection<any>} cloned Feature Collection
+ */
+function cloneFeatureCollection(geojson) {
+    var cloned = {type: 'FeatureCollection'};
+
+    // Preserve Foreign Members
+    Object.keys(geojson).forEach(function (key) {
+        switch (key) {
+        case 'type':
+        case 'features':
+            return;
+        default:
+            cloned[key] = geojson[key];
+        }
+    });
+    // Add features
+    cloned.features = geojson.features.map(function (feature) {
+        return cloneFeature(feature);
+    });
+    return cloned;
+}
+
+/**
+ * Clone Geometry
+ *
+ * @private
+ * @param {Geometry<any>} geometry GeoJSON Geometry
+ * @returns {Geometry<any>} cloned Geometry
+ */
+function cloneGeometry(geometry) {
+    var geom = {type: geometry.type};
+    if (geometry.bbox) geom.bbox = geometry.bbox;
+
+    if (geometry.type === 'GeometryCollection') {
+        geom.geometries = geometry.geometries.map(function (geom) {
+            return cloneGeometry(geom);
+        });
+        return geom;
+    }
+    geom.coordinates = deepSlice(geometry.coordinates);
+    return geom;
+}
+
+/**
+ * Deep Slice coordinates
+ *
+ * @private
+ * @param {Coordinates} coords Coordinates
+ * @returns {Coordinates} all coordinates sliced
+ */
+function deepSlice(coords) {
+    if (typeof coords[0] !== 'object') { return coords.slice(); }
+    return coords.map(function (coord) {
+        return deepSlice(coord);
+    });
+}
+
+module.exports = clone;
+module.exports.default = clone;
+
+},{}],37:[function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+// http://en.wikipedia.org/wiki/Haversine_formula
+// http://www.movable-type.co.uk/scripts/latlong.html
+var helpers_1 = require("@turf/helpers");
+var invariant_1 = require("@turf/invariant");
+/**
+ * Takes a {@link Point} and calculates the location of a destination point given a distance in
+ * degrees, radians, miles, or kilometers; and bearing in degrees.
+ * This uses the [Haversine formula](http://en.wikipedia.org/wiki/Haversine_formula) to account for global curvature.
+ *
+ * @name destination
+ * @param {Coord} origin starting point
+ * @param {number} distance distance from the origin point
+ * @param {number} bearing ranging from -180 to 180
+ * @param {Object} [options={}] Optional parameters
+ * @param {string} [options.units='kilometers'] miles, kilometers, degrees, or radians
+ * @param {Object} [options.properties={}] Translate properties to Point
+ * @returns {Feature<Point>} destination point
+ * @example
+ * var point = turf.point([-75.343, 39.984]);
+ * var distance = 50;
+ * var bearing = 90;
+ * var options = {units: 'miles'};
+ *
+ * var destination = turf.destination(point, distance, bearing, options);
+ *
+ * //addToMap
+ * var addToMap = [point, destination]
+ * destination.properties['marker-color'] = '#f00';
+ * point.properties['marker-color'] = '#0f0';
+ */
+function destination(origin, distance, bearing, options) {
+    if (options === void 0) { options = {}; }
+    // Handle input
+    var coordinates1 = invariant_1.getCoord(origin);
+    var longitude1 = helpers_1.degreesToRadians(coordinates1[0]);
+    var latitude1 = helpers_1.degreesToRadians(coordinates1[1]);
+    var bearingRad = helpers_1.degreesToRadians(bearing);
+    var radians = helpers_1.lengthToRadians(distance, options.units);
+    // Main
+    var latitude2 = Math.asin(Math.sin(latitude1) * Math.cos(radians) +
+        Math.cos(latitude1) * Math.sin(radians) * Math.cos(bearingRad));
+    var longitude2 = longitude1 + Math.atan2(Math.sin(bearingRad) * Math.sin(radians) * Math.cos(latitude1), Math.cos(radians) - Math.sin(latitude1) * Math.sin(latitude2));
+    var lng = helpers_1.radiansToDegrees(longitude2);
+    var lat = helpers_1.radiansToDegrees(latitude2);
+    return helpers_1.point([lng, lat], options.properties);
+}
+exports.default = destination;
+
+},{"@turf/helpers":45,"@turf/invariant":49}],38:[function(require,module,exports){
+'use strict';
+
+var polygonClipping = require('polygon-clipping');
+var helpers = require('@turf/helpers');
+var invariant = require('@turf/invariant');
+
+function _interopDefaultLegacy (e) { return e && typeof e === 'object' && 'default' in e ? e : { 'default': e }; }
+
+var polygonClipping__default = /*#__PURE__*/_interopDefaultLegacy(polygonClipping);
+
+/**
+ * Finds the difference between two {@link Polygon|polygons} by clipping the second polygon from the first.
+ *
+ * @name difference
+ * @param {Feature<Polygon|MultiPolygon>} polygon1 input Polygon feature
+ * @param {Feature<Polygon|MultiPolygon>} polygon2 Polygon feature to difference from polygon1
+ * @returns {Feature<Polygon|MultiPolygon>|null} a Polygon or MultiPolygon feature showing the area of `polygon1` excluding the area of `polygon2` (if empty returns `null`)
+ * @example
+ * var polygon1 = turf.polygon([[
+ *   [128, -26],
+ *   [141, -26],
+ *   [141, -21],
+ *   [128, -21],
+ *   [128, -26]
+ * ]], {
+ *   "fill": "#F00",
+ *   "fill-opacity": 0.1
+ * });
+ * var polygon2 = turf.polygon([[
+ *   [126, -28],
+ *   [140, -28],
+ *   [140, -20],
+ *   [126, -20],
+ *   [126, -28]
+ * ]], {
+ *   "fill": "#00F",
+ *   "fill-opacity": 0.1
+ * });
+ *
+ * var difference = turf.difference(polygon1, polygon2);
+ *
+ * //addToMap
+ * var addToMap = [polygon1, polygon2, difference];
+ */
+function difference(polygon1, polygon2) {
+  var geom1 = invariant.getGeom(polygon1);
+  var geom2 = invariant.getGeom(polygon2);
+  var properties = polygon1.properties || {};
+
+  var differenced = polygonClipping__default['default'].difference(
+    geom1.coordinates,
+    geom2.coordinates
+  );
+  if (differenced.length === 0) return null;
+  if (differenced.length === 1) return helpers.polygon(differenced[0], properties);
+  return helpers.multiPolygon(differenced, properties);
+}
+
+module.exports = difference;
+module.exports.default = difference;
+
+},{"@turf/helpers":39,"@turf/invariant":40,"polygon-clipping":261}],39:[function(require,module,exports){
+arguments[4][8][0].apply(exports,arguments)
+},{"dup":8}],40:[function(require,module,exports){
+arguments[4][9][0].apply(exports,arguments)
+},{"@turf/helpers":39,"dup":9}],41:[function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+var invariant_1 = require("@turf/invariant");
+var helpers_1 = require("@turf/helpers");
+//http://en.wikipedia.org/wiki/Haversine_formula
+//http://www.movable-type.co.uk/scripts/latlong.html
+/**
+ * Calculates the distance between two {@link Point|points} in degrees, radians, miles, or kilometers.
+ * This uses the [Haversine formula](http://en.wikipedia.org/wiki/Haversine_formula) to account for global curvature.
+ *
+ * @name distance
+ * @param {Coord} from origin point
+ * @param {Coord} to destination point
+ * @param {Object} [options={}] Optional parameters
+ * @param {string} [options.units='kilometers'] can be degrees, radians, miles, or kilometers
+ * @returns {number} distance between the two points
+ * @example
+ * var from = turf.point([-75.343, 39.984]);
+ * var to = turf.point([-75.534, 39.123]);
+ * var options = {units: 'miles'};
+ *
+ * var distance = turf.distance(from, to, options);
+ *
+ * //addToMap
+ * var addToMap = [from, to];
+ * from.properties.distance = distance;
+ * to.properties.distance = distance;
+ */
+function distance(from, to, options) {
+    if (options === void 0) { options = {}; }
+    var coordinates1 = invariant_1.getCoord(from);
+    var coordinates2 = invariant_1.getCoord(to);
+    var dLat = helpers_1.degreesToRadians((coordinates2[1] - coordinates1[1]));
+    var dLon = helpers_1.degreesToRadians((coordinates2[0] - coordinates1[0]));
+    var lat1 = helpers_1.degreesToRadians(coordinates1[1]);
+    var lat2 = helpers_1.degreesToRadians(coordinates2[1]);
+    var a = Math.pow(Math.sin(dLat / 2), 2) +
+        Math.pow(Math.sin(dLon / 2), 2) * Math.cos(lat1) * Math.cos(lat2);
+    return helpers_1.radiansToLength(2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)), options.units);
+}
+exports.default = distance;
+
+},{"@turf/helpers":45,"@turf/invariant":49}],42:[function(require,module,exports){
+'use strict';
+
+var meta = require('@turf/meta');
+var helpers = require('@turf/helpers');
+
+/**
+ * Takes a feature or set of features and returns all positions as {@link Point|points}.
+ *
+ * @name explode
+ * @param {GeoJSON} geojson input features
+ * @returns {FeatureCollection<point>} points representing the exploded input features
+ * @throws {Error} if it encounters an unknown geometry type
+ * @example
+ * var polygon = turf.polygon([[[-81, 41], [-88, 36], [-84, 31], [-80, 33], [-77, 39], [-81, 41]]]);
+ *
+ * var explode = turf.explode(polygon);
+ *
+ * //addToMap
+ * var addToMap = [polygon, explode]
+ */
+function explode(geojson) {
+    var points = [];
+    if (geojson.type === 'FeatureCollection') {
+        meta.featureEach(geojson, function (feature) {
+            meta.coordEach(feature, function (coord) {
+                points.push(helpers.point(coord, feature.properties));
+            });
+        });
+    } else {
+        meta.coordEach(geojson, function (coord) {
+            points.push(helpers.point(coord, geojson.properties));
+        });
+    }
+    return helpers.featureCollection(points);
+}
+
+module.exports = explode;
+module.exports.default = explode;
+
+},{"@turf/helpers":43,"@turf/meta":44}],43:[function(require,module,exports){
+arguments[4][34][0].apply(exports,arguments)
+},{"dup":34}],44:[function(require,module,exports){
+arguments[4][35][0].apply(exports,arguments)
+},{"@turf/helpers":43,"dup":35}],45:[function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+/**
+ * @module helpers
+ */
+/**
+ * Earth Radius used with the Harvesine formula and approximates using a spherical (non-ellipsoid) Earth.
+ *
+ * @memberof helpers
+ * @type {number}
+ */
+exports.earthRadius = 6371008.8;
+/**
+ * Unit of measurement factors using a spherical (non-ellipsoid) earth radius.
+ *
+ * @memberof helpers
+ * @type {Object}
+ */
+exports.factors = {
+    centimeters: exports.earthRadius * 100,
+    centimetres: exports.earthRadius * 100,
+    degrees: exports.earthRadius / 111325,
+    feet: exports.earthRadius * 3.28084,
+    inches: exports.earthRadius * 39.370,
+    kilometers: exports.earthRadius / 1000,
+    kilometres: exports.earthRadius / 1000,
+    meters: exports.earthRadius,
+    metres: exports.earthRadius,
+    miles: exports.earthRadius / 1609.344,
+    millimeters: exports.earthRadius * 1000,
+    millimetres: exports.earthRadius * 1000,
+    nauticalmiles: exports.earthRadius / 1852,
+    radians: 1,
+    yards: exports.earthRadius / 1.0936,
+};
+/**
+ * Units of measurement factors based on 1 meter.
+ *
+ * @memberof helpers
+ * @type {Object}
+ */
+exports.unitsFactors = {
+    centimeters: 100,
+    centimetres: 100,
+    degrees: 1 / 111325,
+    feet: 3.28084,
+    inches: 39.370,
+    kilometers: 1 / 1000,
+    kilometres: 1 / 1000,
+    meters: 1,
+    metres: 1,
+    miles: 1 / 1609.344,
+    millimeters: 1000,
+    millimetres: 1000,
+    nauticalmiles: 1 / 1852,
+    radians: 1 / exports.earthRadius,
+    yards: 1 / 1.0936,
+};
+/**
+ * Area of measurement factors based on 1 square meter.
+ *
+ * @memberof helpers
+ * @type {Object}
+ */
+exports.areaFactors = {
+    acres: 0.000247105,
+    centimeters: 10000,
+    centimetres: 10000,
+    feet: 10.763910417,
+    inches: 1550.003100006,
+    kilometers: 0.000001,
+    kilometres: 0.000001,
+    meters: 1,
+    metres: 1,
+    miles: 3.86e-7,
+    millimeters: 1000000,
+    millimetres: 1000000,
+    yards: 1.195990046,
+};
+/**
+ * Wraps a GeoJSON {@link Geometry} in a GeoJSON {@link Feature}.
+ *
+ * @name feature
+ * @param {Geometry} geometry input geometry
+ * @param {Object} [properties={}] an Object of key-value pairs to add as properties
+ * @param {Object} [options={}] Optional Parameters
+ * @param {Array<number>} [options.bbox] Bounding Box Array [west, south, east, north] associated with the Feature
+ * @param {string|number} [options.id] Identifier associated with the Feature
+ * @returns {Feature} a GeoJSON Feature
+ * @example
+ * var geometry = {
+ *   "type": "Point",
+ *   "coordinates": [110, 50]
+ * };
+ *
+ * var feature = turf.feature(geometry);
+ *
+ * //=feature
+ */
+function feature(geom, properties, options) {
+    if (options === void 0) { options = {}; }
+    var feat = { type: "Feature" };
+    if (options.id === 0 || options.id) {
+        feat.id = options.id;
+    }
+    if (options.bbox) {
+        feat.bbox = options.bbox;
+    }
+    feat.properties = properties || {};
+    feat.geometry = geom;
+    return feat;
+}
+exports.feature = feature;
+/**
+ * Creates a GeoJSON {@link Geometry} from a Geometry string type & coordinates.
+ * For GeometryCollection type use `helpers.geometryCollection`
+ *
+ * @name geometry
+ * @param {string} type Geometry Type
+ * @param {Array<any>} coordinates Coordinates
+ * @param {Object} [options={}] Optional Parameters
+ * @returns {Geometry} a GeoJSON Geometry
+ * @example
+ * var type = "Point";
+ * var coordinates = [110, 50];
+ * var geometry = turf.geometry(type, coordinates);
+ * // => geometry
+ */
+function geometry(type, coordinates, options) {
+    if (options === void 0) { options = {}; }
+    switch (type) {
+        case "Point": return point(coordinates).geometry;
+        case "LineString": return lineString(coordinates).geometry;
+        case "Polygon": return polygon(coordinates).geometry;
+        case "MultiPoint": return multiPoint(coordinates).geometry;
+        case "MultiLineString": return multiLineString(coordinates).geometry;
+        case "MultiPolygon": return multiPolygon(coordinates).geometry;
+        default: throw new Error(type + " is invalid");
+    }
+}
+exports.geometry = geometry;
+/**
+ * Creates a {@link Point} {@link Feature} from a Position.
+ *
+ * @name point
+ * @param {Array<number>} coordinates longitude, latitude position (each in decimal degrees)
+ * @param {Object} [properties={}] an Object of key-value pairs to add as properties
+ * @param {Object} [options={}] Optional Parameters
+ * @param {Array<number>} [options.bbox] Bounding Box Array [west, south, east, north] associated with the Feature
+ * @param {string|number} [options.id] Identifier associated with the Feature
+ * @returns {Feature<Point>} a Point feature
+ * @example
+ * var point = turf.point([-75.343, 39.984]);
+ *
+ * //=point
+ */
+function point(coordinates, properties, options) {
+    if (options === void 0) { options = {}; }
+    var geom = {
+        type: "Point",
+        coordinates: coordinates,
+    };
+    return feature(geom, properties, options);
+}
+exports.point = point;
+/**
+ * Creates a {@link Point} {@link FeatureCollection} from an Array of Point coordinates.
+ *
+ * @name points
+ * @param {Array<Array<number>>} coordinates an array of Points
+ * @param {Object} [properties={}] Translate these properties to each Feature
+ * @param {Object} [options={}] Optional Parameters
+ * @param {Array<number>} [options.bbox] Bounding Box Array [west, south, east, north]
+ * associated with the FeatureCollection
+ * @param {string|number} [options.id] Identifier associated with the FeatureCollection
+ * @returns {FeatureCollection<Point>} Point Feature
+ * @example
+ * var points = turf.points([
+ *   [-75, 39],
+ *   [-80, 45],
+ *   [-78, 50]
+ * ]);
+ *
+ * //=points
+ */
+function points(coordinates, properties, options) {
+    if (options === void 0) { options = {}; }
+    return featureCollection(coordinates.map(function (coords) {
+        return point(coords, properties);
+    }), options);
+}
+exports.points = points;
+/**
+ * Creates a {@link Polygon} {@link Feature} from an Array of LinearRings.
+ *
+ * @name polygon
+ * @param {Array<Array<Array<number>>>} coordinates an array of LinearRings
+ * @param {Object} [properties={}] an Object of key-value pairs to add as properties
+ * @param {Object} [options={}] Optional Parameters
+ * @param {Array<number>} [options.bbox] Bounding Box Array [west, south, east, north] associated with the Feature
+ * @param {string|number} [options.id] Identifier associated with the Feature
+ * @returns {Feature<Polygon>} Polygon Feature
+ * @example
+ * var polygon = turf.polygon([[[-5, 52], [-4, 56], [-2, 51], [-7, 54], [-5, 52]]], { name: 'poly1' });
+ *
+ * //=polygon
+ */
+function polygon(coordinates, properties, options) {
+    if (options === void 0) { options = {}; }
+    for (var _i = 0, coordinates_1 = coordinates; _i < coordinates_1.length; _i++) {
+        var ring = coordinates_1[_i];
+        if (ring.length < 4) {
+            throw new Error("Each LinearRing of a Polygon must have 4 or more Positions.");
+        }
+        for (var j = 0; j < ring[ring.length - 1].length; j++) {
+            // Check if first point of Polygon contains two numbers
+            if (ring[ring.length - 1][j] !== ring[0][j]) {
+                throw new Error("First and last Position are not equivalent.");
+            }
+        }
+    }
+    var geom = {
+        type: "Polygon",
+        coordinates: coordinates,
+    };
+    return feature(geom, properties, options);
+}
+exports.polygon = polygon;
+/**
+ * Creates a {@link Polygon} {@link FeatureCollection} from an Array of Polygon coordinates.
+ *
+ * @name polygons
+ * @param {Array<Array<Array<Array<number>>>>} coordinates an array of Polygon coordinates
+ * @param {Object} [properties={}] an Object of key-value pairs to add as properties
+ * @param {Object} [options={}] Optional Parameters
+ * @param {Array<number>} [options.bbox] Bounding Box Array [west, south, east, north] associated with the Feature
+ * @param {string|number} [options.id] Identifier associated with the FeatureCollection
+ * @returns {FeatureCollection<Polygon>} Polygon FeatureCollection
+ * @example
+ * var polygons = turf.polygons([
+ *   [[[-5, 52], [-4, 56], [-2, 51], [-7, 54], [-5, 52]]],
+ *   [[[-15, 42], [-14, 46], [-12, 41], [-17, 44], [-15, 42]]],
+ * ]);
+ *
+ * //=polygons
+ */
+function polygons(coordinates, properties, options) {
+    if (options === void 0) { options = {}; }
+    return featureCollection(coordinates.map(function (coords) {
+        return polygon(coords, properties);
+    }), options);
+}
+exports.polygons = polygons;
+/**
+ * Creates a {@link LineString} {@link Feature} from an Array of Positions.
+ *
+ * @name lineString
+ * @param {Array<Array<number>>} coordinates an array of Positions
+ * @param {Object} [properties={}] an Object of key-value pairs to add as properties
+ * @param {Object} [options={}] Optional Parameters
+ * @param {Array<number>} [options.bbox] Bounding Box Array [west, south, east, north] associated with the Feature
+ * @param {string|number} [options.id] Identifier associated with the Feature
+ * @returns {Feature<LineString>} LineString Feature
+ * @example
+ * var linestring1 = turf.lineString([[-24, 63], [-23, 60], [-25, 65], [-20, 69]], {name: 'line 1'});
+ * var linestring2 = turf.lineString([[-14, 43], [-13, 40], [-15, 45], [-10, 49]], {name: 'line 2'});
+ *
+ * //=linestring1
+ * //=linestring2
+ */
+function lineString(coordinates, properties, options) {
+    if (options === void 0) { options = {}; }
+    if (coordinates.length < 2) {
+        throw new Error("coordinates must be an array of two or more positions");
+    }
+    var geom = {
+        type: "LineString",
+        coordinates: coordinates,
+    };
+    return feature(geom, properties, options);
+}
+exports.lineString = lineString;
+/**
+ * Creates a {@link LineString} {@link FeatureCollection} from an Array of LineString coordinates.
+ *
+ * @name lineStrings
+ * @param {Array<Array<Array<number>>>} coordinates an array of LinearRings
+ * @param {Object} [properties={}] an Object of key-value pairs to add as properties
+ * @param {Object} [options={}] Optional Parameters
+ * @param {Array<number>} [options.bbox] Bounding Box Array [west, south, east, north]
+ * associated with the FeatureCollection
+ * @param {string|number} [options.id] Identifier associated with the FeatureCollection
+ * @returns {FeatureCollection<LineString>} LineString FeatureCollection
+ * @example
+ * var linestrings = turf.lineStrings([
+ *   [[-24, 63], [-23, 60], [-25, 65], [-20, 69]],
+ *   [[-14, 43], [-13, 40], [-15, 45], [-10, 49]]
+ * ]);
+ *
+ * //=linestrings
+ */
+function lineStrings(coordinates, properties, options) {
+    if (options === void 0) { options = {}; }
+    return featureCollection(coordinates.map(function (coords) {
+        return lineString(coords, properties);
+    }), options);
+}
+exports.lineStrings = lineStrings;
+/**
+ * Takes one or more {@link Feature|Features} and creates a {@link FeatureCollection}.
+ *
+ * @name featureCollection
+ * @param {Feature[]} features input features
+ * @param {Object} [options={}] Optional Parameters
+ * @param {Array<number>} [options.bbox] Bounding Box Array [west, south, east, north] associated with the Feature
+ * @param {string|number} [options.id] Identifier associated with the Feature
+ * @returns {FeatureCollection} FeatureCollection of Features
+ * @example
+ * var locationA = turf.point([-75.343, 39.984], {name: 'Location A'});
+ * var locationB = turf.point([-75.833, 39.284], {name: 'Location B'});
+ * var locationC = turf.point([-75.534, 39.123], {name: 'Location C'});
+ *
+ * var collection = turf.featureCollection([
+ *   locationA,
+ *   locationB,
+ *   locationC
+ * ]);
+ *
+ * //=collection
+ */
+function featureCollection(features, options) {
+    if (options === void 0) { options = {}; }
+    var fc = { type: "FeatureCollection" };
+    if (options.id) {
+        fc.id = options.id;
+    }
+    if (options.bbox) {
+        fc.bbox = options.bbox;
+    }
+    fc.features = features;
+    return fc;
+}
+exports.featureCollection = featureCollection;
+/**
+ * Creates a {@link Feature<MultiLineString>} based on a
+ * coordinate array. Properties can be added optionally.
+ *
+ * @name multiLineString
+ * @param {Array<Array<Array<number>>>} coordinates an array of LineStrings
+ * @param {Object} [properties={}] an Object of key-value pairs to add as properties
+ * @param {Object} [options={}] Optional Parameters
+ * @param {Array<number>} [options.bbox] Bounding Box Array [west, south, east, north] associated with the Feature
+ * @param {string|number} [options.id] Identifier associated with the Feature
+ * @returns {Feature<MultiLineString>} a MultiLineString feature
+ * @throws {Error} if no coordinates are passed
+ * @example
+ * var multiLine = turf.multiLineString([[[0,0],[10,10]]]);
+ *
+ * //=multiLine
+ */
+function multiLineString(coordinates, properties, options) {
+    if (options === void 0) { options = {}; }
+    var geom = {
+        type: "MultiLineString",
+        coordinates: coordinates,
+    };
+    return feature(geom, properties, options);
+}
+exports.multiLineString = multiLineString;
+/**
+ * Creates a {@link Feature<MultiPoint>} based on a
+ * coordinate array. Properties can be added optionally.
+ *
+ * @name multiPoint
+ * @param {Array<Array<number>>} coordinates an array of Positions
+ * @param {Object} [properties={}] an Object of key-value pairs to add as properties
+ * @param {Object} [options={}] Optional Parameters
+ * @param {Array<number>} [options.bbox] Bounding Box Array [west, south, east, north] associated with the Feature
+ * @param {string|number} [options.id] Identifier associated with the Feature
+ * @returns {Feature<MultiPoint>} a MultiPoint feature
+ * @throws {Error} if no coordinates are passed
+ * @example
+ * var multiPt = turf.multiPoint([[0,0],[10,10]]);
+ *
+ * //=multiPt
+ */
+function multiPoint(coordinates, properties, options) {
+    if (options === void 0) { options = {}; }
+    var geom = {
+        type: "MultiPoint",
+        coordinates: coordinates,
+    };
+    return feature(geom, properties, options);
+}
+exports.multiPoint = multiPoint;
+/**
+ * Creates a {@link Feature<MultiPolygon>} based on a
+ * coordinate array. Properties can be added optionally.
+ *
+ * @name multiPolygon
+ * @param {Array<Array<Array<Array<number>>>>} coordinates an array of Polygons
+ * @param {Object} [properties={}] an Object of key-value pairs to add as properties
+ * @param {Object} [options={}] Optional Parameters
+ * @param {Array<number>} [options.bbox] Bounding Box Array [west, south, east, north] associated with the Feature
+ * @param {string|number} [options.id] Identifier associated with the Feature
+ * @returns {Feature<MultiPolygon>} a multipolygon feature
+ * @throws {Error} if no coordinates are passed
+ * @example
+ * var multiPoly = turf.multiPolygon([[[[0,0],[0,10],[10,10],[10,0],[0,0]]]]);
+ *
+ * //=multiPoly
+ *
+ */
+function multiPolygon(coordinates, properties, options) {
+    if (options === void 0) { options = {}; }
+    var geom = {
+        type: "MultiPolygon",
+        coordinates: coordinates,
+    };
+    return feature(geom, properties, options);
+}
+exports.multiPolygon = multiPolygon;
+/**
+ * Creates a {@link Feature<GeometryCollection>} based on a
+ * coordinate array. Properties can be added optionally.
+ *
+ * @name geometryCollection
+ * @param {Array<Geometry>} geometries an array of GeoJSON Geometries
+ * @param {Object} [properties={}] an Object of key-value pairs to add as properties
+ * @param {Object} [options={}] Optional Parameters
+ * @param {Array<number>} [options.bbox] Bounding Box Array [west, south, east, north] associated with the Feature
+ * @param {string|number} [options.id] Identifier associated with the Feature
+ * @returns {Feature<GeometryCollection>} a GeoJSON GeometryCollection Feature
+ * @example
+ * var pt = turf.geometry("Point", [100, 0]);
+ * var line = turf.geometry("LineString", [[101, 0], [102, 1]]);
+ * var collection = turf.geometryCollection([pt, line]);
+ *
+ * // => collection
+ */
+function geometryCollection(geometries, properties, options) {
+    if (options === void 0) { options = {}; }
+    var geom = {
+        type: "GeometryCollection",
+        geometries: geometries,
+    };
+    return feature(geom, properties, options);
+}
+exports.geometryCollection = geometryCollection;
+/**
+ * Round number to precision
+ *
+ * @param {number} num Number
+ * @param {number} [precision=0] Precision
+ * @returns {number} rounded number
+ * @example
+ * turf.round(120.4321)
+ * //=120
+ *
+ * turf.round(120.4321, 2)
+ * //=120.43
+ */
+function round(num, precision) {
+    if (precision === void 0) { precision = 0; }
+    if (precision && !(precision >= 0)) {
+        throw new Error("precision must be a positive number");
+    }
+    var multiplier = Math.pow(10, precision || 0);
+    return Math.round(num * multiplier) / multiplier;
+}
+exports.round = round;
+/**
+ * Convert a distance measurement (assuming a spherical Earth) from radians to a more friendly unit.
+ * Valid units: miles, nauticalmiles, inches, yards, meters, metres, kilometers, centimeters, feet
+ *
+ * @name radiansToLength
+ * @param {number} radians in radians across the sphere
+ * @param {string} [units="kilometers"] can be degrees, radians, miles, or kilometers inches, yards, metres,
+ * meters, kilometres, kilometers.
+ * @returns {number} distance
+ */
+function radiansToLength(radians, units) {
+    if (units === void 0) { units = "kilometers"; }
+    var factor = exports.factors[units];
+    if (!factor) {
+        throw new Error(units + " units is invalid");
+    }
+    return radians * factor;
+}
+exports.radiansToLength = radiansToLength;
+/**
+ * Convert a distance measurement (assuming a spherical Earth) from a real-world unit into radians
+ * Valid units: miles, nauticalmiles, inches, yards, meters, metres, kilometers, centimeters, feet
+ *
+ * @name lengthToRadians
+ * @param {number} distance in real units
+ * @param {string} [units="kilometers"] can be degrees, radians, miles, or kilometers inches, yards, metres,
+ * meters, kilometres, kilometers.
+ * @returns {number} radians
+ */
+function lengthToRadians(distance, units) {
+    if (units === void 0) { units = "kilometers"; }
+    var factor = exports.factors[units];
+    if (!factor) {
+        throw new Error(units + " units is invalid");
+    }
+    return distance / factor;
+}
+exports.lengthToRadians = lengthToRadians;
+/**
+ * Convert a distance measurement (assuming a spherical Earth) from a real-world unit into degrees
+ * Valid units: miles, nauticalmiles, inches, yards, meters, metres, centimeters, kilometres, feet
+ *
+ * @name lengthToDegrees
+ * @param {number} distance in real units
+ * @param {string} [units="kilometers"] can be degrees, radians, miles, or kilometers inches, yards, metres,
+ * meters, kilometres, kilometers.
+ * @returns {number} degrees
+ */
+function lengthToDegrees(distance, units) {
+    return radiansToDegrees(lengthToRadians(distance, units));
+}
+exports.lengthToDegrees = lengthToDegrees;
+/**
+ * Converts any bearing angle from the north line direction (positive clockwise)
+ * and returns an angle between 0-360 degrees (positive clockwise), 0 being the north line
+ *
+ * @name bearingToAzimuth
+ * @param {number} bearing angle, between -180 and +180 degrees
+ * @returns {number} angle between 0 and 360 degrees
+ */
+function bearingToAzimuth(bearing) {
+    var angle = bearing % 360;
+    if (angle < 0) {
+        angle += 360;
+    }
+    return angle;
+}
+exports.bearingToAzimuth = bearingToAzimuth;
+/**
+ * Converts an angle in radians to degrees
+ *
+ * @name radiansToDegrees
+ * @param {number} radians angle in radians
+ * @returns {number} degrees between 0 and 360 degrees
+ */
+function radiansToDegrees(radians) {
+    var degrees = radians % (2 * Math.PI);
+    return degrees * 180 / Math.PI;
+}
+exports.radiansToDegrees = radiansToDegrees;
+/**
+ * Converts an angle in degrees to radians
+ *
+ * @name degreesToRadians
+ * @param {number} degrees angle between 0 and 360 degrees
+ * @returns {number} angle in radians
+ */
+function degreesToRadians(degrees) {
+    var radians = degrees % 360;
+    return radians * Math.PI / 180;
+}
+exports.degreesToRadians = degreesToRadians;
+/**
+ * Converts a length to the requested unit.
+ * Valid units: miles, nauticalmiles, inches, yards, meters, metres, kilometers, centimeters, feet
+ *
+ * @param {number} length to be converted
+ * @param {Units} [originalUnit="kilometers"] of the length
+ * @param {Units} [finalUnit="kilometers"] returned unit
+ * @returns {number} the converted length
+ */
+function convertLength(length, originalUnit, finalUnit) {
+    if (originalUnit === void 0) { originalUnit = "kilometers"; }
+    if (finalUnit === void 0) { finalUnit = "kilometers"; }
+    if (!(length >= 0)) {
+        throw new Error("length must be a positive number");
+    }
+    return radiansToLength(lengthToRadians(length, originalUnit), finalUnit);
+}
+exports.convertLength = convertLength;
+/**
+ * Converts a area to the requested unit.
+ * Valid units: kilometers, kilometres, meters, metres, centimetres, millimeters, acres, miles, yards, feet, inches
+ * @param {number} area to be converted
+ * @param {Units} [originalUnit="meters"] of the distance
+ * @param {Units} [finalUnit="kilometers"] returned unit
+ * @returns {number} the converted distance
+ */
+function convertArea(area, originalUnit, finalUnit) {
+    if (originalUnit === void 0) { originalUnit = "meters"; }
+    if (finalUnit === void 0) { finalUnit = "kilometers"; }
+    if (!(area >= 0)) {
+        throw new Error("area must be a positive number");
+    }
+    var startFactor = exports.areaFactors[originalUnit];
+    if (!startFactor) {
+        throw new Error("invalid original units");
+    }
+    var finalFactor = exports.areaFactors[finalUnit];
+    if (!finalFactor) {
+        throw new Error("invalid final units");
+    }
+    return (area / startFactor) * finalFactor;
+}
+exports.convertArea = convertArea;
+/**
+ * isNumber
+ *
+ * @param {*} num Number to validate
+ * @returns {boolean} true/false
+ * @example
+ * turf.isNumber(123)
+ * //=true
+ * turf.isNumber('foo')
+ * //=false
+ */
+function isNumber(num) {
+    return !isNaN(num) && num !== null && !Array.isArray(num) && !/^\s*$/.test(num);
+}
+exports.isNumber = isNumber;
+/**
+ * isObject
+ *
+ * @param {*} input variable to validate
+ * @returns {boolean} true/false
+ * @example
+ * turf.isObject({elevation: 10})
+ * //=true
+ * turf.isObject('foo')
+ * //=false
+ */
+function isObject(input) {
+    return (!!input) && (input.constructor === Object);
+}
+exports.isObject = isObject;
+/**
+ * Validate BBox
+ *
+ * @private
+ * @param {Array<number>} bbox BBox to validate
+ * @returns {void}
+ * @throws Error if BBox is not valid
+ * @example
+ * validateBBox([-180, -40, 110, 50])
+ * //=OK
+ * validateBBox([-180, -40])
+ * //=Error
+ * validateBBox('Foo')
+ * //=Error
+ * validateBBox(5)
+ * //=Error
+ * validateBBox(null)
+ * //=Error
+ * validateBBox(undefined)
+ * //=Error
+ */
+function validateBBox(bbox) {
+    if (!bbox) {
+        throw new Error("bbox is required");
+    }
+    if (!Array.isArray(bbox)) {
+        throw new Error("bbox must be an Array");
+    }
+    if (bbox.length !== 4 && bbox.length !== 6) {
+        throw new Error("bbox must be an Array of 4 or 6 numbers");
+    }
+    bbox.forEach(function (num) {
+        if (!isNumber(num)) {
+            throw new Error("bbox must only contain numbers");
+        }
+    });
+}
+exports.validateBBox = validateBBox;
+/**
+ * Validate Id
+ *
+ * @private
+ * @param {string|number} id Id to validate
+ * @returns {void}
+ * @throws Error if Id is not valid
+ * @example
+ * validateId([-180, -40, 110, 50])
+ * //=Error
+ * validateId([-180, -40])
+ * //=Error
+ * validateId('Foo')
+ * //=OK
+ * validateId(5)
+ * //=OK
+ * validateId(null)
+ * //=Error
+ * validateId(undefined)
+ * //=Error
+ */
+function validateId(id) {
+    if (!id) {
+        throw new Error("id is required");
+    }
+    if (["string", "number"].indexOf(typeof id) === -1) {
+        throw new Error("id must be a number or a string");
+    }
+}
+exports.validateId = validateId;
+// Deprecated methods
+function radians2degrees() {
+    throw new Error("method has been renamed to `radiansToDegrees`");
+}
+exports.radians2degrees = radians2degrees;
+function degrees2radians() {
+    throw new Error("method has been renamed to `degreesToRadians`");
+}
+exports.degrees2radians = degrees2radians;
+function distanceToDegrees() {
+    throw new Error("method has been renamed to `lengthToDegrees`");
+}
+exports.distanceToDegrees = distanceToDegrees;
+function distanceToRadians() {
+    throw new Error("method has been renamed to `lengthToRadians`");
+}
+exports.distanceToRadians = distanceToRadians;
+function radiansToDistance() {
+    throw new Error("method has been renamed to `radiansToLength`");
+}
+exports.radiansToDistance = radiansToDistance;
+function bearingToAngle() {
+    throw new Error("method has been renamed to `bearingToAzimuth`");
+}
+exports.bearingToAngle = bearingToAngle;
+function convertDistance() {
+    throw new Error("method has been renamed to `convertLength`");
+}
+exports.convertDistance = convertDistance;
+
+},{}],46:[function(require,module,exports){
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+var helpers_1 = require("@turf/helpers");
+var invariant_1 = require("@turf/invariant");
+var polygon_clipping_1 = __importDefault(require("polygon-clipping"));
+/**
+ * Takes two {@link Polygon|polygon} or {@link MultiPolygon|multi-polygon} geometries and
+ * finds their polygonal intersection. If they don't intersect, returns null.
+ *
+ * @name intersect
+ * @param {Feature<Polygon | MultiPolygon>} poly1 the first polygon or multipolygon
+ * @param {Feature<Polygon | MultiPolygon>} poly2 the second polygon or multipolygon
+ * @param {Object} [options={}] Optional Parameters
+ * @param {Object} [options.properties={}] Translate GeoJSON Properties to Feature
+ * @returns {Feature|null} returns a feature representing the area they share (either a {@link Polygon} or
+ * {@link MultiPolygon}). If they do not share any area, returns `null`.
+ * @example
+ * var poly1 = turf.polygon([[
+ *   [-122.801742, 45.48565],
+ *   [-122.801742, 45.60491],
+ *   [-122.584762, 45.60491],
+ *   [-122.584762, 45.48565],
+ *   [-122.801742, 45.48565]
+ * ]]);
+ *
+ * var poly2 = turf.polygon([[
+ *   [-122.520217, 45.535693],
+ *   [-122.64038, 45.553967],
+ *   [-122.720031, 45.526554],
+ *   [-122.669906, 45.507309],
+ *   [-122.723464, 45.446643],
+ *   [-122.532577, 45.408574],
+ *   [-122.487258, 45.477466],
+ *   [-122.520217, 45.535693]
+ * ]]);
+ *
+ * var intersection = turf.intersect(poly1, poly2);
+ *
+ * //addToMap
+ * var addToMap = [poly1, poly2, intersection];
+ */
+function intersect(poly1, poly2, options) {
+    if (options === void 0) { options = {}; }
+    var geom1 = invariant_1.getGeom(poly1);
+    var geom2 = invariant_1.getGeom(poly2);
+    var intersection = polygon_clipping_1.default.intersection(geom1.coordinates, geom2.coordinates);
+    if (intersection.length === 0)
+        return null;
+    if (intersection.length === 1)
+        return helpers_1.polygon(intersection[0], options.properties);
+    return helpers_1.multiPolygon(intersection, options.properties);
+}
+exports.default = intersect;
+
+},{"@turf/helpers":47,"@turf/invariant":48,"polygon-clipping":261}],47:[function(require,module,exports){
+arguments[4][8][0].apply(exports,arguments)
+},{"dup":8}],48:[function(require,module,exports){
+arguments[4][9][0].apply(exports,arguments)
+},{"@turf/helpers":47,"dup":9}],49:[function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+var helpers_1 = require("@turf/helpers");
+/**
+ * Unwrap a coordinate from a Point Feature, Geometry or a single coordinate.
+ *
+ * @name getCoord
+ * @param {Array<number>|Geometry<Point>|Feature<Point>} coord GeoJSON Point or an Array of numbers
+ * @returns {Array<number>} coordinates
+ * @example
+ * var pt = turf.point([10, 10]);
+ *
+ * var coord = turf.getCoord(pt);
+ * //= [10, 10]
+ */
+function getCoord(coord) {
+    if (!coord) {
+        throw new Error("coord is required");
+    }
+    if (!Array.isArray(coord)) {
+        if (coord.type === "Feature" && coord.geometry !== null && coord.geometry.type === "Point") {
+            return coord.geometry.coordinates;
+        }
+        if (coord.type === "Point") {
+            return coord.coordinates;
+        }
+    }
+    if (Array.isArray(coord) && coord.length >= 2 && !Array.isArray(coord[0]) && !Array.isArray(coord[1])) {
+        return coord;
+    }
+    throw new Error("coord must be GeoJSON Point or an Array of numbers");
+}
+exports.getCoord = getCoord;
+/**
+ * Unwrap coordinates from a Feature, Geometry Object or an Array
+ *
+ * @name getCoords
+ * @param {Array<any>|Geometry|Feature} coords Feature, Geometry Object or an Array
+ * @returns {Array<any>} coordinates
+ * @example
+ * var poly = turf.polygon([[[119.32, -8.7], [119.55, -8.69], [119.51, -8.54], [119.32, -8.7]]]);
+ *
+ * var coords = turf.getCoords(poly);
+ * //= [[[119.32, -8.7], [119.55, -8.69], [119.51, -8.54], [119.32, -8.7]]]
+ */
+function getCoords(coords) {
+    if (Array.isArray(coords)) {
+        return coords;
+    }
+    // Feature
+    if (coords.type === "Feature") {
+        if (coords.geometry !== null) {
+            return coords.geometry.coordinates;
+        }
+    }
+    else {
+        // Geometry
+        if (coords.coordinates) {
+            return coords.coordinates;
+        }
+    }
+    throw new Error("coords must be GeoJSON Feature, Geometry Object or an Array");
+}
+exports.getCoords = getCoords;
+/**
+ * Checks if coordinates contains a number
+ *
+ * @name containsNumber
+ * @param {Array<any>} coordinates GeoJSON Coordinates
+ * @returns {boolean} true if Array contains a number
+ */
+function containsNumber(coordinates) {
+    if (coordinates.length > 1 && helpers_1.isNumber(coordinates[0]) && helpers_1.isNumber(coordinates[1])) {
+        return true;
+    }
+    if (Array.isArray(coordinates[0]) && coordinates[0].length) {
+        return containsNumber(coordinates[0]);
+    }
+    throw new Error("coordinates must only contain numbers");
+}
+exports.containsNumber = containsNumber;
+/**
+ * Enforce expectations about types of GeoJSON objects for Turf.
+ *
+ * @name geojsonType
+ * @param {GeoJSON} value any GeoJSON object
+ * @param {string} type expected GeoJSON type
+ * @param {string} name name of calling function
+ * @throws {Error} if value is not the expected type.
+ */
+function geojsonType(value, type, name) {
+    if (!type || !name) {
+        throw new Error("type and name required");
+    }
+    if (!value || value.type !== type) {
+        throw new Error("Invalid input to " + name + ": must be a " + type + ", given " + value.type);
+    }
+}
+exports.geojsonType = geojsonType;
+/**
+ * Enforce expectations about types of {@link Feature} inputs for Turf.
+ * Internally this uses {@link geojsonType} to judge geometry types.
+ *
+ * @name featureOf
+ * @param {Feature} feature a feature with an expected geometry type
+ * @param {string} type expected GeoJSON type
+ * @param {string} name name of calling function
+ * @throws {Error} error if value is not the expected type.
+ */
+function featureOf(feature, type, name) {
+    if (!feature) {
+        throw new Error("No feature passed");
+    }
+    if (!name) {
+        throw new Error(".featureOf() requires a name");
+    }
+    if (!feature || feature.type !== "Feature" || !feature.geometry) {
+        throw new Error("Invalid input to " + name + ", Feature with geometry required");
+    }
+    if (!feature.geometry || feature.geometry.type !== type) {
+        throw new Error("Invalid input to " + name + ": must be a " + type + ", given " + feature.geometry.type);
+    }
+}
+exports.featureOf = featureOf;
+/**
+ * Enforce expectations about types of {@link FeatureCollection} inputs for Turf.
+ * Internally this uses {@link geojsonType} to judge geometry types.
+ *
+ * @name collectionOf
+ * @param {FeatureCollection} featureCollection a FeatureCollection for which features will be judged
+ * @param {string} type expected GeoJSON type
+ * @param {string} name name of calling function
+ * @throws {Error} if value is not the expected type.
+ */
+function collectionOf(featureCollection, type, name) {
+    if (!featureCollection) {
+        throw new Error("No featureCollection passed");
+    }
+    if (!name) {
+        throw new Error(".collectionOf() requires a name");
+    }
+    if (!featureCollection || featureCollection.type !== "FeatureCollection") {
+        throw new Error("Invalid input to " + name + ", FeatureCollection required");
+    }
+    for (var _i = 0, _a = featureCollection.features; _i < _a.length; _i++) {
+        var feature = _a[_i];
+        if (!feature || feature.type !== "Feature" || !feature.geometry) {
+            throw new Error("Invalid input to " + name + ", Feature with geometry required");
+        }
+        if (!feature.geometry || feature.geometry.type !== type) {
+            throw new Error("Invalid input to " + name + ": must be a " + type + ", given " + feature.geometry.type);
+        }
+    }
+}
+exports.collectionOf = collectionOf;
+/**
+ * Get Geometry from Feature or Geometry Object
+ *
+ * @param {Feature|Geometry} geojson GeoJSON Feature or Geometry Object
+ * @returns {Geometry|null} GeoJSON Geometry Object
+ * @throws {Error} if geojson is not a Feature or Geometry Object
+ * @example
+ * var point = {
+ *   "type": "Feature",
+ *   "properties": {},
+ *   "geometry": {
+ *     "type": "Point",
+ *     "coordinates": [110, 40]
+ *   }
+ * }
+ * var geom = turf.getGeom(point)
+ * //={"type": "Point", "coordinates": [110, 40]}
+ */
+function getGeom(geojson) {
+    if (geojson.type === "Feature") {
+        return geojson.geometry;
+    }
+    return geojson;
+}
+exports.getGeom = getGeom;
+/**
+ * Get GeoJSON object's type, Geometry type is prioritize.
+ *
+ * @param {GeoJSON} geojson GeoJSON object
+ * @param {string} [name="geojson"] name of the variable to display in error message
+ * @returns {string} GeoJSON type
+ * @example
+ * var point = {
+ *   "type": "Feature",
+ *   "properties": {},
+ *   "geometry": {
+ *     "type": "Point",
+ *     "coordinates": [110, 40]
+ *   }
+ * }
+ * var geom = turf.getType(point)
+ * //="Point"
+ */
+function getType(geojson, name) {
+    if (geojson.type === "FeatureCollection") {
+        return "FeatureCollection";
+    }
+    if (geojson.type === "GeometryCollection") {
+        return "GeometryCollection";
+    }
+    if (geojson.type === "Feature" && geojson.geometry !== null) {
+        return geojson.geometry.type;
+    }
+    return geojson.type;
+}
+exports.getType = getType;
+
+},{"@turf/helpers":45}],50:[function(require,module,exports){
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+var distance_1 = __importDefault(require("@turf/distance"));
+var meta_1 = require("@turf/meta");
+/**
+ * Takes a {@link GeoJSON} and measures its length in the specified units, {@link (Multi)Point}'s distance are ignored.
+ *
+ * @name length
+ * @param {Feature<LineString|MultiLineString>} geojson GeoJSON to measure
+ * @param {Object} [options={}] Optional parameters
+ * @param {string} [options.units=kilometers] can be degrees, radians, miles, or kilometers
+ * @returns {number} length of GeoJSON
+ * @example
+ * var line = turf.lineString([[115, -32], [131, -22], [143, -25], [150, -34]]);
+ * var length = turf.length(line, {units: 'miles'});
+ *
+ * //addToMap
+ * var addToMap = [line];
+ * line.properties.distance = length;
+ */
+function length(geojson, options) {
+    if (options === void 0) { options = {}; }
+    // Calculate distance from 2-vertex line segments
+    return meta_1.segmentReduce(geojson, function (previousValue, segment) {
+        var coords = segment.geometry.coordinates;
+        return previousValue + distance_1.default(coords[0], coords[1], options);
+    }, 0);
+}
+exports.default = length;
+
+},{"@turf/distance":51,"@turf/meta":54}],51:[function(require,module,exports){
+arguments[4][7][0].apply(exports,arguments)
+},{"@turf/helpers":52,"@turf/invariant":53,"dup":7}],52:[function(require,module,exports){
+arguments[4][8][0].apply(exports,arguments)
+},{"dup":8}],53:[function(require,module,exports){
+arguments[4][9][0].apply(exports,arguments)
+},{"@turf/helpers":52,"dup":9}],54:[function(require,module,exports){
+arguments[4][18][0].apply(exports,arguments)
+},{"@turf/helpers":52,"dup":18}],55:[function(require,module,exports){
 "use strict";
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
@@ -6693,7 +7434,7 @@ function intersects(line1, line2) {
 }
 exports.default = lineIntersect;
 
-},{"@turf/helpers":30,"@turf/invariant":34,"@turf/line-segment":41,"@turf/meta":42,"geojson-rbush":78}],41:[function(require,module,exports){
+},{"@turf/helpers":45,"@turf/invariant":49,"@turf/line-segment":56,"@turf/meta":57,"geojson-rbush":96}],56:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 var helpers_1 = require("@turf/helpers");
@@ -6790,7 +7531,7 @@ function bbox(coords1, coords2) {
 }
 exports.default = lineSegment;
 
-},{"@turf/helpers":30,"@turf/invariant":34,"@turf/meta":42}],42:[function(require,module,exports){
+},{"@turf/helpers":45,"@turf/invariant":49,"@turf/meta":57}],57:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, '__esModule', { value: true });
@@ -7924,7 +8665,7 @@ exports.lineReduce = lineReduce;
 exports.findSegment = findSegment;
 exports.findPoint = findPoint;
 
-},{"@turf/helpers":30}],43:[function(require,module,exports){
+},{"@turf/helpers":45}],58:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 var bearing_1 = require("@turf/bearing");
@@ -8011,7 +8752,7 @@ function nearestPointOnLine(lines, pt, options) {
 }
 exports.default = nearestPointOnLine;
 
-},{"@turf/bearing":15,"@turf/destination":22,"@turf/distance":26,"@turf/helpers":30,"@turf/invariant":34,"@turf/line-intersect":40,"@turf/meta":42}],44:[function(require,module,exports){
+},{"@turf/bearing":11,"@turf/destination":37,"@turf/distance":41,"@turf/helpers":45,"@turf/invariant":49,"@turf/line-intersect":55,"@turf/meta":57}],59:[function(require,module,exports){
 'use strict';
 
 function _interopDefault (ex) { return (ex && (typeof ex === 'object') && 'default' in ex) ? ex['default'] : ex; }
@@ -8067,7 +8808,7 @@ function nearestPoint(targetPoint, points) {
 module.exports = nearestPoint;
 module.exports.default = nearestPoint;
 
-},{"@turf/clone":21,"@turf/distance":45,"@turf/meta":48}],45:[function(require,module,exports){
+},{"@turf/clone":36,"@turf/distance":60,"@turf/meta":63}],60:[function(require,module,exports){
 'use strict';
 
 var invariant = require('@turf/invariant');
@@ -8122,9 +8863,9 @@ function distance(from, to, options) {
 module.exports = distance;
 module.exports.default = distance;
 
-},{"@turf/helpers":46,"@turf/invariant":47}],46:[function(require,module,exports){
-arguments[4][19][0].apply(exports,arguments)
-},{"dup":19}],47:[function(require,module,exports){
+},{"@turf/helpers":61,"@turf/invariant":62}],61:[function(require,module,exports){
+arguments[4][34][0].apply(exports,arguments)
+},{"dup":34}],62:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, '__esModule', { value: true });
@@ -8333,9 +9074,9 @@ exports.getGeom = getGeom;
 exports.getGeomType = getGeomType;
 exports.getType = getType;
 
-},{"@turf/helpers":46}],48:[function(require,module,exports){
-arguments[4][20][0].apply(exports,arguments)
-},{"@turf/helpers":46,"dup":20}],49:[function(require,module,exports){
+},{"@turf/helpers":61}],63:[function(require,module,exports){
+arguments[4][35][0].apply(exports,arguments)
+},{"@turf/helpers":61,"dup":35}],64:[function(require,module,exports){
 'use strict';
 
 function _interopDefault (ex) { return (ex && (typeof ex === 'object') && 'default' in ex) ? ex['default'] : ex; }
@@ -8485,7 +9226,7 @@ function pointOnSegment(x, y, x1, y1, x2, y2) {
 module.exports = pointOnFeature;
 module.exports.default = pointOnFeature;
 
-},{"@turf/boolean-point-in-polygon":50,"@turf/center":17,"@turf/explode":27,"@turf/helpers":51,"@turf/nearest-point":44}],50:[function(require,module,exports){
+},{"@turf/boolean-point-in-polygon":65,"@turf/center":32,"@turf/explode":42,"@turf/helpers":66,"@turf/nearest-point":59}],65:[function(require,module,exports){
 'use strict';
 
 var invariant = require('@turf/invariant');
@@ -8600,11 +9341,98 @@ function inBBox(pt, bbox) {
 module.exports = booleanPointInPolygon;
 module.exports.default = booleanPointInPolygon;
 
-},{"@turf/invariant":52}],51:[function(require,module,exports){
-arguments[4][19][0].apply(exports,arguments)
-},{"dup":19}],52:[function(require,module,exports){
-arguments[4][47][0].apply(exports,arguments)
-},{"@turf/helpers":51,"dup":47}],53:[function(require,module,exports){
+},{"@turf/invariant":67}],66:[function(require,module,exports){
+arguments[4][34][0].apply(exports,arguments)
+},{"dup":34}],67:[function(require,module,exports){
+arguments[4][62][0].apply(exports,arguments)
+},{"@turf/helpers":66,"dup":62}],68:[function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+var helpers_1 = require("@turf/helpers");
+var invariant_1 = require("@turf/invariant");
+/**
+ * Converts a {@link Polygon} to {@link LineString|(Multi)LineString} or {@link MultiPolygon} to a
+ * {@link FeatureCollection} of {@link LineString|(Multi)LineString}.
+ *
+ * @name polygonToLine
+ * @param {Feature<Polygon|MultiPolygon>} poly Feature to convert
+ * @param {Object} [options={}] Optional parameters
+ * @param {Object} [options.properties={}] translates GeoJSON properties to Feature
+ * @returns {FeatureCollection|Feature<LineString|MultiLinestring>} converted (Multi)Polygon to (Multi)LineString
+ * @example
+ * var poly = turf.polygon([[[125, -30], [145, -30], [145, -20], [125, -20], [125, -30]]]);
+ *
+ * var line = turf.polygonToLine(poly);
+ *
+ * //addToMap
+ * var addToMap = [line];
+ */
+function default_1(poly, options) {
+    if (options === void 0) { options = {}; }
+    var geom = invariant_1.getGeom(poly);
+    if (!options.properties && poly.type === "Feature") {
+        options.properties = poly.properties;
+    }
+    switch (geom.type) {
+        case "Polygon":
+            return polygonToLine(geom, options);
+        case "MultiPolygon":
+            return multiPolygonToLine(geom, options);
+        default:
+            throw new Error("invalid poly");
+    }
+}
+exports.default = default_1;
+/**
+ * @private
+ */
+function polygonToLine(poly, options) {
+    if (options === void 0) { options = {}; }
+    var geom = invariant_1.getGeom(poly);
+    var coords = geom.coordinates;
+    var properties = options.properties
+        ? options.properties
+        : poly.type === "Feature"
+            ? poly.properties
+            : {};
+    return coordsToLine(coords, properties);
+}
+exports.polygonToLine = polygonToLine;
+/**
+ * @private
+ */
+function multiPolygonToLine(multiPoly, options) {
+    if (options === void 0) { options = {}; }
+    var geom = invariant_1.getGeom(multiPoly);
+    var coords = geom.coordinates;
+    var properties = options.properties
+        ? options.properties
+        : multiPoly.type === "Feature"
+            ? multiPoly.properties
+            : {};
+    var lines = [];
+    coords.forEach(function (coord) {
+        lines.push(coordsToLine(coord, properties));
+    });
+    return helpers_1.featureCollection(lines);
+}
+exports.multiPolygonToLine = multiPolygonToLine;
+/**
+ * @private
+ */
+function coordsToLine(coords, properties) {
+    if (coords.length > 1) {
+        return helpers_1.multiLineString(coords, properties);
+    }
+    return helpers_1.lineString(coords[0], properties);
+}
+exports.coordsToLine = coordsToLine;
+
+},{"@turf/helpers":69,"@turf/invariant":70}],69:[function(require,module,exports){
+arguments[4][8][0].apply(exports,arguments)
+},{"dup":8}],70:[function(require,module,exports){
+arguments[4][9][0].apply(exports,arguments)
+},{"@turf/helpers":69,"dup":9}],71:[function(require,module,exports){
 "use strict";
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
@@ -8657,14 +9485,14 @@ function union(poly1, poly2, options) {
 }
 exports.default = union;
 
-},{"@turf/helpers":54,"@turf/invariant":55,"polygon-clipping":240}],54:[function(require,module,exports){
+},{"@turf/helpers":72,"@turf/invariant":73,"polygon-clipping":261}],72:[function(require,module,exports){
 arguments[4][8][0].apply(exports,arguments)
-},{"dup":8}],55:[function(require,module,exports){
+},{"dup":8}],73:[function(require,module,exports){
 arguments[4][9][0].apply(exports,arguments)
-},{"@turf/helpers":54,"dup":9}],56:[function(require,module,exports){
+},{"@turf/helpers":72,"dup":9}],74:[function(require,module,exports){
 'use strict'
 
-var GeoJSONBounds = require('geojson-bounds')
+const GeoJSONBounds = require('geojson-bounds')
 const haversine = require('haversine')
 
 /* global L:false */
@@ -8677,7 +9505,7 @@ const haversine = require('haversine')
  * var bbox = new BoundingBox({ minlat: 48.123, minlon: 16.23, maxlat: 49.012, maxlon: 16.367 })
  */
 function BoundingBox (bounds) {
-  var k
+  let k
 
   if (bounds === null || typeof bounds === 'undefined') {
     this.minlat = -90
@@ -8689,8 +9517,8 @@ function BoundingBox (bounds) {
 
   // Leaflet.latLngBounds detected!
   if (typeof bounds.getSouthWest === 'function') {
-    var sw = bounds.getSouthWest().wrap()
-    var ne = bounds.getNorthEast().wrap()
+    const sw = bounds.getSouthWest().wrap()
+    const ne = bounds.getNorthEast().wrap()
 
     bounds = {
       minlat: sw.lat,
@@ -8700,26 +9528,26 @@ function BoundingBox (bounds) {
     }
   }
 
-  // GeoJSON detected
+  // GeoJSON Feature detected
   if (bounds.type === 'Feature') {
     let boxes
 
     if (bounds.geometry.type === 'GeometryCollection') {
       boxes = bounds.geometry.geometries.map(
         geometry => {
-          let b = new BoundingBox({ type: 'Feature', geometry })
-          return [ b.minlon, b.minlat, b.maxlon, b.maxlat ]
+          const b = new BoundingBox({ type: 'Feature', geometry })
+          return [b.minlon, b.minlat, b.maxlon, b.maxlat]
         }
       )
-    } else if ([ 'MultiPoint', 'MultiPolygon', 'MultiLineString' ].includes(bounds.geometry.type)) {
+    } else if (['MultiPoint', 'MultiPolygon', 'MultiLineString'].includes(bounds.geometry.type)) {
       boxes = bounds.geometry.coordinates.map(
         geom => GeoJSONBounds.extent({ type: 'Feature', geometry: { type: bounds.geometry.type.substr(5), coordinates: geom } })
       )
     } else {
-      boxes = [ GeoJSONBounds.extent(bounds) ]
+      boxes = [GeoJSONBounds.extent(bounds)]
     }
 
-    let b = boxes.shift()
+    const b = boxes.shift()
 
     this.minlat = b[1]
     this.minlon = b[0]
@@ -8736,6 +9564,23 @@ function BoundingBox (bounds) {
     this._wrap()
 
     return
+  } else
+  // GeoJSON FeatureCollection detected
+  if (bounds.type === 'FeatureCollection') {
+    if (bounds.features.length === 0) {
+      return
+    }
+
+    const r = new BoundingBox(bounds.features[0])
+    for (let i = 1; i < bounds.features.length; i++) {
+      r.extend(bounds.features[i])
+    }
+
+    this.minlat = r.minlat
+    this.minlon = r.minlon
+    this.maxlat = r.maxlat
+    this.maxlon = r.maxlon
+    return
   }
 
   if ('bounds' in bounds) {
@@ -8743,30 +9588,37 @@ function BoundingBox (bounds) {
   }
 
   if (bounds.lat) {
-    this.minlat = bounds.lat
-    this.maxlat = bounds.lat
+    this.minlat = +bounds.lat
+    this.maxlat = +bounds.lat
   }
 
   if (bounds.lon) {
-    this.minlon = bounds.lon
-    this.maxlon = bounds.lon
+    this.minlon = +bounds.lon
+    this.maxlon = +bounds.lon
+  }
+
+  if (bounds.latitude) {
+    this.minlat = +bounds.latitude
+    this.maxlat = +bounds.latitude
+    this.minlon = +bounds.longitude
+    this.maxlon = +bounds.longitude
   }
 
   if (Array.isArray(bounds)) {
-    this.minlat = bounds[0]
-    this.maxlat = bounds[0]
-    this.minlon = bounds[1]
-    this.maxlon = bounds[1]
+    this.minlat = +bounds[0]
+    this.maxlat = +bounds[0]
+    this.minlon = +bounds[1]
+    this.maxlon = +bounds[1]
   }
 
   // e.g. L.latLng object
   if (bounds.lng) {
-    this.minlon = bounds.lng
-    this.maxlon = bounds.lng
+    this.minlon = +bounds.lng
+    this.maxlon = +bounds.lng
   }
 
-  var props = ['minlon', 'minlat', 'maxlon', 'maxlat']
-  for (var i = 0; i < props.length; i++) {
+  const props = ['minlon', 'minlat', 'maxlon', 'maxlat']
+  for (let i = 0; i < props.length; i++) {
     k = props[i]
     if (k in bounds) {
       this[k] = bounds[k]
@@ -8817,15 +9669,15 @@ BoundingBox.prototype.intersects = function (other) {
     return false
   }
 
-  if (other.wrapMaxLon() < this.wrapMinLon()) {
-    return false
+  if (this.wrapMaxLon() >= other.minlon && this.minlon <= other.wrapMaxLon()) {
+    return true
   }
 
-  if (other.wrapMinLon() > this.wrapMaxLon()) {
-    return false
+  if (this.maxlon >= other.wrapMinLon() && this.wrapMinLon() <= other.maxlon) {
+    return true
   }
 
-  return true
+  return false
 }
 
 /**
@@ -8850,15 +9702,15 @@ BoundingBox.prototype.within = function (other) {
     return false
   }
 
-  if (other.wrapMaxLon() < this.wrapMaxLon()) {
-    return false
+  if (this.wrapMinLon() >= other.wrapMinLon() && this.maxlon <= other.maxlon) {
+    return true
   }
 
-  if (other.wrapMinLon() > this.wrapMinLon()) {
-    return false
+  if (this.minlon >= other.minlon && this.wrapMaxLon() <= other.wrapMaxLon()) {
+    return true
   }
 
-  return true
+  return false
 }
 
 BoundingBox.prototype.toTile = function () {
@@ -8915,8 +9767,8 @@ BoundingBox.prototype.toLatLonString = function () {
  * console.log(bbox.diagonalLength()) // 0.8994943023721748
  */
 BoundingBox.prototype.diagonalLength = function () {
-  var dlat = this.maxlat - this.minlat
-  var dlon = this.wrapMaxLon() - this.minlon
+  const dlat = this.maxlat - this.minlat
+  const dlon = this.wrapMaxLon() - this.minlon
 
   return Math.sqrt(dlat * dlat + dlon * dlon)
 }
@@ -8947,8 +9799,8 @@ BoundingBox.prototype.diagonalDistance = function (options = {}) {
  * console.log(bbox.getCenter()) // { lat: 48.567499999999995, lon: 16.2985 }
  */
 BoundingBox.prototype.getCenter = function () {
-  var dlat = this.maxlat - this.minlat
-  var dlon = this.wrapMaxLon() - this.minlon
+  const dlat = this.maxlat - this.minlat
+  const dlon = this.wrapMaxLon() - this.minlon
   let lon = this.minlon + dlon / 2
   if (lon < -180 || lon > 180) {
     lon = (lon + 180) % 360 - 180
@@ -9025,10 +9877,10 @@ BoundingBox.prototype.extend = function (other) {
     }
   }
 
-  let min1 = Math.min(this.minlon, other.minlon)
-  let min2 = Math.max(this.minlon, other.minlon)
-  let max1 = Math.max(this.wrapMaxLon(), other.wrapMaxLon())
-  let max2 = Math.min(this.wrapMaxLon(), other.wrapMaxLon())
+  const min1 = Math.min(this.minlon, other.minlon)
+  const min2 = Math.max(this.minlon, other.minlon)
+  const max1 = Math.max(this.wrapMaxLon(), other.wrapMaxLon())
+  const max2 = Math.min(this.wrapMaxLon(), other.wrapMaxLon())
 
   if (max1 - min1 < max2 - min2 + 360) {
     this.minlon = min1
@@ -9070,21 +9922,21 @@ BoundingBox.prototype.toGeoJSON = function () {
       type: 'Feature',
       properties: {},
       geometry: {
-        'type': 'MultiPolygon',
-        'coordinates': [
+        type: 'MultiPolygon',
+        coordinates: [
           [[
-            [ this.minlon, this.minlat ],
-            [ 180, this.minlat ],
-            [ 180, this.maxlat ],
-            [ this.minlon, this.maxlat ],
-            [ this.minlon, this.minlat ]
+            [this.minlon, this.minlat],
+            [180, this.minlat],
+            [180, this.maxlat],
+            [this.minlon, this.maxlat],
+            [this.minlon, this.minlat]
           ]],
           [[
-            [ -180, this.minlat ],
-            [ this.maxlon, this.minlat ],
-            [ this.maxlon, this.maxlat ],
-            [ -180, this.maxlat ],
-            [ -180, this.minlat ]
+            [-180, this.minlat],
+            [this.maxlon, this.minlat],
+            [this.maxlon, this.maxlat],
+            [-180, this.maxlat],
+            [-180, this.minlat]
           ]]
         ]
       }
@@ -9095,13 +9947,13 @@ BoundingBox.prototype.toGeoJSON = function () {
     type: 'Feature',
     properties: {},
     geometry: {
-      'type': 'Polygon',
-      'coordinates': [[
-        [ this.minlon, this.minlat ],
-        [ this.maxlon, this.minlat ],
-        [ this.maxlon, this.maxlat ],
-        [ this.minlon, this.maxlat ],
-        [ this.minlon, this.minlat ]
+      type: 'Polygon',
+      coordinates: [[
+        [this.minlon, this.minlat],
+        [this.maxlon, this.minlat],
+        [this.maxlon, this.maxlat],
+        [this.minlon, this.maxlat],
+        [this.minlon, this.minlat]
       ]]
     }
   }
@@ -9114,7 +9966,7 @@ BoundingBox.prototype.toGeoJSON = function () {
  */
 BoundingBox.prototype.toLeaflet = function (options = {}) {
   if (!('shiftWorld' in options)) {
-    options.shiftWorld = [ 0, 0 ]
+    options.shiftWorld = [0, 0]
   }
 
   return L.latLngBounds(
@@ -9130,9 +9982,9 @@ if (typeof window !== 'undefined') {
   window.BoundingBox = BoundingBox
 }
 
-},{"geojson-bounds":77,"haversine":79}],57:[function(require,module,exports){
+},{"geojson-bounds":95,"haversine":97}],75:[function(require,module,exports){
 
-},{}],58:[function(require,module,exports){
+},{}],76:[function(require,module,exports){
 'use strict';
 // For more information about browser field, check out the browser field at https://github.com/substack/browserify-handbook#browser-field.
 
@@ -9209,9 +10061,9 @@ module.exports = {
     }
 };
 
-},{}],59:[function(require,module,exports){
-arguments[4][57][0].apply(exports,arguments)
-},{"dup":57}],60:[function(require,module,exports){
+},{}],77:[function(require,module,exports){
+arguments[4][75][0].apply(exports,arguments)
+},{"dup":75}],78:[function(require,module,exports){
 /*
 bzip2.js - a small bzip2 decompression implementation
 
@@ -9520,7 +10372,7 @@ bzip2.decompress = function (bits, size, len) {
 
 module.exports = bzip2;
 
-},{}],61:[function(require,module,exports){
+},{}],79:[function(require,module,exports){
 "use strict";
 
 var isValue         = require("type/value/is")
@@ -9584,18 +10436,18 @@ d.gs = function (dscr, get, set/*, options*/) {
 	return !options ? desc : assign(normalizeOpts(options), desc);
 };
 
-},{"es5-ext/object/assign":63,"es5-ext/object/normalize-options":70,"es5-ext/string/#/contains":73,"type/plain-function/is":249,"type/value/is":251}],62:[function(require,module,exports){
+},{"es5-ext/object/assign":81,"es5-ext/object/normalize-options":88,"es5-ext/string/#/contains":91,"type/plain-function/is":270,"type/value/is":272}],80:[function(require,module,exports){
 "use strict";
 
 // eslint-disable-next-line no-empty-function
 module.exports = function () {};
 
-},{}],63:[function(require,module,exports){
+},{}],81:[function(require,module,exports){
 "use strict";
 
 module.exports = require("./is-implemented")() ? Object.assign : require("./shim");
 
-},{"./is-implemented":64,"./shim":65}],64:[function(require,module,exports){
+},{"./is-implemented":82,"./shim":83}],82:[function(require,module,exports){
 "use strict";
 
 module.exports = function () {
@@ -9606,7 +10458,7 @@ module.exports = function () {
 	return obj.foo + obj.bar + obj.trzy === "razdwatrzy";
 };
 
-},{}],65:[function(require,module,exports){
+},{}],83:[function(require,module,exports){
 "use strict";
 
 var keys  = require("../keys")
@@ -9631,19 +10483,19 @@ module.exports = function (dest, src/*, …srcn*/) {
 	return dest;
 };
 
-},{"../keys":67,"../valid-value":72}],66:[function(require,module,exports){
+},{"../keys":85,"../valid-value":90}],84:[function(require,module,exports){
 "use strict";
 
 var _undefined = require("../function/noop")(); // Support ES3 engines
 
 module.exports = function (val) { return val !== _undefined && val !== null; };
 
-},{"../function/noop":62}],67:[function(require,module,exports){
+},{"../function/noop":80}],85:[function(require,module,exports){
 "use strict";
 
 module.exports = require("./is-implemented")() ? Object.keys : require("./shim");
 
-},{"./is-implemented":68,"./shim":69}],68:[function(require,module,exports){
+},{"./is-implemented":86,"./shim":87}],86:[function(require,module,exports){
 "use strict";
 
 module.exports = function () {
@@ -9655,7 +10507,7 @@ module.exports = function () {
 	}
 };
 
-},{}],69:[function(require,module,exports){
+},{}],87:[function(require,module,exports){
 "use strict";
 
 var isValue = require("../is-value");
@@ -9664,7 +10516,7 @@ var keys = Object.keys;
 
 module.exports = function (object) { return keys(isValue(object) ? Object(object) : object); };
 
-},{"../is-value":66}],70:[function(require,module,exports){
+},{"../is-value":84}],88:[function(require,module,exports){
 "use strict";
 
 var isValue = require("./is-value");
@@ -9686,7 +10538,7 @@ module.exports = function (opts1/*, …options*/) {
 	return result;
 };
 
-},{"./is-value":66}],71:[function(require,module,exports){
+},{"./is-value":84}],89:[function(require,module,exports){
 "use strict";
 
 module.exports = function (fn) {
@@ -9694,7 +10546,7 @@ module.exports = function (fn) {
 	return fn;
 };
 
-},{}],72:[function(require,module,exports){
+},{}],90:[function(require,module,exports){
 "use strict";
 
 var isValue = require("./is-value");
@@ -9704,12 +10556,12 @@ module.exports = function (value) {
 	return value;
 };
 
-},{"./is-value":66}],73:[function(require,module,exports){
+},{"./is-value":84}],91:[function(require,module,exports){
 "use strict";
 
 module.exports = require("./is-implemented")() ? String.prototype.contains : require("./shim");
 
-},{"./is-implemented":74,"./shim":75}],74:[function(require,module,exports){
+},{"./is-implemented":92,"./shim":93}],92:[function(require,module,exports){
 "use strict";
 
 var str = "razdwatrzy";
@@ -9719,7 +10571,7 @@ module.exports = function () {
 	return str.contains("dwa") === true && str.contains("foo") === false;
 };
 
-},{}],75:[function(require,module,exports){
+},{}],93:[function(require,module,exports){
 "use strict";
 
 var indexOf = String.prototype.indexOf;
@@ -9728,7 +10580,7 @@ module.exports = function (searchString/*, position*/) {
 	return indexOf.call(this, searchString, arguments[1]) > -1;
 };
 
-},{}],76:[function(require,module,exports){
+},{}],94:[function(require,module,exports){
 'use strict';
 
 var d        = require('d')
@@ -9862,7 +10714,7 @@ module.exports = exports = function (o) {
 };
 exports.methods = methods;
 
-},{"d":61,"es5-ext/object/valid-callable":71}],77:[function(require,module,exports){
+},{"d":79,"es5-ext/object/valid-callable":89}],95:[function(require,module,exports){
 (function (process){(function (){
 (function() {
   /*
@@ -10048,7 +10900,7 @@ exports.methods = methods;
 }());
 
 }).call(this)}).call(this,require('_process'))
-},{"_process":241}],78:[function(require,module,exports){
+},{"_process":262}],96:[function(require,module,exports){
 var rbush = require('rbush');
 var helpers = require('@turf/helpers');
 var meta = require('@turf/meta');
@@ -10258,7 +11110,7 @@ function geojsonRbush(maxEntries) {
 module.exports = geojsonRbush;
 module.exports.default = geojsonRbush;
 
-},{"@turf/bbox":14,"@turf/helpers":30,"@turf/meta":42,"rbush":243}],79:[function(require,module,exports){
+},{"@turf/bbox":10,"@turf/helpers":45,"@turf/meta":57,"rbush":264}],97:[function(require,module,exports){
 var haversine = (function () {
   var RADII = {
     km:    6371,
@@ -10322,7 +11174,7 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = haversine
 }
 
-},{}],80:[function(require,module,exports){
+},{}],98:[function(require,module,exports){
 "use strict";
 
 // Implementation originally from Twitter's Hogan.js:
@@ -10355,7 +11207,7 @@ module.exports = function(str) {
   }
 };
 
-},{}],81:[function(require,module,exports){
+},{}],99:[function(require,module,exports){
 var getNative = require('./_getNative'),
     root = require('./_root');
 
@@ -10364,7 +11216,7 @@ var DataView = getNative(root, 'DataView');
 
 module.exports = DataView;
 
-},{"./_getNative":136,"./_root":171}],82:[function(require,module,exports){
+},{"./_getNative":154,"./_root":189}],100:[function(require,module,exports){
 var hashClear = require('./_hashClear'),
     hashDelete = require('./_hashDelete'),
     hashGet = require('./_hashGet'),
@@ -10398,7 +11250,7 @@ Hash.prototype.set = hashSet;
 
 module.exports = Hash;
 
-},{"./_hashClear":142,"./_hashDelete":143,"./_hashGet":144,"./_hashHas":145,"./_hashSet":146}],83:[function(require,module,exports){
+},{"./_hashClear":160,"./_hashDelete":161,"./_hashGet":162,"./_hashHas":163,"./_hashSet":164}],101:[function(require,module,exports){
 var listCacheClear = require('./_listCacheClear'),
     listCacheDelete = require('./_listCacheDelete'),
     listCacheGet = require('./_listCacheGet'),
@@ -10432,7 +11284,7 @@ ListCache.prototype.set = listCacheSet;
 
 module.exports = ListCache;
 
-},{"./_listCacheClear":153,"./_listCacheDelete":154,"./_listCacheGet":155,"./_listCacheHas":156,"./_listCacheSet":157}],84:[function(require,module,exports){
+},{"./_listCacheClear":171,"./_listCacheDelete":172,"./_listCacheGet":173,"./_listCacheHas":174,"./_listCacheSet":175}],102:[function(require,module,exports){
 var getNative = require('./_getNative'),
     root = require('./_root');
 
@@ -10441,7 +11293,7 @@ var Map = getNative(root, 'Map');
 
 module.exports = Map;
 
-},{"./_getNative":136,"./_root":171}],85:[function(require,module,exports){
+},{"./_getNative":154,"./_root":189}],103:[function(require,module,exports){
 var mapCacheClear = require('./_mapCacheClear'),
     mapCacheDelete = require('./_mapCacheDelete'),
     mapCacheGet = require('./_mapCacheGet'),
@@ -10475,7 +11327,7 @@ MapCache.prototype.set = mapCacheSet;
 
 module.exports = MapCache;
 
-},{"./_mapCacheClear":158,"./_mapCacheDelete":159,"./_mapCacheGet":160,"./_mapCacheHas":161,"./_mapCacheSet":162}],86:[function(require,module,exports){
+},{"./_mapCacheClear":176,"./_mapCacheDelete":177,"./_mapCacheGet":178,"./_mapCacheHas":179,"./_mapCacheSet":180}],104:[function(require,module,exports){
 var getNative = require('./_getNative'),
     root = require('./_root');
 
@@ -10484,7 +11336,7 @@ var Promise = getNative(root, 'Promise');
 
 module.exports = Promise;
 
-},{"./_getNative":136,"./_root":171}],87:[function(require,module,exports){
+},{"./_getNative":154,"./_root":189}],105:[function(require,module,exports){
 var getNative = require('./_getNative'),
     root = require('./_root');
 
@@ -10493,7 +11345,7 @@ var Set = getNative(root, 'Set');
 
 module.exports = Set;
 
-},{"./_getNative":136,"./_root":171}],88:[function(require,module,exports){
+},{"./_getNative":154,"./_root":189}],106:[function(require,module,exports){
 var MapCache = require('./_MapCache'),
     setCacheAdd = require('./_setCacheAdd'),
     setCacheHas = require('./_setCacheHas');
@@ -10522,7 +11374,7 @@ SetCache.prototype.has = setCacheHas;
 
 module.exports = SetCache;
 
-},{"./_MapCache":85,"./_setCacheAdd":172,"./_setCacheHas":173}],89:[function(require,module,exports){
+},{"./_MapCache":103,"./_setCacheAdd":190,"./_setCacheHas":191}],107:[function(require,module,exports){
 var ListCache = require('./_ListCache'),
     stackClear = require('./_stackClear'),
     stackDelete = require('./_stackDelete'),
@@ -10551,7 +11403,7 @@ Stack.prototype.set = stackSet;
 
 module.exports = Stack;
 
-},{"./_ListCache":83,"./_stackClear":175,"./_stackDelete":176,"./_stackGet":177,"./_stackHas":178,"./_stackSet":179}],90:[function(require,module,exports){
+},{"./_ListCache":101,"./_stackClear":193,"./_stackDelete":194,"./_stackGet":195,"./_stackHas":196,"./_stackSet":197}],108:[function(require,module,exports){
 var root = require('./_root');
 
 /** Built-in value references. */
@@ -10559,7 +11411,7 @@ var Symbol = root.Symbol;
 
 module.exports = Symbol;
 
-},{"./_root":171}],91:[function(require,module,exports){
+},{"./_root":189}],109:[function(require,module,exports){
 var root = require('./_root');
 
 /** Built-in value references. */
@@ -10567,7 +11419,7 @@ var Uint8Array = root.Uint8Array;
 
 module.exports = Uint8Array;
 
-},{"./_root":171}],92:[function(require,module,exports){
+},{"./_root":189}],110:[function(require,module,exports){
 var getNative = require('./_getNative'),
     root = require('./_root');
 
@@ -10576,7 +11428,7 @@ var WeakMap = getNative(root, 'WeakMap');
 
 module.exports = WeakMap;
 
-},{"./_getNative":136,"./_root":171}],93:[function(require,module,exports){
+},{"./_getNative":154,"./_root":189}],111:[function(require,module,exports){
 /**
  * A specialized version of `_.forEach` for arrays without support for
  * iteratee shorthands.
@@ -10600,7 +11452,7 @@ function arrayEach(array, iteratee) {
 
 module.exports = arrayEach;
 
-},{}],94:[function(require,module,exports){
+},{}],112:[function(require,module,exports){
 /**
  * A specialized version of `_.filter` for arrays without support for
  * iteratee shorthands.
@@ -10627,7 +11479,7 @@ function arrayFilter(array, predicate) {
 
 module.exports = arrayFilter;
 
-},{}],95:[function(require,module,exports){
+},{}],113:[function(require,module,exports){
 var baseTimes = require('./_baseTimes'),
     isArguments = require('./isArguments'),
     isArray = require('./isArray'),
@@ -10678,7 +11530,7 @@ function arrayLikeKeys(value, inherited) {
 
 module.exports = arrayLikeKeys;
 
-},{"./_baseTimes":120,"./_isIndex":147,"./isArguments":188,"./isArray":189,"./isBuffer":191,"./isTypedArray":197}],96:[function(require,module,exports){
+},{"./_baseTimes":138,"./_isIndex":165,"./isArguments":206,"./isArray":207,"./isBuffer":209,"./isTypedArray":215}],114:[function(require,module,exports){
 /**
  * A specialized version of `_.map` for arrays without support for iteratee
  * shorthands.
@@ -10701,7 +11553,7 @@ function arrayMap(array, iteratee) {
 
 module.exports = arrayMap;
 
-},{}],97:[function(require,module,exports){
+},{}],115:[function(require,module,exports){
 /**
  * Appends the elements of `values` to `array`.
  *
@@ -10723,7 +11575,7 @@ function arrayPush(array, values) {
 
 module.exports = arrayPush;
 
-},{}],98:[function(require,module,exports){
+},{}],116:[function(require,module,exports){
 /**
  * A specialized version of `_.some` for arrays without support for iteratee
  * shorthands.
@@ -10748,7 +11600,7 @@ function arraySome(array, predicate) {
 
 module.exports = arraySome;
 
-},{}],99:[function(require,module,exports){
+},{}],117:[function(require,module,exports){
 var eq = require('./eq');
 
 /**
@@ -10771,7 +11623,7 @@ function assocIndexOf(array, key) {
 
 module.exports = assocIndexOf;
 
-},{"./eq":183}],100:[function(require,module,exports){
+},{"./eq":201}],118:[function(require,module,exports){
 var baseForOwn = require('./_baseForOwn'),
     createBaseEach = require('./_createBaseEach');
 
@@ -10787,7 +11639,7 @@ var baseEach = createBaseEach(baseForOwn);
 
 module.exports = baseEach;
 
-},{"./_baseForOwn":102,"./_createBaseEach":127}],101:[function(require,module,exports){
+},{"./_baseForOwn":120,"./_createBaseEach":145}],119:[function(require,module,exports){
 var createBaseFor = require('./_createBaseFor');
 
 /**
@@ -10805,7 +11657,7 @@ var baseFor = createBaseFor();
 
 module.exports = baseFor;
 
-},{"./_createBaseFor":128}],102:[function(require,module,exports){
+},{"./_createBaseFor":146}],120:[function(require,module,exports){
 var baseFor = require('./_baseFor'),
     keys = require('./keys');
 
@@ -10823,7 +11675,7 @@ function baseForOwn(object, iteratee) {
 
 module.exports = baseForOwn;
 
-},{"./_baseFor":101,"./keys":198}],103:[function(require,module,exports){
+},{"./_baseFor":119,"./keys":216}],121:[function(require,module,exports){
 var castPath = require('./_castPath'),
     toKey = require('./_toKey');
 
@@ -10849,7 +11701,7 @@ function baseGet(object, path) {
 
 module.exports = baseGet;
 
-},{"./_castPath":125,"./_toKey":181}],104:[function(require,module,exports){
+},{"./_castPath":143,"./_toKey":199}],122:[function(require,module,exports){
 var arrayPush = require('./_arrayPush'),
     isArray = require('./isArray');
 
@@ -10871,7 +11723,7 @@ function baseGetAllKeys(object, keysFunc, symbolsFunc) {
 
 module.exports = baseGetAllKeys;
 
-},{"./_arrayPush":97,"./isArray":189}],105:[function(require,module,exports){
+},{"./_arrayPush":115,"./isArray":207}],123:[function(require,module,exports){
 var Symbol = require('./_Symbol'),
     getRawTag = require('./_getRawTag'),
     objectToString = require('./_objectToString');
@@ -10901,7 +11753,7 @@ function baseGetTag(value) {
 
 module.exports = baseGetTag;
 
-},{"./_Symbol":90,"./_getRawTag":137,"./_objectToString":169}],106:[function(require,module,exports){
+},{"./_Symbol":108,"./_getRawTag":155,"./_objectToString":187}],124:[function(require,module,exports){
 /**
  * The base implementation of `_.hasIn` without support for deep paths.
  *
@@ -10916,7 +11768,7 @@ function baseHasIn(object, key) {
 
 module.exports = baseHasIn;
 
-},{}],107:[function(require,module,exports){
+},{}],125:[function(require,module,exports){
 var baseGetTag = require('./_baseGetTag'),
     isObjectLike = require('./isObjectLike');
 
@@ -10936,7 +11788,7 @@ function baseIsArguments(value) {
 
 module.exports = baseIsArguments;
 
-},{"./_baseGetTag":105,"./isObjectLike":195}],108:[function(require,module,exports){
+},{"./_baseGetTag":123,"./isObjectLike":213}],126:[function(require,module,exports){
 var baseIsEqualDeep = require('./_baseIsEqualDeep'),
     isObjectLike = require('./isObjectLike');
 
@@ -10966,7 +11818,7 @@ function baseIsEqual(value, other, bitmask, customizer, stack) {
 
 module.exports = baseIsEqual;
 
-},{"./_baseIsEqualDeep":109,"./isObjectLike":195}],109:[function(require,module,exports){
+},{"./_baseIsEqualDeep":127,"./isObjectLike":213}],127:[function(require,module,exports){
 var Stack = require('./_Stack'),
     equalArrays = require('./_equalArrays'),
     equalByTag = require('./_equalByTag'),
@@ -11051,7 +11903,7 @@ function baseIsEqualDeep(object, other, bitmask, customizer, equalFunc, stack) {
 
 module.exports = baseIsEqualDeep;
 
-},{"./_Stack":89,"./_equalArrays":129,"./_equalByTag":130,"./_equalObjects":131,"./_getTag":139,"./isArray":189,"./isBuffer":191,"./isTypedArray":197}],110:[function(require,module,exports){
+},{"./_Stack":107,"./_equalArrays":147,"./_equalByTag":148,"./_equalObjects":149,"./_getTag":157,"./isArray":207,"./isBuffer":209,"./isTypedArray":215}],128:[function(require,module,exports){
 var Stack = require('./_Stack'),
     baseIsEqual = require('./_baseIsEqual');
 
@@ -11115,7 +11967,7 @@ function baseIsMatch(object, source, matchData, customizer) {
 
 module.exports = baseIsMatch;
 
-},{"./_Stack":89,"./_baseIsEqual":108}],111:[function(require,module,exports){
+},{"./_Stack":107,"./_baseIsEqual":126}],129:[function(require,module,exports){
 var isFunction = require('./isFunction'),
     isMasked = require('./_isMasked'),
     isObject = require('./isObject'),
@@ -11164,7 +12016,7 @@ function baseIsNative(value) {
 
 module.exports = baseIsNative;
 
-},{"./_isMasked":150,"./_toSource":182,"./isFunction":192,"./isObject":194}],112:[function(require,module,exports){
+},{"./_isMasked":168,"./_toSource":200,"./isFunction":210,"./isObject":212}],130:[function(require,module,exports){
 var baseGetTag = require('./_baseGetTag'),
     isLength = require('./isLength'),
     isObjectLike = require('./isObjectLike');
@@ -11226,7 +12078,7 @@ function baseIsTypedArray(value) {
 
 module.exports = baseIsTypedArray;
 
-},{"./_baseGetTag":105,"./isLength":193,"./isObjectLike":195}],113:[function(require,module,exports){
+},{"./_baseGetTag":123,"./isLength":211,"./isObjectLike":213}],131:[function(require,module,exports){
 var baseMatches = require('./_baseMatches'),
     baseMatchesProperty = require('./_baseMatchesProperty'),
     identity = require('./identity'),
@@ -11259,7 +12111,7 @@ function baseIteratee(value) {
 
 module.exports = baseIteratee;
 
-},{"./_baseMatches":116,"./_baseMatchesProperty":117,"./identity":187,"./isArray":189,"./property":201}],114:[function(require,module,exports){
+},{"./_baseMatches":134,"./_baseMatchesProperty":135,"./identity":205,"./isArray":207,"./property":219}],132:[function(require,module,exports){
 var isPrototype = require('./_isPrototype'),
     nativeKeys = require('./_nativeKeys');
 
@@ -11291,7 +12143,7 @@ function baseKeys(object) {
 
 module.exports = baseKeys;
 
-},{"./_isPrototype":151,"./_nativeKeys":167}],115:[function(require,module,exports){
+},{"./_isPrototype":169,"./_nativeKeys":185}],133:[function(require,module,exports){
 var baseEach = require('./_baseEach'),
     isArrayLike = require('./isArrayLike');
 
@@ -11315,7 +12167,7 @@ function baseMap(collection, iteratee) {
 
 module.exports = baseMap;
 
-},{"./_baseEach":100,"./isArrayLike":190}],116:[function(require,module,exports){
+},{"./_baseEach":118,"./isArrayLike":208}],134:[function(require,module,exports){
 var baseIsMatch = require('./_baseIsMatch'),
     getMatchData = require('./_getMatchData'),
     matchesStrictComparable = require('./_matchesStrictComparable');
@@ -11339,7 +12191,7 @@ function baseMatches(source) {
 
 module.exports = baseMatches;
 
-},{"./_baseIsMatch":110,"./_getMatchData":135,"./_matchesStrictComparable":164}],117:[function(require,module,exports){
+},{"./_baseIsMatch":128,"./_getMatchData":153,"./_matchesStrictComparable":182}],135:[function(require,module,exports){
 var baseIsEqual = require('./_baseIsEqual'),
     get = require('./get'),
     hasIn = require('./hasIn'),
@@ -11374,7 +12226,7 @@ function baseMatchesProperty(path, srcValue) {
 
 module.exports = baseMatchesProperty;
 
-},{"./_baseIsEqual":108,"./_isKey":148,"./_isStrictComparable":152,"./_matchesStrictComparable":164,"./_toKey":181,"./get":185,"./hasIn":186}],118:[function(require,module,exports){
+},{"./_baseIsEqual":126,"./_isKey":166,"./_isStrictComparable":170,"./_matchesStrictComparable":182,"./_toKey":199,"./get":203,"./hasIn":204}],136:[function(require,module,exports){
 /**
  * The base implementation of `_.property` without support for deep paths.
  *
@@ -11390,7 +12242,7 @@ function baseProperty(key) {
 
 module.exports = baseProperty;
 
-},{}],119:[function(require,module,exports){
+},{}],137:[function(require,module,exports){
 var baseGet = require('./_baseGet');
 
 /**
@@ -11408,7 +12260,7 @@ function basePropertyDeep(path) {
 
 module.exports = basePropertyDeep;
 
-},{"./_baseGet":103}],120:[function(require,module,exports){
+},{"./_baseGet":121}],138:[function(require,module,exports){
 /**
  * The base implementation of `_.times` without support for iteratee shorthands
  * or max array length checks.
@@ -11430,7 +12282,7 @@ function baseTimes(n, iteratee) {
 
 module.exports = baseTimes;
 
-},{}],121:[function(require,module,exports){
+},{}],139:[function(require,module,exports){
 var Symbol = require('./_Symbol'),
     arrayMap = require('./_arrayMap'),
     isArray = require('./isArray'),
@@ -11469,7 +12321,7 @@ function baseToString(value) {
 
 module.exports = baseToString;
 
-},{"./_Symbol":90,"./_arrayMap":96,"./isArray":189,"./isSymbol":196}],122:[function(require,module,exports){
+},{"./_Symbol":108,"./_arrayMap":114,"./isArray":207,"./isSymbol":214}],140:[function(require,module,exports){
 /**
  * The base implementation of `_.unary` without support for storing metadata.
  *
@@ -11485,7 +12337,7 @@ function baseUnary(func) {
 
 module.exports = baseUnary;
 
-},{}],123:[function(require,module,exports){
+},{}],141:[function(require,module,exports){
 /**
  * Checks if a `cache` value for `key` exists.
  *
@@ -11500,7 +12352,7 @@ function cacheHas(cache, key) {
 
 module.exports = cacheHas;
 
-},{}],124:[function(require,module,exports){
+},{}],142:[function(require,module,exports){
 var identity = require('./identity');
 
 /**
@@ -11516,7 +12368,7 @@ function castFunction(value) {
 
 module.exports = castFunction;
 
-},{"./identity":187}],125:[function(require,module,exports){
+},{"./identity":205}],143:[function(require,module,exports){
 var isArray = require('./isArray'),
     isKey = require('./_isKey'),
     stringToPath = require('./_stringToPath'),
@@ -11539,7 +12391,7 @@ function castPath(value, object) {
 
 module.exports = castPath;
 
-},{"./_isKey":148,"./_stringToPath":180,"./isArray":189,"./toString":204}],126:[function(require,module,exports){
+},{"./_isKey":166,"./_stringToPath":198,"./isArray":207,"./toString":222}],144:[function(require,module,exports){
 var root = require('./_root');
 
 /** Used to detect overreaching core-js shims. */
@@ -11547,7 +12399,7 @@ var coreJsData = root['__core-js_shared__'];
 
 module.exports = coreJsData;
 
-},{"./_root":171}],127:[function(require,module,exports){
+},{"./_root":189}],145:[function(require,module,exports){
 var isArrayLike = require('./isArrayLike');
 
 /**
@@ -11581,7 +12433,7 @@ function createBaseEach(eachFunc, fromRight) {
 
 module.exports = createBaseEach;
 
-},{"./isArrayLike":190}],128:[function(require,module,exports){
+},{"./isArrayLike":208}],146:[function(require,module,exports){
 /**
  * Creates a base function for methods like `_.forIn` and `_.forOwn`.
  *
@@ -11608,7 +12460,7 @@ function createBaseFor(fromRight) {
 
 module.exports = createBaseFor;
 
-},{}],129:[function(require,module,exports){
+},{}],147:[function(require,module,exports){
 var SetCache = require('./_SetCache'),
     arraySome = require('./_arraySome'),
     cacheHas = require('./_cacheHas');
@@ -11694,7 +12546,7 @@ function equalArrays(array, other, bitmask, customizer, equalFunc, stack) {
 
 module.exports = equalArrays;
 
-},{"./_SetCache":88,"./_arraySome":98,"./_cacheHas":123}],130:[function(require,module,exports){
+},{"./_SetCache":106,"./_arraySome":116,"./_cacheHas":141}],148:[function(require,module,exports){
 var Symbol = require('./_Symbol'),
     Uint8Array = require('./_Uint8Array'),
     eq = require('./eq'),
@@ -11808,7 +12660,7 @@ function equalByTag(object, other, tag, bitmask, customizer, equalFunc, stack) {
 
 module.exports = equalByTag;
 
-},{"./_Symbol":90,"./_Uint8Array":91,"./_equalArrays":129,"./_mapToArray":163,"./_setToArray":174,"./eq":183}],131:[function(require,module,exports){
+},{"./_Symbol":108,"./_Uint8Array":109,"./_equalArrays":147,"./_mapToArray":181,"./_setToArray":192,"./eq":201}],149:[function(require,module,exports){
 var getAllKeys = require('./_getAllKeys');
 
 /** Used to compose bitmasks for value comparisons. */
@@ -11900,7 +12752,7 @@ function equalObjects(object, other, bitmask, customizer, equalFunc, stack) {
 
 module.exports = equalObjects;
 
-},{"./_getAllKeys":133}],132:[function(require,module,exports){
+},{"./_getAllKeys":151}],150:[function(require,module,exports){
 (function (global){(function (){
 /** Detect free variable `global` from Node.js. */
 var freeGlobal = typeof global == 'object' && global && global.Object === Object && global;
@@ -11908,7 +12760,7 @@ var freeGlobal = typeof global == 'object' && global && global.Object === Object
 module.exports = freeGlobal;
 
 }).call(this)}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}],133:[function(require,module,exports){
+},{}],151:[function(require,module,exports){
 var baseGetAllKeys = require('./_baseGetAllKeys'),
     getSymbols = require('./_getSymbols'),
     keys = require('./keys');
@@ -11926,7 +12778,7 @@ function getAllKeys(object) {
 
 module.exports = getAllKeys;
 
-},{"./_baseGetAllKeys":104,"./_getSymbols":138,"./keys":198}],134:[function(require,module,exports){
+},{"./_baseGetAllKeys":122,"./_getSymbols":156,"./keys":216}],152:[function(require,module,exports){
 var isKeyable = require('./_isKeyable');
 
 /**
@@ -11946,7 +12798,7 @@ function getMapData(map, key) {
 
 module.exports = getMapData;
 
-},{"./_isKeyable":149}],135:[function(require,module,exports){
+},{"./_isKeyable":167}],153:[function(require,module,exports){
 var isStrictComparable = require('./_isStrictComparable'),
     keys = require('./keys');
 
@@ -11972,7 +12824,7 @@ function getMatchData(object) {
 
 module.exports = getMatchData;
 
-},{"./_isStrictComparable":152,"./keys":198}],136:[function(require,module,exports){
+},{"./_isStrictComparable":170,"./keys":216}],154:[function(require,module,exports){
 var baseIsNative = require('./_baseIsNative'),
     getValue = require('./_getValue');
 
@@ -11991,7 +12843,7 @@ function getNative(object, key) {
 
 module.exports = getNative;
 
-},{"./_baseIsNative":111,"./_getValue":140}],137:[function(require,module,exports){
+},{"./_baseIsNative":129,"./_getValue":158}],155:[function(require,module,exports){
 var Symbol = require('./_Symbol');
 
 /** Used for built-in method references. */
@@ -12039,7 +12891,7 @@ function getRawTag(value) {
 
 module.exports = getRawTag;
 
-},{"./_Symbol":90}],138:[function(require,module,exports){
+},{"./_Symbol":108}],156:[function(require,module,exports){
 var arrayFilter = require('./_arrayFilter'),
     stubArray = require('./stubArray');
 
@@ -12071,7 +12923,7 @@ var getSymbols = !nativeGetSymbols ? stubArray : function(object) {
 
 module.exports = getSymbols;
 
-},{"./_arrayFilter":94,"./stubArray":202}],139:[function(require,module,exports){
+},{"./_arrayFilter":112,"./stubArray":220}],157:[function(require,module,exports){
 var DataView = require('./_DataView'),
     Map = require('./_Map'),
     Promise = require('./_Promise'),
@@ -12131,7 +12983,7 @@ if ((DataView && getTag(new DataView(new ArrayBuffer(1))) != dataViewTag) ||
 
 module.exports = getTag;
 
-},{"./_DataView":81,"./_Map":84,"./_Promise":86,"./_Set":87,"./_WeakMap":92,"./_baseGetTag":105,"./_toSource":182}],140:[function(require,module,exports){
+},{"./_DataView":99,"./_Map":102,"./_Promise":104,"./_Set":105,"./_WeakMap":110,"./_baseGetTag":123,"./_toSource":200}],158:[function(require,module,exports){
 /**
  * Gets the value at `key` of `object`.
  *
@@ -12146,7 +12998,7 @@ function getValue(object, key) {
 
 module.exports = getValue;
 
-},{}],141:[function(require,module,exports){
+},{}],159:[function(require,module,exports){
 var castPath = require('./_castPath'),
     isArguments = require('./isArguments'),
     isArray = require('./isArray'),
@@ -12187,7 +13039,7 @@ function hasPath(object, path, hasFunc) {
 
 module.exports = hasPath;
 
-},{"./_castPath":125,"./_isIndex":147,"./_toKey":181,"./isArguments":188,"./isArray":189,"./isLength":193}],142:[function(require,module,exports){
+},{"./_castPath":143,"./_isIndex":165,"./_toKey":199,"./isArguments":206,"./isArray":207,"./isLength":211}],160:[function(require,module,exports){
 var nativeCreate = require('./_nativeCreate');
 
 /**
@@ -12204,7 +13056,7 @@ function hashClear() {
 
 module.exports = hashClear;
 
-},{"./_nativeCreate":166}],143:[function(require,module,exports){
+},{"./_nativeCreate":184}],161:[function(require,module,exports){
 /**
  * Removes `key` and its value from the hash.
  *
@@ -12223,7 +13075,7 @@ function hashDelete(key) {
 
 module.exports = hashDelete;
 
-},{}],144:[function(require,module,exports){
+},{}],162:[function(require,module,exports){
 var nativeCreate = require('./_nativeCreate');
 
 /** Used to stand-in for `undefined` hash values. */
@@ -12255,7 +13107,7 @@ function hashGet(key) {
 
 module.exports = hashGet;
 
-},{"./_nativeCreate":166}],145:[function(require,module,exports){
+},{"./_nativeCreate":184}],163:[function(require,module,exports){
 var nativeCreate = require('./_nativeCreate');
 
 /** Used for built-in method references. */
@@ -12280,7 +13132,7 @@ function hashHas(key) {
 
 module.exports = hashHas;
 
-},{"./_nativeCreate":166}],146:[function(require,module,exports){
+},{"./_nativeCreate":184}],164:[function(require,module,exports){
 var nativeCreate = require('./_nativeCreate');
 
 /** Used to stand-in for `undefined` hash values. */
@@ -12305,7 +13157,7 @@ function hashSet(key, value) {
 
 module.exports = hashSet;
 
-},{"./_nativeCreate":166}],147:[function(require,module,exports){
+},{"./_nativeCreate":184}],165:[function(require,module,exports){
 /** Used as references for various `Number` constants. */
 var MAX_SAFE_INTEGER = 9007199254740991;
 
@@ -12332,7 +13184,7 @@ function isIndex(value, length) {
 
 module.exports = isIndex;
 
-},{}],148:[function(require,module,exports){
+},{}],166:[function(require,module,exports){
 var isArray = require('./isArray'),
     isSymbol = require('./isSymbol');
 
@@ -12363,7 +13215,7 @@ function isKey(value, object) {
 
 module.exports = isKey;
 
-},{"./isArray":189,"./isSymbol":196}],149:[function(require,module,exports){
+},{"./isArray":207,"./isSymbol":214}],167:[function(require,module,exports){
 /**
  * Checks if `value` is suitable for use as unique object key.
  *
@@ -12380,7 +13232,7 @@ function isKeyable(value) {
 
 module.exports = isKeyable;
 
-},{}],150:[function(require,module,exports){
+},{}],168:[function(require,module,exports){
 var coreJsData = require('./_coreJsData');
 
 /** Used to detect methods masquerading as native. */
@@ -12402,7 +13254,7 @@ function isMasked(func) {
 
 module.exports = isMasked;
 
-},{"./_coreJsData":126}],151:[function(require,module,exports){
+},{"./_coreJsData":144}],169:[function(require,module,exports){
 /** Used for built-in method references. */
 var objectProto = Object.prototype;
 
@@ -12422,7 +13274,7 @@ function isPrototype(value) {
 
 module.exports = isPrototype;
 
-},{}],152:[function(require,module,exports){
+},{}],170:[function(require,module,exports){
 var isObject = require('./isObject');
 
 /**
@@ -12439,7 +13291,7 @@ function isStrictComparable(value) {
 
 module.exports = isStrictComparable;
 
-},{"./isObject":194}],153:[function(require,module,exports){
+},{"./isObject":212}],171:[function(require,module,exports){
 /**
  * Removes all key-value entries from the list cache.
  *
@@ -12454,7 +13306,7 @@ function listCacheClear() {
 
 module.exports = listCacheClear;
 
-},{}],154:[function(require,module,exports){
+},{}],172:[function(require,module,exports){
 var assocIndexOf = require('./_assocIndexOf');
 
 /** Used for built-in method references. */
@@ -12491,7 +13343,7 @@ function listCacheDelete(key) {
 
 module.exports = listCacheDelete;
 
-},{"./_assocIndexOf":99}],155:[function(require,module,exports){
+},{"./_assocIndexOf":117}],173:[function(require,module,exports){
 var assocIndexOf = require('./_assocIndexOf');
 
 /**
@@ -12512,7 +13364,7 @@ function listCacheGet(key) {
 
 module.exports = listCacheGet;
 
-},{"./_assocIndexOf":99}],156:[function(require,module,exports){
+},{"./_assocIndexOf":117}],174:[function(require,module,exports){
 var assocIndexOf = require('./_assocIndexOf');
 
 /**
@@ -12530,7 +13382,7 @@ function listCacheHas(key) {
 
 module.exports = listCacheHas;
 
-},{"./_assocIndexOf":99}],157:[function(require,module,exports){
+},{"./_assocIndexOf":117}],175:[function(require,module,exports){
 var assocIndexOf = require('./_assocIndexOf');
 
 /**
@@ -12558,7 +13410,7 @@ function listCacheSet(key, value) {
 
 module.exports = listCacheSet;
 
-},{"./_assocIndexOf":99}],158:[function(require,module,exports){
+},{"./_assocIndexOf":117}],176:[function(require,module,exports){
 var Hash = require('./_Hash'),
     ListCache = require('./_ListCache'),
     Map = require('./_Map');
@@ -12581,7 +13433,7 @@ function mapCacheClear() {
 
 module.exports = mapCacheClear;
 
-},{"./_Hash":82,"./_ListCache":83,"./_Map":84}],159:[function(require,module,exports){
+},{"./_Hash":100,"./_ListCache":101,"./_Map":102}],177:[function(require,module,exports){
 var getMapData = require('./_getMapData');
 
 /**
@@ -12601,7 +13453,7 @@ function mapCacheDelete(key) {
 
 module.exports = mapCacheDelete;
 
-},{"./_getMapData":134}],160:[function(require,module,exports){
+},{"./_getMapData":152}],178:[function(require,module,exports){
 var getMapData = require('./_getMapData');
 
 /**
@@ -12619,7 +13471,7 @@ function mapCacheGet(key) {
 
 module.exports = mapCacheGet;
 
-},{"./_getMapData":134}],161:[function(require,module,exports){
+},{"./_getMapData":152}],179:[function(require,module,exports){
 var getMapData = require('./_getMapData');
 
 /**
@@ -12637,7 +13489,7 @@ function mapCacheHas(key) {
 
 module.exports = mapCacheHas;
 
-},{"./_getMapData":134}],162:[function(require,module,exports){
+},{"./_getMapData":152}],180:[function(require,module,exports){
 var getMapData = require('./_getMapData');
 
 /**
@@ -12661,7 +13513,7 @@ function mapCacheSet(key, value) {
 
 module.exports = mapCacheSet;
 
-},{"./_getMapData":134}],163:[function(require,module,exports){
+},{"./_getMapData":152}],181:[function(require,module,exports){
 /**
  * Converts `map` to its key-value pairs.
  *
@@ -12681,7 +13533,7 @@ function mapToArray(map) {
 
 module.exports = mapToArray;
 
-},{}],164:[function(require,module,exports){
+},{}],182:[function(require,module,exports){
 /**
  * A specialized version of `matchesProperty` for source values suitable
  * for strict equality comparisons, i.e. `===`.
@@ -12703,7 +13555,7 @@ function matchesStrictComparable(key, srcValue) {
 
 module.exports = matchesStrictComparable;
 
-},{}],165:[function(require,module,exports){
+},{}],183:[function(require,module,exports){
 var memoize = require('./memoize');
 
 /** Used as the maximum memoize cache size. */
@@ -12731,7 +13583,7 @@ function memoizeCapped(func) {
 
 module.exports = memoizeCapped;
 
-},{"./memoize":200}],166:[function(require,module,exports){
+},{"./memoize":218}],184:[function(require,module,exports){
 var getNative = require('./_getNative');
 
 /* Built-in method references that are verified to be native. */
@@ -12739,7 +13591,7 @@ var nativeCreate = getNative(Object, 'create');
 
 module.exports = nativeCreate;
 
-},{"./_getNative":136}],167:[function(require,module,exports){
+},{"./_getNative":154}],185:[function(require,module,exports){
 var overArg = require('./_overArg');
 
 /* Built-in method references for those with the same name as other `lodash` methods. */
@@ -12747,7 +13599,7 @@ var nativeKeys = overArg(Object.keys, Object);
 
 module.exports = nativeKeys;
 
-},{"./_overArg":170}],168:[function(require,module,exports){
+},{"./_overArg":188}],186:[function(require,module,exports){
 var freeGlobal = require('./_freeGlobal');
 
 /** Detect free variable `exports`. */
@@ -12779,7 +13631,7 @@ var nodeUtil = (function() {
 
 module.exports = nodeUtil;
 
-},{"./_freeGlobal":132}],169:[function(require,module,exports){
+},{"./_freeGlobal":150}],187:[function(require,module,exports){
 /** Used for built-in method references. */
 var objectProto = Object.prototype;
 
@@ -12803,7 +13655,7 @@ function objectToString(value) {
 
 module.exports = objectToString;
 
-},{}],170:[function(require,module,exports){
+},{}],188:[function(require,module,exports){
 /**
  * Creates a unary function that invokes `func` with its argument transformed.
  *
@@ -12820,7 +13672,7 @@ function overArg(func, transform) {
 
 module.exports = overArg;
 
-},{}],171:[function(require,module,exports){
+},{}],189:[function(require,module,exports){
 var freeGlobal = require('./_freeGlobal');
 
 /** Detect free variable `self`. */
@@ -12831,7 +13683,7 @@ var root = freeGlobal || freeSelf || Function('return this')();
 
 module.exports = root;
 
-},{"./_freeGlobal":132}],172:[function(require,module,exports){
+},{"./_freeGlobal":150}],190:[function(require,module,exports){
 /** Used to stand-in for `undefined` hash values. */
 var HASH_UNDEFINED = '__lodash_hash_undefined__';
 
@@ -12852,7 +13704,7 @@ function setCacheAdd(value) {
 
 module.exports = setCacheAdd;
 
-},{}],173:[function(require,module,exports){
+},{}],191:[function(require,module,exports){
 /**
  * Checks if `value` is in the array cache.
  *
@@ -12868,7 +13720,7 @@ function setCacheHas(value) {
 
 module.exports = setCacheHas;
 
-},{}],174:[function(require,module,exports){
+},{}],192:[function(require,module,exports){
 /**
  * Converts `set` to an array of its values.
  *
@@ -12888,7 +13740,7 @@ function setToArray(set) {
 
 module.exports = setToArray;
 
-},{}],175:[function(require,module,exports){
+},{}],193:[function(require,module,exports){
 var ListCache = require('./_ListCache');
 
 /**
@@ -12905,7 +13757,7 @@ function stackClear() {
 
 module.exports = stackClear;
 
-},{"./_ListCache":83}],176:[function(require,module,exports){
+},{"./_ListCache":101}],194:[function(require,module,exports){
 /**
  * Removes `key` and its value from the stack.
  *
@@ -12925,7 +13777,7 @@ function stackDelete(key) {
 
 module.exports = stackDelete;
 
-},{}],177:[function(require,module,exports){
+},{}],195:[function(require,module,exports){
 /**
  * Gets the stack value for `key`.
  *
@@ -12941,7 +13793,7 @@ function stackGet(key) {
 
 module.exports = stackGet;
 
-},{}],178:[function(require,module,exports){
+},{}],196:[function(require,module,exports){
 /**
  * Checks if a stack value for `key` exists.
  *
@@ -12957,7 +13809,7 @@ function stackHas(key) {
 
 module.exports = stackHas;
 
-},{}],179:[function(require,module,exports){
+},{}],197:[function(require,module,exports){
 var ListCache = require('./_ListCache'),
     Map = require('./_Map'),
     MapCache = require('./_MapCache');
@@ -12993,7 +13845,7 @@ function stackSet(key, value) {
 
 module.exports = stackSet;
 
-},{"./_ListCache":83,"./_Map":84,"./_MapCache":85}],180:[function(require,module,exports){
+},{"./_ListCache":101,"./_Map":102,"./_MapCache":103}],198:[function(require,module,exports){
 var memoizeCapped = require('./_memoizeCapped');
 
 /** Used to match property names within property paths. */
@@ -13022,7 +13874,7 @@ var stringToPath = memoizeCapped(function(string) {
 
 module.exports = stringToPath;
 
-},{"./_memoizeCapped":165}],181:[function(require,module,exports){
+},{"./_memoizeCapped":183}],199:[function(require,module,exports){
 var isSymbol = require('./isSymbol');
 
 /** Used as references for various `Number` constants. */
@@ -13045,7 +13897,7 @@ function toKey(value) {
 
 module.exports = toKey;
 
-},{"./isSymbol":196}],182:[function(require,module,exports){
+},{"./isSymbol":214}],200:[function(require,module,exports){
 /** Used for built-in method references. */
 var funcProto = Function.prototype;
 
@@ -13073,7 +13925,7 @@ function toSource(func) {
 
 module.exports = toSource;
 
-},{}],183:[function(require,module,exports){
+},{}],201:[function(require,module,exports){
 /**
  * Performs a
  * [`SameValueZero`](http://ecma-international.org/ecma-262/7.0/#sec-samevaluezero)
@@ -13112,7 +13964,7 @@ function eq(value, other) {
 
 module.exports = eq;
 
-},{}],184:[function(require,module,exports){
+},{}],202:[function(require,module,exports){
 var arrayEach = require('./_arrayEach'),
     baseEach = require('./_baseEach'),
     castFunction = require('./_castFunction'),
@@ -13155,7 +14007,7 @@ function forEach(collection, iteratee) {
 
 module.exports = forEach;
 
-},{"./_arrayEach":93,"./_baseEach":100,"./_castFunction":124,"./isArray":189}],185:[function(require,module,exports){
+},{"./_arrayEach":111,"./_baseEach":118,"./_castFunction":142,"./isArray":207}],203:[function(require,module,exports){
 var baseGet = require('./_baseGet');
 
 /**
@@ -13190,7 +14042,7 @@ function get(object, path, defaultValue) {
 
 module.exports = get;
 
-},{"./_baseGet":103}],186:[function(require,module,exports){
+},{"./_baseGet":121}],204:[function(require,module,exports){
 var baseHasIn = require('./_baseHasIn'),
     hasPath = require('./_hasPath');
 
@@ -13226,7 +14078,7 @@ function hasIn(object, path) {
 
 module.exports = hasIn;
 
-},{"./_baseHasIn":106,"./_hasPath":141}],187:[function(require,module,exports){
+},{"./_baseHasIn":124,"./_hasPath":159}],205:[function(require,module,exports){
 /**
  * This method returns the first argument it receives.
  *
@@ -13249,7 +14101,7 @@ function identity(value) {
 
 module.exports = identity;
 
-},{}],188:[function(require,module,exports){
+},{}],206:[function(require,module,exports){
 var baseIsArguments = require('./_baseIsArguments'),
     isObjectLike = require('./isObjectLike');
 
@@ -13287,7 +14139,7 @@ var isArguments = baseIsArguments(function() { return arguments; }()) ? baseIsAr
 
 module.exports = isArguments;
 
-},{"./_baseIsArguments":107,"./isObjectLike":195}],189:[function(require,module,exports){
+},{"./_baseIsArguments":125,"./isObjectLike":213}],207:[function(require,module,exports){
 /**
  * Checks if `value` is classified as an `Array` object.
  *
@@ -13315,7 +14167,7 @@ var isArray = Array.isArray;
 
 module.exports = isArray;
 
-},{}],190:[function(require,module,exports){
+},{}],208:[function(require,module,exports){
 var isFunction = require('./isFunction'),
     isLength = require('./isLength');
 
@@ -13350,7 +14202,7 @@ function isArrayLike(value) {
 
 module.exports = isArrayLike;
 
-},{"./isFunction":192,"./isLength":193}],191:[function(require,module,exports){
+},{"./isFunction":210,"./isLength":211}],209:[function(require,module,exports){
 var root = require('./_root'),
     stubFalse = require('./stubFalse');
 
@@ -13390,7 +14242,7 @@ var isBuffer = nativeIsBuffer || stubFalse;
 
 module.exports = isBuffer;
 
-},{"./_root":171,"./stubFalse":203}],192:[function(require,module,exports){
+},{"./_root":189,"./stubFalse":221}],210:[function(require,module,exports){
 var baseGetTag = require('./_baseGetTag'),
     isObject = require('./isObject');
 
@@ -13429,7 +14281,7 @@ function isFunction(value) {
 
 module.exports = isFunction;
 
-},{"./_baseGetTag":105,"./isObject":194}],193:[function(require,module,exports){
+},{"./_baseGetTag":123,"./isObject":212}],211:[function(require,module,exports){
 /** Used as references for various `Number` constants. */
 var MAX_SAFE_INTEGER = 9007199254740991;
 
@@ -13466,7 +14318,7 @@ function isLength(value) {
 
 module.exports = isLength;
 
-},{}],194:[function(require,module,exports){
+},{}],212:[function(require,module,exports){
 /**
  * Checks if `value` is the
  * [language type](http://www.ecma-international.org/ecma-262/7.0/#sec-ecmascript-language-types)
@@ -13499,7 +14351,7 @@ function isObject(value) {
 
 module.exports = isObject;
 
-},{}],195:[function(require,module,exports){
+},{}],213:[function(require,module,exports){
 /**
  * Checks if `value` is object-like. A value is object-like if it's not `null`
  * and has a `typeof` result of "object".
@@ -13530,7 +14382,7 @@ function isObjectLike(value) {
 
 module.exports = isObjectLike;
 
-},{}],196:[function(require,module,exports){
+},{}],214:[function(require,module,exports){
 var baseGetTag = require('./_baseGetTag'),
     isObjectLike = require('./isObjectLike');
 
@@ -13561,7 +14413,7 @@ function isSymbol(value) {
 
 module.exports = isSymbol;
 
-},{"./_baseGetTag":105,"./isObjectLike":195}],197:[function(require,module,exports){
+},{"./_baseGetTag":123,"./isObjectLike":213}],215:[function(require,module,exports){
 var baseIsTypedArray = require('./_baseIsTypedArray'),
     baseUnary = require('./_baseUnary'),
     nodeUtil = require('./_nodeUtil');
@@ -13590,7 +14442,7 @@ var isTypedArray = nodeIsTypedArray ? baseUnary(nodeIsTypedArray) : baseIsTypedA
 
 module.exports = isTypedArray;
 
-},{"./_baseIsTypedArray":112,"./_baseUnary":122,"./_nodeUtil":168}],198:[function(require,module,exports){
+},{"./_baseIsTypedArray":130,"./_baseUnary":140,"./_nodeUtil":186}],216:[function(require,module,exports){
 var arrayLikeKeys = require('./_arrayLikeKeys'),
     baseKeys = require('./_baseKeys'),
     isArrayLike = require('./isArrayLike');
@@ -13629,7 +14481,7 @@ function keys(object) {
 
 module.exports = keys;
 
-},{"./_arrayLikeKeys":95,"./_baseKeys":114,"./isArrayLike":190}],199:[function(require,module,exports){
+},{"./_arrayLikeKeys":113,"./_baseKeys":132,"./isArrayLike":208}],217:[function(require,module,exports){
 var arrayMap = require('./_arrayMap'),
     baseIteratee = require('./_baseIteratee'),
     baseMap = require('./_baseMap'),
@@ -13684,7 +14536,7 @@ function map(collection, iteratee) {
 
 module.exports = map;
 
-},{"./_arrayMap":96,"./_baseIteratee":113,"./_baseMap":115,"./isArray":189}],200:[function(require,module,exports){
+},{"./_arrayMap":114,"./_baseIteratee":131,"./_baseMap":133,"./isArray":207}],218:[function(require,module,exports){
 var MapCache = require('./_MapCache');
 
 /** Error message constants. */
@@ -13759,7 +14611,7 @@ memoize.Cache = MapCache;
 
 module.exports = memoize;
 
-},{"./_MapCache":85}],201:[function(require,module,exports){
+},{"./_MapCache":103}],219:[function(require,module,exports){
 var baseProperty = require('./_baseProperty'),
     basePropertyDeep = require('./_basePropertyDeep'),
     isKey = require('./_isKey'),
@@ -13793,7 +14645,7 @@ function property(path) {
 
 module.exports = property;
 
-},{"./_baseProperty":118,"./_basePropertyDeep":119,"./_isKey":148,"./_toKey":181}],202:[function(require,module,exports){
+},{"./_baseProperty":136,"./_basePropertyDeep":137,"./_isKey":166,"./_toKey":199}],220:[function(require,module,exports){
 /**
  * This method returns a new empty array.
  *
@@ -13818,7 +14670,7 @@ function stubArray() {
 
 module.exports = stubArray;
 
-},{}],203:[function(require,module,exports){
+},{}],221:[function(require,module,exports){
 /**
  * This method returns `false`.
  *
@@ -13838,7 +14690,7 @@ function stubFalse() {
 
 module.exports = stubFalse;
 
-},{}],204:[function(require,module,exports){
+},{}],222:[function(require,module,exports){
 var baseToString = require('./_baseToString');
 
 /**
@@ -13868,7 +14720,7 @@ function toString(value) {
 
 module.exports = toString;
 
-},{"./_baseToString":121}],205:[function(require,module,exports){
+},{"./_baseToString":139}],223:[function(require,module,exports){
 /*
   Loki IndexedDb Adapter (need to include this script to use it)
 
@@ -14502,7 +15354,7 @@ module.exports = toString;
   }());
 }));
 
-},{}],206:[function(require,module,exports){
+},{}],224:[function(require,module,exports){
 (function (process,global){(function (){
 /**
  * LokiJS
@@ -22247,7 +23099,7 @@ module.exports = toString;
 }));
 
 }).call(this)}).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./loki-indexed-adapter.js":205,"_process":241,"fs":59}],207:[function(require,module,exports){
+},{"./loki-indexed-adapter.js":223,"_process":262,"fs":77}],225:[function(require,module,exports){
 const turf = {
   nearestPointOnLine: require('@turf/nearest-point-on-line').default,
   booleanPointInPolygon: require('@turf/boolean-point-in-polygon').default
@@ -22337,10 +23189,10 @@ function nearestPointOnGeometry (feature, pt, options) {
 
 module.exports = nearestPointOnGeometry
 
-},{"@turf/boolean-point-in-polygon":16,"@turf/nearest-point-on-line":43}],208:[function(require,module,exports){
+},{"@turf/boolean-point-in-polygon":22,"@turf/nearest-point-on-line":58}],226:[function(require,module,exports){
 module.exports = require('./polygon-features.json')
 
-},{"./polygon-features.json":209}],209:[function(require,module,exports){
+},{"./polygon-features.json":227}],227:[function(require,module,exports){
 module.exports=[
     {
         "key": "building",
@@ -22499,7 +23351,7 @@ module.exports=[
     }
 ]
 
-},{}],210:[function(require,module,exports){
+},{}],228:[function(require,module,exports){
 var _ = require("./lodash.custom.js");
 var rewind = require("@mapbox/geojson-rewind");
 
@@ -23566,7 +24418,7 @@ osmtogeojson.toGeojson = osmtogeojson;
 
 module.exports = osmtogeojson;
 
-},{"./lodash.custom.js":211,"@mapbox/geojson-rewind":3,"osm-polygon-features":208}],211:[function(require,module,exports){
+},{"./lodash.custom.js":229,"@mapbox/geojson-rewind":3,"osm-polygon-features":226}],229:[function(require,module,exports){
 (function (global){(function (){
 /**
  * @license
@@ -27273,7 +28125,7 @@ module.exports = osmtogeojson;
 }.call(this));
 
 }).call(this)}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}],212:[function(require,module,exports){
+},{}],230:[function(require,module,exports){
 (function (process,setImmediate){(function (){
 (function (global, factory) {
     typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports) :
@@ -27580,6 +28432,9 @@ module.exports = osmtogeojson;
         var len = okeys.length;
         return function next() {
             var key = okeys[++i];
+            if (key === '__proto__') {
+                return next();
+            }
             return i < len ? {value: obj[key], key} : null;
         };
     }
@@ -27905,7 +28760,7 @@ module.exports = osmtogeojson;
     /**
      * Produces a new collection of values by mapping each value in `coll` through
      * the `iteratee` function. The `iteratee` is called with an item from `coll`
-     * and a callback for when it has finished processing. Each of these callback
+     * and a callback for when it has finished processing. Each of these callbacks
      * takes 2 arguments: an `error`, and the transformed item from `coll`. If
      * `iteratee` passes an error to its callback, the main `callback` (for the
      * `map` function) is immediately called with the error.
@@ -33303,7 +34158,7 @@ module.exports = osmtogeojson;
 })));
 
 }).call(this)}).call(this,require('_process'),require("timers").setImmediate)
-},{"_process":241,"timers":245}],213:[function(require,module,exports){
+},{"_process":262,"timers":266}],231:[function(require,module,exports){
 const strsearch2regexp = require('strsearch2regexp')
 const filterJoin = require('./filterJoin')
 
@@ -33850,7 +34705,7 @@ class Filter {
 
 module.exports = Filter
 
-},{"./filterJoin":230,"strsearch2regexp":244}],214:[function(require,module,exports){
+},{"./filterJoin":250,"strsearch2regexp":265}],232:[function(require,module,exports){
 (function (global){(function (){
 const ee = require('event-emitter')
 const async = require('async')
@@ -33873,6 +34728,8 @@ const loadOsmFile = require('./loadOsmFile')
 const copyOsm3sMetaFrom = require('./copyOsm3sMeta')
 const timestamp = require('./timestamp')
 const Filter = require('./Filter')
+const isGeoJSON = require('./isGeoJSON')
+const boundsIsFullWorld = require('./boundsIsFullWorld')
 
 /**
  * An error occured
@@ -34059,6 +34916,11 @@ class OverpassFrontend {
    * @param {number} [options.priority=0] - Priority for loading these objects. The lower the sooner they will be requested.
    * @param {string|boolean} [options.sort=false] - When set to true or "index", the function featureCallback will be called in order of the "ids" array. When set to false or null, the featureCallback will be called as soon as the object is loaded (e.g. immediately, if it is cached). When set to "BBoxDiagonalLength", the objects are ordered by the length of the diagonal of the bounding box.
    * @param {"asc"|"desc"} [options.sortDir="asc"] Sort direction.
+   * @param {BoundingBox|GeoJSON} [options.bounds] - Only return items which intersect these bounds. Boundaries is a BoundingBox, or a Leaflet Bounds object (e.g. from map.getBounds()) or a GeoJSON Polygon/Multipolygon.
+   * @param {boolean} [options.members=false] Query relation members of. Default: false
+   * @param {function} [options.memberCallback] For every member, call this callback function. (Requires options.members=true)
+   * @param {bit_array} [options.memberProperties] Which properties should be loaded for the members. Default: OverpassFrontend.TAGS | OverpassFrontend.MEMBERS | OverpassFrontend.BBOX
+   * @param {BoundingBox|GeoJSON} [options.memberBounds] - Only return members which intersect these bounds. Boundaries is a BoundingBox, or a Leaflet Bounds object (e.g. from map.getBounds()) or a GeoJSON Polygon/Multipolygon.
    * @param {function} featureCallback Will be called for each object which is passed in parameter 'ids'. Will be passed: 1. err (if an error occured, otherwise null), 2. the object or null, 3. index of the item in parameter ids.
    * @param {function} finalCallback Will be called after the last feature. Will be passed: 1. err (if an error occured, otherwise null).
    * @return {RequestGet}
@@ -34115,6 +34977,7 @@ class OverpassFrontend {
    * Current request context
    * @typedef {Object} OverpassFrontend#Context
    * @property {string} query - The compiled code of all sub requests
+   * @property {string} queryOptions - The compiled queryOptions which will be sent to Overpass API
    * @property {Request[]} requests - List of all requests in the context
    * @property {Request#SubRequest[]} subRequests - List of all subRequests in the context
    * @property {BoundingBox} bbox - when there are any BBox requests, add this global bbox
@@ -34228,12 +35091,12 @@ class OverpassFrontend {
       return this._next()
     }
 
-    let query = '[out:json]'
-    if (context.bbox) {
-      query += '[bbox:' + context.bbox.toLatLonString() + ']'
+    context.queryOptions = '[out:json]'
+    if (context.bbox && !boundsIsFullWorld(context.bbox)) {
+      context.queryOptions += '[bbox:' + context.bbox.toLatLonString() + ']'
     }
 
-    query += ';\n' + context.query
+    const query = context.queryOptions + ';\n' + context.query
 
     setTimeout(function () {
       httpLoad(
@@ -34361,7 +35224,7 @@ class OverpassFrontend {
       if (part.receiveObject) {
         part.receiveObject(ob)
       }
-      if (!request.aborted && !request.finished && part.featureCallback) {
+      if (!request.aborted && !request.finished && part.featureCallback && (!part.checkFeatureCallback || part.checkFeatureCallback(ob, part))) {
         part.featureCallback(err, ob)
       }
     }
@@ -34398,7 +35261,7 @@ class OverpassFrontend {
 
   /**
    * @param {string} query - Query for requesting objects from Overpass API, e.g. "node[amenity=restaurant]" or "(node[amenity];way[highway~'^(primary|secondary)$];)". See <a href='Filter.html'>Filter</a> for details.
-   * @param {BoundingBox} bounds - A Leaflet Bounds object, e.g. from map.getBounds()
+   * @param {BoundingBox|GeoJSON} bounds - Boundaries where to load objects, can be a BoundingBox object, Leaflet Bounds object (e.g. from map.getBounds()) or a GeoJSON Polygon/Multipolygon.
    * @param {object} options
    * @param {number} [options.priority=0] - Priority for loading these objects. The lower the sooner they will be requested.
    * @param {boolean|string} [options.sort=false] - If false, it will be called as soon as the features are availabe (e.g. immediately when cached).
@@ -34407,6 +35270,7 @@ class OverpassFrontend {
    * @param {boolean} [options.members=false] Query relation members of. Default: false
    * @param {function} [options.memberCallback] For every member, call this callback function. (Requires options.members=true)
    * @param {bit_array} [options.memberProperties] Which properties should be loaded for the members. Default: OverpassFrontend.TAGS | OverpassFrontend.MEMBERS | OverpassFrontend.BBOX
+   * @param {BoundingBox|GeoJSON} [options.memberBounds] - Only return members which intersect these bounds. Boundaries is a BoundingBox, or a Leaflet Bounds object (e.g. from map.getBounds()) or a GeoJSON Polygon/Multipolygon.
    * @param {number} [options.memberSplit=0] If more than 'memberSplit' member elements would be returned, split into smaller requests (see 'split'). 0 = do not split.
    * @param {string|Filter} [options.filter] Additional filter.
    * @param {boolean} [options.noCacheQuery=false] If true, the local cache will not be queried
@@ -34416,13 +35280,17 @@ class OverpassFrontend {
    */
   BBoxQuery (query, bounds, options, featureCallback, finalCallback) {
     let request
-    bounds = new BoundingBox(bounds)
+    const bbox = new BoundingBox(bounds)
 
-    if (bounds.minlon > bounds.maxlon) {
-      const bounds1 = new BoundingBox(bounds)
-      bounds1.maxlon = 180
-      const bounds2 = new BoundingBox(bounds)
-      bounds2.minlon = -180
+    if (!isGeoJSON(bounds)) {
+      bounds = bbox
+    }
+
+    if (bbox.minlon > bbox.maxlon) {
+      const bbox1 = new BoundingBox(bbox)
+      bbox1.maxlon = 180
+      const bbox2 = new BoundingBox(bbox)
+      bbox2.minlon = -180
 
       request = new RequestMulti(this,
         {
@@ -34431,13 +35299,15 @@ class OverpassFrontend {
         }, [
           new RequestBBox(this, {
             query: query,
-            bounds: bounds1,
+            bbox: bbox1,
+            bounds: bounds,
             options: options,
             doneFeatures: {}
           }),
           new RequestBBox(this, {
             query: query,
-            bounds: bounds2,
+            bbox: bbox2,
+            bounds: bounds,
             options: options,
             doneFeatures: {}
           })
@@ -34446,6 +35316,7 @@ class OverpassFrontend {
     } else {
       request = new RequestBBox(this, {
         query: query,
+        bbox: bbox,
         bounds: bounds,
         options: options,
         doneFeatures: {},
@@ -34630,12 +35501,15 @@ OverpassFrontend.Filter = Filter
 module.exports = OverpassFrontend
 
 }).call(this)}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./Filter":213,"./OverpassNode":215,"./OverpassObject":216,"./OverpassRelation":217,"./OverpassWay":218,"./RequestBBox":220,"./RequestGet":222,"./RequestMulti":224,"./copyOsm3sMeta":228,"./defines":229,"./httpLoad":232,"./loadOsmFile":234,"./removeNullEntries":236,"./timestamp":237,"async":212,"boundingbox":56,"event-emitter":76,"lokijs":206,"weight-sort":252}],215:[function(require,module,exports){
+},{"./Filter":231,"./OverpassNode":233,"./OverpassObject":234,"./OverpassRelation":235,"./OverpassWay":236,"./RequestBBox":238,"./RequestGet":240,"./RequestMulti":242,"./boundsIsFullWorld":245,"./copyOsm3sMeta":248,"./defines":249,"./httpLoad":252,"./isGeoJSON":253,"./loadOsmFile":255,"./removeNullEntries":257,"./timestamp":258,"async":230,"boundingbox":74,"event-emitter":94,"lokijs":224,"weight-sort":273}],233:[function(require,module,exports){
 /* global L:false */
 
 const OverpassObject = require('./OverpassObject')
 const BoundingBox = require('boundingbox')
 const OverpassFrontend = require('./defines')
+const turf = {
+  booleanIntersects: require('@turf/boolean-intersects').default
+}
 
 /**
  * A node
@@ -34725,6 +35599,8 @@ class OverpassNode extends OverpassObject {
 
       this.properties = this.properties | OverpassFrontend.GEOM | OverpassFrontend.BBOX | OverpassFrontend.CENTER
     }
+
+    this.properties |= OverpassFrontend.MEMBERS // node does not have members, so it always known all of them
   }
 
   /**
@@ -34761,20 +35637,29 @@ class OverpassNode extends OverpassObject {
       return 1
     }
 
+    if (!bbox.intersects) { // GeoJSON detected
+      const r = turf.booleanIntersects(this.GeoJSON(), bbox)
+      return r ? 2 : 0
+    }
+
     return bbox.intersects(this.bounds) ? 2 : 0
   }
 }
 
 module.exports = OverpassNode
 
-},{"./OverpassObject":216,"./defines":229,"boundingbox":56}],216:[function(require,module,exports){
+},{"./OverpassObject":234,"./defines":249,"@turf/boolean-intersects":19,"boundingbox":74}],234:[function(require,module,exports){
 const ee = require('event-emitter')
 const BoundingBox = require('boundingbox')
 const OverpassFrontend = require('./defines')
+const isGeoJSON = require('./isGeoJSON')
 const turf = {
+  booleanIntersects: require('@turf/boolean-intersects').default,
   difference: require('@turf/difference'),
   intersect: require('@turf/intersect').default
 }
+
+const booleanWithin = require('./booleanWithin')
 
 /**
  * Base class for representing map features.
@@ -34835,8 +35720,8 @@ class OverpassObject {
       this.center = this.bounds.getCenter()
     }
 
-    if (options.bbox) {
-      if (!this.bounds || options.bbox.intersects(this.bounds)) {
+    if (options.bounds) {
+      if (!this.bounds || options.bounds.intersects(this.bounds)) {
         this.properties = this.properties | options.properties
       } else {
         this.properties = this.properties | OverpassFrontend.BBOX | OverpassFrontend.CENTER
@@ -34846,13 +35731,13 @@ class OverpassObject {
     }
 
     // result of a request with bbox limitation, where the object was outside
-    if (options.bboxNoMatch && this.bounds) {
+    if (options.boundsNoMatch && this.bounds) {
       // this.boundsPossibleMatch: record unsucessful bbox requests for an object
       if (typeof this.boundsPossibleMatch === 'undefined') {
         this.boundsPossibleMatch = this.bounds.toGeoJSON()
       }
 
-      this.boundsPossibleMatch = turf.difference(this.boundsPossibleMatch, options.bbox.toGeoJSON())
+      this.boundsPossibleMatch = turf.difference(this.boundsPossibleMatch, options.bounds.toGeoJSON())
     }
 
     // geometry is known -> no need for this.boundsPossibleMatch
@@ -34866,6 +35751,9 @@ class OverpassObject {
       } else {
         this.tags = data.tags
       }
+    } else if (data.tags) {
+      this.tags = data.tags
+      this.properties |= OverpassFrontend.TAGS
     }
     this.errors = []
 
@@ -34877,10 +35765,7 @@ class OverpassObject {
         user: data.user,
         uid: data.uid
       }
-    }
-
-    if (data.tags) {
-      this.tags = data.tags
+      this.properties |= OverpassFrontend.META
     }
   }
 
@@ -35079,16 +35964,27 @@ class OverpassObject {
    * @return {number}
    */
   intersects (bbox) {
-    if (!this.bounds) {
-      return 0
-    }
-
-    if (!bbox.intersects(this.bounds)) {
-      return 0
+    if (this.bounds) {
+      if (!bbox.intersects) { // GeoJSON detected
+        const geojson = this.bounds.toGeoJSON()
+        if (!turf.booleanIntersects(geojson, bbox)) {
+          return 0
+        }
+        if (booleanWithin(geojson, bbox)) {
+          return 2
+        }
+      } else {
+        if (!bbox.intersects(this.bounds)) {
+          return 0
+        }
+        if (this.bounds.within(bbox)) {
+          return 2
+        }
+      }
     }
 
     if (this.boundsPossibleMatch) {
-      const remaining = turf.intersect(bbox.toGeoJSON(), this.boundsPossibleMatch)
+      const remaining = turf.intersect(isGeoJSON(bbox) ? bbox : bbox.toGeoJSON(), this.boundsPossibleMatch)
 
       if (!remaining || remaining.geometry.type !== 'Polygon') {
         // geometry.type != Polygon: bbox matches border of this.boundsPossibleMatch
@@ -35140,7 +36036,7 @@ ee(OverpassObject.prototype)
 
 module.exports = OverpassObject
 
-},{"./defines":229,"@turf/difference":23,"@turf/intersect":31,"boundingbox":56,"event-emitter":76}],217:[function(require,module,exports){
+},{"./booleanWithin":244,"./defines":249,"./isGeoJSON":253,"@turf/boolean-intersects":19,"@turf/difference":38,"@turf/intersect":46,"boundingbox":74,"event-emitter":94}],235:[function(require,module,exports){
 /* global L:false */
 
 const async = require('async')
@@ -35150,7 +36046,7 @@ const OverpassObject = require('./OverpassObject')
 const OverpassFrontend = require('./defines')
 const geojsonShiftWorld = require('./geojsonShiftWorld')
 const turf = {
-  bboxClip: require('@turf/bbox-clip').default
+  booleanIntersects: require('@turf/boolean-intersects').default
 }
 
 /**
@@ -35183,49 +36079,50 @@ const turf = {
  */
 class OverpassRelation extends OverpassObject {
   updateData (data, options) {
-    let i
-
     super.updateData(data, options)
 
-    if ((options.properties & OverpassFrontend.MEMBERS) &&
-        data.members) {
-      this.members = []
-
-      for (i = 0; i < data.members.length; i++) {
-        const member = data.members[i]
-
-        this.members.push(member)
-
-        // fix referenced ways from 'out geom' output
-        if (member.type === 'way' && typeof member.ref === 'string') {
-          const m = member.ref.match(/^_fullGeom([0-9]+)$/)
-          if (m) {
-            member.ref = parseInt(m[1])
-          }
-        }
-
-        this.members[i].id = member.type.substr(0, 1) + member.ref
-      }
+    if (data.bounds) {
+      this.bounds = new BoundingBox(data.bounds)
+      this.center = this.bounds.getCenter()
+      this.properties |= OverpassFrontend.BBOX | OverpassFrontend.CENTER
     }
 
-    if (options.properties & OverpassFrontend.MEMBERS) {
-      const membersKnown = !!this.memberFeatures
+    if (data.center) {
+      this.center = data.center
+      this.properties |= OverpassFrontend.CENTER
+    }
 
+    if (data.members) {
+      this.members = []
+      this.properties |= OverpassFrontend.MEMBERS
+
+      const membersKnown = !!this.memberFeatures
       this.memberFeatures = data.members.map(
         (member, sequence) => {
-          let obProperties = OverpassFrontend.ID_ONLY
+          this.members.push(member)
+
+          // fix referenced ways from 'out geom' output
+          if (member.type === 'way' && typeof member.ref === 'string') {
+            const m = member.ref.match(/^_fullGeom([0-9]+)$/)
+            if (m) {
+              member.ref = parseInt(m[1])
+            }
+          }
+
+          member.id = member.type.substr(0, 1) + member.ref
+
           const ob = JSON.parse(JSON.stringify(member))
           ob.id = ob.ref
           delete ob.ref
           delete ob.role
+          let memberProperties = OverpassFrontend.ID_ONLY
 
-          if (ob.geometry) {
-            obProperties |= OverpassFrontend.GEOM
+          if ((member.type === 'node' && 'lat' in member) ||
+              (member.type === 'way' && 'geometry' in member)) {
+            memberProperties |= OverpassFrontend.GEOM
           }
 
-          const memberOb = this.overpass.createOrUpdateOSMObject(ob, {
-            properties: obProperties
-          })
+          const memberOb = this.overpass.createOrUpdateOSMObject(ob, { properties: memberProperties })
 
           // call notifyMemberOf only once per member
           if (!membersKnown) {
@@ -35235,15 +36132,7 @@ class OverpassRelation extends OverpassObject {
           return memberOb
         }
       )
-    }
 
-    if ((options.properties & OverpassFrontend.MEMBERS) &&
-        (options.properties & OverpassFrontend.GEOM) &&
-        data.members) {
-      const elements = [JSON.parse(JSON.stringify(data))]
-      this.geometry = osmtogeojson({ elements })
-    } else if ((options.properties & OverpassFrontend.MEMBERS) &&
-        data.members) {
       this.updateGeometry()
     }
   }
@@ -35359,7 +36248,7 @@ class OverpassRelation extends OverpassObject {
       }
     )
 
-    if (!this.bounds) {
+    if (!(this.properties & OverpassFrontend.BBOX)) {
       this.members.forEach(member => {
         const ob = this.overpass.cacheElements[member.id]
         if (ob.bounds) {
@@ -35578,54 +36467,24 @@ class OverpassRelation extends OverpassObject {
   }
 
   intersects (bbox) {
-    let i
+    const result = super.intersects(bbox)
 
-    if (this.bounds) {
-      if (!bbox.intersects(this.bounds)) {
-        return 0
-      }
-      if (this.bounds.within(bbox)) {
-        return 2
-      }
+    if (result === 0 || result === 2) {
+      return result
     }
+
+    let i
 
     if (this.geometry) {
       let geometry = this.geometry
-      let bboxShifted = bbox
+      let bboxShifted = bbox.toGeoJSON ? bbox.toGeoJSON() : bbox
       if (this.bounds && this.bounds.minlon > this.bounds.maxlon) {
         geometry = geojsonShiftWorld(geometry, [360, 0])
-        bboxShifted = {
-          minlat: bbox.minlat,
-          maxlat: bbox.maxlat,
-          minlon: bbox.minlon,
-          maxlon: bbox.maxlon + 360
-        }
+        bboxShifted = geojsonShiftWorld(bboxShifted, [360, 0])
       }
 
-      for (i = 0; i < geometry.features.length; i++) {
-        const g = geometry.features[i]
-
-        if (g.geometry.type === 'Point') {
-          if (bbox.intersects(g)) {
-            return 2
-          }
-          continue
-        }
-
-        const intersects = turf.bboxClip(g, [bboxShifted.minlon, bboxShifted.minlat, bboxShifted.maxlon, bboxShifted.maxlat])
-
-        if (g.geometry.type === 'LineString' || g.geometry.type === 'Polygon') {
-          if (intersects.geometry.coordinates.length) {
-            return 2
-          }
-        }
-        if (g.geometry.type === 'MultiPolygon' || g.geometry.type === 'MultiLineString') {
-          for (let j = 0; j < intersects.geometry.coordinates.length; j++) {
-            if (intersects.geometry.coordinates[j].length) {
-              return 2
-            }
-          }
-        }
+      if (turf.booleanIntersects(geometry, bboxShifted)) {
+        return 2
       }
 
       // if there's a relation member (where Overpass does not return the
@@ -35636,8 +36495,8 @@ class OverpassRelation extends OverpassObject {
         }
       }
 
-      // if there's no relation member we can be sure there's no intersection
-      return 0
+      // if there's no relation member and the geometry is complete we can be sure there's no intersection
+      return this.properties & OverpassFrontend.GEOM ? 0 : 1
     } else if (this.members) {
       for (i in this.members) {
         const memberId = this.members[i].id
@@ -35651,13 +36510,13 @@ class OverpassRelation extends OverpassObject {
       }
     }
 
-    return super.intersects(bbox)
+    return 1
   }
 }
 
 module.exports = OverpassRelation
 
-},{"./OverpassObject":216,"./defines":229,"./geojsonShiftWorld":231,"@turf/bbox-clip":10,"async":212,"boundingbox":56,"osmtogeojson":210}],218:[function(require,module,exports){
+},{"./OverpassObject":234,"./defines":249,"./geojsonShiftWorld":251,"@turf/boolean-intersects":19,"async":230,"boundingbox":74,"osmtogeojson":228}],236:[function(require,module,exports){
 /* global L:false */
 
 const async = require('async')
@@ -35665,7 +36524,7 @@ const BoundingBox = require('boundingbox')
 const OverpassObject = require('./OverpassObject')
 const OverpassFrontend = require('./defines')
 const turf = {
-  bboxClip: require('@turf/bbox-clip').default
+  booleanIntersects: require('@turf/boolean-intersects').default
 }
 
 /**
@@ -35697,12 +36556,14 @@ class OverpassWay extends OverpassObject {
 
     if (data.geometry) {
       this.geometry = data.geometry
+      this.properties |= OverpassFrontend.GEOM
     }
 
     super.updateData(data, options)
 
     if (typeof this.data.nodes !== 'undefined') {
       this.members = []
+      this.properties |= OverpassFrontend.MEMBERS
 
       for (let i = 0; i < this.data.nodes.length; i++) {
         this.members.push({
@@ -35923,28 +36784,32 @@ class OverpassWay extends OverpassObject {
   }
 
   intersects (bbox) {
-    if (this.bounds) {
-      if (!bbox.intersects(this.bounds)) {
-        return 0
-      }
-      if (this.bounds.within(bbox)) {
-        return 2
-      }
+    const result = super.intersects(bbox)
+
+    if (result === 0 || result === 2) {
+      return result
     }
 
     if (this.geometry) {
-      const intersects = turf.bboxClip(this.GeoJSON(), [bbox.minlon, bbox.minlat, bbox.maxlon, bbox.maxlat])
+      let intersects
+      if (bbox.toGeoJSON) {
+        // bbox is BoudingBox
+        intersects = turf.booleanIntersects(this.GeoJSON(), bbox.toGeoJSON())
+      } else {
+        // bbox is GeoJSON
+        intersects = turf.booleanIntersects(this.GeoJSON(), bbox)
+      }
 
-      return intersects.geometry.coordinates.length ? 2 : 0
+      return intersects ? 2 : 0
     }
 
-    return super.intersects(bbox)
+    return 1
   }
 }
 
 module.exports = OverpassWay
 
-},{"./OverpassObject":216,"./defines":229,"@turf/bbox-clip":10,"async":212,"boundingbox":56}],219:[function(require,module,exports){
+},{"./OverpassObject":234,"./defines":249,"@turf/boolean-intersects":19,"async":230,"boundingbox":74}],237:[function(require,module,exports){
 const ee = require('event-emitter')
 const SortedCallbacks = require('./SortedCallbacks')
 
@@ -36090,7 +36955,7 @@ ee(Request.prototype)
 
 module.exports = Request
 
-},{"./SortedCallbacks":225,"event-emitter":76}],220:[function(require,module,exports){
+},{"./SortedCallbacks":243,"event-emitter":94}],238:[function(require,module,exports){
 const Request = require('./Request')
 const overpassOutOptions = require('./overpassOutOptions')
 const defines = require('./defines')
@@ -36098,6 +36963,7 @@ const KnownArea = require('./knownArea')
 const RequestBBoxMembers = require('./RequestBBoxMembers')
 const Filter = require('./Filter')
 const boundsToLokiQuery = require('./boundsToLokiQuery')
+const boundsIsFullWorld = require('./boundsIsFullWorld')
 
 /**
  * A BBox request
@@ -36147,7 +37013,9 @@ class RequestBBox extends Request {
         this.lokiQuery = { $and: [this.lokiQuery, filterLokiQuery] }
       }
 
-      this.lokiQuery = { $and: [this.lokiQuery, boundsToLokiQuery(this.bounds, this.overpass)] }
+      if (!boundsIsFullWorld(this.bounds)) {
+        this.lokiQuery = { $and: [this.lokiQuery, boundsToLokiQuery(this.bbox, this.overpass)] }
+      }
     }
 
     this.loadFinish = false
@@ -36237,10 +37105,10 @@ class RequestBBox extends Request {
       return false
     }
 
-    if (context.bbox && context.bbox.toLatLonString() !== this.bounds.toLatLonString()) {
+    if (context.bbox && context.bbox.toLatLonString() !== this.bbox.toLatLonString()) {
       return false
     }
-    context.bbox = this.bounds
+    context.bbox = this.bbox
 
     for (const i in context.requests) {
       const request = context.requests[i]
@@ -36270,7 +37138,7 @@ class RequestBBox extends Request {
    * @return {Request#SubRequest|false} - the compiled query or false if the bbox does not match
    */
   _compileQuery (context) {
-    if (this.loadFinish || (context.bbox && context.bbox.toLatLonString() !== this.bounds.toLatLonString())) {
+    if (this.loadFinish || (context.bbox && context.bbox.toLatLonString() !== this.bbox.toLatLonString())) {
       return {
         query: '',
         request: this,
@@ -36323,6 +37191,7 @@ class RequestBBox extends Request {
         {
           properties: this.options.properties,
           receiveObject: this.receiveObject.bind(this),
+          checkFeatureCallback: this.checkFeatureCallback.bind(this),
           featureCallback: this.featureCallback
         }
       ],
@@ -36341,6 +37210,14 @@ class RequestBBox extends Request {
     this.doneFeatures[ob.id] = ob
   }
 
+  checkFeatureCallback (ob) {
+    if (this.bounds && ob.intersects(this.bounds) === 0) {
+      return false
+    }
+
+    return true
+  }
+
   /**
    * the current subrequest is finished -> update caches, check whether request is finished
    * @param {Request#SubRequest} subRequest - the current sub request
@@ -36353,9 +37230,9 @@ class RequestBBox extends Request {
       this.loadFinish = true
 
       if (this.options.filter) {
-        this.cacheFilter.add(this.bounds)
+        this.cacheFilter.add(this.bbox)
       } else {
-        this.cache.requested.add(this.bounds)
+        this.cache.requested.add(this.bbox)
       }
     }
   }
@@ -36370,11 +37247,11 @@ class RequestBBox extends Request {
     }
 
     // check if we need to call Overpass API (whole area known?)
-    if (this.options.filter && this.cacheFilter.check(this.bounds)) {
+    if (this.options.filter && this.cacheFilter.check(this.bbox)) {
       return false
     }
 
-    return !this.cache.requested.check(this.bounds)
+    return !this.cache.requested.check(this.bbox)
   }
 
   mayFinish () {
@@ -36384,7 +37261,7 @@ class RequestBBox extends Request {
 
 module.exports = RequestBBox
 
-},{"./Filter":213,"./Request":219,"./RequestBBoxMembers":221,"./boundsToLokiQuery":226,"./defines":229,"./knownArea":233,"./overpassOutOptions":235}],221:[function(require,module,exports){
+},{"./Filter":231,"./Request":237,"./RequestBBoxMembers":239,"./boundsIsFullWorld":245,"./boundsToLokiQuery":246,"./defines":249,"./knownArea":254,"./overpassOutOptions":256}],239:[function(require,module,exports){
 const defines = require('./defines')
 const overpassOutOptions = require('./overpassOutOptions')
 const each = require('lodash/forEach')
@@ -36392,6 +37269,7 @@ const map = require('lodash/map')
 const keys = require('lodash/keys')
 const BoundingBox = require('boundingbox')
 const SortedCallbacks = require('./SortedCallbacks')
+const isGeoJSON = require('./isGeoJSON')
 
 class RequestBBoxMembers {
   constructor (request) {
@@ -36404,7 +37282,11 @@ class RequestBBoxMembers {
     this.options.memberProperties |= defines.BBOX
 
     if (this.options.memberBounds) {
-      this.bounds = new BoundingBox(this.options.memberBounds)
+      if (isGeoJSON(this.options.memberBounds)) {
+        this.bounds = this.options.memberBounds
+      } else {
+        this.bounds = new BoundingBox(this.options.memberBounds)
+      }
     }
 
     this.master._compileQuery = this._compileQuery.bind(this, this.master._compileQuery)
@@ -36496,7 +37378,7 @@ class RequestBBoxMembers {
 
     let BBoxString = ''
     if (this.bounds) {
-      BBoxString = '(' + this.bounds.toLatLonString() + ')'
+      BBoxString = '(' + new BoundingBox(this.bounds).toLatLonString() + ')'
     }
 
     query += '(\n' +
@@ -36527,6 +37409,7 @@ class RequestBBoxMembers {
     this.part = {
       properties: this.options.memberProperties,
       receiveObject: this.receiveObject.bind(this),
+      checkFeatureCallback: this.checkFeatureCallback.bind(this),
       featureCallback: this.options.memberCallback,
       count: 0
     }
@@ -36552,6 +37435,14 @@ class RequestBBoxMembers {
 
   receiveObject (ob) {
     this.doneFeatures[ob.id] = ob
+  }
+
+  checkFeatureCallback (ob) {
+    if (this.bounds && ob.intersects(this.bounds) === 0) {
+      return false
+    }
+
+    return true
   }
 
   finishSubRequest (fun, subRequest) {
@@ -36587,12 +37478,13 @@ module.exports = function (request) {
   return new RequestBBoxMembers(request)
 }
 
-},{"./SortedCallbacks":225,"./defines":229,"./overpassOutOptions":235,"boundingbox":56,"lodash/forEach":184,"lodash/keys":198,"lodash/map":199}],222:[function(require,module,exports){
+},{"./SortedCallbacks":243,"./defines":249,"./isGeoJSON":253,"./overpassOutOptions":256,"boundingbox":74,"lodash/forEach":202,"lodash/keys":216,"lodash/map":217}],240:[function(require,module,exports){
 const Request = require('./Request')
 const defines = require('./defines')
 const BoundingBox = require('boundingbox')
 const overpassOutOptions = require('./overpassOutOptions')
 const RequestGetMembers = require('./RequestGetMembers')
+const isGeoJSON = require('./isGeoJSON')
 
 /**
  * A get request (request list of map features by id)
@@ -36623,8 +37515,16 @@ class RequestGet extends Request {
       }
     }
 
-    if (this.options.bbox) {
-      this.options.bbox = new BoundingBox(this.options.bbox)
+    if (this.options.bounds) {
+      if (isGeoJSON(this.options.bounds)) {
+        this.geojsonBounds = this.options.bounds
+      }
+
+      this.options.bounds = new BoundingBox(this.options.bounds)
+    } else if (this.options.bbox) {
+      this.options.bounds = new BoundingBox(this.options.bbox)
+      delete this.options.bbox
+      console.error('OverpassFrontend.get(): option "bbox" is deprecated, use "bounds" instead')
     }
     // option 'split' not available for get requests -> use effort instead
     delete this.options.split
@@ -36693,12 +37593,15 @@ class RequestGet extends Request {
           continue
         }
 
-        // for bbox option, if object is (partly) loaded, but outside call
+        // for bounds option, if object is (partly) loaded, but outside call
         // featureCallback with 'false'
-        if (this.options.bbox && !ob.intersects(this.options.bbox)) {
-          this.featureCallback(null, false, i)
-          this.ids[i] = null
-          continue
+        if (this.options.bounds) {
+          const intersects = this.geojsonBounds ? ob.intersects(this.geojsonBounds) : ob.intersects(this.options.bounds)
+          if (intersects === 0 || (!ob.bounds && ob.properties | defines.BBOX)) {
+            this.featureCallback(null, false, i)
+            this.ids[i] = null
+            continue
+          }
         }
 
         // not fully loaded
@@ -36739,8 +37642,8 @@ class RequestGet extends Request {
     let effort = 0
     let outOptions
 
-    if (this.options.bbox) {
-      BBoxQuery = '(' + this.options.bbox.toLatLonString() + ')'
+    if (this.options.bounds) {
+      BBoxQuery = '(' + this.options.bounds.toLatLonString() + ')'
     }
 
     for (let i = 0; i < this.ids.length; i++) {
@@ -36760,11 +37663,11 @@ class RequestGet extends Request {
         continue
       }
 
-      if (this.options.bbox) {
-        // check if we already know the bbox of the element; if yes, don't try
+      if (this.options.bounds) {
+        // check if we already know the bounds of the element; if yes, don't try
         // to load object if it does not intersect bounds
         if (id in this.overpass.cacheElements && (this.overpass.cacheElements[id].properties & defines.BBOX)) {
-          if (!this.overpass.cacheElements[id].intersects(this.options.bbox)) {
+          if (!this.overpass.cacheElements[id].intersects(this.options.bounds)) {
             continue
           }
         }
@@ -36816,8 +37719,8 @@ class RequestGet extends Request {
 
       requestParts.push({
         properties: defines.BBOX,
-        bbox: this.options.bbox,
-        bboxNoMatch: true
+        bounds: this.options.bounds,
+        boundsNoMatch: true
       })
     }
     if (nodeQuery !== '') {
@@ -36834,6 +37737,7 @@ class RequestGet extends Request {
       requestParts.push({
         properties: this.options.properties,
         receiveObject: this.receiveObject.bind(this),
+        checkFeatureCallback: this.checkFeatureCallback.bind(this),
         featureCallback: this._featureCallback.bind(this, this.featureCallback)
       })
     }
@@ -36848,6 +37752,14 @@ class RequestGet extends Request {
     return subRequest
   }
 
+  checkFeatureCallback (ob) {
+    if (this.geojsonBounds && ob.intersects(this.geojsonBounds) === 0) {
+      return false
+    }
+
+    return true
+  }
+
   _featureCallback (fun, err, ob) {
     const indexes = []
     let p
@@ -36857,7 +37769,7 @@ class RequestGet extends Request {
       indexes.push(p)
     }
 
-    if (this.options.bbox && !ob.intersects(this.options.bbox)) {
+    if (this.options.bounds && !ob.intersects(this.options.bounds)) {
       indexes.forEach(p => fun(null, false, p))
       return
     }
@@ -36878,13 +37790,14 @@ class RequestGet extends Request {
 
 module.exports = RequestGet
 
-},{"./Request":219,"./RequestGetMembers":223,"./defines":229,"./overpassOutOptions":235,"boundingbox":56}],223:[function(require,module,exports){
+},{"./Request":237,"./RequestGetMembers":241,"./defines":249,"./isGeoJSON":253,"./overpassOutOptions":256,"boundingbox":74}],241:[function(require,module,exports){
 const defines = require('./defines')
 const overpassOutOptions = require('./overpassOutOptions')
 const each = require('lodash/forEach')
 const map = require('lodash/map')
 const keys = require('lodash/keys')
 const BoundingBox = require('boundingbox')
+const isGeoJSON = require('./isGeoJSON')
 
 class RequestGetMembers {
   constructor (request) {
@@ -36897,7 +37810,11 @@ class RequestGetMembers {
     this.options.memberProperties |= defines.BBOX
 
     if (this.options.memberBounds) {
-      this.bounds = new BoundingBox(this.options.memberBounds)
+      if (isGeoJSON(this.options.memberBounds)) {
+        this.bounds = this.options.memberBounds
+      } else {
+        this.bounds = new BoundingBox(this.options.memberBounds)
+      }
     }
 
     this.master._compileQuery = this._compileQuery.bind(this, this.master._compileQuery)
@@ -36999,7 +37916,7 @@ class RequestGetMembers {
 
     let BBoxString = ''
     if (this.bounds) {
-      BBoxString = '(' + this.bounds.toLatLonString() + ')'
+      BBoxString = '(' + new BoundingBox(this.bounds).toLatLonString() + ')'
     }
 
     query += '(\n' +
@@ -37040,6 +37957,7 @@ class RequestGetMembers {
     this.part = {
       properties: this.options.memberProperties,
       receiveObject: this.receiveObject.bind(this),
+      checkFeatureCallback: this.checkFeatureCallback.bind(this),
       featureCallback: this.options.memberCallback,
       count: 0
     }
@@ -37063,6 +37981,14 @@ class RequestGetMembers {
 
   receiveObject (ob) {
     this.doneFeatures[ob.id] = ob
+  }
+
+  checkFeatureCallback (ob) {
+    if (this.bounds && ob.intersects(this.bounds) === 0) {
+      return false
+    }
+
+    return true
   }
 
   finishSubRequest (fun, subRequest) {
@@ -37098,7 +38024,7 @@ module.exports = function (request) {
   return new RequestGetMembers(request)
 }
 
-},{"./defines":229,"./overpassOutOptions":235,"boundingbox":56,"lodash/forEach":184,"lodash/keys":198,"lodash/map":199}],224:[function(require,module,exports){
+},{"./defines":249,"./isGeoJSON":253,"./overpassOutOptions":256,"boundingbox":74,"lodash/forEach":202,"lodash/keys":216,"lodash/map":217}],242:[function(require,module,exports){
 const Request = require('./Request')
 
 /**
@@ -37155,7 +38081,7 @@ class RequestMulti extends Request {
 
 module.exports = RequestMulti
 
-},{"./Request":219}],225:[function(require,module,exports){
+},{"./Request":237}],243:[function(require,module,exports){
 const async = require('async')
 const weightSort = require('weight-sort')
 const OverpassFrontend = require('./defines')
@@ -37238,7 +38164,40 @@ class SortedCallbacks {
 
 module.exports = SortedCallbacks
 
-},{"./defines":229,"async":212,"weight-sort":252}],226:[function(require,module,exports){
+},{"./defines":249,"async":230,"weight-sort":273}],244:[function(require,module,exports){
+const turf = {
+  booleanWithin: require('@turf/boolean-within').default
+}
+
+module.exports = function booleanWithin (feature1, feature2) {
+  const features1 = splitGeometry(feature1)
+  const features2 = splitGeometry(feature2)
+
+  const matching = features1.filter(f1 => !!features2.filter(f2 => turf.booleanWithin(f1, f2)).length)
+
+  return features1.length === matching.length
+}
+
+function splitGeometry (feature) {
+  if (feature.geometry && feature.geometry.type === 'MultiPolygon') {
+    return feature.geometry.coordinates.map(polygon => {
+      return {
+        type: 'Feature',
+        geometry: {
+          type: 'Polygon',
+          coordinates: polygon
+        }
+      }
+    })
+  }
+
+  return [feature]
+}
+
+},{"@turf/boolean-within":26}],245:[function(require,module,exports){
+module.exports = (bounds) => bounds.minlat === -90 && bounds.maxlat === 90 && bounds.minlon === -180 && bounds.maxlon === 180
+
+},{}],246:[function(require,module,exports){
 module.exports = function boundsToLokiQuery (bounds, overpass) {
   if (bounds.minlon <= bounds.maxlon) {
     if (overpass.hasStretchLon180) {
@@ -37287,7 +38246,7 @@ module.exports = function boundsToLokiQuery (bounds, overpass) {
   }
 }
 
-},{}],227:[function(require,module,exports){
+},{}],247:[function(require,module,exports){
 module.exports = function convertFromXML (xml) {
   const result = {
     version: parseFloat(xml.getAttribute('version')),
@@ -37394,7 +38353,7 @@ module.exports = function convertFromXML (xml) {
   return result
 }
 
-},{}],228:[function(require,module,exports){
+},{}],248:[function(require,module,exports){
 module.exports = function copyOsm3sMetaFrom (results) {
   const osm3sMeta = {}
 
@@ -37413,7 +38372,7 @@ module.exports = function copyOsm3sMetaFrom (results) {
   return osm3sMeta
 }
 
-},{}],229:[function(require,module,exports){
+},{}],249:[function(require,module,exports){
 module.exports = {
   ID_ONLY: 0,
   TAGS: 1,
@@ -37426,7 +38385,7 @@ module.exports = {
   DEFAULT: 13
 }
 
-},{}],230:[function(require,module,exports){
+},{}],250:[function(require,module,exports){
 module.exports = function filterJoin (def) {
   let result = ['']
 
@@ -37451,7 +38410,7 @@ module.exports = function filterJoin (def) {
   return result
 }
 
-},{}],231:[function(require,module,exports){
+},{}],251:[function(require,module,exports){
 function geojsonShiftWorld (geojson, shift) {
   switch (geojson.type) {
     case 'FeatureCollection':
@@ -37500,7 +38459,7 @@ function geojsonShiftWorld (geojson, shift) {
 
 module.exports = geojsonShiftWorld
 
-},{}],232:[function(require,module,exports){
+},{}],252:[function(require,module,exports){
 (function (global){(function (){
 /* global location:false */
 
@@ -37585,7 +38544,10 @@ function httpLoad (url, getParam, postParam, callback) {
 module.exports = httpLoad
 
 }).call(this)}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}],233:[function(require,module,exports){
+},{}],253:[function(require,module,exports){
+module.exports = geom => geom && (geom.type === 'Feature' || geom.type === 'FeatureCollection')
+
+},{}],254:[function(require,module,exports){
 const BoundingBox = require('boundingbox')
 const turf = require('./turf')
 
@@ -37637,7 +38599,7 @@ class KnownArea {
 
 module.exports = KnownArea
 
-},{"./turf":238,"boundingbox":56}],234:[function(require,module,exports){
+},{"./turf":259,"boundingbox":74}],255:[function(require,module,exports){
 const fs = require('fs')
 const DOMParser = require('xmldom').DOMParser
 const bzip2 = require('bzip2')
@@ -37725,7 +38687,7 @@ module.exports = function loadOsmFile (url, callback) {
   req.send()
 }
 
-},{"./convertFromXML":227,"bzip2":60,"fs":59,"xmldom":254}],235:[function(require,module,exports){
+},{"./convertFromXML":247,"bzip2":78,"fs":77,"xmldom":275}],256:[function(require,module,exports){
 const defines = require('./defines')
 
 function overpassOutOptions (options, optionsOverride) {
@@ -37766,7 +38728,7 @@ function overpassOutOptions (options, optionsOverride) {
 
 module.exports = overpassOutOptions
 
-},{"./defines":229}],236:[function(require,module,exports){
+},{"./defines":249}],257:[function(require,module,exports){
 function removeNullEntries (arr) {
   let p
 
@@ -37779,18 +38741,18 @@ function removeNullEntries (arr) {
 
 module.exports = removeNullEntries
 
-},{}],237:[function(require,module,exports){
+},{}],258:[function(require,module,exports){
 module.exports = function timestamp () {
   return new Date().getTime()
 }
 
-},{}],238:[function(require,module,exports){
+},{}],259:[function(require,module,exports){
 module.exports = {
   difference: require('@turf/difference'),
   union: require('@turf/union').default
 }
 
-},{"@turf/difference":23,"@turf/union":53}],239:[function(require,module,exports){
+},{"@turf/difference":38,"@turf/union":71}],260:[function(require,module,exports){
 (function (process){(function (){
 // 'path' module extracted from Node.js v8.11.1 (only the posix part)
 // transplited with Babel
@@ -38323,7 +39285,7 @@ posix.posix = posix;
 module.exports = posix;
 
 }).call(this)}).call(this,require('_process'))
-},{"_process":241}],240:[function(require,module,exports){
+},{"_process":262}],261:[function(require,module,exports){
 (function (process){(function (){
 (function (global, factory) {
   typeof exports === 'object' && typeof module !== 'undefined' ? module.exports = factory() :
@@ -40884,7 +41846,7 @@ module.exports = posix;
 })));
 
 }).call(this)}).call(this,require('_process'))
-},{"_process":241}],241:[function(require,module,exports){
+},{"_process":262}],262:[function(require,module,exports){
 // shim for using process in browser
 var process = module.exports = {};
 
@@ -41070,7 +42032,7 @@ process.chdir = function (dir) {
 };
 process.umask = function() { return 0; };
 
-},{}],242:[function(require,module,exports){
+},{}],263:[function(require,module,exports){
 (function (global, factory) {
 	typeof exports === 'object' && typeof module !== 'undefined' ? module.exports = factory() :
 	typeof define === 'function' && define.amd ? define(factory) :
@@ -41135,7 +42097,7 @@ return quickselect;
 
 })));
 
-},{}],243:[function(require,module,exports){
+},{}],264:[function(require,module,exports){
 'use strict';
 
 module.exports = rbush;
@@ -41699,7 +42661,7 @@ function multiSelect(arr, left, right, n, compare) {
     }
 }
 
-},{"quickselect":242}],244:[function(require,module,exports){
+},{"quickselect":263}],265:[function(require,module,exports){
 module.exports = function strsearch2regexp (str) {
   return str
     .replace('.', '\\.')
@@ -41726,7 +42688,7 @@ module.exports = function strsearch2regexp (str) {
     .replace('y', '[yýÿ]')
 }
 
-},{}],245:[function(require,module,exports){
+},{}],266:[function(require,module,exports){
 (function (setImmediate,clearImmediate){(function (){
 var nextTick = require('process/browser.js').nextTick;
 var apply = Function.prototype.apply;
@@ -41805,7 +42767,7 @@ exports.clearImmediate = typeof clearImmediate === "function" ? clearImmediate :
   delete immediateIds[id];
 };
 }).call(this)}).call(this,require("timers").setImmediate,require("timers").clearImmediate)
-},{"process/browser.js":241,"timers":245}],246:[function(require,module,exports){
+},{"process/browser.js":262,"timers":266}],267:[function(require,module,exports){
 (function (global){(function (){
 (function webpackUniversalModuleDefinition(root, factory) {
 	if(typeof exports === 'object' && typeof module === 'object')
@@ -51241,7 +52203,7 @@ module.exports = function (Twig) {
 /******/ ]);
 });
 }).call(this)}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"fs":57,"path":239}],247:[function(require,module,exports){
+},{"fs":75,"path":260}],268:[function(require,module,exports){
 "use strict";
 
 var isPrototype = require("../prototype/is");
@@ -51262,7 +52224,7 @@ module.exports = function (value) {
 	return !isPrototype(value);
 };
 
-},{"../prototype/is":250}],248:[function(require,module,exports){
+},{"../prototype/is":271}],269:[function(require,module,exports){
 "use strict";
 
 var isValue = require("../value/is");
@@ -51275,7 +52237,7 @@ module.exports = function (value) {
 	return hasOwnProperty.call(possibleTypes, typeof value);
 };
 
-},{"../value/is":251}],249:[function(require,module,exports){
+},{"../value/is":272}],270:[function(require,module,exports){
 "use strict";
 
 var isFunction = require("../function/is");
@@ -51288,7 +52250,7 @@ module.exports = function (value) {
 	return true;
 };
 
-},{"../function/is":247}],250:[function(require,module,exports){
+},{"../function/is":268}],271:[function(require,module,exports){
 "use strict";
 
 var isObject = require("../object/is");
@@ -51303,7 +52265,7 @@ module.exports = function (value) {
 	}
 };
 
-},{"../object/is":248}],251:[function(require,module,exports){
+},{"../object/is":269}],272:[function(require,module,exports){
 "use strict";
 
 // ES3 safe
@@ -51311,7 +52273,7 @@ var _undefined = void 0;
 
 module.exports = function (value) { return value !== _undefined && value !== null; };
 
-},{}],252:[function(require,module,exports){
+},{}],273:[function(require,module,exports){
 // weightSort(arr, [options | weightKey])
 // Parameters:
 // arr ... an array of form [ [ weight, var], ... ]
@@ -51462,12 +52424,12 @@ if (typeof window !== 'undefined') {
   window.weight_sort = weightSort // legacy
 }
 
-},{}],253:[function(require,module,exports){
+},{}],274:[function(require,module,exports){
 module.exports.RADIUS = 6378137;
 module.exports.FLATTENING = 1/298.257223563;
 module.exports.POLAR_RADIUS = 6356752.3142;
 
-},{}],254:[function(require,module,exports){
+},{}],275:[function(require,module,exports){
 function DOMParser(options){
 	this.options = options ||{locator:{}};
 	
@@ -51720,7 +52682,7 @@ function appendElement (hander,node) {
 	exports.DOMParser = DOMParser;
 //}
 
-},{"./dom":255,"./sax":256}],255:[function(require,module,exports){
+},{"./dom":276,"./sax":277}],276:[function(require,module,exports){
 /*
  * DOM Level 2
  * Object DOMException
@@ -52966,7 +53928,7 @@ try{
 	exports.XMLSerializer = XMLSerializer;
 //}
 
-},{}],256:[function(require,module,exports){
+},{}],277:[function(require,module,exports){
 //[4]   	NameStartChar	   ::=   	":" | [A-Z] | "_" | [a-z] | [#xC0-#xD6] | [#xD8-#xF6] | [#xF8-#x2FF] | [#x370-#x37D] | [#x37F-#x1FFF] | [#x200C-#x200D] | [#x2070-#x218F] | [#x2C00-#x2FEF] | [#x3001-#xD7FF] | [#xF900-#xFDCF] | [#xFDF0-#xFFFD] | [#x10000-#xEFFFF]
 //[4a]   	NameChar	   ::=   	NameStartChar | "-" | "." | [0-9] | #xB7 | [#x0300-#x036F] | [#x203F-#x2040]
 //[5]   	Name	   ::=   	NameStartChar (NameChar)*
@@ -53601,7 +54563,7 @@ function split(source,start){
 exports.XMLReader = XMLReader;
 
 
-},{}],257:[function(require,module,exports){
+},{}],278:[function(require,module,exports){
 /* global L */
 
 const isTrue = require('./isTrue')
@@ -53738,7 +54700,7 @@ class DecoratorPattern {
 
 module.exports = DecoratorPattern
 
-},{"./isTrue":267,"./parseLength":268,"./styleToLeaflet":271}],258:[function(require,module,exports){
+},{"./isTrue":288,"./parseLength":289,"./styleToLeaflet":292}],279:[function(require,module,exports){
 const Sublayer = require('./Sublayer')
 
 class Memberlayer extends Sublayer {
@@ -53808,10 +54770,10 @@ class Memberlayer extends Sublayer {
 
 module.exports = Memberlayer
 
-},{"./Sublayer":263}],259:[function(require,module,exports){
+},{"./Sublayer":284}],280:[function(require,module,exports){
 var css = ".leaflet-popup-content {\n  max-height: 250px;\n  overflow: auto;\n}\n.leaflet-popup-content pre {\n  font-size: 8px;\n}\n.overpass-layer-icon > img,\n.overpass-layer-icon > svg {\n  display: block;\n}\n.overpass-layer-icon div.sign {\n  position: relative;\n  font-size: 12px;\n  text-align: center;\n  transform: translate(-50%, -50%);\n  display: flex;\n  justify-content: center;\n}\n/*  top: -37px; */\n"; (require("browserify-css").createStyle(css, { "href": "src/OverpassLayer.css" }, { "insertAt": "bottom" })); module.exports = css;
-},{"browserify-css":58}],260:[function(require,module,exports){
-/* global overpassFrontend:false */
+},{"browserify-css":76}],281:[function(require,module,exports){
+(function (global){(function (){
 /* eslint camelcase: 0 */
 require('./OverpassLayer.css')
 
@@ -53820,6 +54782,9 @@ const BoundingBox = require('boundingbox')
 const twig = require('twig')
 const OverpassFrontend = require('overpass-frontend')
 const escapeHtml = require('html-escape')
+const turf = {
+  intersect: require('@turf/intersect').default
+}
 
 const Sublayer = require('./Sublayer')
 const Memberlayer = require('./Memberlayer')
@@ -53834,7 +54799,7 @@ class OverpassLayer {
 
     this.options = options
 
-    this.overpassFrontend = 'overpassFrontend' in this.options ? this.options.overpassFrontend : overpassFrontend
+    this.overpassFrontend = 'overpassFrontend' in this.options ? this.options.overpassFrontend : global.overpassFrontend
     this.options.minZoom = 'minZoom' in this.options ? this.options.minZoom : 16
     this.options.maxZoom = 'maxZoom' in this.options ? this.options.maxZoom : undefined
     this.options.feature = 'feature' in this.options ? this.options.feature : {}
@@ -53891,6 +54856,11 @@ class OverpassLayer {
       this.memberlayer = new Memberlayer(this, memberOptions)
       this.subLayers.member = this.memberlayer
     }
+  }
+
+  setBounds (bounds) {
+    this.options.bounds = bounds
+    this.check_update_map()
   }
 
   setLayout (id, layout) {
@@ -53976,7 +54946,18 @@ class OverpassLayer {
     }
 
     const queryOptions = JSON.parse(JSON.stringify(this.options.queryOptions))
-    const bounds = new BoundingBox(this.map.getBounds())
+    let bounds = new BoundingBox(this.map.getBounds())
+
+    if (this.options.bounds) {
+      bounds = turf.intersect(bounds.toGeoJSON(), this.options.bounds)
+
+      if (!bounds) {
+        for (const k in this.subLayers) {
+          this.subLayers[k].hideAll()
+        }
+        return
+      }
+    }
 
     if (this.map.getZoom() < this.options.minZoom ||
        (this.options.maxZoom !== undefined && this.map.getZoom() > this.options.maxZoom)) {
@@ -54161,9 +55142,10 @@ OverpassLayer.twig = twig
 
 module.exports = OverpassLayer
 
-},{"./Memberlayer":258,"./OverpassLayer.css":259,"./Sublayer":263,"./compileFeature":265,"./compileTemplate":266,"boundingbox":56,"event-emitter":76,"html-escape":80,"overpass-frontend":214,"twig":246}],261:[function(require,module,exports){
+}).call(this)}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
+},{"./Memberlayer":279,"./OverpassLayer.css":280,"./Sublayer":284,"./compileFeature":286,"./compileTemplate":287,"@turf/intersect":46,"boundingbox":74,"event-emitter":94,"html-escape":98,"overpass-frontend":232,"twig":267}],282:[function(require,module,exports){
 var css = "ul.overpass-layer-list {\n  margin-top: 0;\n  margin-bottom: 0;\n  padding-left: 0;\n}\nul.overpass-layer-list > li {\n  position: relative;\n  list-style: none;\n  min-height: 30px;\n  padding-left: 40px;\n}\nul.overpass-layer-list > li.selected {\n  background: #e0e0e0;\n}\nul.overpass-layer-list > li > .marker {\n  position: absolute;\n  margin-left: -35px;\n  width: 30px;\n  height: 30px;\n  text-align: center;\n  display: block;\n  color: black;\n  text-decoration: none;\n}\n\nul.overpass-layer-list > li > .marker > .sign {\n  text-align: center;\n  position: absolute;\n  top: 3px;\n  font-size: 15px;\n  left: 0;\n  right: 0;\n  z-index: 1;\n  display: inline-block;\n}\nul.overpass-layer-list > li > .content > a.title {\n  display: inline-block;\n  color: black;\n  text-decoration: none;\n}\nul.overpass-layer-list > li > .content > a.title:hover,\nul.overpass-layer-list > li > .content > a.title:active {\n  text-decoration: underline;\n}\nul.overpass-layer-list > li > .content > div.description {\n  font-style: italic;\n  color: #707070;\n  float: right;\n  text-align: right;\n}\nul.overpass-layer-list > li:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n.hoverable {\n  cursor: pointer;\n}\n"; (require("browserify-css").createStyle(css, { "href": "src/OverpassLayerList.css" }, { "insertAt": "bottom" })); module.exports = css;
-},{"browserify-css":58}],262:[function(require,module,exports){
+},{"browserify-css":76}],283:[function(require,module,exports){
 /* eslint camelcase: 0 */
 
 require('./OverpassLayerList.css')
@@ -54355,7 +55337,7 @@ class OverpassLayerList {
 
 module.exports = OverpassLayerList
 
-},{"./OverpassLayerList.css":261,"./isTrue":267}],263:[function(require,module,exports){
+},{"./OverpassLayerList.css":282,"./isTrue":288}],284:[function(require,module,exports){
 /* global L */
 
 const ee = require('event-emitter')
@@ -55198,7 +56180,7 @@ ee(Sublayer.prototype)
 
 module.exports = Sublayer
 
-},{"./DecoratorPattern":257,"./SublayerFeature":264,"./pointOnFeature":269,"./strToStyle":270,"./styleToLeaflet":271,"boundingbox":56,"event-emitter":76,"nearest-point-on-geometry":207,"overpass-frontend":214}],264:[function(require,module,exports){
+},{"./DecoratorPattern":278,"./SublayerFeature":285,"./pointOnFeature":290,"./strToStyle":291,"./styleToLeaflet":292,"boundingbox":74,"event-emitter":94,"nearest-point-on-geometry":225,"overpass-frontend":232}],285:[function(require,module,exports){
 class SublayerFeature {
   constructor (object, sublayer) {
     this.object = object
@@ -55224,7 +56206,7 @@ class SublayerFeature {
 
 module.exports = SublayerFeature
 
-},{}],265:[function(require,module,exports){
+},{}],286:[function(require,module,exports){
 const compileTemplate = require('./compileTemplate')
 
 function compileFeature (feature, twig, options = {}) {
@@ -55268,7 +56250,7 @@ function compileFeature (feature, twig, options = {}) {
 
 module.exports = compileFeature
 
-},{"./compileTemplate":266}],266:[function(require,module,exports){
+},{"./compileTemplate":287}],287:[function(require,module,exports){
 module.exports = function compileTemplate (template, twig, options = {}) {
   if (typeof template === 'string' && template.search('{') !== -1) {
     let result
@@ -55294,7 +56276,7 @@ module.exports = function compileTemplate (template, twig, options = {}) {
   return template
 }
 
-},{}],267:[function(require,module,exports){
+},{}],288:[function(require,module,exports){
 function isTrue (value) {
   if (value === null || typeof value === 'undefined') {
     return false
@@ -55324,7 +56306,7 @@ function isTrue (value) {
 window.isTrue = isTrue
 module.exports = isTrue
 
-},{}],268:[function(require,module,exports){
+},{}],289:[function(require,module,exports){
 module.exports = function parseLength (value, metersPerPixel) {
   const m = ('' + value).trim().match(/^([+-]?[0-9]+(?:\.[0-9]+)?)\s*(px|m|%)$/)
 
@@ -55343,7 +56325,7 @@ module.exports = function parseLength (value, metersPerPixel) {
   return parseFloat(value)
 }
 
-},{}],269:[function(require,module,exports){
+},{}],290:[function(require,module,exports){
 const turf = {
   along: require('@turf/along').default,
   length: require('@turf/length').default,
@@ -55368,7 +56350,7 @@ module.exports = function pointOnFeature (ob, leafletFeatureOptions) {
   }
 }
 
-},{"@turf/along":4,"@turf/length":35,"@turf/point-on-feature":49}],270:[function(require,module,exports){
+},{"@turf/along":4,"@turf/length":50,"@turf/point-on-feature":64}],291:[function(require,module,exports){
 function strToStyle (style) {
   const str = style.split('\n')
   style = {}
@@ -55391,7 +56373,7 @@ function strToStyle (style) {
 
 module.exports = strToStyle
 
-},{}],271:[function(require,module,exports){
+},{}],292:[function(require,module,exports){
 const isTrue = require('./isTrue')
 const parseLength = require('./parseLength')
 
@@ -55473,4 +56455,4 @@ function styleToLeaflet (style, twigData) {
 
 module.exports = styleToLeaflet
 
-},{"./isTrue":267,"./parseLength":268}]},{},[1]);
+},{"./isTrue":288,"./parseLength":289}]},{},[1]);
