@@ -117,6 +117,12 @@ class OverpassLayer {
     this.map.getPane('hover').style.zIndex = 499
   }
 
+  hideAll (force) {
+    for (const k in this.subLayers) {
+      this.subLayers[k].hideAll(force)
+    }
+  }
+
   remove () {
     for (const k in this.subLayers) {
       this.subLayers[k].hideAll(true)
