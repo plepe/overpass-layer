@@ -87,6 +87,17 @@ class OverpassLayer {
     this.check_update_map()
   }
 
+  setQueryOptions (options) {
+    this.options.queryOptions = options
+
+    if (!('properties' in this.options.queryOptions)) {
+      this.options.queryOptions.properties = OverpassFrontend.ALL
+    }
+
+    this.hideAll()
+    this.check_update_map()
+  }
+
   setLayout (id, layout) {
     this.options.layouts[id] = compileTemplate(layout, twig, { autoescape: false })
   }
