@@ -5,11 +5,7 @@ const OverpassFrontend = require('overpass-frontend')
 const nearestPointOnGeometry = require('nearest-point-on-geometry')
 const BoundingBox = require('boundingbox')
 
-const styleToLeaflet = require('./styleToLeaflet')
-const strToStyle = require('./strToStyle')
 const SublayerFeature = require('./SublayerFeature')
-
-const pointOnFeature = require('./pointOnFeature')
 
 // Extensions:
 const decorators = [
@@ -155,7 +151,7 @@ class Sublayer {
       if (ob.id in this.shownFeatures) {
         data = this.shownFeatures[ob.id]
       } else {
-        this._processObject(data)
+        data.processObject()
 
         this._show(data)
       }
@@ -314,7 +310,7 @@ class Sublayer {
 
       data.updateFlags()
 
-      this._processObject(data)
+      data.processObject()
 
       this._show(data)
 
@@ -349,7 +345,7 @@ class Sublayer {
           if (this.shownFeatureOptions[id].length === 0) {
             this.hide(data)
           } else {
-            this._processObject(this.shownFeatures[id])
+            this.shownFeatures[id].processObject()
           }
         }
       }
@@ -393,7 +389,7 @@ class Sublayer {
       delete this.shownFeatureOptions[id]
 
       if (id in this.visibleFeatures) {
-        this._processObject(data)
+        data.processObject()
       } else {
         this._hide(data)
       }
@@ -419,318 +415,8 @@ class Sublayer {
 
   recalc () {
     for (const k in this.visibleFeatures) {
-      this._processObject(this.visibleFeatures[k])
+      this.visibleFeatures[k].processObject()
     }
-  }
-
-  _processObject (data) {
-    let k
-    const ob = data.object
-    const showOptions = {
-      styles: []
-    }
-    const leafletFeatureOptions = {
-      shiftWorld: this.master.getShiftWorld()
-    }
-
-    if (ob.id in this.shownFeatureOptions) {
-      this.shownFeatureOptions[ob.id].forEach(function (opt) {
-        if ('styles' in opt) {
-          showOptions.styles = showOptions.styles.concat(opt.styles)
-        }
-      })
-    }
-
-    const objectData = this.evaluate(data)
-
-    if (!data.feature) {
-      data.feature = ob.leafletFeature(Object.assign({
-        weight: 0,
-        opacity: 0,
-        fillOpacity: 0,
-        radius: 0
-      }, leafletFeatureOptions))
-    }
-
-    for (k in objectData) {
-      const m = k.match(/^style(|:(.*))$/)
-      if (m) {
-        const styleId = typeof m[2] === 'undefined' ? 'default' : m[2]
-        const style = styleToLeaflet(objectData[k], this.master.globalTwigData)
-
-        if (data.features[styleId]) {
-          data.features[styleId].setStyle(style)
-        } else {
-          data.features[styleId] = ob.leafletFeature(Object.assign(style, leafletFeatureOptions))
-        }
-
-        if ('text' in style && 'setText' in data.features[styleId]) {
-          data.features[styleId].setText(null)
-          data.features[styleId].setText(style.text, {
-            repeat: style.textRepeat,
-            offset: style.textOffset,
-            below: style.textBelow,
-            attributes: {
-              fill: style.textFill,
-              'fill-opacity': style.textFillOpacity,
-              'font-weight': style.textFontWeight,
-              'font-size': style.textFontSize,
-              'letter-spacing': style.textLetterSpacing
-            }
-          })
-        }
-
-        if ('offset' in style && 'setOffset' in data.features[styleId]) {
-          data.features[styleId].setOffset(style.offset)
-        }
-      }
-    }
-
-    if ('styles' in showOptions) {
-      objectData.styles = objectData.styles.concat(showOptions.styles)
-    }
-
-    objectData.marker = {
-      html: '',
-      iconAnchor: [0, 0],
-      iconSize: [0, 0],
-      signAnchor: [0, 0],
-      popupAnchor: [0, 0]
-    }
-    if (objectData.markerSymbol) {
-      objectData.marker.html += objectData.markerSymbol
-
-      const div = document.createElement('div')
-      div.innerHTML = objectData.markerSymbol
-
-      if (div.firstChild) {
-        const c = div.firstChild
-
-        objectData.marker.iconSize = [c.offsetWidth, c.offsetHeight]
-        if (c.hasAttribute('width')) {
-          objectData.marker.iconSize[0] = parseFloat(c.getAttribute('width'))
-        }
-        if (c.hasAttribute('height')) {
-          objectData.marker.iconSize[1] = parseFloat(c.getAttribute('height'))
-        }
-
-        objectData.marker.iconAnchor = [objectData.marker.iconSize[0] / 2, objectData.marker.iconSize[1] / 2]
-        if (c.hasAttribute('anchorx')) {
-          objectData.marker.iconAnchor[0] = parseFloat(c.getAttribute('anchorx'))
-        }
-        if (c.hasAttribute('anchory')) {
-          objectData.marker.iconAnchor[1] = parseFloat(c.getAttribute('anchory'))
-        }
-
-        if (c.hasAttribute('signanchorx')) {
-          objectData.marker.signAnchor[0] = parseFloat(c.getAttribute('signanchorx'))
-        }
-        if (c.hasAttribute('signanchory')) {
-          objectData.marker.signAnchor[1] = parseFloat(c.getAttribute('signanchory'))
-        }
-
-        if (c.hasAttribute('popupanchory')) {
-          objectData.marker.popupAnchor[0] = parseFloat(c.getAttribute('popupanchorx'))
-        }
-        if (c.hasAttribute('popupanchory')) {
-          objectData.marker.popupAnchor[1] = parseFloat(c.getAttribute('popupanchory'))
-        }
-      }
-
-      this.updateAssets(div, objectData)
-    }
-
-    if (objectData.markerSign) {
-      const x = objectData.marker.iconAnchor[0] + objectData.marker.signAnchor[0]
-      const y = -objectData.marker.iconSize[1] + objectData.marker.iconAnchor[1] + objectData.marker.signAnchor[1]
-      objectData.marker.html += '<div class="sign" style="margin-left: ' + x + 'px; margin-top: ' + y + 'px;">' + objectData.markerSign + '</div>'
-    }
-
-    if (objectData.marker.html) {
-      objectData.marker.className = 'overpass-layer-icon'
-      const icon = L.divIcon(objectData.marker)
-
-      if (data.featureMarker) {
-        data.featureMarker.setIcon(icon)
-        if (data.featureMarker._icon) {
-          this.updateAssets(data.featureMarker._icon)
-        }
-      } else {
-        if (!data.pointOnFeature) {
-          data.pointOnFeature = pointOnFeature(ob, leafletFeatureOptions)
-        }
-
-        if (data.pointOnFeature) {
-          data.featureMarker = L.marker(data.pointOnFeature, { icon: icon })
-        }
-      }
-    }
-
-    if (data.isShown) {
-      for (k in data.features) {
-        data.feature.addTo(this.map)
-        if (objectData.styles && objectData.styles.indexOf(k) !== -1 && data.styles && data.styles.indexOf(k) === -1) {
-          data.features[k].addTo(this.map)
-        }
-        if (objectData.styles && objectData.styles.indexOf(k) === -1 && data.styles && data.styles.indexOf(k) !== -1) {
-          this.map.removeLayer(data.features[k])
-        }
-      }
-    }
-    data.styles = objectData.styles
-
-    data.layouts = {}
-    for (const k in this.options.layouts) {
-      if (typeof this.options.layouts[k] === 'function') {
-        data.layouts[k] = this.options.layouts[k]({ object: objectData })
-      } else {
-        data.layouts[k] = this.options.layouts[k]
-      }
-    }
-
-    const popupContent = data.layouts.popup
-
-    if (data.popup) {
-      if (data.popup._contentNode) {
-        if (popupContent === null) {
-          // disable
-        } else if (data.popup.currentHTML !== popupContent) {
-          data.popup._contentNode.innerHTML = popupContent
-          this.updateAssets(data.popup._contentNode, objectData)
-        }
-      } else if (popupContent !== null) {
-        data.popup.setContent(popupContent)
-      }
-
-      data.popup.currentHTML = popupContent
-    } else {
-      data.popup = L.popup()
-      data.popup.object = data
-      data.popup.sublayer = this
-
-      if (popupContent !== null) {
-        data.popup.setContent(popupContent)
-      }
-
-      data.feature.bindPopup(data.popup)
-      for (k in data.features) {
-        if (this._shallBindPopupToStyle(k)) {
-          data.features[k].bindPopup(data.popup)
-        }
-      }
-
-      if (data.featureMarker) {
-        data.featureMarker.bindPopup(data.popup)
-      }
-    }
-
-    data.id = ob.id
-    data.layer_id = this.options.id
-    data.sublayer_id = this.options.sublayer_id
-    data.data = objectData
-
-    if (this.master.onUpdate) {
-      this.master.onUpdate(data)
-    }
-
-    this.master.emit('update', data.object, data)
-    this.emit('update', data.object, data)
-  }
-
-  evaluate (data) {
-    let k
-    const ob = data.object
-
-    data.twigData = this.twigData(ob, data)
-
-    const objectData = {}
-    for (k in this.options.feature) {
-      if (typeof this.options.feature[k] === 'function') {
-        objectData[k] = this.options.feature[k](data.twigData)
-      } else {
-        objectData[k] = this.options.feature[k]
-      }
-    }
-
-    const styleIds = []
-    for (k in objectData) {
-      const m = k.match(/^style(|:(.*))$/)
-      if (m) {
-        const style = objectData[k]
-        const styleId = typeof m[2] === 'undefined' ? 'default' : m[2]
-
-        if (typeof style === 'string' || 'twig_markup' in style) {
-          objectData[k] = strToStyle(style)
-        }
-
-        if (this.options.stylesNoAutoShow.indexOf(styleId) === -1) {
-          styleIds.push(styleId)
-        }
-      }
-    }
-
-    if (!('features' in data)) {
-      data.features = {}
-    }
-
-    objectData.styles =
-      'styles' in objectData
-        ? objectData.styles
-        : 'styles' in this.options
-          ? this.options.styles
-          : styleIds
-    if (typeof objectData.styles === 'string' || 'twig_markup' in objectData.styles) {
-      const styles = objectData.styles.trim()
-      if (styles === '') {
-        objectData.styles = []
-      } else {
-        objectData.styles = styles.split(/,/).map(style => style.trim())
-      }
-    }
-
-    return objectData
-  }
-
-  twigData (ob, data) {
-    const result = {
-      id: ob.id,
-      sublayer_id: this.options.sublayer_id,
-      osm_id: ob.osm_id,
-      type: ob.type,
-      tags: ob.tags,
-      meta: ob.meta,
-      flags: data.flags,
-      members: [],
-      const: this.options.const
-    }
-
-    if (ob.memberFeatures) {
-      ob.memberFeatures.forEach((member, sequence) => {
-        const r = {
-          id: member.id,
-          sequence,
-          type: member.type,
-          osm_id: member.osm_id,
-          role: ob.members[sequence].role,
-          tags: member.tags,
-          meta: member.meta,
-          dir: member.dir,
-          connectedPrev: member.connectedPrev,
-          connectedNext: member.connectedNext
-        }
-
-        result.members.push(r)
-      })
-    }
-
-    for (const k in this.master.globalTwigData) {
-      result[k] = this.master.globalTwigData[k]
-    }
-
-    this.emit('twigData', ob, data, result)
-    this.master.emit('twigData', ob, data, result)
-
-    return result
   }
 
   _shallBindPopupToStyle (styleId) {
@@ -788,7 +474,7 @@ class Sublayer {
         delete this._scheduledReprocesses[id]
 
         if (id in this.visibleFeatures) {
-          this._processObject(this.visibleFeatures[id])
+          this.visibleFeatures[id].processObject()
         }
       }, 0)
     }
@@ -809,7 +495,7 @@ class Sublayer {
           return console.log(err)
         }
 
-        this._processObject(ob)
+        ob.processObject()
         this._show(ob)
         this.openPopupOnObject(ob, options)
       })
