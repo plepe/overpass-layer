@@ -230,6 +230,30 @@ class SublayerFeature {
     this.sublayer_id = this.sublayer.options.sublayer_id
     this.data = objectData
 
+    if (this.data.group && this.sublayer.master.groupLayer) {
+      if (!this.currentGroups) {
+        this.currentGroups = []
+      }
+
+      const toRemove = this.currentGroups.concat()
+      this.currentGroups = this.data.group
+        .split(/\n/g)
+        .filter(v => v.trim())
+      this.currentGroups.filter(group => {
+        const p = toRemove.indexOf(group)
+        if (p !== -1) {
+          toRemove.splice(p, 1)
+          return false
+        }
+
+        this.sublayer.master.groupLayer.add(group, this)
+      })
+
+      toRemove.forEach(group => {
+        this.sublayer.master.groupLayer.remove(group, this)
+      })
+    }
+
     if (this.sublayer.master.onUpdate) {
       this.sublayer.master.onUpdate(this)
     }

@@ -12,6 +12,7 @@ const turf = {
 
 const Sublayer = require('./Sublayer')
 const Memberlayer = require('./Memberlayer')
+const GroupLayer = require('./GroupLayer')
 const compileFeature = require('./compileFeature')
 const compileTemplate = require('./compileTemplate')
 
@@ -79,6 +80,27 @@ class OverpassLayer {
 
       this.memberlayer = new Memberlayer(this, memberOptions)
       this.subLayers.member = this.memberlayer
+    }
+
+    if (this.options.groupFeature) {
+      const groupOptions = {
+        id: this.options.id,
+        sublayer_id: 'group',
+        minZoom: this.options.minZoom,
+        maxZoom: this.options.maxZoom,
+        feature: this.options.groupFeature,
+        styleNoBindPopup: this.options.styleNoBindPopup || [],
+        stylesNoAutoShow: this.options.stylesNoAutoShow || [],
+        layouts: this.options.layouts,
+        const: this.options.const
+      }
+      if (this.options.updateAssets) {
+        memberOptions.updateAssets = this.options.updateAssets
+      }
+      compileFeature(groupOptions.feature, twig)
+
+      this.groupLayer = new GroupLayer(this, groupOptions)
+      this.subLayers.group = this.groupLayer
     }
   }
 
