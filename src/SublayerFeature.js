@@ -336,6 +336,52 @@ class SublayerFeature {
     return result
   }
 
+  show () {
+    if (!this.sublayer.map) {
+      return
+    }
+
+    this.map = this.sublayer.map
+
+    this.feature.addTo(this.map)
+    for (let i = 0; i < this.styles.length; i++) {
+      const k = this.styles[i]
+      if (k in this.features) {
+        this.features[k].addTo(this.map)
+      }
+    }
+
+    if (this.featureMarker) {
+      this.featureMarker.addTo(this.map)
+      this.sublayer.updateAssets(this.featureMarker._icon)
+    }
+
+    this.object.on('update', this.sublayer.scheduleReprocess.bind(this.sublayer, this.id))
+
+    this.isShown = true
+  }
+
+  hide () {
+    this.sublayer.master.emit('remove', this.object, this)
+    this.sublayer.emit('remove', this.object, this)
+
+    this.map.removeLayer(this.feature)
+    for (const k in this.features) {
+      this.map.removeLayer(this.features[k])
+    }
+
+    if (this.featureMarker) {
+      this.map.removeLayer(this.featureMarker)
+    }
+
+    if (this.sublayer.master.onDisappear) {
+      this.sublayer.master.onDisappear(data)
+    }
+
+    this.object.off('update', this.sublayer.scheduleReprocess.bind(this.sublayer, this.id))
+
+    this.isShown = false
+  }
 }
 
 module.exports = SublayerFeature
