@@ -27,7 +27,19 @@ class GroupObject {
   }
 
   leafletFeature (options) {
-    console.log('leafletFeature called')
+    if (!('shiftWorld' in options)) {
+      options.shiftWorld = [0, 0]
+    }
+
+    // no geometry? use the member features instead
+    if (!this.geometry) {
+      const feature = L.featureGroup()
+      feature._updateCallbacks = []
+
+      return feature
+    }
+
+    return feature
   }
 
   add (feature) {
