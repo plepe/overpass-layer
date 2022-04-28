@@ -19,6 +19,7 @@ class Sublayer {
     options.sublayer_id = options.sublayer_id || 'main'
     this.options = options
 
+    this.featureClass = SublayerFeature
     this.visibleFeatures = {}
     this.shownFeatures = {} // features which are forcibly shown
     this.shownFeatureOptions = {}
@@ -151,7 +152,7 @@ class Sublayer {
       if (ob.id in this.shownFeatures) {
         data = this.shownFeatures[ob.id]
       } else {
-        data = new SublayerFeature(ob, this)
+        data = new this.featureClass(ob, this)
         data.processObject()
         data.show()
       }
@@ -286,7 +287,7 @@ class Sublayer {
       } else if (id in this.shownFeatures) {
         data = this.shownFeatures[id]
       } else {
-        data = new SublayerFeature(ob, this)
+        data = new this.featureClass(ob, this)
       }
 
       callback(null, data)
