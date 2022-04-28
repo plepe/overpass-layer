@@ -146,14 +146,14 @@ class Sublayer {
     this.currentRequestFeatures[ob.id] = true
 
     if (!(ob.id in this.visibleFeatures)) {
-      let data = new SublayerFeature(ob, this)
+      let data
 
       if (ob.id in this.shownFeatures) {
         data = this.shownFeatures[ob.id]
       } else {
+        data = new SublayerFeature(ob, this)
         data.processObject()
-
-        this._show(data)
+        data.show()
       }
 
       this.visibleFeatures[ob.id] = data
@@ -171,7 +171,7 @@ class Sublayer {
     for (const k in this.visibleFeatures) {
       if (!(k in this.currentRequestFeatures)) {
         if (!(k in this.shownFeatures)) {
-          this._hide(this.visibleFeatures[k])
+          this.visibleFeatures[k].hide()
         }
 
         delete this.visibleFeatures[k]
@@ -184,7 +184,7 @@ class Sublayer {
       const ob = this.visibleFeatures[k]
 
       if (force || !(ob.id in this.shownFeatures)) {
-        this._hide(ob)
+        ob.hide()
       }
     }
 
@@ -198,7 +198,7 @@ class Sublayer {
 
       if (!ob.object.intersects(bounds)) {
         if (!(ob.id in this.shownFeatures)) {
-          this._hide(ob)
+          ob.hide()
         }
 
         delete this.visibleFeatures[k]
@@ -216,7 +216,7 @@ class Sublayer {
 
       if (!filter.match(ob.object)) {
         if (!(ob.id in this.shownFeatures)) {
-          this._hide(ob)
+          ob.hide()
         }
 
         delete this.visibleFeatures[k]
@@ -312,7 +312,7 @@ class Sublayer {
 
       data.processObject()
 
-      this._show(data)
+      data.show()
 
       callback(null, data.object, data)
     }
@@ -391,7 +391,7 @@ class Sublayer {
       if (id in this.visibleFeatures) {
         data.processObject()
       } else {
-        this._hide(data)
+        data.hide()
       }
     }
   }
@@ -423,51 +423,6 @@ class Sublayer {
     return this.options.styleNoBindPopup.indexOf(styleId) === -1
   }
 
-  _show (data) {
-    if (!this.map) {
-      return
-    }
-
-    data.feature.addTo(this.map)
-    for (let i = 0; i < data.styles.length; i++) {
-      const k = data.styles[i]
-      if (k in data.features) {
-        data.features[k].addTo(this.map)
-      }
-    }
-
-    if (data.featureMarker) {
-      data.featureMarker.addTo(this.map)
-      this.updateAssets(data.featureMarker._icon)
-    }
-
-    data.object.on('update', this.scheduleReprocess.bind(this, data.id))
-
-    data.isShown = true
-  }
-
-  _hide (data) {
-    this.master.emit('remove', data.object, data)
-    this.emit('remove', data.object, data)
-
-    this.map.removeLayer(data.feature)
-    for (const k in data.features) {
-      this.map.removeLayer(data.features[k])
-    }
-
-    if (data.featureMarker) {
-      this.map.removeLayer(data.featureMarker)
-    }
-
-    if (this.master.onDisappear) {
-      this.master.onDisappear(data)
-    }
-
-    data.object.off('update', this.scheduleReprocess.bind(this, data.id))
-
-    data.isShown = false
-  }
-
   scheduleReprocess (id) {
     if (!(id in this._scheduledReprocesses)) {
       this._scheduledReprocesses[id] = window.setTimeout(() => {
@@ -496,7 +451,7 @@ class Sublayer {
         }
 
         ob.processObject()
-        this._show(ob)
+        ob.show()
         this.openPopupOnObject(ob, options)
       })
     }
