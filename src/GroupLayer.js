@@ -34,6 +34,9 @@ class GroupLayer extends Sublayer {
 
       this.master.emit('add', feature.object, feature)
       this.emit('add', feature.object, feature)
+    } else {
+      this.master.emit('update', feature.object, feature)
+      this.emit('update', feature.object, feature)
     }
   }
 

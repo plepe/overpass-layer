@@ -3,6 +3,7 @@ class GroupObject {
     this.id = id
     this.properties = 0
     this.list = {}
+    this.leafletFeatures = []
   }
 
   memberIds () {
@@ -22,8 +23,23 @@ class GroupObject {
   }
 
   intersects (bbox) {
-    console.log('intersects called')
-    return 2
+    if (this.id === 'Urban-Loritz-Platz') {
+      console.log('here')
+    }
+
+    let max = 0
+
+    for (let k in this.list) {
+      const i = this.list[k].object.intersects(bbox)
+
+      if (i === 2) {
+        return 2
+      }
+
+      max = i > max ? i : max
+    }
+
+    return max
   }
 
   leafletFeature (options) {
@@ -31,13 +47,14 @@ class GroupObject {
       options.shiftWorld = [0, 0]
     }
 
-    // no geometry? use the member features instead
-    if (!this.geometry) {
-      const feature = L.featureGroup()
-      feature._updateCallbacks = []
+    const feature = L.featureGroup()
+    feature._updateCallbacks = []
 
-      return feature
-    }
+    Object.values(this.list).forEach(member => {
+      feature.addLayer(member.object.leafletFeature(options))
+    })
+
+    this.leafletFeatures.push([feature, options])
 
     return feature
   }
@@ -66,6 +83,10 @@ class GroupObject {
     this.meta.ids = Object.values(this.list)
       .map(item => item.id)
       .join(';')
+
+    this.leafletFeatures.forEach(([featureGroup, options]) => {
+      featureGroup.addLayer(feature.object.leafletFeature(options))
+    })
   }
 
   remove (feature) {
