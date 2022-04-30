@@ -40,8 +40,23 @@ class GroupLayer extends Sublayer {
     }
   }
 
-  remove (group, feature) {
-    console.log('remove', group, feature.id)
+  remove (group, member) {
+    if (!(group in this.visibleFeatures)) {
+      return
+    }
+
+    const feature = this.visibleFeatures[group]
+
+    feature.object.remove(member)
+
+    if (Object.keys(feature.object.list).length) {
+      feature.processObject()
+
+      this.master.emit('update', feature.object, feature)
+      this.emit('update', feature.object, feature)
+    } else {
+      this.hide()
+    }
   }
 
   recalc () {

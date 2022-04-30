@@ -1,3 +1,5 @@
+const ee = require('event-emitter')
+
 class GroupObject {
   constructor (id) {
     this.id = id
@@ -18,7 +20,7 @@ class GroupObject {
       type: 'FeatureCollection',
       id: this.id,
       properties: {},
-      features: Object.values(this.list).map(f => f.GeoJSON())
+      features: Object.values(this.list).map(f => f.object.GeoJSON())
     }
   }
 
@@ -50,11 +52,13 @@ class GroupObject {
     const feature = L.featureGroup()
     feature._updateCallbacks = []
 
+    const mapping = {}
     Object.values(this.list).forEach(member => {
-      feature.addLayer(member.object.leafletFeature(options))
+      const layer = feature.addLayer(member.object.leafletFeature(options))
+      mapping[member.id] = feature.getLayerId(layer)
     })
 
-    this.leafletFeatures.push([feature, options])
+    this.leafletFeatures.push([feature, options, mapping])
 
     return feature
   }
@@ -62,7 +66,39 @@ class GroupObject {
   add (feature) {
     this.list[feature.id] = feature
 
-    this.tags = {}
+    this.recalc()
+
+    this.leafletFeatures.forEach(([featureGroup, options, mapping]) => {
+      const layer = featureGroup.addLayer(feature.object.leafletFeature(options))
+      mapping[feature.id] = featureGroup.getLayerId(layer)
+    })
+  }
+
+  remove (feature) {
+    delete this.list[feature.id]
+
+    this.recalc()
+
+    this.leafletFeatures.forEach(([featureGroup, options, mapping]) => {
+      featureGroup.removeLayer(mapping[feature.id])
+      delete mapping[feature.id]
+    })
+  }
+
+  recalc () {
+    if (!this.meta) {
+      this.meta = {}
+      this.tags = {}
+    }
+
+    this.meta.ids = Object.values(this.list)
+      .map(item => item.id)
+      .join(';')
+
+    for (let k in this.tags) {
+      delete this.tags[k]
+    }
+
     Object.values(this.list).forEach(item => {
       for (let k in item.object.tags) {
         if (!(k in this.tags)) {
@@ -78,20 +114,9 @@ class GroupObject {
     for (let k in this.tags) {
       this.tags[k] = Object.keys(this.tags[k]).join(';')
     }
-
-    this.meta = {}
-    this.meta.ids = Object.values(this.list)
-      .map(item => item.id)
-      .join(';')
-
-    this.leafletFeatures.forEach(([featureGroup, options]) => {
-      featureGroup.addLayer(feature.object.leafletFeature(options))
-    })
-  }
-
-  remove (feature) {
-    delete this.list[feature.id]
   }
 }
+
+ee(GroupObject.prototype)
 
 module.exports = GroupObject
