@@ -3,6 +3,7 @@ class GroupObject {
     this.id = id
     this.properties = 0
     this.list = {}
+    this.leafletFeatures = []
   }
 
   memberIds () {
@@ -31,13 +32,14 @@ class GroupObject {
       options.shiftWorld = [0, 0]
     }
 
-    // no geometry? use the member features instead
-    if (!this.geometry) {
-      const feature = L.featureGroup()
-      feature._updateCallbacks = []
+    const feature = L.featureGroup()
+    feature._updateCallbacks = []
 
-      return feature
-    }
+    Object.values(this.list).forEach(member => {
+      feature.addLayer(member.object.leafletFeature(options))
+    })
+
+    this.leafletFeatures.push([feature, options])
 
     return feature
   }
@@ -66,6 +68,10 @@ class GroupObject {
     this.meta.ids = Object.values(this.list)
       .map(item => item.id)
       .join(';')
+
+    this.leafletFeatures.forEach(([featureGroup, options]) => {
+      featureGroup.addLayer(feature.object.leafletFeature(options))
+    })
   }
 
   remove (feature) {
