@@ -58,7 +58,28 @@ class GroupObject {
   add (feature) {
     this.list[feature.id] = feature
 
-    this.tags = {}
+    this.recalc()
+
+    this.leafletFeatures.forEach(([featureGroup, options, mapping]) => {
+      const layer = featureGroup.addLayer(feature.object.leafletFeature(options))
+      mapping[feature.id] = featureGroup.getLayerId(layer)
+    })
+  }
+
+  recalc () {
+    if (!this.meta) {
+      this.meta = {}
+      this.tags = {}
+    }
+
+    this.meta.ids = Object.values(this.list)
+      .map(item => item.id)
+      .join(';')
+
+    for (let k in this.tags) {
+      delete this.tags[k]
+    }
+
     Object.values(this.list).forEach(item => {
       for (let k in item.object.tags) {
         if (!(k in this.tags)) {
@@ -75,19 +96,11 @@ class GroupObject {
       this.tags[k] = Object.keys(this.tags[k]).join(';')
     }
 
-    this.meta = {}
-    this.meta.ids = Object.values(this.list)
-      .map(item => item.id)
-      .join(';')
-
-    this.leafletFeatures.forEach(([featureGroup, options]) => {
-      featureGroup.addLayer(feature.object.leafletFeature(options))
-    })
-  }
-
   remove (feature) {
     delete this.list[feature.id]
   }
 }
+
+ee(GroupObject.prototype)
 
 module.exports = GroupObject
