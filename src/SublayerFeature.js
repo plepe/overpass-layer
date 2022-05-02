@@ -402,6 +402,14 @@ class SublayerFeature {
       this.sublayer.master.onDisappear(data)
     }
 
+    if (this.currentGroups) {
+      this.currentGroups.forEach(group => {
+        this.sublayer.master.groupLayer.remove(group, this)
+      })
+
+      delete this.currentGroups
+    }
+
     this.object.off('update', this.sublayer.scheduleReprocess.bind(this.sublayer, this.id))
 
     this.isShown = false

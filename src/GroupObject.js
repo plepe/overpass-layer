@@ -1,3 +1,5 @@
+const ee = require('event-emitter')
+
 class GroupObject {
   constructor (id) {
     this.id = id
@@ -46,11 +48,13 @@ class GroupObject {
     const feature = L.featureGroup()
     feature._updateCallbacks = []
 
+    const mapping = {}
     Object.values(this.list).forEach(member => {
-      feature.addLayer(member.object.leafletFeature(options))
+      const layer = feature.addLayer(member.object.leafletFeature(options))
+      mapping[member.id] = feature.getLayerId(layer)
     })
 
-    this.leafletFeatures.push([feature, options])
+    this.leafletFeatures.push([feature, options, mapping])
 
     return feature
   }
@@ -63,6 +67,17 @@ class GroupObject {
     this.leafletFeatures.forEach(([featureGroup, options, mapping]) => {
       const layer = featureGroup.addLayer(feature.object.leafletFeature(options))
       mapping[feature.id] = featureGroup.getLayerId(layer)
+    })
+  }
+
+  remove (feature) {
+    delete this.list[feature.id]
+
+    this.recalc()
+
+    this.leafletFeatures.forEach(([featureGroup, options, mapping]) => {
+      featureGroup.removeLayer(mapping[feature.id])
+      delete mapping[feature.id]
     })
   }
 
@@ -95,9 +110,6 @@ class GroupObject {
     for (let k in this.tags) {
       this.tags[k] = Object.keys(this.tags[k]).join(';')
     }
-
-  remove (feature) {
-    delete this.list[feature.id]
   }
 }
 
