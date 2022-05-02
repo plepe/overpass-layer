@@ -23,8 +23,19 @@ class GroupObject {
   }
 
   intersects (bbox) {
-    console.log('intersects called')
-    return 2
+    let max = 0
+
+    for (let k in this.list) {
+      const i = this.list[k].object.intersects(bbox)
+
+      if (i === 2) {
+        return 2
+      }
+
+      max = i > max ? i : max
+    }
+
+    return max
   }
 
   leafletFeature (options) {
