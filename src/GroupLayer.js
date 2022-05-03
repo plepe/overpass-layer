@@ -20,6 +20,7 @@ class GroupLayer extends Sublayer {
     }
 
     feature.object.add(member)
+    feature.geometryChanged = true
     feature.processObject()
 
     if (isNew) {
@@ -45,6 +46,7 @@ class GroupLayer extends Sublayer {
     const feature = this.visibleFeatures[group]
 
     feature.object.remove(member)
+    feature.geometryChanged = true
 
     if (Object.keys(feature.object.list).length) {
       feature.processObject()
