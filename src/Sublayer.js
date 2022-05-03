@@ -1,5 +1,6 @@
 /* global L */
 
+const escapeHtml = require('html-escape')
 const ee = require('event-emitter')
 const OverpassFrontend = require('overpass-frontend')
 const nearestPointOnGeometry = require('nearest-point-on-geometry')
@@ -18,6 +19,12 @@ class Sublayer {
 
     options.sublayer_id = options.sublayer_id || 'main'
     this.options = options
+
+    this.options.feature.style = 'style' in this.options.feature ? this.options.feature.style : {}
+    this.options.feature.title = 'title' in this.options.feature ? this.options.feature.title : function (ob) { return escapeHtml(ob.tags.name || ob.tags.operator || ob.tags.ref || ob.id) }
+    this.options.feature.body = 'body' in this.options.feature ? this.options.feature.body : ''
+    this.options.feature.markerSymbol = 'markerSymbol' in this.options.feature ? this.options.feature.markerSymbol : '<img anchorX="13" anchorY="42" width="25" height="42" signAnchorX="0" signAnchorY="-30" src="img/map_pointer.png">'
+    this.options.feature.markerSign = 'markerSign' in this.options.feature ? this.options.feature.markerSign : null
 
     this.featureClass = SublayerFeature
     this.visibleFeatures = {}

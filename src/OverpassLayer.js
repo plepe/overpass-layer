@@ -5,7 +5,6 @@ const ee = require('event-emitter')
 const BoundingBox = require('boundingbox')
 const twig = require('twig')
 const OverpassFrontend = require('overpass-frontend')
-const escapeHtml = require('html-escape')
 const turf = {
   intersect: require('@turf/intersect').default
 }
@@ -28,11 +27,6 @@ class OverpassLayer {
     this.options.minZoom = 'minZoom' in this.options ? this.options.minZoom : 16
     this.options.maxZoom = 'maxZoom' in this.options ? this.options.maxZoom : undefined
     this.options.feature = 'feature' in this.options ? this.options.feature : {}
-    this.options.feature.style = 'style' in this.options.feature ? this.options.feature.style : {}
-    this.options.feature.title = 'title' in this.options.feature ? this.options.feature.title : function (ob) { return escapeHtml(ob.tags.name || ob.tags.operator || ob.tags.ref || ob.id) }
-    this.options.feature.body = 'body' in this.options.feature ? this.options.feature.body : ''
-    this.options.feature.markerSymbol = 'markerSymbol' in this.options.feature ? this.options.feature.markerSymbol : '<img anchorX="13" anchorY="42" width="25" height="42" signAnchorX="0" signAnchorY="-30" src="img/map_pointer.png">'
-    this.options.feature.markerSign = 'markerSign' in this.options.feature ? this.options.feature.markerSign : null
     this.options.queryOptions = 'queryOptions' in this.options ? this.options.queryOptions : {}
     if (!('properties' in this.options.queryOptions)) {
       this.options.queryOptions.properties = OverpassFrontend.ALL
