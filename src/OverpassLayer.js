@@ -76,13 +76,14 @@ class OverpassLayer {
       this.subLayers.member = this.memberlayer
     }
 
-    if (this.options.groupFeature) {
+    if (this.options.feature.group ||
+        (this.memberlayer && this.memberlayer.options.feature.group)) {
       const groupOptions = {
         id: this.options.id,
         sublayer_id: 'group',
         minZoom: this.options.minZoom,
         maxZoom: this.options.maxZoom,
-        feature: this.options.groupFeature,
+        feature: this.options.groupFeature || {},
         styleNoBindPopup: this.options.styleNoBindPopup || [],
         stylesNoAutoShow: this.options.stylesNoAutoShow || [],
         layouts: this.options.layouts,
