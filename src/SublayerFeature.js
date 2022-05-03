@@ -152,12 +152,17 @@ class SublayerFeature {
       const icon = L.divIcon(objectData.marker)
 
       if (this.featureMarker) {
+        if (this.geometryChanged) {
+          this.pointOnFeature = pointOnFeature(ob, leafletFeatureOptions)
+          this.featureMarker.setLatLng(this.pointOnFeature)
+        }
+
         this.featureMarker.setIcon(icon)
         if (this.featureMarker._icon) {
           this.sublayer.updateAssets(this.featureMarker._icon)
         }
       } else {
-        if (!this.pointOnFeature) {
+        if (!this.pointOnFeature || this.geometryChanged) {
           this.pointOnFeature = pointOnFeature(ob, leafletFeatureOptions)
         }
 
@@ -229,6 +234,7 @@ class SublayerFeature {
     this.layer_id = this.sublayer.options.id
     this.sublayer_id = this.sublayer.options.sublayer_id
     this.data = objectData
+    this.geometryChanged = false
 
     if (this.data.group && this.sublayer.master.groupLayer) {
       if (!this.currentGroups) {
