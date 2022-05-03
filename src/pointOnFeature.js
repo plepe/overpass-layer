@@ -4,16 +4,21 @@ const turf = {
   pointOnFeature: require('@turf/point-on-feature').default
 }
 
-module.exports = function pointOnFeature (ob, leafletFeatureOptions) {
-  const geojson = ob.GeoJSON()
-  let poi
-
+function pointOnGeoJSON (geojson) {
   if (geojson.geometry.type === 'LineString') {
-    poi = turf.along(geojson, turf.length(geojson) / 2)
+    return turf.along(geojson, turf.length(geojson) / 2)
   } else if (geojson.geometry.type === 'GeometryCollection' && geojson.geometry.geometries.length === 0) {
     return null
   } else {
-    poi = turf.pointOnFeature(geojson)
+    return turf.pointOnFeature(geojson)
+  }
+}
+
+module.exports = function pointOnFeature (ob, leafletFeatureOptions) {
+  const poi = pointOnGeoJSON(ob.GeoJSON())
+
+  if (!poi) {
+    return null
   }
 
   return {
