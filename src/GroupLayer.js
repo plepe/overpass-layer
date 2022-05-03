@@ -21,9 +21,9 @@ class GroupLayer extends Sublayer {
 
     feature.object.add(member)
     feature.geometryChanged = true
-    feature.processObject()
 
     if (isNew) {
+      feature.processObject()
       feature.show()
 
       if (this.master.onAppear) {
@@ -33,6 +33,8 @@ class GroupLayer extends Sublayer {
       this.master.emit('add', feature.object, feature)
       this.emit('add', feature.object, feature)
     } else {
+      this.scheduleReprocess(feature.id)
+
       this.master.emit('update', feature.object, feature)
       this.emit('update', feature.object, feature)
     }
@@ -49,7 +51,7 @@ class GroupLayer extends Sublayer {
     feature.geometryChanged = true
 
     if (Object.keys(feature.object.list).length) {
-      feature.processObject()
+      this.scheduleReprocess(feature.id)
 
       this.master.emit('update', feature.object, feature)
       this.emit('update', feature.object, feature)
