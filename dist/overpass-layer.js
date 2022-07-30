@@ -29326,10 +29326,36 @@ module.exports = osmtogeojson;
     var ARROW_FN_ARGS = /^(?:async\s+)?\(?\s*([^)=]+)\s*\)?(?:\s*=>)/;
     var FN_ARG_SPLIT = /,/;
     var FN_ARG = /(=.+)?(\s*)$/;
-    var STRIP_COMMENTS = /((\/\/.*$)|(\/\*[\s\S]*?\*\/))/mg;
+
+    function stripComments(string) {
+        let stripped = '';
+        let index = 0;
+        let endBlockComment = string.indexOf('*/');
+        while (index < string.length) {
+            if (string[index] === '/' && string[index+1] === '/') {
+                // inline comment
+                let endIndex = string.indexOf('\n', index);
+                index = (endIndex === -1) ? string.length : endIndex;
+            } else if ((endBlockComment !== -1) && (string[index] === '/') && (string[index+1] === '*')) {
+                // block comment
+                let endIndex = string.indexOf('*/', index);
+                if (endIndex !== -1) {
+                    index = endIndex + 2;
+                    endBlockComment = string.indexOf('*/', index);
+                } else {
+                    stripped += string[index];
+                    index++;
+                }
+            } else {
+                stripped += string[index];
+                index++;
+            }
+        }
+        return stripped;
+    }
 
     function parseParams(func) {
-        const src = func.toString().replace(STRIP_COMMENTS, '');
+        const src = stripComments(func.toString());
         let match = src.match(FN_ARGS);
         if (!match) {
             match = src.match(ARROW_FN_ARGS);
@@ -29615,12 +29641,11 @@ module.exports = osmtogeojson;
                 res(args);
             }
 
-            var item = {
+            var item = q._createTaskItem(
                 data,
-                callback: rejectOnError ?
-                    promiseCallback :
+                rejectOnError ? promiseCallback :
                     (callback || promiseCallback)
-            };
+            );
 
             if (insertAtFront) {
                 q._tasks.unshift(item);
@@ -29702,6 +29727,12 @@ module.exports = osmtogeojson;
         var isProcessing = false;
         var q = {
             _tasks: new DLL(),
+            _createTaskItem (data, callback) {
+                return {
+                    data,
+                    callback
+                };
+            },
             *[Symbol.iterator] () {
                 yield* q._tasks[Symbol.iterator]();
             },
@@ -30086,7 +30117,7 @@ module.exports = osmtogeojson;
      * app.get('/cats', function(request, response) {
      *     var User = request.models.User;
      *     async.seq(
-     *         _.bind(User.get, User),  // 'User.get' has signature (id, callback(err, data))
+     *         User.get.bind(User),  // 'User.get' has signature (id, callback(err, data))
      *         function(user, fn) {
      *             user.getCats(fn);      // 'getCats' has signature (callback(err, data))
      *         }
@@ -30451,7 +30482,7 @@ module.exports = osmtogeojson;
      * Result will be the first item in the array that passes the truth test
      * (iteratee) or the value `undefined` if none passed. Invoked with
      * (err, result).
-     * @returns A Promise, if no callback is passed
+     * @returns {Promise} a promise, if a callback is omitted
      * @example
      *
      * // dir1 is a directory that contains file1.txt, file2.txt
@@ -30523,7 +30554,7 @@ module.exports = osmtogeojson;
      * Result will be the first item in the array that passes the truth test
      * (iteratee) or the value `undefined` if none passed. Invoked with
      * (err, result).
-     * @returns a Promise if no callback is passed
+     * @returns {Promise} a promise, if a callback is omitted
      */
     function detectLimit(coll, limit, iteratee, callback) {
         return _createTester(bool => bool, (res, item) => item)(eachOfLimit(limit), coll, iteratee, callback)
@@ -30549,7 +30580,7 @@ module.exports = osmtogeojson;
      * Result will be the first item in the array that passes the truth test
      * (iteratee) or the value `undefined` if none passed. Invoked with
      * (err, result).
-     * @returns a Promise if no callback is passed
+     * @returns {Promise} a promise, if a callback is omitted
      */
     function detectSeries(coll, iteratee, callback) {
         return _createTester(bool => bool, (res, item) => item)(eachOfLimit(1), coll, iteratee, callback)
@@ -31720,6 +31751,8 @@ module.exports = osmtogeojson;
         return memoized;
     }
 
+    /* istanbul ignore file */
+
     /**
      * Calls `callback` on a later loop around the event loop. In Node.js this just
      * calls `process.nextTick`.  In the browser it will use `setImmediate` if
@@ -31763,7 +31796,7 @@ module.exports = osmtogeojson;
 
     var nextTick = wrap(_defer$1);
 
-    var _parallel = awaitify((eachfn, tasks, callback) => {
+    var parallel = awaitify((eachfn, tasks, callback) => {
         var results = isArrayLike(tasks) ? [] : {};
 
         eachfn(tasks, (task, key, taskCb) => {
@@ -31936,8 +31969,8 @@ module.exports = osmtogeojson;
      * }
      *
      */
-    function parallel(tasks, callback) {
-        return _parallel(eachOf$1, tasks, callback);
+    function parallel$1(tasks, callback) {
+        return parallel(eachOf$1, tasks, callback);
     }
 
     /**
@@ -31961,7 +31994,7 @@ module.exports = osmtogeojson;
      * @returns {Promise} a promise, if a callback is not passed
      */
     function parallelLimit(tasks, limit, callback) {
-        return _parallel(eachOfLimit(limit), tasks, callback);
+        return parallel(eachOfLimit(limit), tasks, callback);
     }
 
     /**
@@ -32245,54 +32278,51 @@ module.exports = osmtogeojson;
      * @param {number} concurrency - An `integer` for determining how many `worker`
      * functions should be run in parallel.  If omitted, the concurrency defaults to
      * `1`.  If the concurrency is `0`, an error is thrown.
-     * @returns {module:ControlFlow.QueueObject} A priorityQueue object to manage the tasks. There are two
+     * @returns {module:ControlFlow.QueueObject} A priorityQueue object to manage the tasks. There are three
      * differences between `queue` and `priorityQueue` objects:
      * * `push(task, priority, [callback])` - `priority` should be a number. If an
      *   array of `tasks` is given, all tasks will be assigned the same priority.
-     * * The `unshift` method was removed.
+     * * `pushAsync(task, priority, [callback])` - the same as `priorityQueue.push`,
+     *   except this returns a promise that rejects if an error occurs.
+     * * The `unshift` and `unshiftAsync` methods were removed.
      */
     function priorityQueue(worker, concurrency) {
         // Start with a normal queue
         var q = queue$1(worker, concurrency);
-        var processingScheduled = false;
+
+        var {
+            push,
+            pushAsync
+        } = q;
 
         q._tasks = new Heap();
-
-        // Override push to accept second parameter representing priority
-        q.push = function(data, priority = 0, callback = () => {}) {
-            if (typeof callback !== 'function') {
-                throw new Error('task callback must be a function');
-            }
-            q.started = true;
-            if (!Array.isArray(data)) {
-                data = [data];
-            }
-            if (data.length === 0 && q.idle()) {
-                // call drain immediately if there are no tasks
-                return setImmediate$1(() => q.drain());
-            }
-
-            for (var i = 0, l = data.length; i < l; i++) {
-                var item = {
-                    data: data[i],
-                    priority,
-                    callback
-                };
-
-                q._tasks.push(item);
-            }
-
-            if (!processingScheduled) {
-                processingScheduled = true;
-                setImmediate$1(() => {
-                    processingScheduled = false;
-                    q.process();
-                });
-            }
+        q._createTaskItem = ({data, priority}, callback) => {
+            return {
+                data,
+                priority,
+                callback
+            };
         };
 
-        // Remove unshift function
+        function createDataItems(tasks, priority) {
+            if (!Array.isArray(tasks)) {
+                return {data: tasks, priority};
+            }
+            return tasks.map(data => { return {data, priority}; });
+        }
+
+        // Override push to accept second parameter representing priority
+        q.push = function(data, priority = 0, callback) {
+            return push(createDataItems(data, priority), callback);
+        };
+
+        q.pushAsync = function(data, priority = 0, callback) {
+            return pushAsync(createDataItems(data, priority), callback);
+        };
+
+        // Remove unshift functions
         delete q.unshift;
+        delete q.unshiftAsync;
 
         return q;
     }
@@ -32313,7 +32343,7 @@ module.exports = osmtogeojson;
      * @param {Function} callback - A callback to run once any of the functions have
      * completed. This function gets an error or result from the first function that
      * completed. Invoked with (err, result).
-     * @returns undefined
+     * @returns {Promise} a promise, if a callback is omitted
      * @example
      *
      * async.race([
@@ -33006,7 +33036,7 @@ module.exports = osmtogeojson;
      *
      */
     function series(tasks, callback) {
-        return _parallel(eachOfSeries$1, tasks, callback);
+        return parallel(eachOfSeries$1, tasks, callback);
     }
 
     /**
@@ -33838,7 +33868,7 @@ module.exports = osmtogeojson;
      * @param {Function} [callback] - An optional callback to run once all the
      * functions have completed. This will be passed the results of the last task's
      * callback. Invoked with (err, [results]).
-     * @returns undefined
+     * @returns {Promise} a promise, if a callback is omitted
      * @example
      *
      * async.waterfall([
@@ -33986,7 +34016,7 @@ module.exports = osmtogeojson;
         mapValuesSeries,
         memoize,
         nextTick,
-        parallel,
+        parallel: parallel$1,
         parallelLimit,
         priorityQueue,
         queue: queue$1,
@@ -34094,7 +34124,7 @@ module.exports = osmtogeojson;
     exports.mapValuesSeries = mapValuesSeries;
     exports.memoize = memoize;
     exports.nextTick = nextTick;
-    exports.parallel = parallel;
+    exports.parallel = parallel$1;
     exports.parallelLimit = parallelLimit;
     exports.priorityQueue = priorityQueue;
     exports.queue = queue$1;
@@ -35368,6 +35398,7 @@ class OverpassFrontend {
     }
 
     this.requests = []
+    this.requestIsActive = false
   }
 
   removeFromCache (ids) {
@@ -38600,6 +38631,7 @@ class KnownArea {
 module.exports = KnownArea
 
 },{"./turf":259,"boundingbox":74}],255:[function(require,module,exports){
+(function (global){(function (){
 const fs = require('fs')
 const DOMParser = require('xmldom').DOMParser
 const bzip2 = require('bzip2')
@@ -38639,7 +38671,7 @@ module.exports = function loadOsmFile (url, callback) {
     return
   }
 
-  const req = new window.XMLHttpRequest()
+  const req = new global.XMLHttpRequest()
 
   req.onreadystatechange = function () {
     if (req.readyState === 4) {
@@ -38674,7 +38706,7 @@ module.exports = function loadOsmFile (url, callback) {
     if (typeof location === 'undefined') {
       url = 'https:' + url
     } else {
-      url = window.location.protocol + url
+      url = global.location.protocol + url
     }
   }
 
@@ -38687,6 +38719,7 @@ module.exports = function loadOsmFile (url, callback) {
   req.send()
 }
 
+}).call(this)}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
 },{"./convertFromXML":247,"bzip2":78,"fs":77,"xmldom":275}],256:[function(require,module,exports){
 const defines = require('./defines')
 
@@ -54891,6 +54924,12 @@ class OverpassLayer {
 
     this.map.createPane('hover')
     this.map.getPane('hover').style.zIndex = 499
+  }
+
+  hideAll (force) {
+    for (const k in this.subLayers) {
+      this.subLayers[k].hideAll(force)
+    }
   }
 
   remove () {
