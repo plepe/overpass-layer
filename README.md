@@ -2,6 +2,7 @@
 Show a [Leaflet](https://leafletjs.com) layer using OpenStreetMap data from [Overpass API](https://overpass-api.de/) via [overpass-frontend](https://github.com/plepe/overpass-frontend).
 
 Check the [Demos](http://xover.mud.at/~skunk/overpass-layer/)
+and how to [set them up](./INSTALL.md).
 
 # Usage
 ```js
