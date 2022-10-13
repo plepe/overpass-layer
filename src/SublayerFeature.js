@@ -1,3 +1,4 @@
+/* global L:false */
 const styleToLeaflet = require('./styleToLeaflet')
 const pointOnFeature = require('./pointOnFeature')
 const strToStyle = require('./strToStyle')
@@ -239,14 +240,11 @@ class SublayerFeature {
   }
 
   evaluate () {
-    let k
-    const ob = this.object
-
     const twigData = this.twigData()
 
     global.currentMapFeature = this
     const objectData = {}
-    for (k in this.sublayer.options.feature) {
+    for (const k in this.sublayer.options.feature) {
       if (typeof this.sublayer.options.feature[k] === 'function') {
         objectData[k] = this.sublayer.options.feature[k](twigData)
       } else {
@@ -256,7 +254,7 @@ class SublayerFeature {
     delete global.currentMapFeature
 
     const styleIds = []
-    for (k in objectData) {
+    for (const k in objectData) {
       const m = k.match(/^style(|:(.*))$/)
       if (m) {
         const style = objectData[k]
@@ -377,7 +375,7 @@ class SublayerFeature {
     }
 
     if (this.sublayer.master.onDisappear) {
-      this.sublayer.master.onDisappear(data)
+      this.sublayer.master.onDisappear(this)
     }
 
     this.object.off('update', this.sublayer.scheduleReprocess.bind(this.sublayer, this.id))

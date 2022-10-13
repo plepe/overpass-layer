@@ -1,5 +1,4 @@
-/* global L */
-
+/* eslint-disable new-cap */
 const ee = require('event-emitter')
 const OverpassFrontend = require('overpass-frontend')
 const nearestPointOnGeometry = require('nearest-point-on-geometry')
