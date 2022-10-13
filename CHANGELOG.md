@@ -1,3 +1,8 @@
+Version 3.2.0, 2022-10-13
+=========================
+* Move code from Sublayer.js to SublayerFeature.js
+* method SublayerFeature.recalc() initiates a re-calc
+
 Version 3.1.0, 2021-12-31
 =========================
 * Set custom bounds (as GeoJSON polygon / multipolygon) either with the option `bounds` or the function `setBounds()`
