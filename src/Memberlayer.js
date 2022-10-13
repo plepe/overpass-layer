@@ -1,10 +1,12 @@
 const Sublayer = require('./Sublayer')
+const MemberFeature = require('./MemberFeature')
 
 class Memberlayer extends Sublayer {
   constructor (master, options) {
     super(master, options)
 
     this.masterlayer = this.master.mainlayer
+    this.featureClass = MemberFeature
 
     this.masterlayer.on('add', this.featureOnMainModified.bind(this))
     this.masterlayer.on('remove', this.featureOnMainModified.bind(this))
@@ -29,39 +31,6 @@ class Memberlayer extends Sublayer {
         this.scheduleReprocess(member.id)
       }
     })
-  }
-
-  twigData (ob, data) {
-    const result = super.twigData(ob, data)
-
-    for (const k in this.masterlayer.visibleFeatures) {
-      const feature = this.masterlayer.visibleFeatures[k]
-      if (feature.object.members) {
-        feature.object.members.forEach((member, sequence) => {
-          if (member.id === ob.id) {
-            if (!('masters' in result)) {
-              result.masters = []
-            }
-
-            result.masters.push({
-              id: feature.id,
-              type: feature.object.type,
-              osm_id: feature.object.osm_id,
-              tags: feature.object.tags,
-              meta: feature.object.meta,
-              role: member.role,
-              dir: member.dir,
-              connectedPrev: member.connectedPrev,
-              connectedNext: member.connectedNext,
-              flags: feature.flags,
-              sequence
-            })
-          }
-        })
-      }
-    }
-
-    return result
   }
 }
 
