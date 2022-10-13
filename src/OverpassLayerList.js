@@ -152,12 +152,10 @@ class OverpassLayerList {
     }
 
     // CONTENT
-    if (div.className === 'content') {
-      const html = ob.layouts[this.options.prefix] || ob.layouts.list || ''
-      if (div.currentHTML !== html) {
-        div.innerHTML = html
-        div.currentHTML = html
-      }
+    const html = ob.layouts[this.options.prefix] || ob.layouts.list || ''
+    if (div.currentHTML !== html) {
+      div.innerHTML = html
+      div.currentHTML = html
     }
 
     ob.sublayer.updateAssets(div, ob.data)
