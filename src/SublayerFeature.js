@@ -244,6 +244,7 @@ class SublayerFeature {
 
     const twigData = this.twigData()
 
+    global.currentMapFeature = this
     const objectData = {}
     for (k in this.sublayer.options.feature) {
       if (typeof this.sublayer.options.feature[k] === 'function') {
@@ -252,6 +253,7 @@ class SublayerFeature {
         objectData[k] = this.sublayer.options.feature[k]
       }
     }
+    delete global.currentMapFeature
 
     const styleIds = []
     for (k in objectData) {
