@@ -384,6 +384,10 @@ class SublayerFeature {
 
     this.isShown = false
   }
+
+  recalc () {
+    this.sublayer.scheduleReprocess(this.id)
+  }
 }
 
 module.exports = SublayerFeature
