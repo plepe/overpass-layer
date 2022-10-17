@@ -55862,6 +55862,14 @@ class Sublayer {
     // no point found? use normal object popup open then ...
     ob.feature.openPopup()
   }
+
+  /**
+   * evaluate a fake object
+   */
+  evaluate (ob) {
+    const feature = new SublayerFeature(ob, this)
+    return feature.evaluate()
+  }
 }
 
 ee(Sublayer.prototype)
