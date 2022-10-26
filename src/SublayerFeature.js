@@ -240,13 +240,13 @@ class SublayerFeature {
   }
 
   evaluate () {
-    const twigData = this.twigData()
+    this.twigData = this.compileTwigData()
 
     global.currentMapFeature = this
     const objectData = {}
     for (const k in this.sublayer.options.feature) {
       if (typeof this.sublayer.options.feature[k] === 'function') {
-        objectData[k] = this.sublayer.options.feature[k](twigData)
+        objectData[k] = this.sublayer.options.feature[k](this.twigData)
       } else {
         objectData[k] = this.sublayer.options.feature[k]
       }
@@ -292,7 +292,7 @@ class SublayerFeature {
     return objectData
   }
 
-  twigData () {
+  compileTwigData () {
     const ob = this.object
 
     const result = {

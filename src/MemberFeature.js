@@ -1,9 +1,9 @@
 const SublayerFeature = require('./SublayerFeature')
 
 class MemberFeature extends SublayerFeature {
-  twigData () {
+  compileTwigData () {
     const ob = this.object
-    const result = super.twigData()
+    const result = super.compileTwigData()
 
     for (const k in this.sublayer.masterlayer.visibleFeatures) {
       const feature = this.sublayer.masterlayer.visibleFeatures[k]
