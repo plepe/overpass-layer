@@ -38919,7 +38919,7 @@ function parse (def, rek = 0) {
         throw new Error("Can't parse query, expected type of object (e.g. 'node'): " + def)
       }
     } else if (mode === 1) {
-      m = def.match(/^\s*\);?/)
+      m = def.match(/^\s*\)\s*;?\s*/)
       if (m) {
         def = def.slice(m[0].length)
         return [rek === 0 && script.length === 1 ? script[0] : script, def]
@@ -58198,9 +58198,9 @@ module.exports = DecoratorPattern
 const SublayerFeature = require('./SublayerFeature')
 
 class MemberFeature extends SublayerFeature {
-  twigData () {
+  compileTwigData () {
     const ob = this.object
-    const result = super.twigData()
+    const result = super.compileTwigData()
 
     for (const k in this.sublayer.masterlayer.visibleFeatures) {
       const feature = this.sublayer.masterlayer.visibleFeatures[k]
@@ -59581,13 +59581,13 @@ class SublayerFeature {
   }
 
   evaluate () {
-    const twigData = this.twigData()
+    this.twigData = this.compileTwigData()
 
     global.currentMapFeature = this
     const objectData = {}
     for (const k in this.sublayer.options.feature) {
       if (typeof this.sublayer.options.feature[k] === 'function') {
-        objectData[k] = this.sublayer.options.feature[k](twigData)
+        objectData[k] = this.sublayer.options.feature[k](this.twigData)
       } else {
         objectData[k] = this.sublayer.options.feature[k]
       }
@@ -59633,7 +59633,7 @@ class SublayerFeature {
     return objectData
   }
 
-  twigData () {
+  compileTwigData () {
     const ob = this.object
 
     const result = {
