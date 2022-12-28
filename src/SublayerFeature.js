@@ -169,8 +169,8 @@ class SublayerFeature {
     }
 
     if (this.isShown) {
+      this.feature.addTo(this.sublayer.map)
       for (k in this.features) {
-        this.feature.addTo(this.sublayer.map)
         if (objectData.styles && objectData.styles.indexOf(k) !== -1 && this.styles && this.styles.indexOf(k) === -1) {
           this.features[k].addTo(this.sublayer.map)
         }
