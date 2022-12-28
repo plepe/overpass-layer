@@ -136,7 +136,7 @@ class OverpassLayerList {
     const listExclude = isTrue(ob.data[this.options.prefix + 'Exclude'])
 
     if (!(ob.id in this.items) && !listExclude) {
-      return
+      return this.addObject(ob)
     }
 
     if (listExclude) {
