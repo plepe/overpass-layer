@@ -2,6 +2,7 @@
 const styleToLeaflet = require('./styleToLeaflet')
 const pointOnFeature = require('./pointOnFeature')
 const strToStyle = require('./strToStyle')
+const isTrue = require('./isTrue')
 
 class SublayerFeature {
   constructor (object, sublayer) {
@@ -153,6 +154,12 @@ class SublayerFeature {
       const icon = L.divIcon(objectData.marker)
 
       if (this.featureMarker) {
+        if (isTrue(objectData.exclude)) {
+          this.map.removeLayer(this.featureMarker)
+        } else {
+          this.featureMarker.addTo(this.map)
+        }
+
         this.featureMarker.setIcon(icon)
         if (this.featureMarker._icon) {
           this.sublayer.updateAssets(this.featureMarker._icon)
@@ -166,6 +173,10 @@ class SublayerFeature {
           this.featureMarker = L.marker(this.pointOnFeature, { icon: icon })
         }
       }
+    }
+
+    if (isTrue(objectData.exclude)) {
+      objectData.styles = []
     }
 
     if (this.isShown) {
@@ -351,7 +362,7 @@ class SublayerFeature {
       }
     }
 
-    if (this.featureMarker) {
+    if (this.featureMarker && !isTrue(this.data.exclude)) {
       this.featureMarker.addTo(this.map)
       this.sublayer.updateAssets(this.featureMarker._icon)
     }
