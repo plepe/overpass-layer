@@ -2,6 +2,7 @@
 const styleToLeaflet = require('./styleToLeaflet')
 const pointOnFeature = require('./pointOnFeature')
 const strToStyle = require('./strToStyle')
+const isTrue = require('./isTrue')
 
 class SublayerFeature {
   constructor (object, sublayer) {
@@ -50,6 +51,7 @@ class SublayerFeature {
         weight: 0,
         opacity: 0,
         fillOpacity: 0,
+        interactive: false,
         radius: 0
       }, leafletFeatureOptions))
     }
@@ -148,11 +150,19 @@ class SublayerFeature {
       objectData.marker.html += '<div class="sign" style="margin-left: ' + x + 'px; margin-top: ' + y + 'px;">' + objectData.markerSign + '</div>'
     }
 
+    const exclude = isTrue(objectData.exclude)
+
     if (objectData.marker.html) {
       objectData.marker.className = 'overpass-layer-icon'
       const icon = L.divIcon(objectData.marker)
 
       if (this.featureMarker) {
+        if (exclude) {
+          this.map.removeLayer(this.featureMarker)
+        } else {
+          this.featureMarker.addTo(this.map)
+        }
+
         this.featureMarker.setIcon(icon)
         if (this.featureMarker._icon) {
           this.sublayer.updateAssets(this.featureMarker._icon)
@@ -168,9 +178,13 @@ class SublayerFeature {
       }
     }
 
+    if (exclude) {
+      objectData.styles = []
+    }
+
     if (this.isShown) {
+      this.feature.addTo(this.sublayer.map)
       for (k in this.features) {
-        this.feature.addTo(this.sublayer.map)
         if (objectData.styles && objectData.styles.indexOf(k) !== -1 && this.styles && this.styles.indexOf(k) === -1) {
           this.features[k].addTo(this.sublayer.map)
         }
@@ -351,7 +365,7 @@ class SublayerFeature {
       }
     }
 
-    if (this.featureMarker) {
+    if (this.featureMarker && !isTrue(this.data.exclude)) {
       this.featureMarker.addTo(this.map)
       this.sublayer.updateAssets(this.featureMarker._icon)
     }

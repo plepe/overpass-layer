@@ -66,7 +66,10 @@ class OverpassLayerList {
   }
 
   addObject (ob) {
-    if (isTrue(ob.data[this.options.prefix + 'Exclude'])) {
+    const listExclude = isTrue(ob.data[this.options.prefix + 'Exclude']) ||
+      (!(this.options.prefix + 'Exclude' in ob.data) && isTrue(ob.data.exclude))
+
+    if (listExclude) {
       return
     }
 
@@ -133,10 +136,11 @@ class OverpassLayerList {
   }
 
   updateObject (ob) {
-    const listExclude = isTrue(ob.data[this.options.prefix + 'Exclude'])
+    const listExclude = isTrue(ob.data[this.options.prefix + 'Exclude']) ||
+      (!(this.options.prefix + 'Exclude' in ob.data) && isTrue(ob.data.exclude))
 
     if (!(ob.id in this.items) && !listExclude) {
-      return
+      return this.addObject(ob)
     }
 
     if (listExclude) {

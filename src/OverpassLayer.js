@@ -156,6 +156,7 @@ class OverpassLayer {
   setFilter (filter) {
     this.filter = filter
     this.check_update_map()
+    this.recalc()
   }
 
   calcGlobalTwigData () {
@@ -288,6 +289,10 @@ class OverpassLayer {
   }
 
   recalc () {
+    if (!this.map || !this.map._loaded) {
+      return
+    }
+
     this.calcGlobalTwigData()
     for (const k in this.subLayers) {
       this.subLayers[k].recalc()
