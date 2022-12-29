@@ -51,6 +51,7 @@ class SublayerFeature {
         weight: 0,
         opacity: 0,
         fillOpacity: 0,
+        interactive: false,
         radius: 0
       }, leafletFeatureOptions))
     }
