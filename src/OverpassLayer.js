@@ -288,6 +288,10 @@ class OverpassLayer {
   }
 
   recalc () {
+    if (!this.map || !this.map._loaded) {
+      return
+    }
+
     this.calcGlobalTwigData()
     for (const k in this.subLayers) {
       this.subLayers[k].recalc()
