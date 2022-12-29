@@ -38284,7 +38284,7 @@ class BBoxQueryCache {
    */
   check (bbox, cacheDescriptors = null) {
     if (cacheDescriptors && cacheDescriptors.invalid) {
-      return false
+      return true
     }
 
     if (cacheDescriptors && cacheDescriptors.ids) {
@@ -38747,6 +38747,7 @@ module.exports = class EvaluatorValue extends EvaluatorPart {
 }
 
 },{"./EvaluatorPart":217}],219:[function(require,module,exports){
+const turf = require('./turf')
 const strsearch2regexp = require('strsearch2regexp')
 const filterJoin = require('./filterJoin')
 const OverpassFrontend = require('./defines')
@@ -38921,8 +38922,12 @@ function parse (def, rek = 0) {
     } else if (mode === 1) {
       m = def.match(/^\s*\)\s*;?\s*/)
       if (m) {
-        def = def.slice(m[0].length)
-        return [rek === 0 && script.length === 1 ? script[0] : script, def]
+        if (rek === 0) {
+          return [script.length === 1 ? script[0] : script, def]
+        } else {
+          def = def.slice(m[0].length)
+          return [script, def]
+        }
       } else {
         mode = 0
       }
@@ -38938,6 +38943,7 @@ function parse (def, rek = 0) {
         def = def.slice(m[0].length)
         script.push(current)
         current = []
+        notExists = null
         mode = 1
       } else if (!m && def.match(/^\s*$/)) {
         if (current.length) {
@@ -38981,6 +38987,7 @@ function parse (def, rek = 0) {
         }
         current.push(entry)
         def = def.slice(m[0].length)
+        notExists = null
         mode = 10
       } else if (m) {
         if (notExists) {
@@ -39065,7 +39072,11 @@ function parse (def, rek = 0) {
 
 function check (def) {
   if (typeof def === 'string') {
-    return parse(def)[0]
+    const result = parse(def)
+    if (result[1].trim()) {
+      throw new Error("Can't parse query, trailing characters: " + result[1])
+    }
+    return result[0]
   } else if (def === null) {
     return
   } else if (typeof def === 'object' && def.constructor.name === 'Filter') {
@@ -39280,14 +39291,16 @@ class Filter {
 
       const r = {
         $and:
-        def.and.map(part => {
-          const r = this.toLokijs(options, part)
-          if (r.needMatch) {
-            needMatch = true
-          }
-          delete r.needMatch
-          return r
-        })
+        def.and
+          .map(part => {
+            const r = this.toLokijs(options, part)
+            if (r.needMatch) {
+              needMatch = true
+            }
+            delete r.needMatch
+            return r
+          })
+          .filter(part => Object.keys(part).length)
       }
 
       if (needMatch) {
@@ -39504,6 +39517,22 @@ class Filter {
       }
     }
 
+    if (b.invalid) {
+      r.invalid = true
+    }
+
+    if (b.bounds && a.bounds) {
+      const mergeBounds = turf.intersect(a.bounds, b.bounds)
+      if (mergeBounds) {
+        r.bounds = mergeBounds.geometry
+      } else {
+        r.invalid = true
+        delete r.bounds
+      }
+    } else if (b.bounds) {
+      r.bounds = b.bounds
+    }
+
     return r
   }
 
@@ -39580,7 +39609,7 @@ class Filter {
 
 module.exports = Filter
 
-},{"./defines":238,"./filterJoin":259,"./parseParentheses":265,"./parseString":266,"./qlFunctions/__index__":267,"./qlFunctions/qlFunction":275,"strsearch2regexp":285}],220:[function(require,module,exports){
+},{"./defines":238,"./filterJoin":259,"./parseParentheses":265,"./parseString":266,"./qlFunctions/__index__":267,"./qlFunctions/qlFunction":275,"./turf":280,"strsearch2regexp":285}],220:[function(require,module,exports){
 (function (global){(function (){
 const ee = require('event-emitter')
 const async = require('async')
@@ -39659,10 +39688,12 @@ const boundsIsFullWorld = require('./boundsIsFullWorld')
  * A connection to an Overpass API Server or an OpenStreetMap file
  * @param {string} url The URL of the API, e.g. 'https://overpass-api.de/api/'. If you omit the protocol, it will use the protocol which is in use for the current page (or https: on nodejs): '//overpass-api.de/api/'. If the url ends in .json, .osm or .osm.bz2 it will load this OpenStreetMap file and use the data from there.
  * @param {object} options Options
+ * @param {number} [options.count=0] Only return a maximum of count items. If count=0, no limit is used (default).
  * @param {number} [options.effortPerRequest=1000] To avoid huge requests to the Overpass API, the request will be split into smaller chunks. This value defines, how many objects will be requested per API call (for get() calls see effortNode, effortWay, effortRelation, e.g. up to 1000 nodes or 250 ways or (500 nodes and 125 ways) at default values; for BBoxQuery() calls the setting will be divided by 4).
  * @param {number} [options.effortNode=1] The effort for request a node. Default: 1.
  * @param {number} [options.effortWay=4] The effort for request a way.
  * @param {number} [options.effortRelation=64] The effort for request a relation.
+ * @param {number} [options.effortBBoxFeature=4] The effort for requesting an item in a BboxQuery.
  * @param {number} [options.timeGap=10] A short time gap between two requests to the Overpass API (milliseconds).
  * @param {number} [options.timeGap429=500] A longer time gap after a 429 response from Overpass API (milliseconds).
  * @param {number} [options.timeGap429Exp=3] If we keep getting 429 responses, increase the time exponentially with the specified factor (e.g. 2: 500ms, 1000ms, 2000ms, ...; 3: 500ms, 1500ms, 4500ms, ...)
@@ -39677,6 +39708,7 @@ class OverpassFrontend {
       effortNode: 1,
       effortWay: 4,
       effortRelation: 64,
+      effortBBoxFeature: 4,
       timeGap: 10,
       timeGap429: 500,
       timeGap429Exp: 3,
@@ -40145,6 +40177,7 @@ class OverpassFrontend {
    * @param {string} query - Query for requesting objects from Overpass API, e.g. "node[amenity=restaurant]" or "(node[amenity];way[highway~'^(primary|secondary)$];)". See <a href='Filter.html'>Filter</a> for details.
    * @param {BoundingBox|GeoJSON} bounds - Boundaries where to load objects, can be a BoundingBox object, Leaflet Bounds object (e.g. from map.getBounds()) or a GeoJSON Polygon/Multipolygon.
    * @param {object} options
+   * @param {number} [options.limit=0] - Limit count of results. If 0, no limit will be used.
    * @param {number} [options.priority=0] - Priority for loading these objects. The lower the sooner they will be requested.
    * @param {boolean|string} [options.sort=false] - If false, it will be called as soon as the features are availabe (e.g. immediately when cached).
    * @param {bit_array} [options.properties] Which properties of the features should be downloaded: OVERPASS_ID_ONLY, OVERPASS_BBOX, OVERPASS_TAGS, OVERPASS_GEOM, OVERPASS_META. Combine by binary OR: ``OVERPASS_ID | OVERPASS_BBOX``. Default: OverpassFrontend.TAGS | OverpassFrontend.MEMBERS | OverpassFrontend.BBOX
@@ -41711,6 +41744,7 @@ const SortedCallbacks = require('./SortedCallbacks')
  * @property {object[]} parts - An entry for each part (separated by the 'out count' separator)
  * @property {int} parts[].properties - The properties which each returned map feature has set (TAGS, BBOX, ...)
  * @property {int} effort - Supposed "effort" of this query
+ * @property {int} count - Count of discovered items
  * @property {Request} request - The request this compiled query belongs to
  */
 
@@ -41737,6 +41771,7 @@ class Request {
     this.featureCallback = callbacks.next.bind(callbacks)
     this.finalCallback = callbacks.final.bind(callbacks)
 
+    this.count = 0
     this.callCount = 0
     this.timestampPreprocess = 0
   }
@@ -41825,6 +41860,7 @@ class Request {
    * @param {int} partIndex - Which part of the subRequest is being received
    */
   receiveObject (ob) {
+    this.count++
   }
 
   /**
@@ -41928,6 +41964,11 @@ class RequestBBox extends Request {
     }
 
     for (let i = 0; i < items.length; i++) {
+      if (this.options.limit && this.count >= this.options.limit) {
+        this.loadFinish = true
+        return
+      }
+
       const id = items[i].id
 
       if (!(id in this.overpass.cacheElements)) {
@@ -41950,10 +41991,13 @@ class RequestBBox extends Request {
       }
 
       if ((this.options.properties & ob.properties) === this.options.properties) {
-        this.doneFeatures[id] = ob
-
+        this.receiveObject(ob)
         this.featureCallback(null, ob)
       }
+    }
+
+    if (this.options.limit && this.count >= this.options.limit) {
+      this.loadFinish = true
     }
   }
 
@@ -41991,7 +42035,14 @@ class RequestBBox extends Request {
       return { minEffort: 0, maxEffort: 0 }
     }
 
-    return { minEffort: this.options.minEffort, maxEffort: null }
+    let minEffort = this.options.minEffort
+    let maxEffort = null
+    if (this.options.limit) {
+      maxEffort = (this.options.limit - this.count) * this.overpass.options.effortBBoxFeature
+      minEffort = Math.min(minEffort, maxEffort)
+    }
+
+    return { minEffort, maxEffort }
   }
 
   /**
@@ -42009,7 +42060,11 @@ class RequestBBox extends Request {
       }
     }
 
-    const effortAvailable = Math.max(context.maxEffort, this.options.minEffort)
+    const efforts = this.minMaxEffort()
+    let effortAvailable = Math.max(context.maxEffort, efforts.minEffort)
+    if (efforts.maxEffort) {
+      effortAvailable = Math.min(effortAvailable, efforts.maxEffort)
+    }
 
     // if the context already has a bbox and it differs from this, we can't add
     // ours
@@ -42035,7 +42090,7 @@ class RequestBBox extends Request {
     }
 
     if (!('split' in this.options)) {
-      this.options.effortSplit = Math.ceil(effortAvailable / 4)
+      this.options.effortSplit = Math.ceil(effortAvailable / this.overpass.options.effortBBoxFeature)
     }
     query += '.result out ' + overpassOutOptions(this.options) + ';'
 
@@ -42050,7 +42105,7 @@ class RequestBBox extends Request {
           featureCallback: this.featureCallback
         }
       ],
-      effort: this.options.split ? this.options.split * 4 : effortAvailable // TODO: configure bbox effort
+      effort: this.options.split ? this.options.split * this.overpass.options.effortBBoxFeature : effortAvailable
     }
     return subRequest
   }
@@ -42062,6 +42117,7 @@ class RequestBBox extends Request {
    * @param {int} partIndex - Which part of the subRequest is being received
    */
   receiveObject (ob) {
+    super.receiveObject(ob)
     this.doneFeatures[ob.id] = ob
   }
 
@@ -42087,6 +42143,10 @@ class RequestBBox extends Request {
       this.cacheDescriptors && this.cacheDescriptors.forEach(cache => {
         cache.cache.add(this.bbox, cache.cacheDescriptors)
       })
+    }
+
+    if (this.options.limit && this.options.limit <= this.count) {
+      this.loadFinish = true
     }
   }
 
@@ -42120,12 +42180,13 @@ const keys = require('lodash/keys')
 const BoundingBox = require('boundingbox')
 const SortedCallbacks = require('./SortedCallbacks')
 const isGeoJSON = require('./isGeoJSON')
+const Request = require('./Request')
 
-class RequestBBoxMembers {
+class RequestBBoxMembers extends Request {
   constructor (request) {
+    super(request.overpass, {})
     this.master = request
     this.options = this.master.options
-    this.overpass = this.master.overpass
 
     this.options.properties |= defines.MEMBERS
     this.options.memberProperties = this.options.memberProperties || defines.DEFAULT
@@ -42201,8 +42262,7 @@ class RequestBBoxMembers {
         }
 
         if ((this.options.memberProperties & ob.properties) === this.options.memberProperties) {
-          this.doneFeatures[id] = ob
-
+          this.receiveObject(ob)
           this.options.memberCallback(null, ob)
         }
       }
@@ -42284,6 +42344,7 @@ class RequestBBoxMembers {
   }
 
   receiveObject (ob) {
+    super.receiveObject(ob)
     this.doneFeatures[ob.id] = ob
   }
 
@@ -42328,7 +42389,7 @@ module.exports = function (request) {
   return new RequestBBoxMembers(request)
 }
 
-},{"./SortedCallbacks":231,"./defines":238,"./isGeoJSON":262,"./overpassOutOptions":264,"boundingbox":54,"lodash/forEach":184,"lodash/keys":198,"lodash/map":199}],228:[function(require,module,exports){
+},{"./Request":225,"./SortedCallbacks":231,"./defines":238,"./isGeoJSON":262,"./overpassOutOptions":264,"boundingbox":54,"lodash/forEach":184,"lodash/keys":198,"lodash/map":199}],228:[function(require,module,exports){
 const Request = require('./Request')
 const defines = require('./defines')
 const BoundingBox = require('boundingbox')
@@ -42461,6 +42522,7 @@ class RequestGet extends Request {
 
         // if sort is set in options maybe defer calling featureCallback
         if (ready) {
+          this.receiveObject(ob)
           this.featureCallback(null, ob, i)
           this.ids[i] = null
           continue
@@ -42648,12 +42710,13 @@ const map = require('lodash/map')
 const keys = require('lodash/keys')
 const BoundingBox = require('boundingbox')
 const isGeoJSON = require('./isGeoJSON')
+const Request = require('./Request')
 
-class RequestGetMembers {
+class RequestGetMembers extends Request {
   constructor (request) {
+    super(request.overpass, {})
     this.master = request
     this.options = this.master.options
-    this.overpass = this.master.overpass
 
     this.options.properties |= defines.MEMBERS
     this.options.memberProperties = this.options.memberProperties || defines.DEFAULT
@@ -42739,8 +42802,7 @@ class RequestGetMembers {
         }
 
         if ((this.options.memberProperties & ob.properties) === this.options.memberProperties) {
-          this.doneFeatures[id] = ob
-
+          this.receiveObject(ob)
           this.options.memberCallback(null, ob)
         }
       }
@@ -42830,6 +42892,7 @@ class RequestGetMembers {
   }
 
   receiveObject (ob) {
+    super.receiveObject(ob)
     this.doneFeatures[ob.id] = ob
   }
 
@@ -42874,7 +42937,7 @@ module.exports = function (request) {
   return new RequestGetMembers(request)
 }
 
-},{"./defines":238,"./isGeoJSON":262,"./overpassOutOptions":264,"boundingbox":54,"lodash/forEach":184,"lodash/keys":198,"lodash/map":199}],230:[function(require,module,exports){
+},{"./Request":225,"./defines":238,"./isGeoJSON":262,"./overpassOutOptions":264,"boundingbox":54,"lodash/forEach":184,"lodash/keys":198,"lodash/map":199}],230:[function(require,module,exports){
 const Request = require('./Request')
 
 /**
@@ -45002,7 +45065,7 @@ module.exports = {
   booleanWithin: require('@turf/boolean-within').default,
   buffer: require('@turf/buffer').default,
   distance: require('@turf/distance').default,
-  difference: require('@turf/difference'),
+  difference: require('@turf/difference').default,
   intersect: require('@turf/intersect').default,
   length: require('@turf/length').default,
   union: require('@turf/union').default
@@ -58436,6 +58499,7 @@ class OverpassLayer {
   setFilter (filter) {
     this.filter = filter
     this.check_update_map()
+    this.recalc()
   }
 
   calcGlobalTwigData () {
@@ -58568,6 +58632,10 @@ class OverpassLayer {
   }
 
   recalc () {
+    if (!this.map || !this.map._loaded) {
+      return
+    }
+
     this.calcGlobalTwigData()
     for (const k in this.subLayers) {
       this.subLayers[k].recalc()
@@ -58724,7 +58792,10 @@ class OverpassLayerList {
   }
 
   addObject (ob) {
-    if (isTrue(ob.data[this.options.prefix + 'Exclude'])) {
+    const listExclude = isTrue(ob.data[this.options.prefix + 'Exclude']) ||
+      (!(this.options.prefix + 'Exclude' in ob.data) && isTrue(ob.data.exclude))
+
+    if (listExclude) {
       return
     }
 
@@ -58791,10 +58862,11 @@ class OverpassLayerList {
   }
 
   updateObject (ob) {
-    const listExclude = isTrue(ob.data[this.options.prefix + 'Exclude'])
+    const listExclude = isTrue(ob.data[this.options.prefix + 'Exclude']) ||
+      (!(this.options.prefix + 'Exclude' in ob.data) && isTrue(ob.data.exclude))
 
     if (!(ob.id in this.items) && !listExclude) {
-      return
+      return this.addObject(ob)
     }
 
     if (listExclude) {
@@ -59343,6 +59415,7 @@ module.exports = Sublayer
 const styleToLeaflet = require('./styleToLeaflet')
 const pointOnFeature = require('./pointOnFeature')
 const strToStyle = require('./strToStyle')
+const isTrue = require('./isTrue')
 
 class SublayerFeature {
   constructor (object, sublayer) {
@@ -59391,6 +59464,7 @@ class SublayerFeature {
         weight: 0,
         opacity: 0,
         fillOpacity: 0,
+        interactive: false,
         radius: 0
       }, leafletFeatureOptions))
     }
@@ -59489,11 +59563,19 @@ class SublayerFeature {
       objectData.marker.html += '<div class="sign" style="margin-left: ' + x + 'px; margin-top: ' + y + 'px;">' + objectData.markerSign + '</div>'
     }
 
+    const exclude = isTrue(objectData.exclude)
+
     if (objectData.marker.html) {
       objectData.marker.className = 'overpass-layer-icon'
       const icon = L.divIcon(objectData.marker)
 
       if (this.featureMarker) {
+        if (exclude) {
+          this.map.removeLayer(this.featureMarker)
+        } else {
+          this.featureMarker.addTo(this.map)
+        }
+
         this.featureMarker.setIcon(icon)
         if (this.featureMarker._icon) {
           this.sublayer.updateAssets(this.featureMarker._icon)
@@ -59509,9 +59591,13 @@ class SublayerFeature {
       }
     }
 
+    if (exclude) {
+      objectData.styles = []
+    }
+
     if (this.isShown) {
+      this.feature.addTo(this.sublayer.map)
       for (k in this.features) {
-        this.feature.addTo(this.sublayer.map)
         if (objectData.styles && objectData.styles.indexOf(k) !== -1 && this.styles && this.styles.indexOf(k) === -1) {
           this.features[k].addTo(this.sublayer.map)
         }
@@ -59692,7 +59778,7 @@ class SublayerFeature {
       }
     }
 
-    if (this.featureMarker) {
+    if (this.featureMarker && !isTrue(this.data.exclude)) {
       this.featureMarker.addTo(this.map)
       this.sublayer.updateAssets(this.featureMarker._icon)
     }
@@ -59732,7 +59818,7 @@ class SublayerFeature {
 module.exports = SublayerFeature
 
 }).call(this)}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./pointOnFeature":308,"./strToStyle":309,"./styleToLeaflet":310}],304:[function(require,module,exports){
+},{"./isTrue":306,"./pointOnFeature":308,"./strToStyle":309,"./styleToLeaflet":310}],304:[function(require,module,exports){
 const compileTemplate = require('./compileTemplate')
 
 function compileFeature (feature, twig, options = {}) {
