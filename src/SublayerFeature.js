@@ -150,12 +150,14 @@ class SublayerFeature {
       objectData.marker.html += '<div class="sign" style="margin-left: ' + x + 'px; margin-top: ' + y + 'px;">' + objectData.markerSign + '</div>'
     }
 
+    const exclude = isTrue(objectData.exclude)
+
     if (objectData.marker.html) {
       objectData.marker.className = 'overpass-layer-icon'
       const icon = L.divIcon(objectData.marker)
 
       if (this.featureMarker) {
-        if (isTrue(objectData.exclude)) {
+        if (exclude) {
           this.map.removeLayer(this.featureMarker)
         } else {
           this.featureMarker.addTo(this.map)
@@ -176,7 +178,7 @@ class SublayerFeature {
       }
     }
 
-    if (isTrue(objectData.exclude)) {
+    if (exclude) {
       objectData.styles = []
     }
 
