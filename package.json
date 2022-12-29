@@ -12,7 +12,7 @@
     "event-emitter": "^0.3.5",
     "html-escape": "^2.0.0",
     "nearest-point-on-geometry": "^1.0.1",
-    "overpass-frontend": "^3.0.0",
+    "overpass-frontend": "^3.1.1",
     "twig": "^1.15.4"
   },
   "devDependencies": {
@@ -21,7 +21,7 @@
     "leaflet": "~1.7.1",
     "leaflet-polylinedecorator": "git+https://github.com/plepe/Leaflet.PolylineDecorator.git",
     "leaflet-polylineoffset": "^1.1.1",
-    "standard": "^16.0.4",
+    "standard": "^16.0.3",
     "watchify": "^4.0.0"
   },
   "main": "index.js",
