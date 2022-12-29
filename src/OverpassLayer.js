@@ -117,6 +117,12 @@ class OverpassLayer {
     this.map.getPane('hover').style.zIndex = 499
   }
 
+  hideAll (force) {
+    for (const k in this.subLayers) {
+      this.subLayers[k].hideAll(force)
+    }
+  }
+
   remove () {
     for (const k in this.subLayers) {
       this.subLayers[k].hideAll(true)
@@ -150,6 +156,7 @@ class OverpassLayer {
   setFilter (filter) {
     this.filter = filter
     this.check_update_map()
+    this.recalc()
   }
 
   calcGlobalTwigData () {
@@ -282,6 +289,10 @@ class OverpassLayer {
   }
 
   recalc () {
+    if (!this.map || !this.map._loaded) {
+      return
+    }
+
     this.calcGlobalTwigData()
     for (const k in this.subLayers) {
       this.subLayers[k].recalc()

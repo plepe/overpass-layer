@@ -58,6 +58,8 @@ Options:
   * markerSign: a HTML string which will be shown within the icon.
   * priority: a numeric value by which the elements in the list will be sorted (lower values first)
   * appUrl: an url for the link of an item in the list, default: '#'.
+  * exclude: if value evaluates to true, will not be shown on the map (and the list)
+  * listExclude: if value evaluates to true, will not be shown in the list (priority over exclude)
 * queryOptions: options for OverpassFrontend.BBoxQuery.
 * styleNoBindPopup: array, list of styles where popup should not bind to. Default: []
 * stylesNoAutoShow: array, list of styles which should not automatically be shown.

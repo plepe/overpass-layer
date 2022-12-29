@@ -1,27 +1,27 @@
 {
   "name": "overpass-layer",
-  "version": "3.1.0",
+  "version": "3.3.1",
   "description": "Show a Leaflet layer using OpenStreetMap data from Overpass API via OverpassFrontend.",
   "dependencies": {
     "@turf/along": "^6.5.0",
     "@turf/intersect": "^6.5.0",
     "@turf/length": "^6.5.0",
     "@turf/point-on-feature": "^5.1.5",
-    "boundingbox": "^1.2.5",
+    "boundingbox": "^1.4.0",
     "browserify-css": "^0.15.0",
     "event-emitter": "^0.3.5",
     "html-escape": "^2.0.0",
     "nearest-point-on-geometry": "^1.0.1",
-    "overpass-frontend": "^2.7.0",
+    "overpass-frontend": "^3.1.1",
     "twig": "^1.15.4"
   },
   "devDependencies": {
     "browserify": "^17.0.0",
-    "http-server": "^0.12.3",
-    "leaflet": "^1.7.1",
+    "http-server": "^14.1.1",
+    "leaflet": "~1.7.1",
     "leaflet-polylinedecorator": "git+https://github.com/plepe/Leaflet.PolylineDecorator.git",
     "leaflet-polylineoffset": "^1.1.1",
-    "standard": "^16.0.4",
+    "standard": "^16.0.3",
     "watchify": "^4.0.0"
   },
   "main": "index.js",

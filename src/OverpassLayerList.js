@@ -66,7 +66,10 @@ class OverpassLayerList {
   }
 
   addObject (ob) {
-    if (isTrue(ob.data[this.options.prefix + 'Exclude'])) {
+    const listExclude = isTrue(ob.data[this.options.prefix + 'Exclude']) ||
+      (!(this.options.prefix + 'Exclude' in ob.data) && isTrue(ob.data.exclude))
+
+    if (listExclude) {
       return
     }
 
@@ -133,10 +136,11 @@ class OverpassLayerList {
   }
 
   updateObject (ob) {
-    const listExclude = isTrue(ob.data[this.options.prefix + 'Exclude'])
+    const listExclude = isTrue(ob.data[this.options.prefix + 'Exclude']) ||
+      (!(this.options.prefix + 'Exclude' in ob.data) && isTrue(ob.data.exclude))
 
     if (!(ob.id in this.items) && !listExclude) {
-      return
+      return this.addObject(ob)
     }
 
     if (listExclude) {
@@ -152,12 +156,10 @@ class OverpassLayerList {
     }
 
     // CONTENT
-    if (div.className === 'content') {
-      const html = ob.layouts[this.options.prefix] || ob.layouts.list || ''
-      if (div.currentHTML !== html) {
-        div.innerHTML = html
-        div.currentHTML = html
-      }
+    const html = ob.layouts[this.options.prefix] || ob.layouts.list || ''
+    if (div.currentHTML !== html) {
+      div.innerHTML = html
+      div.currentHTML = html
     }
 
     ob.sublayer.updateAssets(div, ob.data)
