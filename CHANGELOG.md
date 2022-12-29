@@ -1,3 +1,12 @@
+Version 3.4.0, 2022-12-29
+=========================
+* If value `feature.exclude` evaluates to true, exclude item from the map (and from the list, if `feature.listExclude` is not set).
+* Improved README (thanks to @xeruf)
+
+Version 3.3.0, 2022-10-25
+=========================
+* Now depending on overpass-frontend 3.x
+
 Version 3.2.0, 2022-10-13
 =========================
 * Move code from Sublayer.js to SublayerFeature.js
