@@ -72,6 +72,7 @@ class SublayerFeature {
           this.features[styleId].setText(null)
           this.features[styleId].setText(style.text, {
             repeat: style.textRepeat,
+            center: style.textCenter,
             offset: style.textOffset,
             below: style.textBelow,
             attributes: {
