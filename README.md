@@ -47,8 +47,9 @@ Options:
   * styles: Array of style-id which should be shown. If not set, the value of the parent 'styles' values will be used. Can be a comma-separated string.
   * style: An object or a function or a TwigJS template (string), styling the resulting map feature (see below for a list of available parameters). Style-Id: "default".
     * If an object is used, e.g.: { width: 2, fillColor: 'red' }
+    * A JSON string, e.g. `{"width":2,"fillColor":"red"}`.
     * If a function is used, the function will be passed the OverpassObject object and should return the style as object.
-    * If a TwigJS template is used, the template should create lines with "key: value" (E.g. `color: red\nwidth: 2`). See below for possible patterns.
+    * If a TwigJS template is used, the template should create lines with "key: value" (E.g. `color: red\nwidth: 2`) or a JSON string (e.g. `{"color":"red","width":2}` - if you use the `json_encode` filter, disable autoescape or use the raw filter (e.g. `{{ {"width":2}|json_encode|raw }}`). See below for possible patterns.
   * "style:*": Additional styles with the style-id as suffix (e.g. "style:casing"). (see below for a list of available parameters)
   * title: the title of the feature popup and the object in the list.
   * body: the body of the feature popup.

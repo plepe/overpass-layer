@@ -1,4 +1,10 @@
 function strToStyle (style) {
+  try {
+    return JSON.parse(style)
+  } catch (e) {
+    // not JSON? -> ignore, because it could be line-based
+  }
+
   const str = style.split('\n')
   style = {}
 
