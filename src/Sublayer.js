@@ -61,10 +61,11 @@ class Sublayer {
       const ob = e.popup.object
 
       ob._popupOpen(e)
-      this.updateAssets(e.popup._contentNode)
 
       this.emit('selectObject', ob.object, ob)
       this.master.emit('selectObject', ob.object, ob)
+
+      this.updateAssets(e.popup._contentNode)
     }
   }
 
