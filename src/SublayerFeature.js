@@ -254,6 +254,12 @@ class SublayerFeature {
     this.sublayer.emit('update', this.object, this)
   }
 
+  _popupOpen (e) {
+  }
+
+  _popupClose (e) {
+  }
+
   evaluate () {
     this.twigData = this.compileTwigData()
 
