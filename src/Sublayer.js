@@ -74,7 +74,6 @@ class Sublayer {
       const ob = e.popup.object
 
       ob._popupClose(e)
-      this.updateAssets(e.popup._contentNode)
 
       this.emit('unselectObject', ob.object, ob)
       this.master.emit('unselectObject', ob.object, ob)
