@@ -177,6 +177,16 @@ class Sublayer {
         delete this.visibleFeatures[k]
       }
     }
+
+    this.reorder()
+  }
+
+  reorder () {
+    const allFeatureFeatures = Object.values(this.visibleFeatures)
+      .map(f => Object.values(f.features))
+      .flat()
+      .sort((a, b) => (a.options.zIndex ?? 0) - (b.options.zIndex ?? 0))
+      .forEach(f => f.bringToFront())
   }
 
   hideAll (force) {

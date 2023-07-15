@@ -35,6 +35,9 @@ const transforms = {
   },
   dashOffset: {
     type: 'length'
+  },
+  zIndex: {
+    type: 'float'
   }
 }
 

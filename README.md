@@ -96,6 +96,7 @@ interactive | boolean | true
 pane      | string | 'overlayPane'
 attribution | string | null
 smoothFactor | float | 1.0 | Polyline only
+zIndex | float | 0.0 | Order of features (higher = front)
 
 Types:
 * boolean: true or false. The following values are false: `undefined`, `null`, `false`, "false", 0, "0", "".
