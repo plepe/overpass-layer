@@ -59,6 +59,7 @@ const overpassLayer = new OverpassLayer({
       pane: 'casing',
       color: 'black',
       width: '{{ current.width + 3 }}',
+      fill: false,
       opacity: 1
     },
     // the inner color of the road
@@ -66,6 +67,7 @@ const overpassLayer = new OverpassLayer({
       color: '{{ current.color }}',
       width: '{{ current.width }}',
       zIndex: '{{ current.zIndex }}',
+      fill: false,
       opacity: 1
     },
     markerSymbol: null,
