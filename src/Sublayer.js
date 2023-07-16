@@ -164,6 +164,8 @@ class Sublayer {
 
       this.master.emit('add', ob, data)
       this.emit('add', ob, data)
+
+      this.reorder()
     }
   }
 
