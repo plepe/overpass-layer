@@ -182,6 +182,13 @@ class Sublayer {
   }
 
   reorder () {
+    if (!this._initiateReorder) {
+      this._initiateReorder = global.setTimeout(() => this._reorder(), 0)
+    }
+  }
+
+  _reorder () {
+    delete this._initiateReorder
     const allFeatureFeatures = Object.values(this.visibleFeatures)
       .map(f => Object.values(f.features))
       .flat()
