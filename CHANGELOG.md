@@ -1,3 +1,10 @@
+Version 3.5.0, 2023-07-18
+=========================
+* Improve performance of popups - only update DOM for active popups
+* Add a 'zIndex' parameter to styles
+* Accept JSON as feature.style parameter
+* Text: handle parameter 'textCenter'
+
 Version 3.4.0, 2022-12-29
 =========================
 * If value `feature.exclude` evaluates to true, exclude item from the map (and from the list, if `feature.listExclude` is not set).
