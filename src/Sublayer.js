@@ -59,6 +59,9 @@ class Sublayer {
   _popupOpen (e) {
     if (e.popup.sublayer === this) {
       const ob = e.popup.object
+
+      ob._popupOpen(e)
+
       this.emit('selectObject', ob.object, ob)
       this.master.emit('selectObject', ob.object, ob)
 
@@ -69,10 +72,11 @@ class Sublayer {
   _popupClose (e) {
     if (e.popup.sublayer === this) {
       const ob = e.popup.object
+
+      ob._popupClose(e)
+
       this.emit('unselectObject', ob.object, ob)
       this.master.emit('unselectObject', ob.object, ob)
-
-      this.updateAssets(e.popup._contentNode)
     }
   }
 

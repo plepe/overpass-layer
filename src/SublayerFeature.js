@@ -208,26 +208,18 @@ class SublayerFeature {
     const popupContent = this.layouts.popup
 
     if (this.popup) {
-      if (this.popup._contentNode) {
-        if (popupContent === null) {
-          // disable
-        } else if (this.popup.currentHTML !== popupContent) {
-          this.popup._contentNode.innerHTML = popupContent
-          this.sublayer.updateAssets(this.popup._contentNode, objectData)
-        }
-      } else if (popupContent !== null) {
-        this.popup.setContent(popupContent)
+      if (this.popup.currentHTML && (popupContent !== null || this.popup.currentHTML !== popupContent)) {
+        this.popup._contentNode.innerHTML = popupContent
+        this.popup.currentHTML = popupContent
+        this.sublayer.updateAssets(this.popup._contentNode, objectData)
       }
-
-      this.popup.currentHTML = popupContent
     } else {
       this.popup = L.popup()
       this.popup.object = this
       this.popup.sublayer = this.sublayer
 
-      if (popupContent !== null) {
-        this.popup.setContent(popupContent)
-      }
+      // do not set content here, but later, when _popupOpen gets called
+      this.popup.currentHTML = null
 
       this.feature.bindPopup(this.popup)
       for (k in this.features) {
@@ -252,6 +244,18 @@ class SublayerFeature {
 
     this.sublayer.master.emit('update', this.object, this)
     this.sublayer.emit('update', this.object, this)
+  }
+
+  _popupOpen (e) {
+    const popupContent = this.layouts.popup
+    if (popupContent !== null) {
+      e.popup.setContent(popupContent)
+      e.popup.currentHTML = popupContent
+    }
+  }
+
+  _popupClose (e) {
+    e.popup.currentHTML = null
   }
 
   evaluate () {
