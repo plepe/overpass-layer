@@ -168,6 +168,8 @@ class Sublayer {
 
       this.master.emit('add', ob, data)
       this.emit('add', ob, data)
+
+      this.reorder()
     }
   }
 
@@ -181,6 +183,31 @@ class Sublayer {
         delete this.visibleFeatures[k]
       }
     }
+
+    this.reorder()
+  }
+
+  reorder () {
+    if (!this._initiateReorder) {
+      this._initiateReorder = global.setTimeout(() => this._reorder(), 0)
+    }
+  }
+
+  _reorder () {
+    delete this._initiateReorder
+    const allFeatureFeatures = Object.values(this.visibleFeatures)
+      .map(f => Object.values(f.features))
+      .flat()
+
+    // send all negative zIndex features to the back
+    allFeatureFeatures.filter(f => (f.options.zIndex ?? 0) < 0)
+      .sort((a, b) => (b.options.zIndex ?? 0) - (a.options.zIndex ?? 0))
+      .forEach(f => f.bringToBack())
+
+    // send all positive zIndex features to the front
+    allFeatureFeatures.filter(f => (f.options.zIndex ?? 0) > 0)
+      .sort((a, b) => (a.options.zIndex ?? 0) - (b.options.zIndex ?? 0))
+      .forEach(f => f.bringToFront())
   }
 
   hideAll (force) {

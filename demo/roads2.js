@@ -16,21 +16,21 @@ const highwayStylesLow = {
 }
 
 const highwayStylesHigh = {
-  motorway: { width: 12, color: '#ff0000' },
-  motorway_link: { width: 8, color: '#ff0000' },
-  trunk: { width: 10, color: '#ff3f00' },
-  trunk_link: { width: 6, color: '#ff3f00' },
-  primary: { width: 8, color: '#ff7f00' },
-  primary_link: { width: 4, color: '#ff7f00' },
-  secondary: { width: 7, color: '#ffaf00' },
-  secondary_link: { width: 4, color: '#ffaf00' },
-  tertiary: { width: 6, color: '#ffff00' },
-  tertiary_link: { width: 4, color: '#ffff00' },
-  footway: { width: 2, color: '#afafaf' },
-  cycleway: { width: 2, color: '#afafaf' },
-  bridleway: { width: 2, color: '#afafaf' },
-  path: { width: 2, color: '#7f3f00' },
-  default: { width: 4, color: '#ffffff' }
+  motorway: { width: 12, zIndex: 26, color: '#ff0000' },
+  motorway_link: { width: 8, zIndex: 21, color: '#ff0000' },
+  trunk: { width: 10, zIndex: 25, color: '#ff3f00' },
+  trunk_link: { width: 6, zIndex: 20, color: '#ff3f00' },
+  primary: { width: 8, zIndex: 17, color: '#ff7f00' },
+  primary_link: { width: 4, zIndex: 10, color: '#ff7f00' },
+  secondary: { width: 7, zIndex: 16, color: '#ffaf00' },
+  secondary_link: { width: 4, zIndex: 9, color: '#ffaf00' },
+  tertiary: { width: 6, zIndex: 15, color: '#ffff00' },
+  tertiary_link: { width: 4, zIndex: 8, color: '#ffff00' },
+  footway: { width: 2, zIndex: 2, color: '#afafaf' },
+  cycleway: { width: 2, zIndex: 2, color: '#afafaf' },
+  bridleway: { width: 2, zIndex: 2, color: '#afafaf' },
+  path: { width: 2, zIndex: 1, color: '#7f3f00' },
+  default: { width: 4, zIndex: 5, color: '#ffffff' }
 }
 
 const overpassLayer = new OverpassLayer({
@@ -59,12 +59,15 @@ const overpassLayer = new OverpassLayer({
       pane: 'casing',
       color: 'black',
       width: '{{ current.width + 3 }}',
+      fill: false,
       opacity: 1
     },
     // the inner color of the road
     'style:default': {
       color: '{{ current.color }}',
       width: '{{ current.width }}',
+      zIndex: '{{ current.zIndex }}',
+      fill: false,
       opacity: 1
     },
     markerSymbol: null,
