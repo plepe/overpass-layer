@@ -107,6 +107,7 @@ class OverpassLayer {
 
   addTo (map) {
     this.map = map
+    this.emit('layeradd')
     this.map.on('moveend', this.check_update_map, this)
     for (const k in this.subLayers) {
       this.subLayers[k].addTo(map)
@@ -130,6 +131,7 @@ class OverpassLayer {
     }
 
     this.abortRequest()
+    this.emit('layerremove')
 
     this.map.off('moveend', this.check_update_map, this)
     this.map = null
