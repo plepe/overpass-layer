@@ -17,41 +17,45 @@ class OverpassLayerList {
 
     this.dom = document.createElement('ul')
     this.dom.className = 'overpass-layer-list'
-    this.layer = layer
+    this.layer = Array.isArray(layer) ? layer : [layer]
     this.options = options || {}
     this.options.prefix = this.options.prefix || 'list'
     this.selectedId = null
 
     const prefix = this.options.prefix
-    if (!(prefix in this.layer.options.layouts)) {
-      this.layer.setLayout(prefix,
-        '<div class="marker">' +
-        '{% if object.' + prefix + 'MarkerSymbol or object.markerSymbol %}' +
-        '<div class="symbol">{{ object.' + prefix + 'MarkerSymbol|default(object.markerSymbol) }}</div>' +
-        '{% elseif object.marker and object.marker.iconUrl %}' +
-        '<img class="symbol" src="{{ object.marker.iconUrl|e }}">' +
-        '{% endif %}' +
-        '{% if object.' + prefix + 'MarkerSign or object.markerSign %}' +
-        '<div class="sign">{{ object.' + prefix + 'MarkerSign|default(object.markerSign) }}</div>' +
-        '{% endif %}' +
-        '</div>' +
-        '<div class="content">' +
-        '<a class="title" href="{{ object.appUrl|default("#") }}">{{ object.' + prefix + 'Title|default(object.title) }}</a>' +
-        '{% if object.' + prefix + 'Description or object.description %}<div class="description">{{ object.' + prefix + 'Description|default(object.description) }}</div>{% endif %}' +
-        '</div>'
-      )
-    }
-
-    this.layer.on('add', (ob, data) => this.addObject(data))
-    this.layer.on('update', (ob, data) => this.updateObject(data))
-    this.layer.on('remove', (ob, data) => this.delObject(data))
-    this.layer.on('selectObject', (ob, data) => {
-      this.selectedId = ob.id
-      this.updateObject(data)
+    this.layer.forEach(layer => {
+      if (!(prefix in layer.options.layouts)) {
+        layer.setLayout(prefix,
+          '<div class="marker">' +
+          '{% if object.' + prefix + 'MarkerSymbol or object.markerSymbol %}' +
+          '<div class="symbol">{{ object.' + prefix + 'MarkerSymbol|default(object.markerSymbol) }}</div>' +
+          '{% elseif object.marker and object.marker.iconUrl %}' +
+          '<img class="symbol" src="{{ object.marker.iconUrl|e }}">' +
+          '{% endif %}' +
+          '{% if object.' + prefix + 'MarkerSign or object.markerSign %}' +
+          '<div class="sign">{{ object.' + prefix + 'MarkerSign|default(object.markerSign) }}</div>' +
+          '{% endif %}' +
+          '</div>' +
+          '<div class="content">' +
+          '<a class="title" href="{{ object.appUrl|default("#") }}">{{ object.' + prefix + 'Title|default(object.title) }}</a>' +
+          '{% if object.' + prefix + 'Description or object.description %}<div class="description">{{ object.' + prefix + 'Description|default(object.description) }}</div>{% endif %}' +
+          '</div>'
+        )
+      }
     })
-    this.layer.on('unselectObject', (ob, data) => {
-      this.selectedId = null
-      this.updateObject(data)
+
+    this.layer.forEach(layer => {
+      layer.on('add', (ob, data) => this.addObject(data))
+      layer.on('update', (ob, data) => this.updateObject(data))
+      layer.on('remove', (ob, data) => this.delObject(data))
+      layer.on('selectObject', (ob, data) => {
+        this.selectedId = ob.id
+        this.updateObject(data)
+      })
+      layer.on('unselectObject', (ob, data) => {
+        this.selectedId = null
+        this.updateObject(data)
+      })
     })
 
     this.items = {}
@@ -111,7 +115,7 @@ class OverpassLayerList {
         this.currentHover.hide()
       }
 
-      this.currentHover = this.layer.show(id,
+      this.currentHover = ob.sublayer.show(id,
         {
           styles: ['hover'],
           flags: ['hover'],
@@ -130,7 +134,7 @@ class OverpassLayerList {
     }.bind(this, ob.id, ob.sublayer_id)
 
     div.onclick = function (ob) {
-      this.layer.openPopupOnObject(ob)
+      ob.sublayer.master.openPopupOnObject(ob)
       return false
     }.bind(this, ob)
   }
