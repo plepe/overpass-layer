@@ -234,6 +234,12 @@ Called for every object on re-calculation. Result is the twigData which will use
 
 See `add` for the description of other parameters.
 
+## event 'layeradd', no parameters.
+Emitted when the layer gets added.
+
+## event 'layerremove', no parameters.
+Emitted when the layer gets removed.
+
 # Optional features
 ## Text along lines
 ```sh
