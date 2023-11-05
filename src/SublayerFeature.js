@@ -62,6 +62,10 @@ class SublayerFeature {
         const styleId = typeof m[2] === 'undefined' ? 'default' : m[2]
         const style = styleToLeaflet(objectData[k], this.sublayer.master.globalTwigData)
 
+        if (!('attribution' in style)) {
+          style.attribution = this.sublayer.options.attribution
+        }
+
         if (this.features[styleId]) {
           this.features[styleId].setStyle(style)
         } else {

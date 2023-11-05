@@ -38,6 +38,7 @@ Options:
 * id: an optional id, which will be passed as `sublayer_id` to twig templates (see below).
 * query: e.g. `node[natural=tree];`. Combine queries with: `(way[building];relation[building];);`. Optionally zoom-dependend queries can be given by using an object with the minimum zoom level as index, e.g. `{ 13: 'way[landuse=forest]', 15: '(way[landuse=forest];node[natural=tree];)' }`: zoom levels 13 and 14 all forests will be shown, from zoom level 15 all forests and trees.
 * overpassFrontend: An OverpassFrontend object (defaults to the global variable `overpassFrontend`)
+* attribution: a HTML string with attribution information
 * minZoom: Show layer only from the given zoom level (default: 16)
 * maxZoom: Show layer only up to the given zoom level (default: no limit)
 * bounds: Show only items intersecting this GeoJSON polygon/multipolygon (default: `null`).
@@ -94,7 +95,7 @@ radius       | float | depends | Circle and CircleMarker only
 bubblingMouseEvents | boolean | true
 interactive | boolean | true
 pane      | string | 'overlayPane'
-attribution | string | null
+attribution | string | null | Override default attribution
 smoothFactor | float | 1.0 | Polyline only
 zIndex | float | 0.0 | Order of features (higher = front). This is not very efficient, using 'pane' is faster.
 
