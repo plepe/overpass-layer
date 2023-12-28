@@ -244,7 +244,7 @@ Emitted when the layer gets removed.
 # Optional features
 ## Text along lines
 ```sh
-npm install --save https://github.com/makinacorpus/Leaflet.TextPath#leaflet0.8-dev
+npm install --save leaflet-textpath
 ```
 
 Include script:
