@@ -21,6 +21,7 @@
     "leaflet": "~1.7.1",
     "leaflet-polylinedecorator": "git+https://github.com/plepe/Leaflet.PolylineDecorator.git",
     "leaflet-polylineoffset": "^1.1.1",
+    "leaflet-textpath": "^1.2.3",
     "standard": "^16.0.3",
     "watchify": "^4.0.0"
   },
