@@ -5,8 +5,14 @@ const transforms = {
   stroke: {
     type: 'boolean'
   },
+  color: {
+    type: 'color'
+  },
   fill: {
     type: 'boolean'
+  },
+  fillColor: {
+    type: 'color'
   },
   text: {
     type: 'string'
@@ -48,7 +54,34 @@ const transforms = {
   opacity: {
     type: 'float'
   },
+  lineCap: {
+    type: 'string'
+  },
+  lineJoin: {
+    type: 'string'
+  },
   fillOpacity: {
+    type: 'float'
+  },
+  fillRule: {
+    type: 'string'
+  },
+  radius: {
+    type: 'float'
+  },
+  bubblingMouseEvents: {
+    type: 'boolean'
+  },
+  interactive: {
+    type: 'boolean'
+  },
+  pane: {
+    type: 'string'
+  },
+  attribution: {
+    type: 'string'
+  },
+  smoothFactor: {
     type: 'float'
   },
   offset: {
