@@ -8,11 +8,35 @@ const transforms = {
   fill: {
     type: 'boolean'
   },
+  text: {
+    type: 'string'
+  },
+  textFill: {
+    type: 'color'
+  },
   textRepeat: {
     type: 'boolean'
   },
   textBelow: {
     type: 'boolean'
+  },
+  textOffset: {
+    type: 'float'
+  },
+  textCenter: {
+    type: 'boolean'
+  },
+  textFillOpacity: {
+    type: 'float'
+  },
+  textFontWeight: {
+    type: 'string'
+  },
+  textFontSize: {
+    type: 'string'
+  },
+  textLetterSpacing: {
+    type: 'float'
   },
   noClip: {
     type: 'boolean'
