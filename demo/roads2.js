@@ -67,6 +67,12 @@ const overpassLayer = new OverpassLayer({
       color: '{{ current.color }}',
       width: '{{ current.width }}',
       zIndex: '{{ current.zIndex }}',
+      text: '{{ tags.name }}',
+      textCenter: 'true',
+      textFillWeight: 'bold',
+      textFontSize: '10px',
+      textBelow: false,
+      textOffset: 3,
       fill: false,
       opacity: 1
     },

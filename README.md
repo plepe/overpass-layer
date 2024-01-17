@@ -244,13 +244,28 @@ Emitted when the layer gets removed.
 # Optional features
 ## Text along lines
 ```sh
-npm install --save https://github.com/makinacorpus/Leaflet.TextPath#leaflet0.8-dev
+npm install --save leaflet-textpath
 ```
 
 Include script:
 ```html
 <script src="node_modules/leaflet-textpath/leaflet.textpath.js"></script>
 ```
+
+The style of the text labels can be set with these parameters:
+
+| Field | Type | Default | Description
+|-------|------|---------|-------------
+| text | string | *null* | Label to show along the line (*null* for no label). (this impacts performace, as SVG labels are used).
+| textRepeat | boolean | false | Specifies if the text should be repeated along the polyline.
+| textCenter | boolean | false | Centers the text according to the polyline's bounding box.
+| textOffset | float | 0 | Set an offset to position text relative to the polyline.
+| textBelow | boolean | false | Show text below the path.
+| textFill | color | black | Color of the text.
+| textFillOpacity | opacity | 1.0 | Text opacity.
+| textFontWeight | string | normal | Boldness or lightness of the glyphs used to render the text.
+| textFontSize | font size | 12px | Font size of the text.
+| textLetterSpacing | float | 0 | Extra letter spacing of the text.
 
 ## Line offset
 ```sh
