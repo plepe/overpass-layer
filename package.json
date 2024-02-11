@@ -12,8 +12,14 @@
     "event-emitter": "^0.3.5",
     "html-escape": "^2.0.0",
     "nearest-point-on-geometry": "^1.0.1",
+    "osmtogeojson": "^3.0.0-beta.5",
     "overpass-frontend": "^3.1.1",
     "twig": "^1.15.4"
+  },
+  "overrides": {
+    "osmtogeojson": {
+      "@xmldom/xmldom": "~0.8.10"
+    }
   },
   "devDependencies": {
     "browserify": "^17.0.0",
