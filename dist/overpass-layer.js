@@ -6984,6 +6984,38 @@ exports.default = union;
 'use strict'
 
 /**
+ * Ponyfill for `Array.prototype.find` which is only available in ES6 runtimes.
+ *
+ * Works with anything that has a `length` property and index access properties, including NodeList.
+ *
+ * @template {unknown} T
+ * @param {Array<T> | ({length:number, [number]: T})} list
+ * @param {function (item: T, index: number, list:Array<T> | ({length:number, [number]: T})):boolean} predicate
+ * @param {Partial<Pick<ArrayConstructor['prototype'], 'find'>>?} ac `Array.prototype` by default,
+ * 				allows injecting a custom implementation in tests
+ * @returns {T | undefined}
+ *
+ * @see https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/find
+ * @see https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.find
+ */
+function find(list, predicate, ac) {
+	if (ac === undefined) {
+		ac = Array.prototype;
+	}
+	if (list && typeof ac.find === 'function') {
+		return ac.find.call(list, predicate);
+	}
+	for (var i = 0; i < list.length; i++) {
+		if (Object.prototype.hasOwnProperty.call(list, i)) {
+			var item = list[i];
+			if (predicate.call(undefined, item, i, list)) {
+				return item;
+			}
+		}
+	}
+}
+
+/**
  * "Shallow freezes" an object to render it immutable.
  * Uses `Object.freeze` if available,
  * otherwise the immutability is only in the type.
@@ -7148,6 +7180,7 @@ var NAMESPACE = freeze({
 })
 
 exports.assign = assign;
+exports.find = find;
 exports.freeze = freeze;
 exports.MIME_TYPE = MIME_TYPE;
 exports.NAMESPACE = NAMESPACE;
@@ -7479,6 +7512,7 @@ exports.DOMParser = DOMParser;
 },{"./conventions":47,"./dom":49,"./entities":50,"./sax":52}],49:[function(require,module,exports){
 var conventions = require("./conventions");
 
+var find = conventions.find;
 var NAMESPACE = conventions.NAMESPACE;
 
 /**
@@ -7637,24 +7671,40 @@ NodeList.prototype = {
 	 * The number of nodes in the list. The range of valid child node indices is 0 to length-1 inclusive.
 	 * @standard level1
 	 */
-	length:0, 
+	length:0,
 	/**
 	 * Returns the indexth item in the collection. If index is greater than or equal to the number of nodes in the list, this returns null.
 	 * @standard level1
-	 * @param index  unsigned long 
+	 * @param index  unsigned long
 	 *   Index into the collection.
 	 * @return Node
-	 * 	The node at the indexth position in the NodeList, or null if that is not a valid index. 
+	 * 	The node at the indexth position in the NodeList, or null if that is not a valid index.
 	 */
 	item: function(index) {
-		return this[index] || null;
+		return index >= 0 && index < this.length ? this[index] : null;
 	},
 	toString:function(isHTML,nodeFilter){
 		for(var buf = [], i = 0;i<this.length;i++){
 			serializeToString(this[i],buf,isHTML,nodeFilter);
 		}
 		return buf.join('');
-	}
+	},
+	/**
+	 * @private
+	 * @param {function (Node):boolean} predicate
+	 * @returns {Node[]}
+	 */
+	filter: function (predicate) {
+		return Array.prototype.filter.call(this, predicate);
+	},
+	/**
+	 * @private
+	 * @param {Node} item
+	 * @returns {number}
+	 */
+	indexOf: function (item) {
+		return Array.prototype.indexOf.call(this, item);
+	},
 };
 
 function LiveNodeList(node,refresh){
@@ -7664,17 +7714,23 @@ function LiveNodeList(node,refresh){
 }
 function _updateLiveList(list){
 	var inc = list._node._inc || list._node.ownerDocument._inc;
-	if(list._inc != inc){
+	if (list._inc !== inc) {
 		var ls = list._refresh(list._node);
-		//console.log(ls.length)
 		__set__(list,'length',ls.length);
+		if (!list.$$length || ls.length < list.$$length) {
+			for (var i = ls.length; i in list; i++) {
+				if (Object.prototype.hasOwnProperty.call(list, i)) {
+					delete list[i];
+				}
+			}
+		}
 		copy(ls,list);
 		list._inc = inc;
 	}
 }
 LiveNodeList.prototype.item = function(i){
 	_updateLiveList(this);
-	return this[i];
+	return this[i] || null;
 }
 
 _extends(LiveNodeList,NodeList);
@@ -7688,7 +7744,7 @@ _extends(LiveNodeList,NodeList);
  * but this is simply to allow convenient enumeration of the contents of a NamedNodeMap,
  * and does not imply that the DOM specifies an order to these Nodes.
  * NamedNodeMap objects in the DOM are live.
- * used for attributes or DocumentType entities 
+ * used for attributes or DocumentType entities
  */
 function NamedNodeMap() {
 };
@@ -7732,7 +7788,7 @@ function _removeNamedNode(el,list,attr){
 			}
 		}
 	}else{
-		throw DOMException(NOT_FOUND_ERR,new Error(el.tagName+'@'+attr))
+		throw new DOMException(NOT_FOUND_ERR,new Error(el.tagName+'@'+attr))
 	}
 }
 NamedNodeMap.prototype = {
@@ -7777,10 +7833,10 @@ NamedNodeMap.prototype = {
 		var attr = this.getNamedItem(key);
 		_removeNamedNode(this._ownerElement,this,attr);
 		return attr;
-		
-		
+
+
 	},// raises: NOT_FOUND_ERR,NO_MODIFICATION_ALLOWED_ERR
-	
+
 	//for level2
 	removeNamedItemNS:function(namespaceURI,localName){
 		var attr = this.getNamedItemNS(namespaceURI,localName);
@@ -7926,11 +7982,11 @@ Node.prototype = {
 	prefix : null,
 	localName : null,
 	// Modified in DOM Level 2:
-	insertBefore:function(newChild, refChild){//raises 
+	insertBefore:function(newChild, refChild){//raises
 		return _insertBefore(this,newChild,refChild);
 	},
-	replaceChild:function(newChild, oldChild){//raises 
-		this.insertBefore(newChild,oldChild);
+	replaceChild:function(newChild, oldChild){//raises
+		_insertBefore(this, newChild,oldChild, assertPreReplacementValidityInDocument);
 		if(oldChild){
 			this.removeChild(oldChild);
 		}
@@ -8052,6 +8108,7 @@ function _visitNode(node,callback){
 
 
 function Document(){
+	this.ownerDocument = this;
 }
 
 function _onAddAttribute(doc,el,newAttr){
@@ -8135,48 +8192,313 @@ function _removeChild (parentNode, child) {
 	_onUpdateChild(parentNode.ownerDocument, parentNode);
 	return child;
 }
+
 /**
- * preformance key(refChild == null)
+ * Returns `true` if `node` can be a parent for insertion.
+ * @param {Node} node
+ * @returns {boolean}
  */
-function _insertBefore(parentNode,newChild,nextChild){
-	var cp = newChild.parentNode;
-	if(cp){
-		cp.removeChild(newChild);//remove and update
+function hasValidParentNodeType(node) {
+	return (
+		node &&
+		(node.nodeType === Node.DOCUMENT_NODE || node.nodeType === Node.DOCUMENT_FRAGMENT_NODE || node.nodeType === Node.ELEMENT_NODE)
+	);
+}
+
+/**
+ * Returns `true` if `node` can be inserted according to it's `nodeType`.
+ * @param {Node} node
+ * @returns {boolean}
+ */
+function hasInsertableNodeType(node) {
+	return (
+		node &&
+		(isElementNode(node) ||
+			isTextNode(node) ||
+			isDocTypeNode(node) ||
+			node.nodeType === Node.DOCUMENT_FRAGMENT_NODE ||
+			node.nodeType === Node.COMMENT_NODE ||
+			node.nodeType === Node.PROCESSING_INSTRUCTION_NODE)
+	);
+}
+
+/**
+ * Returns true if `node` is a DOCTYPE node
+ * @param {Node} node
+ * @returns {boolean}
+ */
+function isDocTypeNode(node) {
+	return node && node.nodeType === Node.DOCUMENT_TYPE_NODE;
+}
+
+/**
+ * Returns true if the node is an element
+ * @param {Node} node
+ * @returns {boolean}
+ */
+function isElementNode(node) {
+	return node && node.nodeType === Node.ELEMENT_NODE;
+}
+/**
+ * Returns true if `node` is a text node
+ * @param {Node} node
+ * @returns {boolean}
+ */
+function isTextNode(node) {
+	return node && node.nodeType === Node.TEXT_NODE;
+}
+
+/**
+ * Check if en element node can be inserted before `child`, or at the end if child is falsy,
+ * according to the presence and position of a doctype node on the same level.
+ *
+ * @param {Document} doc The document node
+ * @param {Node} child the node that would become the nextSibling if the element would be inserted
+ * @returns {boolean} `true` if an element can be inserted before child
+ * @private
+ * https://dom.spec.whatwg.org/#concept-node-ensure-pre-insertion-validity
+ */
+function isElementInsertionPossible(doc, child) {
+	var parentChildNodes = doc.childNodes || [];
+	if (find(parentChildNodes, isElementNode) || isDocTypeNode(child)) {
+		return false;
 	}
-	if(newChild.nodeType === DOCUMENT_FRAGMENT_NODE){
-		var newFirst = newChild.firstChild;
-		if (newFirst == null) {
-			return newChild;
+	var docTypeNode = find(parentChildNodes, isDocTypeNode);
+	return !(child && docTypeNode && parentChildNodes.indexOf(docTypeNode) > parentChildNodes.indexOf(child));
+}
+
+/**
+ * Check if en element node can be inserted before `child`, or at the end if child is falsy,
+ * according to the presence and position of a doctype node on the same level.
+ *
+ * @param {Node} doc The document node
+ * @param {Node} child the node that would become the nextSibling if the element would be inserted
+ * @returns {boolean} `true` if an element can be inserted before child
+ * @private
+ * https://dom.spec.whatwg.org/#concept-node-ensure-pre-insertion-validity
+ */
+function isElementReplacementPossible(doc, child) {
+	var parentChildNodes = doc.childNodes || [];
+
+	function hasElementChildThatIsNotChild(node) {
+		return isElementNode(node) && node !== child;
+	}
+
+	if (find(parentChildNodes, hasElementChildThatIsNotChild)) {
+		return false;
+	}
+	var docTypeNode = find(parentChildNodes, isDocTypeNode);
+	return !(child && docTypeNode && parentChildNodes.indexOf(docTypeNode) > parentChildNodes.indexOf(child));
+}
+
+/**
+ * @private
+ * Steps 1-5 of the checks before inserting and before replacing a child are the same.
+ *
+ * @param {Node} parent the parent node to insert `node` into
+ * @param {Node} node the node to insert
+ * @param {Node=} child the node that should become the `nextSibling` of `node`
+ * @returns {Node}
+ * @throws DOMException for several node combinations that would create a DOM that is not well-formed.
+ * @throws DOMException if `child` is provided but is not a child of `parent`.
+ * @see https://dom.spec.whatwg.org/#concept-node-ensure-pre-insertion-validity
+ * @see https://dom.spec.whatwg.org/#concept-node-replace
+ */
+function assertPreInsertionValidity1to5(parent, node, child) {
+	// 1. If `parent` is not a Document, DocumentFragment, or Element node, then throw a "HierarchyRequestError" DOMException.
+	if (!hasValidParentNodeType(parent)) {
+		throw new DOMException(HIERARCHY_REQUEST_ERR, 'Unexpected parent node type ' + parent.nodeType);
+	}
+	// 2. If `node` is a host-including inclusive ancestor of `parent`, then throw a "HierarchyRequestError" DOMException.
+	// not implemented!
+	// 3. If `child` is non-null and its parent is not `parent`, then throw a "NotFoundError" DOMException.
+	if (child && child.parentNode !== parent) {
+		throw new DOMException(NOT_FOUND_ERR, 'child not in parent');
+	}
+	if (
+		// 4. If `node` is not a DocumentFragment, DocumentType, Element, or CharacterData node, then throw a "HierarchyRequestError" DOMException.
+		!hasInsertableNodeType(node) ||
+		// 5. If either `node` is a Text node and `parent` is a document,
+		// the sax parser currently adds top level text nodes, this will be fixed in 0.9.0
+		// || (node.nodeType === Node.TEXT_NODE && parent.nodeType === Node.DOCUMENT_NODE)
+		// or `node` is a doctype and `parent` is not a document, then throw a "HierarchyRequestError" DOMException.
+		(isDocTypeNode(node) && parent.nodeType !== Node.DOCUMENT_NODE)
+	) {
+		throw new DOMException(
+			HIERARCHY_REQUEST_ERR,
+			'Unexpected node type ' + node.nodeType + ' for parent node type ' + parent.nodeType
+		);
+	}
+}
+
+/**
+ * @private
+ * Step 6 of the checks before inserting and before replacing a child are different.
+ *
+ * @param {Document} parent the parent node to insert `node` into
+ * @param {Node} node the node to insert
+ * @param {Node | undefined} child the node that should become the `nextSibling` of `node`
+ * @returns {Node}
+ * @throws DOMException for several node combinations that would create a DOM that is not well-formed.
+ * @throws DOMException if `child` is provided but is not a child of `parent`.
+ * @see https://dom.spec.whatwg.org/#concept-node-ensure-pre-insertion-validity
+ * @see https://dom.spec.whatwg.org/#concept-node-replace
+ */
+function assertPreInsertionValidityInDocument(parent, node, child) {
+	var parentChildNodes = parent.childNodes || [];
+	var nodeChildNodes = node.childNodes || [];
+
+	// DocumentFragment
+	if (node.nodeType === Node.DOCUMENT_FRAGMENT_NODE) {
+		var nodeChildElements = nodeChildNodes.filter(isElementNode);
+		// If node has more than one element child or has a Text node child.
+		if (nodeChildElements.length > 1 || find(nodeChildNodes, isTextNode)) {
+			throw new DOMException(HIERARCHY_REQUEST_ERR, 'More than one element or text in fragment');
 		}
-		var newLast = newChild.lastChild;
-	}else{
-		newFirst = newLast = newChild;
+		// Otherwise, if `node` has one element child and either `parent` has an element child,
+		// `child` is a doctype, or `child` is non-null and a doctype is following `child`.
+		if (nodeChildElements.length === 1 && !isElementInsertionPossible(parent, child)) {
+			throw new DOMException(HIERARCHY_REQUEST_ERR, 'Element in fragment can not be inserted before doctype');
+		}
 	}
-	var pre = nextChild ? nextChild.previousSibling : parentNode.lastChild;
+	// Element
+	if (isElementNode(node)) {
+		// `parent` has an element child, `child` is a doctype,
+		// or `child` is non-null and a doctype is following `child`.
+		if (!isElementInsertionPossible(parent, child)) {
+			throw new DOMException(HIERARCHY_REQUEST_ERR, 'Only one element can be added and only after doctype');
+		}
+	}
+	// DocumentType
+	if (isDocTypeNode(node)) {
+		// `parent` has a doctype child,
+		if (find(parentChildNodes, isDocTypeNode)) {
+			throw new DOMException(HIERARCHY_REQUEST_ERR, 'Only one doctype is allowed');
+		}
+		var parentElementChild = find(parentChildNodes, isElementNode);
+		// `child` is non-null and an element is preceding `child`,
+		if (child && parentChildNodes.indexOf(parentElementChild) < parentChildNodes.indexOf(child)) {
+			throw new DOMException(HIERARCHY_REQUEST_ERR, 'Doctype can only be inserted before an element');
+		}
+		// or `child` is null and `parent` has an element child.
+		if (!child && parentElementChild) {
+			throw new DOMException(HIERARCHY_REQUEST_ERR, 'Doctype can not be appended since element is present');
+		}
+	}
+}
+
+/**
+ * @private
+ * Step 6 of the checks before inserting and before replacing a child are different.
+ *
+ * @param {Document} parent the parent node to insert `node` into
+ * @param {Node} node the node to insert
+ * @param {Node | undefined} child the node that should become the `nextSibling` of `node`
+ * @returns {Node}
+ * @throws DOMException for several node combinations that would create a DOM that is not well-formed.
+ * @throws DOMException if `child` is provided but is not a child of `parent`.
+ * @see https://dom.spec.whatwg.org/#concept-node-ensure-pre-insertion-validity
+ * @see https://dom.spec.whatwg.org/#concept-node-replace
+ */
+function assertPreReplacementValidityInDocument(parent, node, child) {
+	var parentChildNodes = parent.childNodes || [];
+	var nodeChildNodes = node.childNodes || [];
+
+	// DocumentFragment
+	if (node.nodeType === Node.DOCUMENT_FRAGMENT_NODE) {
+		var nodeChildElements = nodeChildNodes.filter(isElementNode);
+		// If `node` has more than one element child or has a Text node child.
+		if (nodeChildElements.length > 1 || find(nodeChildNodes, isTextNode)) {
+			throw new DOMException(HIERARCHY_REQUEST_ERR, 'More than one element or text in fragment');
+		}
+		// Otherwise, if `node` has one element child and either `parent` has an element child that is not `child` or a doctype is following `child`.
+		if (nodeChildElements.length === 1 && !isElementReplacementPossible(parent, child)) {
+			throw new DOMException(HIERARCHY_REQUEST_ERR, 'Element in fragment can not be inserted before doctype');
+		}
+	}
+	// Element
+	if (isElementNode(node)) {
+		// `parent` has an element child that is not `child` or a doctype is following `child`.
+		if (!isElementReplacementPossible(parent, child)) {
+			throw new DOMException(HIERARCHY_REQUEST_ERR, 'Only one element can be added and only after doctype');
+		}
+	}
+	// DocumentType
+	if (isDocTypeNode(node)) {
+		function hasDoctypeChildThatIsNotChild(node) {
+			return isDocTypeNode(node) && node !== child;
+		}
+
+		// `parent` has a doctype child that is not `child`,
+		if (find(parentChildNodes, hasDoctypeChildThatIsNotChild)) {
+			throw new DOMException(HIERARCHY_REQUEST_ERR, 'Only one doctype is allowed');
+		}
+		var parentElementChild = find(parentChildNodes, isElementNode);
+		// or an element is preceding `child`.
+		if (child && parentChildNodes.indexOf(parentElementChild) < parentChildNodes.indexOf(child)) {
+			throw new DOMException(HIERARCHY_REQUEST_ERR, 'Doctype can only be inserted before an element');
+		}
+	}
+}
+
+/**
+ * @private
+ * @param {Node} parent the parent node to insert `node` into
+ * @param {Node} node the node to insert
+ * @param {Node=} child the node that should become the `nextSibling` of `node`
+ * @returns {Node}
+ * @throws DOMException for several node combinations that would create a DOM that is not well-formed.
+ * @throws DOMException if `child` is provided but is not a child of `parent`.
+ * @see https://dom.spec.whatwg.org/#concept-node-ensure-pre-insertion-validity
+ */
+function _insertBefore(parent, node, child, _inDocumentAssertion) {
+	// To ensure pre-insertion validity of a node into a parent before a child, run these steps:
+	assertPreInsertionValidity1to5(parent, node, child);
+
+	// If parent is a document, and any of the statements below, switched on the interface node implements,
+	// are true, then throw a "HierarchyRequestError" DOMException.
+	if (parent.nodeType === Node.DOCUMENT_NODE) {
+		(_inDocumentAssertion || assertPreInsertionValidityInDocument)(parent, node, child);
+	}
+
+	var cp = node.parentNode;
+	if(cp){
+		cp.removeChild(node);//remove and update
+	}
+	if(node.nodeType === DOCUMENT_FRAGMENT_NODE){
+		var newFirst = node.firstChild;
+		if (newFirst == null) {
+			return node;
+		}
+		var newLast = node.lastChild;
+	}else{
+		newFirst = newLast = node;
+	}
+	var pre = child ? child.previousSibling : parent.lastChild;
 
 	newFirst.previousSibling = pre;
-	newLast.nextSibling = nextChild;
-	
-	
+	newLast.nextSibling = child;
+
+
 	if(pre){
 		pre.nextSibling = newFirst;
 	}else{
-		parentNode.firstChild = newFirst;
+		parent.firstChild = newFirst;
 	}
-	if(nextChild == null){
-		parentNode.lastChild = newLast;
+	if(child == null){
+		parent.lastChild = newLast;
 	}else{
-		nextChild.previousSibling = newLast;
+		child.previousSibling = newLast;
 	}
 	do{
-		newFirst.parentNode = parentNode;
+		newFirst.parentNode = parent;
 	}while(newFirst !== newLast && (newFirst= newFirst.nextSibling))
-	_onUpdateChild(parentNode.ownerDocument||parentNode,parentNode);
-	//console.log(parentNode.lastChild.nextSibling == null)
-	if (newChild.nodeType == DOCUMENT_FRAGMENT_NODE) {
-		newChild.firstChild = newChild.lastChild = null;
+	_onUpdateChild(parent.ownerDocument||parent, parent);
+	//console.log(parent.lastChild.nextSibling == null)
+	if (node.nodeType == DOCUMENT_FRAGMENT_NODE) {
+		node.firstChild = node.lastChild = null;
 	}
-	return newChild;
+	return node;
 }
 
 /**
@@ -8231,17 +8553,30 @@ Document.prototype = {
 			}
 			return newChild;
 		}
-		if(this.documentElement == null && newChild.nodeType == ELEMENT_NODE){
+		_insertBefore(this, newChild, refChild);
+		newChild.ownerDocument = this;
+		if (this.documentElement === null && newChild.nodeType === ELEMENT_NODE) {
 			this.documentElement = newChild;
 		}
 
-		return _insertBefore(this,newChild,refChild),(newChild.ownerDocument = this),newChild;
+		return newChild;
 	},
 	removeChild :  function(oldChild){
 		if(this.documentElement == oldChild){
 			this.documentElement = null;
 		}
 		return _removeChild(this,oldChild);
+	},
+	replaceChild: function (newChild, oldChild) {
+		//raises
+		_insertBefore(this, newChild, oldChild, assertPreReplacementValidityInDocument);
+		newChild.ownerDocument = this;
+		if (oldChild) {
+			this.removeChild(oldChild);
+		}
+		if (isElementNode(newChild)) {
+			this.documentElement = newChild;
+		}
 	},
 	// Introduced in DOM Level 2:
 	importNode : function(importedNode,deep){
@@ -8344,8 +8679,8 @@ Document.prototype = {
 	createProcessingInstruction :	function(target,data){
 		var node = new ProcessingInstruction();
 		node.ownerDocument = this;
-		node.tagName = node.target = target;
-		node.nodeValue= node.data = data;
+		node.tagName = node.nodeName = node.target = target;
+		node.nodeValue = node.data = data;
 		return node;
 	},
 	createAttribute :	function(name){
@@ -8429,7 +8764,7 @@ Element.prototype = {
 		var attr = this.getAttributeNode(name)
 		attr && this.removeAttributeNode(attr);
 	},
-	
+
 	//four real opeartion method
 	appendChild:function(newChild){
 		if(newChild.nodeType === DOCUMENT_FRAGMENT_NODE){
@@ -8453,7 +8788,7 @@ Element.prototype = {
 		var old = this.getAttributeNodeNS(namespaceURI, localName);
 		old && this.removeAttributeNode(old);
 	},
-	
+
 	hasAttributeNS : function(namespaceURI, localName){
 		return this.getAttributeNodeNS(namespaceURI, localName)!=null;
 	},
@@ -8469,7 +8804,7 @@ Element.prototype = {
 	getAttributeNodeNS : function(namespaceURI, localName){
 		return this.attributes.getNamedItemNS(namespaceURI, localName);
 	},
-	
+
 	getElementsByTagName : function(tagName){
 		return new LiveNodeList(this,function(base){
 			var ls = [];
@@ -8490,7 +8825,7 @@ Element.prototype = {
 				}
 			});
 			return ls;
-			
+
 		});
 	}
 };
@@ -8519,7 +8854,7 @@ CharacterData.prototype = {
 	},
 	insertData: function(offset,text) {
 		this.replaceData(offset,0,text);
-	
+
 	},
 	appendChild:function(newChild){
 		throw new Error(ExceptionMessage[HIERARCHY_REQUEST_ERR])
@@ -8613,7 +8948,7 @@ function nodeSerializeToString(isHtml,nodeFilter){
 	var refNode = this.nodeType == 9 && this.documentElement || this;
 	var prefix = refNode.prefix;
 	var uri = refNode.namespaceURI;
-	
+
 	if(uri && prefix == null){
 		//console.log(prefix)
 		var prefix = refNode.lookupPrefix(uri);
@@ -8646,8 +8981,8 @@ function needNamespaceDefine(node, isHTML, visibleNamespaces) {
 	if (prefix === "xml" && uri === NAMESPACE.XML || uri === NAMESPACE.XMLNS) {
 		return false;
 	}
-	
-	var i = visibleNamespaces.length 
+
+	var i = visibleNamespaces.length
 	while (i--) {
 		var ns = visibleNamespaces[i];
 		// get namespace prefix
@@ -8698,7 +9033,7 @@ function serializeToString(node,buf,isHTML,nodeFilter,visibleNamespaces){
 		var len = attrs.length;
 		var child = node.firstChild;
 		var nodeName = node.tagName;
-		
+
 		isHTML = NAMESPACE.isHTML(node.namespaceURI) || isHTML
 
 		var prefixedNodeName = nodeName
@@ -8757,14 +9092,14 @@ function serializeToString(node,buf,isHTML,nodeFilter,visibleNamespaces){
 			serializeToString(attr,buf,isHTML,nodeFilter,visibleNamespaces);
 		}
 
-		// add namespace for current node		
+		// add namespace for current node
 		if (nodeName === prefixedNodeName && needNamespaceDefine(node, isHTML, visibleNamespaces)) {
 			var prefix = node.prefix||'';
 			var uri = node.namespaceURI;
 			addSerializedAttribute(buf, prefix ? 'xmlns:' + prefix : "xmlns", uri);
 			visibleNamespaces.push({ prefix: prefix, namespace:uri });
 		}
-		
+
 		if(child || isHTML && !/^(?:meta|link|img|br|hr|input)$/i.test(nodeName)){
 			buf.push('>');
 			//if is cdata child node
@@ -8979,7 +9314,7 @@ try{
 				}
 			}
 		})
-		
+
 		function getTextContent(node){
 			switch(node.nodeType){
 			case ELEMENT_NODE:
@@ -9017,6 +9352,8 @@ try{
 //}
 
 },{"./conventions":47}],50:[function(require,module,exports){
+'use strict';
+
 var freeze = require('./conventions').freeze;
 
 /**
@@ -9026,270 +9363,2161 @@ var freeze = require('./conventions').freeze;
  * @see https://www.w3.org/TR/2008/REC-xml-20081126/#sec-predefined-ent W3C XML 1.0
  * @see https://en.wikipedia.org/wiki/List_of_XML_and_HTML_character_entity_references#Predefined_entities_in_XML Wikipedia
  */
-exports.XML_ENTITIES = freeze({amp:'&', apos:"'", gt:'>', lt:'<', quot:'"'})
+exports.XML_ENTITIES = freeze({
+	amp: '&',
+	apos: "'",
+	gt: '>',
+	lt: '<',
+	quot: '"',
+});
 
 /**
- * A map of currently 241 entities that are detected in an HTML document.
+ * A map of all entities that are detected in an HTML document.
  * They contain all entries from `XML_ENTITIES`.
  *
  * @see XML_ENTITIES
  * @see DOMParser.parseFromString
  * @see DOMImplementation.prototype.createHTMLDocument
  * @see https://html.spec.whatwg.org/#named-character-references WHATWG HTML(5) Spec
+ * @see https://html.spec.whatwg.org/entities.json JSON
  * @see https://www.w3.org/TR/xml-entity-names/ W3C XML Entity Names
  * @see https://www.w3.org/TR/html4/sgml/entities.html W3C HTML4/SGML
  * @see https://en.wikipedia.org/wiki/List_of_XML_and_HTML_character_entity_references#Character_entity_references_in_HTML Wikipedia (HTML)
  * @see https://en.wikipedia.org/wiki/List_of_XML_and_HTML_character_entity_references#Entities_representing_special_characters_in_XHTML Wikpedia (XHTML)
  */
 exports.HTML_ENTITIES = freeze({
-       lt: '<',
-       gt: '>',
-       amp: '&',
-       quot: '"',
-       apos: "'",
-       Agrave: "À",
-       Aacute: "Á",
-       Acirc: "Â",
-       Atilde: "Ã",
-       Auml: "Ä",
-       Aring: "Å",
-       AElig: "Æ",
-       Ccedil: "Ç",
-       Egrave: "È",
-       Eacute: "É",
-       Ecirc: "Ê",
-       Euml: "Ë",
-       Igrave: "Ì",
-       Iacute: "Í",
-       Icirc: "Î",
-       Iuml: "Ï",
-       ETH: "Ð",
-       Ntilde: "Ñ",
-       Ograve: "Ò",
-       Oacute: "Ó",
-       Ocirc: "Ô",
-       Otilde: "Õ",
-       Ouml: "Ö",
-       Oslash: "Ø",
-       Ugrave: "Ù",
-       Uacute: "Ú",
-       Ucirc: "Û",
-       Uuml: "Ü",
-       Yacute: "Ý",
-       THORN: "Þ",
-       szlig: "ß",
-       agrave: "à",
-       aacute: "á",
-       acirc: "â",
-       atilde: "ã",
-       auml: "ä",
-       aring: "å",
-       aelig: "æ",
-       ccedil: "ç",
-       egrave: "è",
-       eacute: "é",
-       ecirc: "ê",
-       euml: "ë",
-       igrave: "ì",
-       iacute: "í",
-       icirc: "î",
-       iuml: "ï",
-       eth: "ð",
-       ntilde: "ñ",
-       ograve: "ò",
-       oacute: "ó",
-       ocirc: "ô",
-       otilde: "õ",
-       ouml: "ö",
-       oslash: "ø",
-       ugrave: "ù",
-       uacute: "ú",
-       ucirc: "û",
-       uuml: "ü",
-       yacute: "ý",
-       thorn: "þ",
-       yuml: "ÿ",
-       nbsp: "\u00a0",
-       iexcl: "¡",
-       cent: "¢",
-       pound: "£",
-       curren: "¤",
-       yen: "¥",
-       brvbar: "¦",
-       sect: "§",
-       uml: "¨",
-       copy: "©",
-       ordf: "ª",
-       laquo: "«",
-       not: "¬",
-       shy: "­­",
-       reg: "®",
-       macr: "¯",
-       deg: "°",
-       plusmn: "±",
-       sup2: "²",
-       sup3: "³",
-       acute: "´",
-       micro: "µ",
-       para: "¶",
-       middot: "·",
-       cedil: "¸",
-       sup1: "¹",
-       ordm: "º",
-       raquo: "»",
-       frac14: "¼",
-       frac12: "½",
-       frac34: "¾",
-       iquest: "¿",
-       times: "×",
-       divide: "÷",
-       forall: "∀",
-       part: "∂",
-       exist: "∃",
-       empty: "∅",
-       nabla: "∇",
-       isin: "∈",
-       notin: "∉",
-       ni: "∋",
-       prod: "∏",
-       sum: "∑",
-       minus: "−",
-       lowast: "∗",
-       radic: "√",
-       prop: "∝",
-       infin: "∞",
-       ang: "∠",
-       and: "∧",
-       or: "∨",
-       cap: "∩",
-       cup: "∪",
-       'int': "∫",
-       there4: "∴",
-       sim: "∼",
-       cong: "≅",
-       asymp: "≈",
-       ne: "≠",
-       equiv: "≡",
-       le: "≤",
-       ge: "≥",
-       sub: "⊂",
-       sup: "⊃",
-       nsub: "⊄",
-       sube: "⊆",
-       supe: "⊇",
-       oplus: "⊕",
-       otimes: "⊗",
-       perp: "⊥",
-       sdot: "⋅",
-       Alpha: "Α",
-       Beta: "Β",
-       Gamma: "Γ",
-       Delta: "Δ",
-       Epsilon: "Ε",
-       Zeta: "Ζ",
-       Eta: "Η",
-       Theta: "Θ",
-       Iota: "Ι",
-       Kappa: "Κ",
-       Lambda: "Λ",
-       Mu: "Μ",
-       Nu: "Ν",
-       Xi: "Ξ",
-       Omicron: "Ο",
-       Pi: "Π",
-       Rho: "Ρ",
-       Sigma: "Σ",
-       Tau: "Τ",
-       Upsilon: "Υ",
-       Phi: "Φ",
-       Chi: "Χ",
-       Psi: "Ψ",
-       Omega: "Ω",
-       alpha: "α",
-       beta: "β",
-       gamma: "γ",
-       delta: "δ",
-       epsilon: "ε",
-       zeta: "ζ",
-       eta: "η",
-       theta: "θ",
-       iota: "ι",
-       kappa: "κ",
-       lambda: "λ",
-       mu: "μ",
-       nu: "ν",
-       xi: "ξ",
-       omicron: "ο",
-       pi: "π",
-       rho: "ρ",
-       sigmaf: "ς",
-       sigma: "σ",
-       tau: "τ",
-       upsilon: "υ",
-       phi: "φ",
-       chi: "χ",
-       psi: "ψ",
-       omega: "ω",
-       thetasym: "ϑ",
-       upsih: "ϒ",
-       piv: "ϖ",
-       OElig: "Œ",
-       oelig: "œ",
-       Scaron: "Š",
-       scaron: "š",
-       Yuml: "Ÿ",
-       fnof: "ƒ",
-       circ: "ˆ",
-       tilde: "˜",
-       ensp: " ",
-       emsp: " ",
-       thinsp: " ",
-       zwnj: "‌",
-       zwj: "‍",
-       lrm: "‎",
-       rlm: "‏",
-       ndash: "–",
-       mdash: "—",
-       lsquo: "‘",
-       rsquo: "’",
-       sbquo: "‚",
-       ldquo: "“",
-       rdquo: "”",
-       bdquo: "„",
-       dagger: "†",
-       Dagger: "‡",
-       bull: "•",
-       hellip: "…",
-       permil: "‰",
-       prime: "′",
-       Prime: "″",
-       lsaquo: "‹",
-       rsaquo: "›",
-       oline: "‾",
-       euro: "€",
-       trade: "™",
-       larr: "←",
-       uarr: "↑",
-       rarr: "→",
-       darr: "↓",
-       harr: "↔",
-       crarr: "↵",
-       lceil: "⌈",
-       rceil: "⌉",
-       lfloor: "⌊",
-       rfloor: "⌋",
-       loz: "◊",
-       spades: "♠",
-       clubs: "♣",
-       hearts: "♥",
-       diams: "♦"
+	Aacute: '\u00C1',
+	aacute: '\u00E1',
+	Abreve: '\u0102',
+	abreve: '\u0103',
+	ac: '\u223E',
+	acd: '\u223F',
+	acE: '\u223E\u0333',
+	Acirc: '\u00C2',
+	acirc: '\u00E2',
+	acute: '\u00B4',
+	Acy: '\u0410',
+	acy: '\u0430',
+	AElig: '\u00C6',
+	aelig: '\u00E6',
+	af: '\u2061',
+	Afr: '\uD835\uDD04',
+	afr: '\uD835\uDD1E',
+	Agrave: '\u00C0',
+	agrave: '\u00E0',
+	alefsym: '\u2135',
+	aleph: '\u2135',
+	Alpha: '\u0391',
+	alpha: '\u03B1',
+	Amacr: '\u0100',
+	amacr: '\u0101',
+	amalg: '\u2A3F',
+	AMP: '\u0026',
+	amp: '\u0026',
+	And: '\u2A53',
+	and: '\u2227',
+	andand: '\u2A55',
+	andd: '\u2A5C',
+	andslope: '\u2A58',
+	andv: '\u2A5A',
+	ang: '\u2220',
+	ange: '\u29A4',
+	angle: '\u2220',
+	angmsd: '\u2221',
+	angmsdaa: '\u29A8',
+	angmsdab: '\u29A9',
+	angmsdac: '\u29AA',
+	angmsdad: '\u29AB',
+	angmsdae: '\u29AC',
+	angmsdaf: '\u29AD',
+	angmsdag: '\u29AE',
+	angmsdah: '\u29AF',
+	angrt: '\u221F',
+	angrtvb: '\u22BE',
+	angrtvbd: '\u299D',
+	angsph: '\u2222',
+	angst: '\u00C5',
+	angzarr: '\u237C',
+	Aogon: '\u0104',
+	aogon: '\u0105',
+	Aopf: '\uD835\uDD38',
+	aopf: '\uD835\uDD52',
+	ap: '\u2248',
+	apacir: '\u2A6F',
+	apE: '\u2A70',
+	ape: '\u224A',
+	apid: '\u224B',
+	apos: '\u0027',
+	ApplyFunction: '\u2061',
+	approx: '\u2248',
+	approxeq: '\u224A',
+	Aring: '\u00C5',
+	aring: '\u00E5',
+	Ascr: '\uD835\uDC9C',
+	ascr: '\uD835\uDCB6',
+	Assign: '\u2254',
+	ast: '\u002A',
+	asymp: '\u2248',
+	asympeq: '\u224D',
+	Atilde: '\u00C3',
+	atilde: '\u00E3',
+	Auml: '\u00C4',
+	auml: '\u00E4',
+	awconint: '\u2233',
+	awint: '\u2A11',
+	backcong: '\u224C',
+	backepsilon: '\u03F6',
+	backprime: '\u2035',
+	backsim: '\u223D',
+	backsimeq: '\u22CD',
+	Backslash: '\u2216',
+	Barv: '\u2AE7',
+	barvee: '\u22BD',
+	Barwed: '\u2306',
+	barwed: '\u2305',
+	barwedge: '\u2305',
+	bbrk: '\u23B5',
+	bbrktbrk: '\u23B6',
+	bcong: '\u224C',
+	Bcy: '\u0411',
+	bcy: '\u0431',
+	bdquo: '\u201E',
+	becaus: '\u2235',
+	Because: '\u2235',
+	because: '\u2235',
+	bemptyv: '\u29B0',
+	bepsi: '\u03F6',
+	bernou: '\u212C',
+	Bernoullis: '\u212C',
+	Beta: '\u0392',
+	beta: '\u03B2',
+	beth: '\u2136',
+	between: '\u226C',
+	Bfr: '\uD835\uDD05',
+	bfr: '\uD835\uDD1F',
+	bigcap: '\u22C2',
+	bigcirc: '\u25EF',
+	bigcup: '\u22C3',
+	bigodot: '\u2A00',
+	bigoplus: '\u2A01',
+	bigotimes: '\u2A02',
+	bigsqcup: '\u2A06',
+	bigstar: '\u2605',
+	bigtriangledown: '\u25BD',
+	bigtriangleup: '\u25B3',
+	biguplus: '\u2A04',
+	bigvee: '\u22C1',
+	bigwedge: '\u22C0',
+	bkarow: '\u290D',
+	blacklozenge: '\u29EB',
+	blacksquare: '\u25AA',
+	blacktriangle: '\u25B4',
+	blacktriangledown: '\u25BE',
+	blacktriangleleft: '\u25C2',
+	blacktriangleright: '\u25B8',
+	blank: '\u2423',
+	blk12: '\u2592',
+	blk14: '\u2591',
+	blk34: '\u2593',
+	block: '\u2588',
+	bne: '\u003D\u20E5',
+	bnequiv: '\u2261\u20E5',
+	bNot: '\u2AED',
+	bnot: '\u2310',
+	Bopf: '\uD835\uDD39',
+	bopf: '\uD835\uDD53',
+	bot: '\u22A5',
+	bottom: '\u22A5',
+	bowtie: '\u22C8',
+	boxbox: '\u29C9',
+	boxDL: '\u2557',
+	boxDl: '\u2556',
+	boxdL: '\u2555',
+	boxdl: '\u2510',
+	boxDR: '\u2554',
+	boxDr: '\u2553',
+	boxdR: '\u2552',
+	boxdr: '\u250C',
+	boxH: '\u2550',
+	boxh: '\u2500',
+	boxHD: '\u2566',
+	boxHd: '\u2564',
+	boxhD: '\u2565',
+	boxhd: '\u252C',
+	boxHU: '\u2569',
+	boxHu: '\u2567',
+	boxhU: '\u2568',
+	boxhu: '\u2534',
+	boxminus: '\u229F',
+	boxplus: '\u229E',
+	boxtimes: '\u22A0',
+	boxUL: '\u255D',
+	boxUl: '\u255C',
+	boxuL: '\u255B',
+	boxul: '\u2518',
+	boxUR: '\u255A',
+	boxUr: '\u2559',
+	boxuR: '\u2558',
+	boxur: '\u2514',
+	boxV: '\u2551',
+	boxv: '\u2502',
+	boxVH: '\u256C',
+	boxVh: '\u256B',
+	boxvH: '\u256A',
+	boxvh: '\u253C',
+	boxVL: '\u2563',
+	boxVl: '\u2562',
+	boxvL: '\u2561',
+	boxvl: '\u2524',
+	boxVR: '\u2560',
+	boxVr: '\u255F',
+	boxvR: '\u255E',
+	boxvr: '\u251C',
+	bprime: '\u2035',
+	Breve: '\u02D8',
+	breve: '\u02D8',
+	brvbar: '\u00A6',
+	Bscr: '\u212C',
+	bscr: '\uD835\uDCB7',
+	bsemi: '\u204F',
+	bsim: '\u223D',
+	bsime: '\u22CD',
+	bsol: '\u005C',
+	bsolb: '\u29C5',
+	bsolhsub: '\u27C8',
+	bull: '\u2022',
+	bullet: '\u2022',
+	bump: '\u224E',
+	bumpE: '\u2AAE',
+	bumpe: '\u224F',
+	Bumpeq: '\u224E',
+	bumpeq: '\u224F',
+	Cacute: '\u0106',
+	cacute: '\u0107',
+	Cap: '\u22D2',
+	cap: '\u2229',
+	capand: '\u2A44',
+	capbrcup: '\u2A49',
+	capcap: '\u2A4B',
+	capcup: '\u2A47',
+	capdot: '\u2A40',
+	CapitalDifferentialD: '\u2145',
+	caps: '\u2229\uFE00',
+	caret: '\u2041',
+	caron: '\u02C7',
+	Cayleys: '\u212D',
+	ccaps: '\u2A4D',
+	Ccaron: '\u010C',
+	ccaron: '\u010D',
+	Ccedil: '\u00C7',
+	ccedil: '\u00E7',
+	Ccirc: '\u0108',
+	ccirc: '\u0109',
+	Cconint: '\u2230',
+	ccups: '\u2A4C',
+	ccupssm: '\u2A50',
+	Cdot: '\u010A',
+	cdot: '\u010B',
+	cedil: '\u00B8',
+	Cedilla: '\u00B8',
+	cemptyv: '\u29B2',
+	cent: '\u00A2',
+	CenterDot: '\u00B7',
+	centerdot: '\u00B7',
+	Cfr: '\u212D',
+	cfr: '\uD835\uDD20',
+	CHcy: '\u0427',
+	chcy: '\u0447',
+	check: '\u2713',
+	checkmark: '\u2713',
+	Chi: '\u03A7',
+	chi: '\u03C7',
+	cir: '\u25CB',
+	circ: '\u02C6',
+	circeq: '\u2257',
+	circlearrowleft: '\u21BA',
+	circlearrowright: '\u21BB',
+	circledast: '\u229B',
+	circledcirc: '\u229A',
+	circleddash: '\u229D',
+	CircleDot: '\u2299',
+	circledR: '\u00AE',
+	circledS: '\u24C8',
+	CircleMinus: '\u2296',
+	CirclePlus: '\u2295',
+	CircleTimes: '\u2297',
+	cirE: '\u29C3',
+	cire: '\u2257',
+	cirfnint: '\u2A10',
+	cirmid: '\u2AEF',
+	cirscir: '\u29C2',
+	ClockwiseContourIntegral: '\u2232',
+	CloseCurlyDoubleQuote: '\u201D',
+	CloseCurlyQuote: '\u2019',
+	clubs: '\u2663',
+	clubsuit: '\u2663',
+	Colon: '\u2237',
+	colon: '\u003A',
+	Colone: '\u2A74',
+	colone: '\u2254',
+	coloneq: '\u2254',
+	comma: '\u002C',
+	commat: '\u0040',
+	comp: '\u2201',
+	compfn: '\u2218',
+	complement: '\u2201',
+	complexes: '\u2102',
+	cong: '\u2245',
+	congdot: '\u2A6D',
+	Congruent: '\u2261',
+	Conint: '\u222F',
+	conint: '\u222E',
+	ContourIntegral: '\u222E',
+	Copf: '\u2102',
+	copf: '\uD835\uDD54',
+	coprod: '\u2210',
+	Coproduct: '\u2210',
+	COPY: '\u00A9',
+	copy: '\u00A9',
+	copysr: '\u2117',
+	CounterClockwiseContourIntegral: '\u2233',
+	crarr: '\u21B5',
+	Cross: '\u2A2F',
+	cross: '\u2717',
+	Cscr: '\uD835\uDC9E',
+	cscr: '\uD835\uDCB8',
+	csub: '\u2ACF',
+	csube: '\u2AD1',
+	csup: '\u2AD0',
+	csupe: '\u2AD2',
+	ctdot: '\u22EF',
+	cudarrl: '\u2938',
+	cudarrr: '\u2935',
+	cuepr: '\u22DE',
+	cuesc: '\u22DF',
+	cularr: '\u21B6',
+	cularrp: '\u293D',
+	Cup: '\u22D3',
+	cup: '\u222A',
+	cupbrcap: '\u2A48',
+	CupCap: '\u224D',
+	cupcap: '\u2A46',
+	cupcup: '\u2A4A',
+	cupdot: '\u228D',
+	cupor: '\u2A45',
+	cups: '\u222A\uFE00',
+	curarr: '\u21B7',
+	curarrm: '\u293C',
+	curlyeqprec: '\u22DE',
+	curlyeqsucc: '\u22DF',
+	curlyvee: '\u22CE',
+	curlywedge: '\u22CF',
+	curren: '\u00A4',
+	curvearrowleft: '\u21B6',
+	curvearrowright: '\u21B7',
+	cuvee: '\u22CE',
+	cuwed: '\u22CF',
+	cwconint: '\u2232',
+	cwint: '\u2231',
+	cylcty: '\u232D',
+	Dagger: '\u2021',
+	dagger: '\u2020',
+	daleth: '\u2138',
+	Darr: '\u21A1',
+	dArr: '\u21D3',
+	darr: '\u2193',
+	dash: '\u2010',
+	Dashv: '\u2AE4',
+	dashv: '\u22A3',
+	dbkarow: '\u290F',
+	dblac: '\u02DD',
+	Dcaron: '\u010E',
+	dcaron: '\u010F',
+	Dcy: '\u0414',
+	dcy: '\u0434',
+	DD: '\u2145',
+	dd: '\u2146',
+	ddagger: '\u2021',
+	ddarr: '\u21CA',
+	DDotrahd: '\u2911',
+	ddotseq: '\u2A77',
+	deg: '\u00B0',
+	Del: '\u2207',
+	Delta: '\u0394',
+	delta: '\u03B4',
+	demptyv: '\u29B1',
+	dfisht: '\u297F',
+	Dfr: '\uD835\uDD07',
+	dfr: '\uD835\uDD21',
+	dHar: '\u2965',
+	dharl: '\u21C3',
+	dharr: '\u21C2',
+	DiacriticalAcute: '\u00B4',
+	DiacriticalDot: '\u02D9',
+	DiacriticalDoubleAcute: '\u02DD',
+	DiacriticalGrave: '\u0060',
+	DiacriticalTilde: '\u02DC',
+	diam: '\u22C4',
+	Diamond: '\u22C4',
+	diamond: '\u22C4',
+	diamondsuit: '\u2666',
+	diams: '\u2666',
+	die: '\u00A8',
+	DifferentialD: '\u2146',
+	digamma: '\u03DD',
+	disin: '\u22F2',
+	div: '\u00F7',
+	divide: '\u00F7',
+	divideontimes: '\u22C7',
+	divonx: '\u22C7',
+	DJcy: '\u0402',
+	djcy: '\u0452',
+	dlcorn: '\u231E',
+	dlcrop: '\u230D',
+	dollar: '\u0024',
+	Dopf: '\uD835\uDD3B',
+	dopf: '\uD835\uDD55',
+	Dot: '\u00A8',
+	dot: '\u02D9',
+	DotDot: '\u20DC',
+	doteq: '\u2250',
+	doteqdot: '\u2251',
+	DotEqual: '\u2250',
+	dotminus: '\u2238',
+	dotplus: '\u2214',
+	dotsquare: '\u22A1',
+	doublebarwedge: '\u2306',
+	DoubleContourIntegral: '\u222F',
+	DoubleDot: '\u00A8',
+	DoubleDownArrow: '\u21D3',
+	DoubleLeftArrow: '\u21D0',
+	DoubleLeftRightArrow: '\u21D4',
+	DoubleLeftTee: '\u2AE4',
+	DoubleLongLeftArrow: '\u27F8',
+	DoubleLongLeftRightArrow: '\u27FA',
+	DoubleLongRightArrow: '\u27F9',
+	DoubleRightArrow: '\u21D2',
+	DoubleRightTee: '\u22A8',
+	DoubleUpArrow: '\u21D1',
+	DoubleUpDownArrow: '\u21D5',
+	DoubleVerticalBar: '\u2225',
+	DownArrow: '\u2193',
+	Downarrow: '\u21D3',
+	downarrow: '\u2193',
+	DownArrowBar: '\u2913',
+	DownArrowUpArrow: '\u21F5',
+	DownBreve: '\u0311',
+	downdownarrows: '\u21CA',
+	downharpoonleft: '\u21C3',
+	downharpoonright: '\u21C2',
+	DownLeftRightVector: '\u2950',
+	DownLeftTeeVector: '\u295E',
+	DownLeftVector: '\u21BD',
+	DownLeftVectorBar: '\u2956',
+	DownRightTeeVector: '\u295F',
+	DownRightVector: '\u21C1',
+	DownRightVectorBar: '\u2957',
+	DownTee: '\u22A4',
+	DownTeeArrow: '\u21A7',
+	drbkarow: '\u2910',
+	drcorn: '\u231F',
+	drcrop: '\u230C',
+	Dscr: '\uD835\uDC9F',
+	dscr: '\uD835\uDCB9',
+	DScy: '\u0405',
+	dscy: '\u0455',
+	dsol: '\u29F6',
+	Dstrok: '\u0110',
+	dstrok: '\u0111',
+	dtdot: '\u22F1',
+	dtri: '\u25BF',
+	dtrif: '\u25BE',
+	duarr: '\u21F5',
+	duhar: '\u296F',
+	dwangle: '\u29A6',
+	DZcy: '\u040F',
+	dzcy: '\u045F',
+	dzigrarr: '\u27FF',
+	Eacute: '\u00C9',
+	eacute: '\u00E9',
+	easter: '\u2A6E',
+	Ecaron: '\u011A',
+	ecaron: '\u011B',
+	ecir: '\u2256',
+	Ecirc: '\u00CA',
+	ecirc: '\u00EA',
+	ecolon: '\u2255',
+	Ecy: '\u042D',
+	ecy: '\u044D',
+	eDDot: '\u2A77',
+	Edot: '\u0116',
+	eDot: '\u2251',
+	edot: '\u0117',
+	ee: '\u2147',
+	efDot: '\u2252',
+	Efr: '\uD835\uDD08',
+	efr: '\uD835\uDD22',
+	eg: '\u2A9A',
+	Egrave: '\u00C8',
+	egrave: '\u00E8',
+	egs: '\u2A96',
+	egsdot: '\u2A98',
+	el: '\u2A99',
+	Element: '\u2208',
+	elinters: '\u23E7',
+	ell: '\u2113',
+	els: '\u2A95',
+	elsdot: '\u2A97',
+	Emacr: '\u0112',
+	emacr: '\u0113',
+	empty: '\u2205',
+	emptyset: '\u2205',
+	EmptySmallSquare: '\u25FB',
+	emptyv: '\u2205',
+	EmptyVerySmallSquare: '\u25AB',
+	emsp: '\u2003',
+	emsp13: '\u2004',
+	emsp14: '\u2005',
+	ENG: '\u014A',
+	eng: '\u014B',
+	ensp: '\u2002',
+	Eogon: '\u0118',
+	eogon: '\u0119',
+	Eopf: '\uD835\uDD3C',
+	eopf: '\uD835\uDD56',
+	epar: '\u22D5',
+	eparsl: '\u29E3',
+	eplus: '\u2A71',
+	epsi: '\u03B5',
+	Epsilon: '\u0395',
+	epsilon: '\u03B5',
+	epsiv: '\u03F5',
+	eqcirc: '\u2256',
+	eqcolon: '\u2255',
+	eqsim: '\u2242',
+	eqslantgtr: '\u2A96',
+	eqslantless: '\u2A95',
+	Equal: '\u2A75',
+	equals: '\u003D',
+	EqualTilde: '\u2242',
+	equest: '\u225F',
+	Equilibrium: '\u21CC',
+	equiv: '\u2261',
+	equivDD: '\u2A78',
+	eqvparsl: '\u29E5',
+	erarr: '\u2971',
+	erDot: '\u2253',
+	Escr: '\u2130',
+	escr: '\u212F',
+	esdot: '\u2250',
+	Esim: '\u2A73',
+	esim: '\u2242',
+	Eta: '\u0397',
+	eta: '\u03B7',
+	ETH: '\u00D0',
+	eth: '\u00F0',
+	Euml: '\u00CB',
+	euml: '\u00EB',
+	euro: '\u20AC',
+	excl: '\u0021',
+	exist: '\u2203',
+	Exists: '\u2203',
+	expectation: '\u2130',
+	ExponentialE: '\u2147',
+	exponentiale: '\u2147',
+	fallingdotseq: '\u2252',
+	Fcy: '\u0424',
+	fcy: '\u0444',
+	female: '\u2640',
+	ffilig: '\uFB03',
+	fflig: '\uFB00',
+	ffllig: '\uFB04',
+	Ffr: '\uD835\uDD09',
+	ffr: '\uD835\uDD23',
+	filig: '\uFB01',
+	FilledSmallSquare: '\u25FC',
+	FilledVerySmallSquare: '\u25AA',
+	fjlig: '\u0066\u006A',
+	flat: '\u266D',
+	fllig: '\uFB02',
+	fltns: '\u25B1',
+	fnof: '\u0192',
+	Fopf: '\uD835\uDD3D',
+	fopf: '\uD835\uDD57',
+	ForAll: '\u2200',
+	forall: '\u2200',
+	fork: '\u22D4',
+	forkv: '\u2AD9',
+	Fouriertrf: '\u2131',
+	fpartint: '\u2A0D',
+	frac12: '\u00BD',
+	frac13: '\u2153',
+	frac14: '\u00BC',
+	frac15: '\u2155',
+	frac16: '\u2159',
+	frac18: '\u215B',
+	frac23: '\u2154',
+	frac25: '\u2156',
+	frac34: '\u00BE',
+	frac35: '\u2157',
+	frac38: '\u215C',
+	frac45: '\u2158',
+	frac56: '\u215A',
+	frac58: '\u215D',
+	frac78: '\u215E',
+	frasl: '\u2044',
+	frown: '\u2322',
+	Fscr: '\u2131',
+	fscr: '\uD835\uDCBB',
+	gacute: '\u01F5',
+	Gamma: '\u0393',
+	gamma: '\u03B3',
+	Gammad: '\u03DC',
+	gammad: '\u03DD',
+	gap: '\u2A86',
+	Gbreve: '\u011E',
+	gbreve: '\u011F',
+	Gcedil: '\u0122',
+	Gcirc: '\u011C',
+	gcirc: '\u011D',
+	Gcy: '\u0413',
+	gcy: '\u0433',
+	Gdot: '\u0120',
+	gdot: '\u0121',
+	gE: '\u2267',
+	ge: '\u2265',
+	gEl: '\u2A8C',
+	gel: '\u22DB',
+	geq: '\u2265',
+	geqq: '\u2267',
+	geqslant: '\u2A7E',
+	ges: '\u2A7E',
+	gescc: '\u2AA9',
+	gesdot: '\u2A80',
+	gesdoto: '\u2A82',
+	gesdotol: '\u2A84',
+	gesl: '\u22DB\uFE00',
+	gesles: '\u2A94',
+	Gfr: '\uD835\uDD0A',
+	gfr: '\uD835\uDD24',
+	Gg: '\u22D9',
+	gg: '\u226B',
+	ggg: '\u22D9',
+	gimel: '\u2137',
+	GJcy: '\u0403',
+	gjcy: '\u0453',
+	gl: '\u2277',
+	gla: '\u2AA5',
+	glE: '\u2A92',
+	glj: '\u2AA4',
+	gnap: '\u2A8A',
+	gnapprox: '\u2A8A',
+	gnE: '\u2269',
+	gne: '\u2A88',
+	gneq: '\u2A88',
+	gneqq: '\u2269',
+	gnsim: '\u22E7',
+	Gopf: '\uD835\uDD3E',
+	gopf: '\uD835\uDD58',
+	grave: '\u0060',
+	GreaterEqual: '\u2265',
+	GreaterEqualLess: '\u22DB',
+	GreaterFullEqual: '\u2267',
+	GreaterGreater: '\u2AA2',
+	GreaterLess: '\u2277',
+	GreaterSlantEqual: '\u2A7E',
+	GreaterTilde: '\u2273',
+	Gscr: '\uD835\uDCA2',
+	gscr: '\u210A',
+	gsim: '\u2273',
+	gsime: '\u2A8E',
+	gsiml: '\u2A90',
+	Gt: '\u226B',
+	GT: '\u003E',
+	gt: '\u003E',
+	gtcc: '\u2AA7',
+	gtcir: '\u2A7A',
+	gtdot: '\u22D7',
+	gtlPar: '\u2995',
+	gtquest: '\u2A7C',
+	gtrapprox: '\u2A86',
+	gtrarr: '\u2978',
+	gtrdot: '\u22D7',
+	gtreqless: '\u22DB',
+	gtreqqless: '\u2A8C',
+	gtrless: '\u2277',
+	gtrsim: '\u2273',
+	gvertneqq: '\u2269\uFE00',
+	gvnE: '\u2269\uFE00',
+	Hacek: '\u02C7',
+	hairsp: '\u200A',
+	half: '\u00BD',
+	hamilt: '\u210B',
+	HARDcy: '\u042A',
+	hardcy: '\u044A',
+	hArr: '\u21D4',
+	harr: '\u2194',
+	harrcir: '\u2948',
+	harrw: '\u21AD',
+	Hat: '\u005E',
+	hbar: '\u210F',
+	Hcirc: '\u0124',
+	hcirc: '\u0125',
+	hearts: '\u2665',
+	heartsuit: '\u2665',
+	hellip: '\u2026',
+	hercon: '\u22B9',
+	Hfr: '\u210C',
+	hfr: '\uD835\uDD25',
+	HilbertSpace: '\u210B',
+	hksearow: '\u2925',
+	hkswarow: '\u2926',
+	hoarr: '\u21FF',
+	homtht: '\u223B',
+	hookleftarrow: '\u21A9',
+	hookrightarrow: '\u21AA',
+	Hopf: '\u210D',
+	hopf: '\uD835\uDD59',
+	horbar: '\u2015',
+	HorizontalLine: '\u2500',
+	Hscr: '\u210B',
+	hscr: '\uD835\uDCBD',
+	hslash: '\u210F',
+	Hstrok: '\u0126',
+	hstrok: '\u0127',
+	HumpDownHump: '\u224E',
+	HumpEqual: '\u224F',
+	hybull: '\u2043',
+	hyphen: '\u2010',
+	Iacute: '\u00CD',
+	iacute: '\u00ED',
+	ic: '\u2063',
+	Icirc: '\u00CE',
+	icirc: '\u00EE',
+	Icy: '\u0418',
+	icy: '\u0438',
+	Idot: '\u0130',
+	IEcy: '\u0415',
+	iecy: '\u0435',
+	iexcl: '\u00A1',
+	iff: '\u21D4',
+	Ifr: '\u2111',
+	ifr: '\uD835\uDD26',
+	Igrave: '\u00CC',
+	igrave: '\u00EC',
+	ii: '\u2148',
+	iiiint: '\u2A0C',
+	iiint: '\u222D',
+	iinfin: '\u29DC',
+	iiota: '\u2129',
+	IJlig: '\u0132',
+	ijlig: '\u0133',
+	Im: '\u2111',
+	Imacr: '\u012A',
+	imacr: '\u012B',
+	image: '\u2111',
+	ImaginaryI: '\u2148',
+	imagline: '\u2110',
+	imagpart: '\u2111',
+	imath: '\u0131',
+	imof: '\u22B7',
+	imped: '\u01B5',
+	Implies: '\u21D2',
+	in: '\u2208',
+	incare: '\u2105',
+	infin: '\u221E',
+	infintie: '\u29DD',
+	inodot: '\u0131',
+	Int: '\u222C',
+	int: '\u222B',
+	intcal: '\u22BA',
+	integers: '\u2124',
+	Integral: '\u222B',
+	intercal: '\u22BA',
+	Intersection: '\u22C2',
+	intlarhk: '\u2A17',
+	intprod: '\u2A3C',
+	InvisibleComma: '\u2063',
+	InvisibleTimes: '\u2062',
+	IOcy: '\u0401',
+	iocy: '\u0451',
+	Iogon: '\u012E',
+	iogon: '\u012F',
+	Iopf: '\uD835\uDD40',
+	iopf: '\uD835\uDD5A',
+	Iota: '\u0399',
+	iota: '\u03B9',
+	iprod: '\u2A3C',
+	iquest: '\u00BF',
+	Iscr: '\u2110',
+	iscr: '\uD835\uDCBE',
+	isin: '\u2208',
+	isindot: '\u22F5',
+	isinE: '\u22F9',
+	isins: '\u22F4',
+	isinsv: '\u22F3',
+	isinv: '\u2208',
+	it: '\u2062',
+	Itilde: '\u0128',
+	itilde: '\u0129',
+	Iukcy: '\u0406',
+	iukcy: '\u0456',
+	Iuml: '\u00CF',
+	iuml: '\u00EF',
+	Jcirc: '\u0134',
+	jcirc: '\u0135',
+	Jcy: '\u0419',
+	jcy: '\u0439',
+	Jfr: '\uD835\uDD0D',
+	jfr: '\uD835\uDD27',
+	jmath: '\u0237',
+	Jopf: '\uD835\uDD41',
+	jopf: '\uD835\uDD5B',
+	Jscr: '\uD835\uDCA5',
+	jscr: '\uD835\uDCBF',
+	Jsercy: '\u0408',
+	jsercy: '\u0458',
+	Jukcy: '\u0404',
+	jukcy: '\u0454',
+	Kappa: '\u039A',
+	kappa: '\u03BA',
+	kappav: '\u03F0',
+	Kcedil: '\u0136',
+	kcedil: '\u0137',
+	Kcy: '\u041A',
+	kcy: '\u043A',
+	Kfr: '\uD835\uDD0E',
+	kfr: '\uD835\uDD28',
+	kgreen: '\u0138',
+	KHcy: '\u0425',
+	khcy: '\u0445',
+	KJcy: '\u040C',
+	kjcy: '\u045C',
+	Kopf: '\uD835\uDD42',
+	kopf: '\uD835\uDD5C',
+	Kscr: '\uD835\uDCA6',
+	kscr: '\uD835\uDCC0',
+	lAarr: '\u21DA',
+	Lacute: '\u0139',
+	lacute: '\u013A',
+	laemptyv: '\u29B4',
+	lagran: '\u2112',
+	Lambda: '\u039B',
+	lambda: '\u03BB',
+	Lang: '\u27EA',
+	lang: '\u27E8',
+	langd: '\u2991',
+	langle: '\u27E8',
+	lap: '\u2A85',
+	Laplacetrf: '\u2112',
+	laquo: '\u00AB',
+	Larr: '\u219E',
+	lArr: '\u21D0',
+	larr: '\u2190',
+	larrb: '\u21E4',
+	larrbfs: '\u291F',
+	larrfs: '\u291D',
+	larrhk: '\u21A9',
+	larrlp: '\u21AB',
+	larrpl: '\u2939',
+	larrsim: '\u2973',
+	larrtl: '\u21A2',
+	lat: '\u2AAB',
+	lAtail: '\u291B',
+	latail: '\u2919',
+	late: '\u2AAD',
+	lates: '\u2AAD\uFE00',
+	lBarr: '\u290E',
+	lbarr: '\u290C',
+	lbbrk: '\u2772',
+	lbrace: '\u007B',
+	lbrack: '\u005B',
+	lbrke: '\u298B',
+	lbrksld: '\u298F',
+	lbrkslu: '\u298D',
+	Lcaron: '\u013D',
+	lcaron: '\u013E',
+	Lcedil: '\u013B',
+	lcedil: '\u013C',
+	lceil: '\u2308',
+	lcub: '\u007B',
+	Lcy: '\u041B',
+	lcy: '\u043B',
+	ldca: '\u2936',
+	ldquo: '\u201C',
+	ldquor: '\u201E',
+	ldrdhar: '\u2967',
+	ldrushar: '\u294B',
+	ldsh: '\u21B2',
+	lE: '\u2266',
+	le: '\u2264',
+	LeftAngleBracket: '\u27E8',
+	LeftArrow: '\u2190',
+	Leftarrow: '\u21D0',
+	leftarrow: '\u2190',
+	LeftArrowBar: '\u21E4',
+	LeftArrowRightArrow: '\u21C6',
+	leftarrowtail: '\u21A2',
+	LeftCeiling: '\u2308',
+	LeftDoubleBracket: '\u27E6',
+	LeftDownTeeVector: '\u2961',
+	LeftDownVector: '\u21C3',
+	LeftDownVectorBar: '\u2959',
+	LeftFloor: '\u230A',
+	leftharpoondown: '\u21BD',
+	leftharpoonup: '\u21BC',
+	leftleftarrows: '\u21C7',
+	LeftRightArrow: '\u2194',
+	Leftrightarrow: '\u21D4',
+	leftrightarrow: '\u2194',
+	leftrightarrows: '\u21C6',
+	leftrightharpoons: '\u21CB',
+	leftrightsquigarrow: '\u21AD',
+	LeftRightVector: '\u294E',
+	LeftTee: '\u22A3',
+	LeftTeeArrow: '\u21A4',
+	LeftTeeVector: '\u295A',
+	leftthreetimes: '\u22CB',
+	LeftTriangle: '\u22B2',
+	LeftTriangleBar: '\u29CF',
+	LeftTriangleEqual: '\u22B4',
+	LeftUpDownVector: '\u2951',
+	LeftUpTeeVector: '\u2960',
+	LeftUpVector: '\u21BF',
+	LeftUpVectorBar: '\u2958',
+	LeftVector: '\u21BC',
+	LeftVectorBar: '\u2952',
+	lEg: '\u2A8B',
+	leg: '\u22DA',
+	leq: '\u2264',
+	leqq: '\u2266',
+	leqslant: '\u2A7D',
+	les: '\u2A7D',
+	lescc: '\u2AA8',
+	lesdot: '\u2A7F',
+	lesdoto: '\u2A81',
+	lesdotor: '\u2A83',
+	lesg: '\u22DA\uFE00',
+	lesges: '\u2A93',
+	lessapprox: '\u2A85',
+	lessdot: '\u22D6',
+	lesseqgtr: '\u22DA',
+	lesseqqgtr: '\u2A8B',
+	LessEqualGreater: '\u22DA',
+	LessFullEqual: '\u2266',
+	LessGreater: '\u2276',
+	lessgtr: '\u2276',
+	LessLess: '\u2AA1',
+	lesssim: '\u2272',
+	LessSlantEqual: '\u2A7D',
+	LessTilde: '\u2272',
+	lfisht: '\u297C',
+	lfloor: '\u230A',
+	Lfr: '\uD835\uDD0F',
+	lfr: '\uD835\uDD29',
+	lg: '\u2276',
+	lgE: '\u2A91',
+	lHar: '\u2962',
+	lhard: '\u21BD',
+	lharu: '\u21BC',
+	lharul: '\u296A',
+	lhblk: '\u2584',
+	LJcy: '\u0409',
+	ljcy: '\u0459',
+	Ll: '\u22D8',
+	ll: '\u226A',
+	llarr: '\u21C7',
+	llcorner: '\u231E',
+	Lleftarrow: '\u21DA',
+	llhard: '\u296B',
+	lltri: '\u25FA',
+	Lmidot: '\u013F',
+	lmidot: '\u0140',
+	lmoust: '\u23B0',
+	lmoustache: '\u23B0',
+	lnap: '\u2A89',
+	lnapprox: '\u2A89',
+	lnE: '\u2268',
+	lne: '\u2A87',
+	lneq: '\u2A87',
+	lneqq: '\u2268',
+	lnsim: '\u22E6',
+	loang: '\u27EC',
+	loarr: '\u21FD',
+	lobrk: '\u27E6',
+	LongLeftArrow: '\u27F5',
+	Longleftarrow: '\u27F8',
+	longleftarrow: '\u27F5',
+	LongLeftRightArrow: '\u27F7',
+	Longleftrightarrow: '\u27FA',
+	longleftrightarrow: '\u27F7',
+	longmapsto: '\u27FC',
+	LongRightArrow: '\u27F6',
+	Longrightarrow: '\u27F9',
+	longrightarrow: '\u27F6',
+	looparrowleft: '\u21AB',
+	looparrowright: '\u21AC',
+	lopar: '\u2985',
+	Lopf: '\uD835\uDD43',
+	lopf: '\uD835\uDD5D',
+	loplus: '\u2A2D',
+	lotimes: '\u2A34',
+	lowast: '\u2217',
+	lowbar: '\u005F',
+	LowerLeftArrow: '\u2199',
+	LowerRightArrow: '\u2198',
+	loz: '\u25CA',
+	lozenge: '\u25CA',
+	lozf: '\u29EB',
+	lpar: '\u0028',
+	lparlt: '\u2993',
+	lrarr: '\u21C6',
+	lrcorner: '\u231F',
+	lrhar: '\u21CB',
+	lrhard: '\u296D',
+	lrm: '\u200E',
+	lrtri: '\u22BF',
+	lsaquo: '\u2039',
+	Lscr: '\u2112',
+	lscr: '\uD835\uDCC1',
+	Lsh: '\u21B0',
+	lsh: '\u21B0',
+	lsim: '\u2272',
+	lsime: '\u2A8D',
+	lsimg: '\u2A8F',
+	lsqb: '\u005B',
+	lsquo: '\u2018',
+	lsquor: '\u201A',
+	Lstrok: '\u0141',
+	lstrok: '\u0142',
+	Lt: '\u226A',
+	LT: '\u003C',
+	lt: '\u003C',
+	ltcc: '\u2AA6',
+	ltcir: '\u2A79',
+	ltdot: '\u22D6',
+	lthree: '\u22CB',
+	ltimes: '\u22C9',
+	ltlarr: '\u2976',
+	ltquest: '\u2A7B',
+	ltri: '\u25C3',
+	ltrie: '\u22B4',
+	ltrif: '\u25C2',
+	ltrPar: '\u2996',
+	lurdshar: '\u294A',
+	luruhar: '\u2966',
+	lvertneqq: '\u2268\uFE00',
+	lvnE: '\u2268\uFE00',
+	macr: '\u00AF',
+	male: '\u2642',
+	malt: '\u2720',
+	maltese: '\u2720',
+	Map: '\u2905',
+	map: '\u21A6',
+	mapsto: '\u21A6',
+	mapstodown: '\u21A7',
+	mapstoleft: '\u21A4',
+	mapstoup: '\u21A5',
+	marker: '\u25AE',
+	mcomma: '\u2A29',
+	Mcy: '\u041C',
+	mcy: '\u043C',
+	mdash: '\u2014',
+	mDDot: '\u223A',
+	measuredangle: '\u2221',
+	MediumSpace: '\u205F',
+	Mellintrf: '\u2133',
+	Mfr: '\uD835\uDD10',
+	mfr: '\uD835\uDD2A',
+	mho: '\u2127',
+	micro: '\u00B5',
+	mid: '\u2223',
+	midast: '\u002A',
+	midcir: '\u2AF0',
+	middot: '\u00B7',
+	minus: '\u2212',
+	minusb: '\u229F',
+	minusd: '\u2238',
+	minusdu: '\u2A2A',
+	MinusPlus: '\u2213',
+	mlcp: '\u2ADB',
+	mldr: '\u2026',
+	mnplus: '\u2213',
+	models: '\u22A7',
+	Mopf: '\uD835\uDD44',
+	mopf: '\uD835\uDD5E',
+	mp: '\u2213',
+	Mscr: '\u2133',
+	mscr: '\uD835\uDCC2',
+	mstpos: '\u223E',
+	Mu: '\u039C',
+	mu: '\u03BC',
+	multimap: '\u22B8',
+	mumap: '\u22B8',
+	nabla: '\u2207',
+	Nacute: '\u0143',
+	nacute: '\u0144',
+	nang: '\u2220\u20D2',
+	nap: '\u2249',
+	napE: '\u2A70\u0338',
+	napid: '\u224B\u0338',
+	napos: '\u0149',
+	napprox: '\u2249',
+	natur: '\u266E',
+	natural: '\u266E',
+	naturals: '\u2115',
+	nbsp: '\u00A0',
+	nbump: '\u224E\u0338',
+	nbumpe: '\u224F\u0338',
+	ncap: '\u2A43',
+	Ncaron: '\u0147',
+	ncaron: '\u0148',
+	Ncedil: '\u0145',
+	ncedil: '\u0146',
+	ncong: '\u2247',
+	ncongdot: '\u2A6D\u0338',
+	ncup: '\u2A42',
+	Ncy: '\u041D',
+	ncy: '\u043D',
+	ndash: '\u2013',
+	ne: '\u2260',
+	nearhk: '\u2924',
+	neArr: '\u21D7',
+	nearr: '\u2197',
+	nearrow: '\u2197',
+	nedot: '\u2250\u0338',
+	NegativeMediumSpace: '\u200B',
+	NegativeThickSpace: '\u200B',
+	NegativeThinSpace: '\u200B',
+	NegativeVeryThinSpace: '\u200B',
+	nequiv: '\u2262',
+	nesear: '\u2928',
+	nesim: '\u2242\u0338',
+	NestedGreaterGreater: '\u226B',
+	NestedLessLess: '\u226A',
+	NewLine: '\u000A',
+	nexist: '\u2204',
+	nexists: '\u2204',
+	Nfr: '\uD835\uDD11',
+	nfr: '\uD835\uDD2B',
+	ngE: '\u2267\u0338',
+	nge: '\u2271',
+	ngeq: '\u2271',
+	ngeqq: '\u2267\u0338',
+	ngeqslant: '\u2A7E\u0338',
+	nges: '\u2A7E\u0338',
+	nGg: '\u22D9\u0338',
+	ngsim: '\u2275',
+	nGt: '\u226B\u20D2',
+	ngt: '\u226F',
+	ngtr: '\u226F',
+	nGtv: '\u226B\u0338',
+	nhArr: '\u21CE',
+	nharr: '\u21AE',
+	nhpar: '\u2AF2',
+	ni: '\u220B',
+	nis: '\u22FC',
+	nisd: '\u22FA',
+	niv: '\u220B',
+	NJcy: '\u040A',
+	njcy: '\u045A',
+	nlArr: '\u21CD',
+	nlarr: '\u219A',
+	nldr: '\u2025',
+	nlE: '\u2266\u0338',
+	nle: '\u2270',
+	nLeftarrow: '\u21CD',
+	nleftarrow: '\u219A',
+	nLeftrightarrow: '\u21CE',
+	nleftrightarrow: '\u21AE',
+	nleq: '\u2270',
+	nleqq: '\u2266\u0338',
+	nleqslant: '\u2A7D\u0338',
+	nles: '\u2A7D\u0338',
+	nless: '\u226E',
+	nLl: '\u22D8\u0338',
+	nlsim: '\u2274',
+	nLt: '\u226A\u20D2',
+	nlt: '\u226E',
+	nltri: '\u22EA',
+	nltrie: '\u22EC',
+	nLtv: '\u226A\u0338',
+	nmid: '\u2224',
+	NoBreak: '\u2060',
+	NonBreakingSpace: '\u00A0',
+	Nopf: '\u2115',
+	nopf: '\uD835\uDD5F',
+	Not: '\u2AEC',
+	not: '\u00AC',
+	NotCongruent: '\u2262',
+	NotCupCap: '\u226D',
+	NotDoubleVerticalBar: '\u2226',
+	NotElement: '\u2209',
+	NotEqual: '\u2260',
+	NotEqualTilde: '\u2242\u0338',
+	NotExists: '\u2204',
+	NotGreater: '\u226F',
+	NotGreaterEqual: '\u2271',
+	NotGreaterFullEqual: '\u2267\u0338',
+	NotGreaterGreater: '\u226B\u0338',
+	NotGreaterLess: '\u2279',
+	NotGreaterSlantEqual: '\u2A7E\u0338',
+	NotGreaterTilde: '\u2275',
+	NotHumpDownHump: '\u224E\u0338',
+	NotHumpEqual: '\u224F\u0338',
+	notin: '\u2209',
+	notindot: '\u22F5\u0338',
+	notinE: '\u22F9\u0338',
+	notinva: '\u2209',
+	notinvb: '\u22F7',
+	notinvc: '\u22F6',
+	NotLeftTriangle: '\u22EA',
+	NotLeftTriangleBar: '\u29CF\u0338',
+	NotLeftTriangleEqual: '\u22EC',
+	NotLess: '\u226E',
+	NotLessEqual: '\u2270',
+	NotLessGreater: '\u2278',
+	NotLessLess: '\u226A\u0338',
+	NotLessSlantEqual: '\u2A7D\u0338',
+	NotLessTilde: '\u2274',
+	NotNestedGreaterGreater: '\u2AA2\u0338',
+	NotNestedLessLess: '\u2AA1\u0338',
+	notni: '\u220C',
+	notniva: '\u220C',
+	notnivb: '\u22FE',
+	notnivc: '\u22FD',
+	NotPrecedes: '\u2280',
+	NotPrecedesEqual: '\u2AAF\u0338',
+	NotPrecedesSlantEqual: '\u22E0',
+	NotReverseElement: '\u220C',
+	NotRightTriangle: '\u22EB',
+	NotRightTriangleBar: '\u29D0\u0338',
+	NotRightTriangleEqual: '\u22ED',
+	NotSquareSubset: '\u228F\u0338',
+	NotSquareSubsetEqual: '\u22E2',
+	NotSquareSuperset: '\u2290\u0338',
+	NotSquareSupersetEqual: '\u22E3',
+	NotSubset: '\u2282\u20D2',
+	NotSubsetEqual: '\u2288',
+	NotSucceeds: '\u2281',
+	NotSucceedsEqual: '\u2AB0\u0338',
+	NotSucceedsSlantEqual: '\u22E1',
+	NotSucceedsTilde: '\u227F\u0338',
+	NotSuperset: '\u2283\u20D2',
+	NotSupersetEqual: '\u2289',
+	NotTilde: '\u2241',
+	NotTildeEqual: '\u2244',
+	NotTildeFullEqual: '\u2247',
+	NotTildeTilde: '\u2249',
+	NotVerticalBar: '\u2224',
+	npar: '\u2226',
+	nparallel: '\u2226',
+	nparsl: '\u2AFD\u20E5',
+	npart: '\u2202\u0338',
+	npolint: '\u2A14',
+	npr: '\u2280',
+	nprcue: '\u22E0',
+	npre: '\u2AAF\u0338',
+	nprec: '\u2280',
+	npreceq: '\u2AAF\u0338',
+	nrArr: '\u21CF',
+	nrarr: '\u219B',
+	nrarrc: '\u2933\u0338',
+	nrarrw: '\u219D\u0338',
+	nRightarrow: '\u21CF',
+	nrightarrow: '\u219B',
+	nrtri: '\u22EB',
+	nrtrie: '\u22ED',
+	nsc: '\u2281',
+	nsccue: '\u22E1',
+	nsce: '\u2AB0\u0338',
+	Nscr: '\uD835\uDCA9',
+	nscr: '\uD835\uDCC3',
+	nshortmid: '\u2224',
+	nshortparallel: '\u2226',
+	nsim: '\u2241',
+	nsime: '\u2244',
+	nsimeq: '\u2244',
+	nsmid: '\u2224',
+	nspar: '\u2226',
+	nsqsube: '\u22E2',
+	nsqsupe: '\u22E3',
+	nsub: '\u2284',
+	nsubE: '\u2AC5\u0338',
+	nsube: '\u2288',
+	nsubset: '\u2282\u20D2',
+	nsubseteq: '\u2288',
+	nsubseteqq: '\u2AC5\u0338',
+	nsucc: '\u2281',
+	nsucceq: '\u2AB0\u0338',
+	nsup: '\u2285',
+	nsupE: '\u2AC6\u0338',
+	nsupe: '\u2289',
+	nsupset: '\u2283\u20D2',
+	nsupseteq: '\u2289',
+	nsupseteqq: '\u2AC6\u0338',
+	ntgl: '\u2279',
+	Ntilde: '\u00D1',
+	ntilde: '\u00F1',
+	ntlg: '\u2278',
+	ntriangleleft: '\u22EA',
+	ntrianglelefteq: '\u22EC',
+	ntriangleright: '\u22EB',
+	ntrianglerighteq: '\u22ED',
+	Nu: '\u039D',
+	nu: '\u03BD',
+	num: '\u0023',
+	numero: '\u2116',
+	numsp: '\u2007',
+	nvap: '\u224D\u20D2',
+	nVDash: '\u22AF',
+	nVdash: '\u22AE',
+	nvDash: '\u22AD',
+	nvdash: '\u22AC',
+	nvge: '\u2265\u20D2',
+	nvgt: '\u003E\u20D2',
+	nvHarr: '\u2904',
+	nvinfin: '\u29DE',
+	nvlArr: '\u2902',
+	nvle: '\u2264\u20D2',
+	nvlt: '\u003C\u20D2',
+	nvltrie: '\u22B4\u20D2',
+	nvrArr: '\u2903',
+	nvrtrie: '\u22B5\u20D2',
+	nvsim: '\u223C\u20D2',
+	nwarhk: '\u2923',
+	nwArr: '\u21D6',
+	nwarr: '\u2196',
+	nwarrow: '\u2196',
+	nwnear: '\u2927',
+	Oacute: '\u00D3',
+	oacute: '\u00F3',
+	oast: '\u229B',
+	ocir: '\u229A',
+	Ocirc: '\u00D4',
+	ocirc: '\u00F4',
+	Ocy: '\u041E',
+	ocy: '\u043E',
+	odash: '\u229D',
+	Odblac: '\u0150',
+	odblac: '\u0151',
+	odiv: '\u2A38',
+	odot: '\u2299',
+	odsold: '\u29BC',
+	OElig: '\u0152',
+	oelig: '\u0153',
+	ofcir: '\u29BF',
+	Ofr: '\uD835\uDD12',
+	ofr: '\uD835\uDD2C',
+	ogon: '\u02DB',
+	Ograve: '\u00D2',
+	ograve: '\u00F2',
+	ogt: '\u29C1',
+	ohbar: '\u29B5',
+	ohm: '\u03A9',
+	oint: '\u222E',
+	olarr: '\u21BA',
+	olcir: '\u29BE',
+	olcross: '\u29BB',
+	oline: '\u203E',
+	olt: '\u29C0',
+	Omacr: '\u014C',
+	omacr: '\u014D',
+	Omega: '\u03A9',
+	omega: '\u03C9',
+	Omicron: '\u039F',
+	omicron: '\u03BF',
+	omid: '\u29B6',
+	ominus: '\u2296',
+	Oopf: '\uD835\uDD46',
+	oopf: '\uD835\uDD60',
+	opar: '\u29B7',
+	OpenCurlyDoubleQuote: '\u201C',
+	OpenCurlyQuote: '\u2018',
+	operp: '\u29B9',
+	oplus: '\u2295',
+	Or: '\u2A54',
+	or: '\u2228',
+	orarr: '\u21BB',
+	ord: '\u2A5D',
+	order: '\u2134',
+	orderof: '\u2134',
+	ordf: '\u00AA',
+	ordm: '\u00BA',
+	origof: '\u22B6',
+	oror: '\u2A56',
+	orslope: '\u2A57',
+	orv: '\u2A5B',
+	oS: '\u24C8',
+	Oscr: '\uD835\uDCAA',
+	oscr: '\u2134',
+	Oslash: '\u00D8',
+	oslash: '\u00F8',
+	osol: '\u2298',
+	Otilde: '\u00D5',
+	otilde: '\u00F5',
+	Otimes: '\u2A37',
+	otimes: '\u2297',
+	otimesas: '\u2A36',
+	Ouml: '\u00D6',
+	ouml: '\u00F6',
+	ovbar: '\u233D',
+	OverBar: '\u203E',
+	OverBrace: '\u23DE',
+	OverBracket: '\u23B4',
+	OverParenthesis: '\u23DC',
+	par: '\u2225',
+	para: '\u00B6',
+	parallel: '\u2225',
+	parsim: '\u2AF3',
+	parsl: '\u2AFD',
+	part: '\u2202',
+	PartialD: '\u2202',
+	Pcy: '\u041F',
+	pcy: '\u043F',
+	percnt: '\u0025',
+	period: '\u002E',
+	permil: '\u2030',
+	perp: '\u22A5',
+	pertenk: '\u2031',
+	Pfr: '\uD835\uDD13',
+	pfr: '\uD835\uDD2D',
+	Phi: '\u03A6',
+	phi: '\u03C6',
+	phiv: '\u03D5',
+	phmmat: '\u2133',
+	phone: '\u260E',
+	Pi: '\u03A0',
+	pi: '\u03C0',
+	pitchfork: '\u22D4',
+	piv: '\u03D6',
+	planck: '\u210F',
+	planckh: '\u210E',
+	plankv: '\u210F',
+	plus: '\u002B',
+	plusacir: '\u2A23',
+	plusb: '\u229E',
+	pluscir: '\u2A22',
+	plusdo: '\u2214',
+	plusdu: '\u2A25',
+	pluse: '\u2A72',
+	PlusMinus: '\u00B1',
+	plusmn: '\u00B1',
+	plussim: '\u2A26',
+	plustwo: '\u2A27',
+	pm: '\u00B1',
+	Poincareplane: '\u210C',
+	pointint: '\u2A15',
+	Popf: '\u2119',
+	popf: '\uD835\uDD61',
+	pound: '\u00A3',
+	Pr: '\u2ABB',
+	pr: '\u227A',
+	prap: '\u2AB7',
+	prcue: '\u227C',
+	prE: '\u2AB3',
+	pre: '\u2AAF',
+	prec: '\u227A',
+	precapprox: '\u2AB7',
+	preccurlyeq: '\u227C',
+	Precedes: '\u227A',
+	PrecedesEqual: '\u2AAF',
+	PrecedesSlantEqual: '\u227C',
+	PrecedesTilde: '\u227E',
+	preceq: '\u2AAF',
+	precnapprox: '\u2AB9',
+	precneqq: '\u2AB5',
+	precnsim: '\u22E8',
+	precsim: '\u227E',
+	Prime: '\u2033',
+	prime: '\u2032',
+	primes: '\u2119',
+	prnap: '\u2AB9',
+	prnE: '\u2AB5',
+	prnsim: '\u22E8',
+	prod: '\u220F',
+	Product: '\u220F',
+	profalar: '\u232E',
+	profline: '\u2312',
+	profsurf: '\u2313',
+	prop: '\u221D',
+	Proportion: '\u2237',
+	Proportional: '\u221D',
+	propto: '\u221D',
+	prsim: '\u227E',
+	prurel: '\u22B0',
+	Pscr: '\uD835\uDCAB',
+	pscr: '\uD835\uDCC5',
+	Psi: '\u03A8',
+	psi: '\u03C8',
+	puncsp: '\u2008',
+	Qfr: '\uD835\uDD14',
+	qfr: '\uD835\uDD2E',
+	qint: '\u2A0C',
+	Qopf: '\u211A',
+	qopf: '\uD835\uDD62',
+	qprime: '\u2057',
+	Qscr: '\uD835\uDCAC',
+	qscr: '\uD835\uDCC6',
+	quaternions: '\u210D',
+	quatint: '\u2A16',
+	quest: '\u003F',
+	questeq: '\u225F',
+	QUOT: '\u0022',
+	quot: '\u0022',
+	rAarr: '\u21DB',
+	race: '\u223D\u0331',
+	Racute: '\u0154',
+	racute: '\u0155',
+	radic: '\u221A',
+	raemptyv: '\u29B3',
+	Rang: '\u27EB',
+	rang: '\u27E9',
+	rangd: '\u2992',
+	range: '\u29A5',
+	rangle: '\u27E9',
+	raquo: '\u00BB',
+	Rarr: '\u21A0',
+	rArr: '\u21D2',
+	rarr: '\u2192',
+	rarrap: '\u2975',
+	rarrb: '\u21E5',
+	rarrbfs: '\u2920',
+	rarrc: '\u2933',
+	rarrfs: '\u291E',
+	rarrhk: '\u21AA',
+	rarrlp: '\u21AC',
+	rarrpl: '\u2945',
+	rarrsim: '\u2974',
+	Rarrtl: '\u2916',
+	rarrtl: '\u21A3',
+	rarrw: '\u219D',
+	rAtail: '\u291C',
+	ratail: '\u291A',
+	ratio: '\u2236',
+	rationals: '\u211A',
+	RBarr: '\u2910',
+	rBarr: '\u290F',
+	rbarr: '\u290D',
+	rbbrk: '\u2773',
+	rbrace: '\u007D',
+	rbrack: '\u005D',
+	rbrke: '\u298C',
+	rbrksld: '\u298E',
+	rbrkslu: '\u2990',
+	Rcaron: '\u0158',
+	rcaron: '\u0159',
+	Rcedil: '\u0156',
+	rcedil: '\u0157',
+	rceil: '\u2309',
+	rcub: '\u007D',
+	Rcy: '\u0420',
+	rcy: '\u0440',
+	rdca: '\u2937',
+	rdldhar: '\u2969',
+	rdquo: '\u201D',
+	rdquor: '\u201D',
+	rdsh: '\u21B3',
+	Re: '\u211C',
+	real: '\u211C',
+	realine: '\u211B',
+	realpart: '\u211C',
+	reals: '\u211D',
+	rect: '\u25AD',
+	REG: '\u00AE',
+	reg: '\u00AE',
+	ReverseElement: '\u220B',
+	ReverseEquilibrium: '\u21CB',
+	ReverseUpEquilibrium: '\u296F',
+	rfisht: '\u297D',
+	rfloor: '\u230B',
+	Rfr: '\u211C',
+	rfr: '\uD835\uDD2F',
+	rHar: '\u2964',
+	rhard: '\u21C1',
+	rharu: '\u21C0',
+	rharul: '\u296C',
+	Rho: '\u03A1',
+	rho: '\u03C1',
+	rhov: '\u03F1',
+	RightAngleBracket: '\u27E9',
+	RightArrow: '\u2192',
+	Rightarrow: '\u21D2',
+	rightarrow: '\u2192',
+	RightArrowBar: '\u21E5',
+	RightArrowLeftArrow: '\u21C4',
+	rightarrowtail: '\u21A3',
+	RightCeiling: '\u2309',
+	RightDoubleBracket: '\u27E7',
+	RightDownTeeVector: '\u295D',
+	RightDownVector: '\u21C2',
+	RightDownVectorBar: '\u2955',
+	RightFloor: '\u230B',
+	rightharpoondown: '\u21C1',
+	rightharpoonup: '\u21C0',
+	rightleftarrows: '\u21C4',
+	rightleftharpoons: '\u21CC',
+	rightrightarrows: '\u21C9',
+	rightsquigarrow: '\u219D',
+	RightTee: '\u22A2',
+	RightTeeArrow: '\u21A6',
+	RightTeeVector: '\u295B',
+	rightthreetimes: '\u22CC',
+	RightTriangle: '\u22B3',
+	RightTriangleBar: '\u29D0',
+	RightTriangleEqual: '\u22B5',
+	RightUpDownVector: '\u294F',
+	RightUpTeeVector: '\u295C',
+	RightUpVector: '\u21BE',
+	RightUpVectorBar: '\u2954',
+	RightVector: '\u21C0',
+	RightVectorBar: '\u2953',
+	ring: '\u02DA',
+	risingdotseq: '\u2253',
+	rlarr: '\u21C4',
+	rlhar: '\u21CC',
+	rlm: '\u200F',
+	rmoust: '\u23B1',
+	rmoustache: '\u23B1',
+	rnmid: '\u2AEE',
+	roang: '\u27ED',
+	roarr: '\u21FE',
+	robrk: '\u27E7',
+	ropar: '\u2986',
+	Ropf: '\u211D',
+	ropf: '\uD835\uDD63',
+	roplus: '\u2A2E',
+	rotimes: '\u2A35',
+	RoundImplies: '\u2970',
+	rpar: '\u0029',
+	rpargt: '\u2994',
+	rppolint: '\u2A12',
+	rrarr: '\u21C9',
+	Rrightarrow: '\u21DB',
+	rsaquo: '\u203A',
+	Rscr: '\u211B',
+	rscr: '\uD835\uDCC7',
+	Rsh: '\u21B1',
+	rsh: '\u21B1',
+	rsqb: '\u005D',
+	rsquo: '\u2019',
+	rsquor: '\u2019',
+	rthree: '\u22CC',
+	rtimes: '\u22CA',
+	rtri: '\u25B9',
+	rtrie: '\u22B5',
+	rtrif: '\u25B8',
+	rtriltri: '\u29CE',
+	RuleDelayed: '\u29F4',
+	ruluhar: '\u2968',
+	rx: '\u211E',
+	Sacute: '\u015A',
+	sacute: '\u015B',
+	sbquo: '\u201A',
+	Sc: '\u2ABC',
+	sc: '\u227B',
+	scap: '\u2AB8',
+	Scaron: '\u0160',
+	scaron: '\u0161',
+	sccue: '\u227D',
+	scE: '\u2AB4',
+	sce: '\u2AB0',
+	Scedil: '\u015E',
+	scedil: '\u015F',
+	Scirc: '\u015C',
+	scirc: '\u015D',
+	scnap: '\u2ABA',
+	scnE: '\u2AB6',
+	scnsim: '\u22E9',
+	scpolint: '\u2A13',
+	scsim: '\u227F',
+	Scy: '\u0421',
+	scy: '\u0441',
+	sdot: '\u22C5',
+	sdotb: '\u22A1',
+	sdote: '\u2A66',
+	searhk: '\u2925',
+	seArr: '\u21D8',
+	searr: '\u2198',
+	searrow: '\u2198',
+	sect: '\u00A7',
+	semi: '\u003B',
+	seswar: '\u2929',
+	setminus: '\u2216',
+	setmn: '\u2216',
+	sext: '\u2736',
+	Sfr: '\uD835\uDD16',
+	sfr: '\uD835\uDD30',
+	sfrown: '\u2322',
+	sharp: '\u266F',
+	SHCHcy: '\u0429',
+	shchcy: '\u0449',
+	SHcy: '\u0428',
+	shcy: '\u0448',
+	ShortDownArrow: '\u2193',
+	ShortLeftArrow: '\u2190',
+	shortmid: '\u2223',
+	shortparallel: '\u2225',
+	ShortRightArrow: '\u2192',
+	ShortUpArrow: '\u2191',
+	shy: '\u00AD',
+	Sigma: '\u03A3',
+	sigma: '\u03C3',
+	sigmaf: '\u03C2',
+	sigmav: '\u03C2',
+	sim: '\u223C',
+	simdot: '\u2A6A',
+	sime: '\u2243',
+	simeq: '\u2243',
+	simg: '\u2A9E',
+	simgE: '\u2AA0',
+	siml: '\u2A9D',
+	simlE: '\u2A9F',
+	simne: '\u2246',
+	simplus: '\u2A24',
+	simrarr: '\u2972',
+	slarr: '\u2190',
+	SmallCircle: '\u2218',
+	smallsetminus: '\u2216',
+	smashp: '\u2A33',
+	smeparsl: '\u29E4',
+	smid: '\u2223',
+	smile: '\u2323',
+	smt: '\u2AAA',
+	smte: '\u2AAC',
+	smtes: '\u2AAC\uFE00',
+	SOFTcy: '\u042C',
+	softcy: '\u044C',
+	sol: '\u002F',
+	solb: '\u29C4',
+	solbar: '\u233F',
+	Sopf: '\uD835\uDD4A',
+	sopf: '\uD835\uDD64',
+	spades: '\u2660',
+	spadesuit: '\u2660',
+	spar: '\u2225',
+	sqcap: '\u2293',
+	sqcaps: '\u2293\uFE00',
+	sqcup: '\u2294',
+	sqcups: '\u2294\uFE00',
+	Sqrt: '\u221A',
+	sqsub: '\u228F',
+	sqsube: '\u2291',
+	sqsubset: '\u228F',
+	sqsubseteq: '\u2291',
+	sqsup: '\u2290',
+	sqsupe: '\u2292',
+	sqsupset: '\u2290',
+	sqsupseteq: '\u2292',
+	squ: '\u25A1',
+	Square: '\u25A1',
+	square: '\u25A1',
+	SquareIntersection: '\u2293',
+	SquareSubset: '\u228F',
+	SquareSubsetEqual: '\u2291',
+	SquareSuperset: '\u2290',
+	SquareSupersetEqual: '\u2292',
+	SquareUnion: '\u2294',
+	squarf: '\u25AA',
+	squf: '\u25AA',
+	srarr: '\u2192',
+	Sscr: '\uD835\uDCAE',
+	sscr: '\uD835\uDCC8',
+	ssetmn: '\u2216',
+	ssmile: '\u2323',
+	sstarf: '\u22C6',
+	Star: '\u22C6',
+	star: '\u2606',
+	starf: '\u2605',
+	straightepsilon: '\u03F5',
+	straightphi: '\u03D5',
+	strns: '\u00AF',
+	Sub: '\u22D0',
+	sub: '\u2282',
+	subdot: '\u2ABD',
+	subE: '\u2AC5',
+	sube: '\u2286',
+	subedot: '\u2AC3',
+	submult: '\u2AC1',
+	subnE: '\u2ACB',
+	subne: '\u228A',
+	subplus: '\u2ABF',
+	subrarr: '\u2979',
+	Subset: '\u22D0',
+	subset: '\u2282',
+	subseteq: '\u2286',
+	subseteqq: '\u2AC5',
+	SubsetEqual: '\u2286',
+	subsetneq: '\u228A',
+	subsetneqq: '\u2ACB',
+	subsim: '\u2AC7',
+	subsub: '\u2AD5',
+	subsup: '\u2AD3',
+	succ: '\u227B',
+	succapprox: '\u2AB8',
+	succcurlyeq: '\u227D',
+	Succeeds: '\u227B',
+	SucceedsEqual: '\u2AB0',
+	SucceedsSlantEqual: '\u227D',
+	SucceedsTilde: '\u227F',
+	succeq: '\u2AB0',
+	succnapprox: '\u2ABA',
+	succneqq: '\u2AB6',
+	succnsim: '\u22E9',
+	succsim: '\u227F',
+	SuchThat: '\u220B',
+	Sum: '\u2211',
+	sum: '\u2211',
+	sung: '\u266A',
+	Sup: '\u22D1',
+	sup: '\u2283',
+	sup1: '\u00B9',
+	sup2: '\u00B2',
+	sup3: '\u00B3',
+	supdot: '\u2ABE',
+	supdsub: '\u2AD8',
+	supE: '\u2AC6',
+	supe: '\u2287',
+	supedot: '\u2AC4',
+	Superset: '\u2283',
+	SupersetEqual: '\u2287',
+	suphsol: '\u27C9',
+	suphsub: '\u2AD7',
+	suplarr: '\u297B',
+	supmult: '\u2AC2',
+	supnE: '\u2ACC',
+	supne: '\u228B',
+	supplus: '\u2AC0',
+	Supset: '\u22D1',
+	supset: '\u2283',
+	supseteq: '\u2287',
+	supseteqq: '\u2AC6',
+	supsetneq: '\u228B',
+	supsetneqq: '\u2ACC',
+	supsim: '\u2AC8',
+	supsub: '\u2AD4',
+	supsup: '\u2AD6',
+	swarhk: '\u2926',
+	swArr: '\u21D9',
+	swarr: '\u2199',
+	swarrow: '\u2199',
+	swnwar: '\u292A',
+	szlig: '\u00DF',
+	Tab: '\u0009',
+	target: '\u2316',
+	Tau: '\u03A4',
+	tau: '\u03C4',
+	tbrk: '\u23B4',
+	Tcaron: '\u0164',
+	tcaron: '\u0165',
+	Tcedil: '\u0162',
+	tcedil: '\u0163',
+	Tcy: '\u0422',
+	tcy: '\u0442',
+	tdot: '\u20DB',
+	telrec: '\u2315',
+	Tfr: '\uD835\uDD17',
+	tfr: '\uD835\uDD31',
+	there4: '\u2234',
+	Therefore: '\u2234',
+	therefore: '\u2234',
+	Theta: '\u0398',
+	theta: '\u03B8',
+	thetasym: '\u03D1',
+	thetav: '\u03D1',
+	thickapprox: '\u2248',
+	thicksim: '\u223C',
+	ThickSpace: '\u205F\u200A',
+	thinsp: '\u2009',
+	ThinSpace: '\u2009',
+	thkap: '\u2248',
+	thksim: '\u223C',
+	THORN: '\u00DE',
+	thorn: '\u00FE',
+	Tilde: '\u223C',
+	tilde: '\u02DC',
+	TildeEqual: '\u2243',
+	TildeFullEqual: '\u2245',
+	TildeTilde: '\u2248',
+	times: '\u00D7',
+	timesb: '\u22A0',
+	timesbar: '\u2A31',
+	timesd: '\u2A30',
+	tint: '\u222D',
+	toea: '\u2928',
+	top: '\u22A4',
+	topbot: '\u2336',
+	topcir: '\u2AF1',
+	Topf: '\uD835\uDD4B',
+	topf: '\uD835\uDD65',
+	topfork: '\u2ADA',
+	tosa: '\u2929',
+	tprime: '\u2034',
+	TRADE: '\u2122',
+	trade: '\u2122',
+	triangle: '\u25B5',
+	triangledown: '\u25BF',
+	triangleleft: '\u25C3',
+	trianglelefteq: '\u22B4',
+	triangleq: '\u225C',
+	triangleright: '\u25B9',
+	trianglerighteq: '\u22B5',
+	tridot: '\u25EC',
+	trie: '\u225C',
+	triminus: '\u2A3A',
+	TripleDot: '\u20DB',
+	triplus: '\u2A39',
+	trisb: '\u29CD',
+	tritime: '\u2A3B',
+	trpezium: '\u23E2',
+	Tscr: '\uD835\uDCAF',
+	tscr: '\uD835\uDCC9',
+	TScy: '\u0426',
+	tscy: '\u0446',
+	TSHcy: '\u040B',
+	tshcy: '\u045B',
+	Tstrok: '\u0166',
+	tstrok: '\u0167',
+	twixt: '\u226C',
+	twoheadleftarrow: '\u219E',
+	twoheadrightarrow: '\u21A0',
+	Uacute: '\u00DA',
+	uacute: '\u00FA',
+	Uarr: '\u219F',
+	uArr: '\u21D1',
+	uarr: '\u2191',
+	Uarrocir: '\u2949',
+	Ubrcy: '\u040E',
+	ubrcy: '\u045E',
+	Ubreve: '\u016C',
+	ubreve: '\u016D',
+	Ucirc: '\u00DB',
+	ucirc: '\u00FB',
+	Ucy: '\u0423',
+	ucy: '\u0443',
+	udarr: '\u21C5',
+	Udblac: '\u0170',
+	udblac: '\u0171',
+	udhar: '\u296E',
+	ufisht: '\u297E',
+	Ufr: '\uD835\uDD18',
+	ufr: '\uD835\uDD32',
+	Ugrave: '\u00D9',
+	ugrave: '\u00F9',
+	uHar: '\u2963',
+	uharl: '\u21BF',
+	uharr: '\u21BE',
+	uhblk: '\u2580',
+	ulcorn: '\u231C',
+	ulcorner: '\u231C',
+	ulcrop: '\u230F',
+	ultri: '\u25F8',
+	Umacr: '\u016A',
+	umacr: '\u016B',
+	uml: '\u00A8',
+	UnderBar: '\u005F',
+	UnderBrace: '\u23DF',
+	UnderBracket: '\u23B5',
+	UnderParenthesis: '\u23DD',
+	Union: '\u22C3',
+	UnionPlus: '\u228E',
+	Uogon: '\u0172',
+	uogon: '\u0173',
+	Uopf: '\uD835\uDD4C',
+	uopf: '\uD835\uDD66',
+	UpArrow: '\u2191',
+	Uparrow: '\u21D1',
+	uparrow: '\u2191',
+	UpArrowBar: '\u2912',
+	UpArrowDownArrow: '\u21C5',
+	UpDownArrow: '\u2195',
+	Updownarrow: '\u21D5',
+	updownarrow: '\u2195',
+	UpEquilibrium: '\u296E',
+	upharpoonleft: '\u21BF',
+	upharpoonright: '\u21BE',
+	uplus: '\u228E',
+	UpperLeftArrow: '\u2196',
+	UpperRightArrow: '\u2197',
+	Upsi: '\u03D2',
+	upsi: '\u03C5',
+	upsih: '\u03D2',
+	Upsilon: '\u03A5',
+	upsilon: '\u03C5',
+	UpTee: '\u22A5',
+	UpTeeArrow: '\u21A5',
+	upuparrows: '\u21C8',
+	urcorn: '\u231D',
+	urcorner: '\u231D',
+	urcrop: '\u230E',
+	Uring: '\u016E',
+	uring: '\u016F',
+	urtri: '\u25F9',
+	Uscr: '\uD835\uDCB0',
+	uscr: '\uD835\uDCCA',
+	utdot: '\u22F0',
+	Utilde: '\u0168',
+	utilde: '\u0169',
+	utri: '\u25B5',
+	utrif: '\u25B4',
+	uuarr: '\u21C8',
+	Uuml: '\u00DC',
+	uuml: '\u00FC',
+	uwangle: '\u29A7',
+	vangrt: '\u299C',
+	varepsilon: '\u03F5',
+	varkappa: '\u03F0',
+	varnothing: '\u2205',
+	varphi: '\u03D5',
+	varpi: '\u03D6',
+	varpropto: '\u221D',
+	vArr: '\u21D5',
+	varr: '\u2195',
+	varrho: '\u03F1',
+	varsigma: '\u03C2',
+	varsubsetneq: '\u228A\uFE00',
+	varsubsetneqq: '\u2ACB\uFE00',
+	varsupsetneq: '\u228B\uFE00',
+	varsupsetneqq: '\u2ACC\uFE00',
+	vartheta: '\u03D1',
+	vartriangleleft: '\u22B2',
+	vartriangleright: '\u22B3',
+	Vbar: '\u2AEB',
+	vBar: '\u2AE8',
+	vBarv: '\u2AE9',
+	Vcy: '\u0412',
+	vcy: '\u0432',
+	VDash: '\u22AB',
+	Vdash: '\u22A9',
+	vDash: '\u22A8',
+	vdash: '\u22A2',
+	Vdashl: '\u2AE6',
+	Vee: '\u22C1',
+	vee: '\u2228',
+	veebar: '\u22BB',
+	veeeq: '\u225A',
+	vellip: '\u22EE',
+	Verbar: '\u2016',
+	verbar: '\u007C',
+	Vert: '\u2016',
+	vert: '\u007C',
+	VerticalBar: '\u2223',
+	VerticalLine: '\u007C',
+	VerticalSeparator: '\u2758',
+	VerticalTilde: '\u2240',
+	VeryThinSpace: '\u200A',
+	Vfr: '\uD835\uDD19',
+	vfr: '\uD835\uDD33',
+	vltri: '\u22B2',
+	vnsub: '\u2282\u20D2',
+	vnsup: '\u2283\u20D2',
+	Vopf: '\uD835\uDD4D',
+	vopf: '\uD835\uDD67',
+	vprop: '\u221D',
+	vrtri: '\u22B3',
+	Vscr: '\uD835\uDCB1',
+	vscr: '\uD835\uDCCB',
+	vsubnE: '\u2ACB\uFE00',
+	vsubne: '\u228A\uFE00',
+	vsupnE: '\u2ACC\uFE00',
+	vsupne: '\u228B\uFE00',
+	Vvdash: '\u22AA',
+	vzigzag: '\u299A',
+	Wcirc: '\u0174',
+	wcirc: '\u0175',
+	wedbar: '\u2A5F',
+	Wedge: '\u22C0',
+	wedge: '\u2227',
+	wedgeq: '\u2259',
+	weierp: '\u2118',
+	Wfr: '\uD835\uDD1A',
+	wfr: '\uD835\uDD34',
+	Wopf: '\uD835\uDD4E',
+	wopf: '\uD835\uDD68',
+	wp: '\u2118',
+	wr: '\u2240',
+	wreath: '\u2240',
+	Wscr: '\uD835\uDCB2',
+	wscr: '\uD835\uDCCC',
+	xcap: '\u22C2',
+	xcirc: '\u25EF',
+	xcup: '\u22C3',
+	xdtri: '\u25BD',
+	Xfr: '\uD835\uDD1B',
+	xfr: '\uD835\uDD35',
+	xhArr: '\u27FA',
+	xharr: '\u27F7',
+	Xi: '\u039E',
+	xi: '\u03BE',
+	xlArr: '\u27F8',
+	xlarr: '\u27F5',
+	xmap: '\u27FC',
+	xnis: '\u22FB',
+	xodot: '\u2A00',
+	Xopf: '\uD835\uDD4F',
+	xopf: '\uD835\uDD69',
+	xoplus: '\u2A01',
+	xotime: '\u2A02',
+	xrArr: '\u27F9',
+	xrarr: '\u27F6',
+	Xscr: '\uD835\uDCB3',
+	xscr: '\uD835\uDCCD',
+	xsqcup: '\u2A06',
+	xuplus: '\u2A04',
+	xutri: '\u25B3',
+	xvee: '\u22C1',
+	xwedge: '\u22C0',
+	Yacute: '\u00DD',
+	yacute: '\u00FD',
+	YAcy: '\u042F',
+	yacy: '\u044F',
+	Ycirc: '\u0176',
+	ycirc: '\u0177',
+	Ycy: '\u042B',
+	ycy: '\u044B',
+	yen: '\u00A5',
+	Yfr: '\uD835\uDD1C',
+	yfr: '\uD835\uDD36',
+	YIcy: '\u0407',
+	yicy: '\u0457',
+	Yopf: '\uD835\uDD50',
+	yopf: '\uD835\uDD6A',
+	Yscr: '\uD835\uDCB4',
+	yscr: '\uD835\uDCCE',
+	YUcy: '\u042E',
+	yucy: '\u044E',
+	Yuml: '\u0178',
+	yuml: '\u00FF',
+	Zacute: '\u0179',
+	zacute: '\u017A',
+	Zcaron: '\u017D',
+	zcaron: '\u017E',
+	Zcy: '\u0417',
+	zcy: '\u0437',
+	Zdot: '\u017B',
+	zdot: '\u017C',
+	zeetrf: '\u2128',
+	ZeroWidthSpace: '\u200B',
+	Zeta: '\u0396',
+	zeta: '\u03B6',
+	Zfr: '\u2128',
+	zfr: '\uD835\uDD37',
+	ZHcy: '\u0416',
+	zhcy: '\u0436',
+	zigrarr: '\u21DD',
+	Zopf: '\u2124',
+	zopf: '\uD835\uDD6B',
+	Zscr: '\uD835\uDCB5',
+	zscr: '\uD835\uDCCF',
+	zwj: '\u200D',
+	zwnj: '\u200C',
 });
 
 /**
  * @deprecated use `HTML_ENTITIES` instead
  * @see HTML_ENTITIES
  */
-exports.entityMap = exports.HTML_ENTITIES
+exports.entityMap = exports.HTML_ENTITIES;
 
 },{"./conventions":47}],51:[function(require,module,exports){
 var dom = require('./dom')
@@ -9603,7 +11831,9 @@ function parseElementStartPart(source,start,el,currentNSMap,entityReplacer,error
 				el.closed = true;
 			case S_ATTR_NOQUOT_VALUE:
 			case S_ATTR:
-			case S_ATTR_SPACE:
+				break;
+				case S_ATTR_SPACE:
+					el.closed = true;
 				break;
 			//case S_EQ:
 			default:
@@ -9964,8 +12194,8 @@ exports.ParseError = ParseError;
 (function (global, factory) {
     typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports) :
     typeof define === 'function' && define.amd ? define(['exports'], factory) :
-    (factory((global.async = {})));
-}(this, (function (exports) { 'use strict';
+    (global = typeof globalThis !== 'undefined' ? globalThis : global || self, factory(global.async = {}));
+})(this, (function (exports) { 'use strict';
 
     /**
      * Creates a continuation function with some arguments already applied.
@@ -10037,19 +12267,19 @@ exports.ParseError = ParseError;
         return (fn, ...args) => defer(() => fn(...args));
     }
 
-    var _defer;
+    var _defer$1;
 
     if (hasQueueMicrotask) {
-        _defer = queueMicrotask;
+        _defer$1 = queueMicrotask;
     } else if (hasSetImmediate) {
-        _defer = setImmediate;
+        _defer$1 = setImmediate;
     } else if (hasNextTick) {
-        _defer = process.nextTick;
+        _defer$1 = process.nextTick;
     } else {
-        _defer = fallback;
+        _defer$1 = fallback;
     }
 
-    var setImmediate$1 = wrap(_defer);
+    var setImmediate$1 = wrap(_defer$1);
 
     /**
      * Take a sync function and make it async, passing its return value to a
@@ -10136,7 +12366,7 @@ exports.ParseError = ParseError;
         return promise.then(value => {
             invokeCallback(callback, null, value);
         }, err => {
-            invokeCallback(callback, err && err.message ? err : new Error(err));
+            invokeCallback(callback, err && (err instanceof Error || err.message) ? err : new Error(err));
         });
     }
 
@@ -10167,7 +12397,8 @@ exports.ParseError = ParseError;
 
     // conditionally promisify a function.
     // only return a promise if a callback is omitted
-    function awaitify (asyncFn, arity = asyncFn.length) {
+    function awaitify (asyncFn, arity) {
+        if (!arity) arity = asyncFn.length;
         if (!arity) throw new Error('arity is undefined')
         function awaitable (...args) {
             if (typeof args[arity - 1] === 'function') {
@@ -10186,7 +12417,7 @@ exports.ParseError = ParseError;
         return awaitable
     }
 
-    function applyEach (eachfn) {
+    function applyEach$1 (eachfn) {
         return function applyEach(fns, ...callArgs) {
             const go = awaitify(function (callback) {
                 var that = this;
@@ -10225,6 +12456,7 @@ exports.ParseError = ParseError;
     // A temporary value used to identify if the loop should be broken.
     // See #1064, #1293
     const breakLoop = {};
+    var breakLoop$1 = breakLoop;
 
     function once(fn) {
         function wrapper (...args) {
@@ -10335,7 +12567,7 @@ exports.ParseError = ParseError;
                 return
             }
 
-            if (result === breakLoop || (done && running <= 0)) {
+            if (result === breakLoop$1 || (done && running <= 0)) {
                 done = true;
                 //console.log('done iterCb')
                 return callback(null);
@@ -10353,7 +12585,7 @@ exports.ParseError = ParseError;
         replenish();
     }
 
-    var eachOfLimit = (limit) => {
+    var eachOfLimit$2 = (limit) => {
         return (obj, iteratee, callback) => {
             callback = once(callback);
             if (limit <= 0) {
@@ -10385,7 +12617,7 @@ exports.ParseError = ParseError;
                     done = true;
                     canceled = true;
                 }
-                else if (value === breakLoop || (done && running <= 0)) {
+                else if (value === breakLoop$1 || (done && running <= 0)) {
                     done = true;
                     return callback(null);
                 }
@@ -10436,11 +12668,11 @@ exports.ParseError = ParseError;
      * `iteratee` functions have finished, or an error occurs. Invoked with (err).
      * @returns {Promise} a promise, if a callback is omitted
      */
-    function eachOfLimit$1(coll, limit, iteratee, callback) {
-        return eachOfLimit(limit)(coll, wrapAsync(iteratee), callback);
+    function eachOfLimit(coll, limit, iteratee, callback) {
+        return eachOfLimit$2(limit)(coll, wrapAsync(iteratee), callback);
     }
 
-    var eachOfLimit$2 = awaitify(eachOfLimit$1, 4);
+    var eachOfLimit$1 = awaitify(eachOfLimit, 4);
 
     // eachOf implementation optimized for array-likes
     function eachOfArrayLike(coll, iteratee, callback) {
@@ -10460,7 +12692,7 @@ exports.ParseError = ParseError;
             if (canceled === true) return
             if (err) {
                 callback(err);
-            } else if ((++completed === length) || value === breakLoop) {
+            } else if ((++completed === length) || value === breakLoop$1) {
                 callback(null);
             }
         }
@@ -10472,7 +12704,7 @@ exports.ParseError = ParseError;
 
     // a generic version of eachOf which can handle array, object, and iterator cases.
     function eachOfGeneric (coll, iteratee, callback) {
-        return eachOfLimit$2(coll, Infinity, iteratee, callback);
+        return eachOfLimit$1(coll, Infinity, iteratee, callback);
     }
 
     /**
@@ -10752,7 +12984,7 @@ exports.ParseError = ParseError;
      *     callback
      * );
      */
-    var applyEach$1 = applyEach(map$1);
+    var applyEach = applyEach$1(map$1);
 
     /**
      * The same as [`eachOf`]{@link module:Collections.eachOf} but runs only a single async operation at a time.
@@ -10773,7 +13005,7 @@ exports.ParseError = ParseError;
      * @returns {Promise} a promise, if a callback is omitted
      */
     function eachOfSeries(coll, iteratee, callback) {
-        return eachOfLimit$2(coll, 1, iteratee, callback)
+        return eachOfLimit$1(coll, 1, iteratee, callback)
     }
     var eachOfSeries$1 = awaitify(eachOfSeries, 3);
 
@@ -10820,7 +13052,7 @@ exports.ParseError = ParseError;
      * appling the `args` to the list of functions.  It takes no args, other than
      * a callback.
      */
-    var applyEachSeries = applyEach(mapSeries$1);
+    var applyEachSeries = applyEach$1(mapSeries$1);
 
     const PROMISE_SYMBOL = Symbol('promiseCallback');
 
@@ -11418,7 +13650,7 @@ exports.ParseError = ParseError;
         dll.head = dll.tail = node;
     }
 
-    function queue(worker, concurrency, payload) {
+    function queue$1(worker, concurrency, payload) {
         if (concurrency == null) {
             concurrency = 1;
         }
@@ -11736,8 +13968,8 @@ exports.ParseError = ParseError;
      * await cargo.push({name: 'baz'});
      * console.log('finished processing baz');
      */
-    function cargo(worker, payload) {
-        return queue(worker, 1, payload);
+    function cargo$1(worker, payload) {
+        return queue$1(worker, 1, payload);
     }
 
     /**
@@ -11794,8 +14026,8 @@ exports.ParseError = ParseError;
      *     console.log('finished processing boo');
      * });
      */
-    function cargo$1(worker, concurrency, payload) {
-        return queue(worker, concurrency, payload);
+    function cargo(worker, concurrency, payload) {
+        return queue$1(worker, concurrency, payload);
     }
 
     /**
@@ -12051,7 +14283,7 @@ exports.ParseError = ParseError;
      * @returns {Promise} a promise, if no callback is passed
      */
     function mapLimit (coll, limit, iteratee, callback) {
-        return _asyncMap(eachOfLimit(limit), coll, iteratee, callback)
+        return _asyncMap(eachOfLimit$2(limit), coll, iteratee, callback)
     }
     var mapLimit$1 = awaitify(mapLimit, 4);
 
@@ -12261,7 +14493,7 @@ exports.ParseError = ParseError;
      *     //...
      * }, callback);
      */
-    function constant(...args) {
+    function constant$1(...args) {
         return function (...ignoredArgs/*, callback*/) {
             var callback = ignoredArgs.pop();
             return callback(null, ...args);
@@ -12280,7 +14512,7 @@ exports.ParseError = ParseError;
                     if (check(result) && !testResult) {
                         testPassed = true;
                         testResult = getResult(true, value);
-                        return callback(null, breakLoop);
+                        return callback(null, breakLoop$1);
                     }
                     callback();
                 });
@@ -12391,7 +14623,7 @@ exports.ParseError = ParseError;
      * @returns {Promise} a promise, if a callback is omitted
      */
     function detectLimit(coll, limit, iteratee, callback) {
-        return _createTester(bool => bool, (res, item) => item)(eachOfLimit(limit), coll, iteratee, callback)
+        return _createTester(bool => bool, (res, item) => item)(eachOfLimit$2(limit), coll, iteratee, callback)
     }
     var detectLimit$1 = awaitify(detectLimit, 4);
 
@@ -12417,7 +14649,7 @@ exports.ParseError = ParseError;
      * @returns {Promise} a promise, if a callback is omitted
      */
     function detectSeries(coll, iteratee, callback) {
-        return _createTester(bool => bool, (res, item) => item)(eachOfLimit(1), coll, iteratee, callback)
+        return _createTester(bool => bool, (res, item) => item)(eachOfLimit$2(1), coll, iteratee, callback)
     }
 
     var detectSeries$1 = awaitify(detectSeries, 3);
@@ -12650,11 +14882,11 @@ exports.ParseError = ParseError;
      * }
      *
      */
-    function eachLimit(coll, iteratee, callback) {
+    function eachLimit$2(coll, iteratee, callback) {
         return eachOf$1(coll, _withoutIndex(wrapAsync(iteratee)), callback);
     }
 
-    var each = awaitify(eachLimit, 3);
+    var each = awaitify(eachLimit$2, 3);
 
     /**
      * The same as [`each`]{@link module:Collections.each} but runs a maximum of `limit` async operations at a time.
@@ -12677,10 +14909,10 @@ exports.ParseError = ParseError;
      * `iteratee` functions have finished, or an error occurs. Invoked with (err).
      * @returns {Promise} a promise, if a callback is omitted
      */
-    function eachLimit$1(coll, limit, iteratee, callback) {
-        return eachOfLimit(limit)(coll, _withoutIndex(wrapAsync(iteratee)), callback);
+    function eachLimit(coll, limit, iteratee, callback) {
+        return eachOfLimit$2(limit)(coll, _withoutIndex(wrapAsync(iteratee)), callback);
     }
-    var eachLimit$2 = awaitify(eachLimit$1, 4);
+    var eachLimit$1 = awaitify(eachLimit, 4);
 
     /**
      * The same as [`each`]{@link module:Collections.each} but runs only a single async operation at a time.
@@ -12706,7 +14938,7 @@ exports.ParseError = ParseError;
      * @returns {Promise} a promise, if a callback is omitted
      */
     function eachSeries(coll, iteratee, callback) {
-        return eachLimit$2(coll, 1, iteratee, callback)
+        return eachLimit$1(coll, 1, iteratee, callback)
     }
     var eachSeries$1 = awaitify(eachSeries, 3);
 
@@ -12883,7 +15115,7 @@ exports.ParseError = ParseError;
      * @returns {Promise} a promise, if no callback provided
      */
     function everyLimit(coll, limit, iteratee, callback) {
-        return _createTester(bool => !bool, res => !res)(eachOfLimit(limit), coll, iteratee, callback)
+        return _createTester(bool => !bool, res => !res)(eachOfLimit$2(limit), coll, iteratee, callback)
     }
     var everyLimit$1 = awaitify(everyLimit, 4);
 
@@ -13046,7 +15278,7 @@ exports.ParseError = ParseError;
      * @returns {Promise} a promise, if no callback provided
      */
     function filterLimit (coll, limit, iteratee, callback) {
-        return _filter(eachOfLimit(limit), coll, iteratee, callback)
+        return _filter(eachOfLimit$2(limit), coll, iteratee, callback)
     }
     var filterLimit$1 = awaitify(filterLimit, 4);
 
@@ -13341,7 +15573,7 @@ exports.ParseError = ParseError;
         callback = once(callback);
         var newObj = {};
         var _iteratee = wrapAsync(iteratee);
-        return eachOfLimit(limit)(obj, (val, key, next) => {
+        return eachOfLimit$2(limit)(obj, (val, key, next) => {
             _iteratee(val, key, (err, result) => {
                 if (err) return next(err);
                 newObj[key] = result;
@@ -13618,19 +15850,19 @@ exports.ParseError = ParseError;
      *     // a, b, and c equal 1, 2, and 3
      * }, 1, 2, 3);
      */
-    var _defer$1;
+    var _defer;
 
     if (hasNextTick) {
-        _defer$1 = process.nextTick;
+        _defer = process.nextTick;
     } else if (hasSetImmediate) {
-        _defer$1 = setImmediate;
+        _defer = setImmediate;
     } else {
-        _defer$1 = fallback;
+        _defer = fallback;
     }
 
-    var nextTick = wrap(_defer$1);
+    var nextTick = wrap(_defer);
 
-    var parallel = awaitify((eachfn, tasks, callback) => {
+    var _parallel = awaitify((eachfn, tasks, callback) => {
         var results = isArrayLike(tasks) ? [] : {};
 
         eachfn(tasks, (task, key, taskCb) => {
@@ -13803,8 +16035,8 @@ exports.ParseError = ParseError;
      * }
      *
      */
-    function parallel$1(tasks, callback) {
-        return parallel(eachOf$1, tasks, callback);
+    function parallel(tasks, callback) {
+        return _parallel(eachOf$1, tasks, callback);
     }
 
     /**
@@ -13828,7 +16060,7 @@ exports.ParseError = ParseError;
      * @returns {Promise} a promise, if a callback is not passed
      */
     function parallelLimit(tasks, limit, callback) {
-        return parallel(eachOfLimit(limit), tasks, callback);
+        return _parallel(eachOfLimit$2(limit), tasks, callback);
     }
 
     /**
@@ -13973,9 +16205,9 @@ exports.ParseError = ParseError;
      *     console.log('finished processing bar');
      * });
      */
-    function queue$1 (worker, concurrency) {
+    function queue (worker, concurrency) {
         var _worker = wrapAsync(worker);
-        return queue((items, cb) => {
+        return queue$1((items, cb) => {
             _worker(items[0], cb);
         }, concurrency, 1);
     }
@@ -14122,7 +16354,7 @@ exports.ParseError = ParseError;
      */
     function priorityQueue(worker, concurrency) {
         // Start with a normal queue
-        var q = queue$1(worker, concurrency);
+        var q = queue(worker, concurrency);
 
         var {
             push,
@@ -14377,7 +16609,7 @@ exports.ParseError = ParseError;
         return results;
     }
 
-    function reject(eachfn, arr, _iteratee, callback) {
+    function reject$2(eachfn, arr, _iteratee, callback) {
         const iteratee = wrapAsync(_iteratee);
         return _filter(eachfn, arr, (value, cb) => {
             iteratee(value, (err, v) => {
@@ -14448,10 +16680,10 @@ exports.ParseError = ParseError;
      * }
      *
      */
-    function reject$1 (coll, iteratee, callback) {
-        return reject(eachOf$1, coll, iteratee, callback)
+    function reject (coll, iteratee, callback) {
+        return reject$2(eachOf$1, coll, iteratee, callback)
     }
-    var reject$2 = awaitify(reject$1, 3);
+    var reject$1 = awaitify(reject, 3);
 
     /**
      * The same as [`reject`]{@link module:Collections.reject} but runs a maximum of `limit` async operations at a
@@ -14474,7 +16706,7 @@ exports.ParseError = ParseError;
      * @returns {Promise} a promise, if no callback is passed
      */
     function rejectLimit (coll, limit, iteratee, callback) {
-        return reject(eachOfLimit(limit), coll, iteratee, callback)
+        return reject$2(eachOfLimit$2(limit), coll, iteratee, callback)
     }
     var rejectLimit$1 = awaitify(rejectLimit, 4);
 
@@ -14497,11 +16729,11 @@ exports.ParseError = ParseError;
      * @returns {Promise} a promise, if no callback is passed
      */
     function rejectSeries (coll, iteratee, callback) {
-        return reject(eachOfSeries$1, coll, iteratee, callback)
+        return reject$2(eachOfSeries$1, coll, iteratee, callback)
     }
     var rejectSeries$1 = awaitify(rejectSeries, 3);
 
-    function constant$1(value) {
+    function constant(value) {
         return function () {
             return value;
         }
@@ -14598,7 +16830,7 @@ exports.ParseError = ParseError;
     function retry(opts, task, callback) {
         var options = {
             times: DEFAULT_TIMES,
-            intervalFunc: constant$1(DEFAULT_INTERVAL)
+            intervalFunc: constant(DEFAULT_INTERVAL)
         };
 
         if (arguments.length < 3 && typeof opts === 'function') {
@@ -14639,7 +16871,7 @@ exports.ParseError = ParseError;
 
             acc.intervalFunc = typeof t.interval === 'function' ?
                 t.interval :
-                constant$1(+t.interval || DEFAULT_INTERVAL);
+                constant(+t.interval || DEFAULT_INTERVAL);
 
             acc.errorFilter = t.errorFilter;
         } else if (typeof t === 'number' || typeof t === 'string') {
@@ -14870,7 +17102,7 @@ exports.ParseError = ParseError;
      *
      */
     function series(tasks, callback) {
-        return parallel(eachOfSeries$1, tasks, callback);
+        return _parallel(eachOfSeries$1, tasks, callback);
     }
 
     /**
@@ -14998,7 +17230,7 @@ exports.ParseError = ParseError;
      * @returns {Promise} a promise, if no callback provided
      */
     function someLimit(coll, limit, iteratee, callback) {
-        return _createTester(Boolean, res => res)(eachOfLimit(limit), coll, iteratee, callback)
+        return _createTester(Boolean, res => res)(eachOfLimit$2(limit), coll, iteratee, callback)
     }
     var someLimit$1 = awaitify(someLimit, 4);
 
@@ -15592,7 +17824,7 @@ exports.ParseError = ParseError;
      * @method
      * @category Control Flow
      * @param {AsyncFunction} test - asynchronous truth test to perform before each
-     * execution of `iteratee`. Invoked with ().
+     * execution of `iteratee`. Invoked with (callback).
      * @param {AsyncFunction} iteratee - An async function which is called each time
      * `test` passes. Invoked with (callback).
      * @param {Function} [callback] - A callback which is called after the test
@@ -15804,20 +18036,21 @@ exports.ParseError = ParseError;
      * @static
      */
 
+
     var index = {
         apply,
-        applyEach: applyEach$1,
+        applyEach,
         applyEachSeries,
         asyncify,
         auto,
         autoInject,
-        cargo,
-        cargoQueue: cargo$1,
+        cargo: cargo$1,
+        cargoQueue: cargo,
         compose,
         concat: concat$1,
         concatLimit: concatLimit$1,
         concatSeries: concatSeries$1,
-        constant,
+        constant: constant$1,
         detect: detect$1,
         detectLimit: detectLimit$1,
         detectSeries: detectSeries$1,
@@ -15825,9 +18058,9 @@ exports.ParseError = ParseError;
         doUntil,
         doWhilst: doWhilst$1,
         each,
-        eachLimit: eachLimit$2,
+        eachLimit: eachLimit$1,
         eachOf: eachOf$1,
-        eachOfLimit: eachOfLimit$2,
+        eachOfLimit: eachOfLimit$1,
         eachOfSeries: eachOfSeries$1,
         eachSeries: eachSeries$1,
         ensureAsync,
@@ -15850,16 +18083,16 @@ exports.ParseError = ParseError;
         mapValuesSeries,
         memoize,
         nextTick,
-        parallel: parallel$1,
+        parallel,
         parallelLimit,
         priorityQueue,
-        queue: queue$1,
+        queue,
         race: race$1,
         reduce: reduce$1,
         reduceRight,
         reflect,
         reflectAll,
-        reject: reject$2,
+        reject: reject$1,
         rejectLimit: rejectLimit$1,
         rejectSeries: rejectSeries$1,
         retry,
@@ -15897,10 +18130,10 @@ exports.ParseError = ParseError;
         flatMapSeries: concatSeries$1,
         forEach: each,
         forEachSeries: eachSeries$1,
-        forEachLimit: eachLimit$2,
+        forEachLimit: eachLimit$1,
         forEachOf: eachOf$1,
         forEachOfSeries: eachOfSeries$1,
-        forEachOfLimit: eachOfLimit$2,
+        forEachOfLimit: eachOfLimit$1,
         inject: reduce$1,
         foldl: reduce$1,
         foldr: reduceRight,
@@ -15912,30 +18145,38 @@ exports.ParseError = ParseError;
         doDuring: doWhilst$1
     };
 
-    exports.default = index;
+    exports.all = every$1;
+    exports.allLimit = everyLimit$1;
+    exports.allSeries = everySeries$1;
+    exports.any = some$1;
+    exports.anyLimit = someLimit$1;
+    exports.anySeries = someSeries$1;
     exports.apply = apply;
-    exports.applyEach = applyEach$1;
+    exports.applyEach = applyEach;
     exports.applyEachSeries = applyEachSeries;
     exports.asyncify = asyncify;
     exports.auto = auto;
     exports.autoInject = autoInject;
-    exports.cargo = cargo;
-    exports.cargoQueue = cargo$1;
+    exports.cargo = cargo$1;
+    exports.cargoQueue = cargo;
     exports.compose = compose;
     exports.concat = concat$1;
     exports.concatLimit = concatLimit$1;
     exports.concatSeries = concatSeries$1;
-    exports.constant = constant;
+    exports.constant = constant$1;
+    exports.default = index;
     exports.detect = detect$1;
     exports.detectLimit = detectLimit$1;
     exports.detectSeries = detectSeries$1;
     exports.dir = dir;
+    exports.doDuring = doWhilst$1;
     exports.doUntil = doUntil;
     exports.doWhilst = doWhilst$1;
+    exports.during = whilst$1;
     exports.each = each;
-    exports.eachLimit = eachLimit$2;
+    exports.eachLimit = eachLimit$1;
     exports.eachOf = eachOf$1;
-    exports.eachOfLimit = eachOfLimit$2;
+    exports.eachOfLimit = eachOfLimit$1;
     exports.eachOfSeries = eachOfSeries$1;
     exports.eachSeries = eachSeries$1;
     exports.ensureAsync = ensureAsync;
@@ -15945,10 +18186,25 @@ exports.ParseError = ParseError;
     exports.filter = filter$1;
     exports.filterLimit = filterLimit$1;
     exports.filterSeries = filterSeries$1;
+    exports.find = detect$1;
+    exports.findLimit = detectLimit$1;
+    exports.findSeries = detectSeries$1;
+    exports.flatMap = concat$1;
+    exports.flatMapLimit = concatLimit$1;
+    exports.flatMapSeries = concatSeries$1;
+    exports.foldl = reduce$1;
+    exports.foldr = reduceRight;
+    exports.forEach = each;
+    exports.forEachLimit = eachLimit$1;
+    exports.forEachOf = eachOf$1;
+    exports.forEachOfLimit = eachOfLimit$1;
+    exports.forEachOfSeries = eachOfSeries$1;
+    exports.forEachSeries = eachSeries$1;
     exports.forever = forever$1;
     exports.groupBy = groupBy;
     exports.groupByLimit = groupByLimit$1;
     exports.groupBySeries = groupBySeries;
+    exports.inject = reduce$1;
     exports.log = log;
     exports.map = map$1;
     exports.mapLimit = mapLimit$1;
@@ -15958,20 +18214,23 @@ exports.ParseError = ParseError;
     exports.mapValuesSeries = mapValuesSeries;
     exports.memoize = memoize;
     exports.nextTick = nextTick;
-    exports.parallel = parallel$1;
+    exports.parallel = parallel;
     exports.parallelLimit = parallelLimit;
     exports.priorityQueue = priorityQueue;
-    exports.queue = queue$1;
+    exports.queue = queue;
     exports.race = race$1;
     exports.reduce = reduce$1;
     exports.reduceRight = reduceRight;
     exports.reflect = reflect;
     exports.reflectAll = reflectAll;
-    exports.reject = reject$2;
+    exports.reject = reject$1;
     exports.rejectLimit = rejectLimit$1;
     exports.rejectSeries = rejectSeries$1;
     exports.retry = retry;
     exports.retryable = retryable;
+    exports.select = filter$1;
+    exports.selectLimit = filterLimit$1;
+    exports.selectSeries = filterSeries$1;
     exports.seq = seq;
     exports.series = series;
     exports.setImmediate = setImmediate$1;
@@ -15989,37 +18248,11 @@ exports.ParseError = ParseError;
     exports.until = until;
     exports.waterfall = waterfall$1;
     exports.whilst = whilst$1;
-    exports.all = every$1;
-    exports.allLimit = everyLimit$1;
-    exports.allSeries = everySeries$1;
-    exports.any = some$1;
-    exports.anyLimit = someLimit$1;
-    exports.anySeries = someSeries$1;
-    exports.find = detect$1;
-    exports.findLimit = detectLimit$1;
-    exports.findSeries = detectSeries$1;
-    exports.flatMap = concat$1;
-    exports.flatMapLimit = concatLimit$1;
-    exports.flatMapSeries = concatSeries$1;
-    exports.forEach = each;
-    exports.forEachSeries = eachSeries$1;
-    exports.forEachLimit = eachLimit$2;
-    exports.forEachOf = eachOf$1;
-    exports.forEachOfSeries = eachOfSeries$1;
-    exports.forEachOfLimit = eachOfLimit$2;
-    exports.inject = reduce$1;
-    exports.foldl = reduce$1;
-    exports.foldr = reduceRight;
-    exports.select = filter$1;
-    exports.selectLimit = filterLimit$1;
-    exports.selectSeries = filterSeries$1;
     exports.wrapSync = asyncify;
-    exports.during = whilst$1;
-    exports.doDuring = doWhilst$1;
 
     Object.defineProperty(exports, '__esModule', { value: true });
 
-})));
+}));
 
 }).call(this)}).call(this,require('_process'),require("timers").setImmediate)
 },{"_process":295,"timers":298}],54:[function(require,module,exports){
@@ -41482,7 +43715,7 @@ function parse (def, rek = 0) {
       const r = parseParentheses(def)
       def = r[1]
       const mId = r[0].match(/^\s*(\d+)\s*$/)
-      const mBbox = r[0].match(/^((\s*\d+(.\d+)?\s*,){3}\s*\d+(.\d+)?\s*)$/)
+      const mBbox = r[0].match(/^((\s*-?\d+(.\d+)?\s*,){3}\s*-?\d+(.\d+)?\s*)$/)
       const m = r[0].match(/^\s*(\w+)\s*:\s*(.*)\s*$/)
       /* eslint-disable new-cap */
       if (mId) {
@@ -42236,11 +44469,6 @@ class OverpassFrontend {
             // Set objects to fully known, as no more data can be loaded from the file
             obs.forEach(ob => {
               ob.properties |= OverpassFrontend.ALL
-              if (osm3sMeta.bounds) {
-                osm3sMeta.bounds.extend(ob.bounds)
-              } else {
-                osm3sMeta.bounds = new BoundingBox(ob.bounds)
-              }
             })
 
             if (err) {
@@ -42248,6 +44476,7 @@ class OverpassFrontend {
               return this.emit('error', err)
             }
 
+            this.meta = osm3sMeta
             this.emit('load', osm3sMeta)
 
             this.ready = true
@@ -42516,6 +44745,7 @@ class OverpassFrontend {
     this.errorCount = 0
 
     const osm3sMeta = copyOsm3sMetaFrom(results)
+    this.meta = osm3sMeta
     this.emit('load', osm3sMeta, context)
 
     let subRequestsIndex = 0
@@ -42840,6 +45070,20 @@ class OverpassFrontend {
       .replace('*', '\\*')
       .replace('^', '\\^')
       .replace('$', '\\$')
+  }
+
+  /**
+   * get meta data of last request or - if no request was submitted - the first.
+   * @params [function] callback - a callback which will receive (err, meta)
+   */
+  getMeta (callback) {
+    if (this.meta) {
+      return callback(null, this.meta)
+    }
+
+    this.once('load', () => {
+      callback(null, this.meta)
+    })
   }
 }
 
@@ -45609,6 +47853,8 @@ module.exports = function boundsToLokiQuery (bounds, overpass) {
 }
 
 },{}],248:[function(require,module,exports){
+const BoundingBox = require('boundingbox')
+
 module.exports = function convertFromXML (xml) {
   const result = {
     version: parseFloat(xml.getAttribute('version')),
@@ -45707,6 +47953,19 @@ module.exports = function convertFromXML (xml) {
       }
 
       result.elements.push(element)
+    } else if (current.nodeName === 'bounds') {
+      const bounds = new BoundingBox({
+        minlat: parseFloat(current.getAttribute('minlat')),
+        minlon: parseFloat(current.getAttribute('minlon')),
+        maxlat: parseFloat(current.getAttribute('maxlat')),
+        maxlon: parseFloat(current.getAttribute('maxlon'))
+      })
+
+      if (result.bounds) {
+        result.bounds = result.bounds.extend(bounds)
+      } else {
+        result.bounds = bounds
+      }
     }
 
     current = current.nextSibling
@@ -45715,7 +47974,7 @@ module.exports = function convertFromXML (xml) {
   return result
 }
 
-},{}],249:[function(require,module,exports){
+},{"boundingbox":54}],249:[function(require,module,exports){
 module.exports = function copyOsm3sMetaFrom (results) {
   const osm3sMeta = {}
 
@@ -48052,1117 +50311,1281 @@ module.exports = posix;
 },{"_process":295}],294:[function(require,module,exports){
 (function (process){(function (){
 (function (global, factory) {
-  typeof exports === 'object' && typeof module !== 'undefined' ? module.exports = factory() :
-  typeof define === 'function' && define.amd ? define(factory) :
-  (global = typeof globalThis !== 'undefined' ? globalThis : global || self, global.polygonClipping = factory());
-}(this, (function () { 'use strict';
+    typeof exports === 'object' && typeof module !== 'undefined' ? module.exports = factory() :
+    typeof define === 'function' && define.amd ? define(factory) :
+    (global = typeof globalThis !== 'undefined' ? globalThis : global || self, global.polygonClipping = factory());
+})(this, (function () { 'use strict';
 
-  function _classCallCheck(instance, Constructor) {
-    if (!(instance instanceof Constructor)) {
-      throw new TypeError("Cannot call a class as a function");
-    }
-  }
-
-  function _defineProperties(target, props) {
-    for (var i = 0; i < props.length; i++) {
-      var descriptor = props[i];
-      descriptor.enumerable = descriptor.enumerable || false;
-      descriptor.configurable = true;
-      if ("value" in descriptor) descriptor.writable = true;
-      Object.defineProperty(target, descriptor.key, descriptor);
-    }
-  }
-
-  function _createClass(Constructor, protoProps, staticProps) {
-    if (protoProps) _defineProperties(Constructor.prototype, protoProps);
-    if (staticProps) _defineProperties(Constructor, staticProps);
-    return Constructor;
-  }
-
-  /**
-   * splaytree v3.1.0
-   * Fast Splay tree for Node and browser
-   *
-   * @author Alexander Milevski <info@w8r.name>
-   * @license MIT
-   * @preserve
-   */
-  var Node =
-  /** @class */
-  function () {
-    function Node(key, data) {
-      this.next = null;
-      this.key = key;
-      this.data = data;
-      this.left = null;
-      this.right = null;
-    }
-
-    return Node;
-  }();
-  /* follows "An implementation of top-down splaying"
-   * by D. Sleator <sleator@cs.cmu.edu> March 1992
-   */
-
-
-  function DEFAULT_COMPARE(a, b) {
-    return a > b ? 1 : a < b ? -1 : 0;
-  }
-  /**
-   * Simple top down splay, not requiring i to be in the tree t.
-   */
-
-
-  function splay(i, t, comparator) {
-    var N = new Node(null, null);
-    var l = N;
-    var r = N;
-
-    while (true) {
-      var cmp = comparator(i, t.key); //if (i < t.key) {
-
-      if (cmp < 0) {
-        if (t.left === null) break; //if (i < t.left.key) {
-
-        if (comparator(i, t.left.key) < 0) {
-          var y = t.left;
-          /* rotate right */
-
-          t.left = y.right;
-          y.right = t;
-          t = y;
-          if (t.left === null) break;
-        }
-
-        r.left = t;
-        /* link right */
-
-        r = t;
-        t = t.left; //} else if (i > t.key) {
-      } else if (cmp > 0) {
-        if (t.right === null) break; //if (i > t.right.key) {
-
-        if (comparator(i, t.right.key) > 0) {
-          var y = t.right;
-          /* rotate left */
-
-          t.right = y.left;
-          y.left = t;
-          t = y;
-          if (t.right === null) break;
-        }
-
-        l.right = t;
-        /* link left */
-
-        l = t;
-        t = t.right;
-      } else break;
-    }
-    /* assemble */
-
-
-    l.right = t.left;
-    r.left = t.right;
-    t.left = N.right;
-    t.right = N.left;
-    return t;
-  }
-
-  function insert(i, data, t, comparator) {
-    var node = new Node(i, data);
-
-    if (t === null) {
-      node.left = node.right = null;
-      return node;
-    }
-
-    t = splay(i, t, comparator);
-    var cmp = comparator(i, t.key);
-
-    if (cmp < 0) {
-      node.left = t.left;
-      node.right = t;
-      t.left = null;
-    } else if (cmp >= 0) {
-      node.right = t.right;
-      node.left = t;
-      t.right = null;
-    }
-
-    return node;
-  }
-
-  function split(key, v, comparator) {
-    var left = null;
-    var right = null;
-
-    if (v) {
-      v = splay(key, v, comparator);
-      var cmp = comparator(v.key, key);
-
-      if (cmp === 0) {
-        left = v.left;
-        right = v.right;
-      } else if (cmp < 0) {
-        right = v.right;
-        v.right = null;
-        left = v;
-      } else {
-        left = v.left;
-        v.left = null;
-        right = v;
-      }
-    }
-
-    return {
-      left: left,
-      right: right
-    };
-  }
-
-  function merge(left, right, comparator) {
-    if (right === null) return left;
-    if (left === null) return right;
-    right = splay(left.key, right, comparator);
-    right.left = left;
-    return right;
-  }
-  /**
-   * Prints level of the tree
-   */
-
-
-  function printRow(root, prefix, isTail, out, printNode) {
-    if (root) {
-      out("" + prefix + (isTail ? '└── ' : '├── ') + printNode(root) + "\n");
-      var indent = prefix + (isTail ? '    ' : '│   ');
-      if (root.left) printRow(root.left, indent, false, out, printNode);
-      if (root.right) printRow(root.right, indent, true, out, printNode);
-    }
-  }
-
-  var Tree =
-  /** @class */
-  function () {
-    function Tree(comparator) {
-      if (comparator === void 0) {
-        comparator = DEFAULT_COMPARE;
-      }
-
-      this._root = null;
-      this._size = 0;
-      this._comparator = comparator;
-    }
     /**
-     * Inserts a key, allows duplicates
+     * splaytree v3.1.2
+     * Fast Splay tree for Node and browser
+     *
+     * @author Alexander Milevski <info@w8r.name>
+     * @license MIT
+     * @preserve
      */
 
+    /*! *****************************************************************************
+    Copyright (c) Microsoft Corporation. All rights reserved.
+    Licensed under the Apache License, Version 2.0 (the "License"); you may not use
+    this file except in compliance with the License. You may obtain a copy of the
+    License at http://www.apache.org/licenses/LICENSE-2.0
 
-    Tree.prototype.insert = function (key, data) {
-      this._size++;
-      return this._root = insert(key, data, this._root, this._comparator);
-    };
-    /**
-     * Adds a key, if it is not present in the tree
-     */
+    THIS CODE IS PROVIDED ON AN *AS IS* BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+    KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT LIMITATION ANY IMPLIED
+    WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR A PARTICULAR PURPOSE,
+    MERCHANTABLITY OR NON-INFRINGEMENT.
 
+    See the Apache Version 2.0 License for specific language governing permissions
+    and limitations under the License.
+    ***************************************************************************** */
 
-    Tree.prototype.add = function (key, data) {
-      var node = new Node(key, data);
-
-      if (this._root === null) {
-        node.left = node.right = null;
-        this._size++;
-        this._root = node;
-      }
-
-      var comparator = this._comparator;
-      var t = splay(key, this._root, comparator);
-      var cmp = comparator(key, t.key);
-      if (cmp === 0) this._root = t;else {
-        if (cmp < 0) {
-          node.left = t.left;
-          node.right = t;
-          t.left = null;
-        } else if (cmp > 0) {
-          node.right = t.right;
-          node.left = t;
-          t.right = null;
-        }
-
-        this._size++;
-        this._root = node;
-      }
-      return this._root;
-    };
-    /**
-     * @param  {Key} key
-     * @return {Node|null}
-     */
-
-
-    Tree.prototype.remove = function (key) {
-      this._root = this._remove(key, this._root, this._comparator);
-    };
-    /**
-     * Deletes i from the tree if it's there
-     */
-
-
-    Tree.prototype._remove = function (i, t, comparator) {
-      var x;
-      if (t === null) return null;
-      t = splay(i, t, comparator);
-      var cmp = comparator(i, t.key);
-
-      if (cmp === 0) {
-        /* found it */
-        if (t.left === null) {
-          x = t.right;
-        } else {
-          x = splay(i, t.left, comparator);
-          x.right = t.right;
-        }
-
-        this._size--;
-        return x;
-      }
-
-      return t;
-      /* It wasn't there */
-    };
-    /**
-     * Removes and returns the node with smallest key
-     */
-
-
-    Tree.prototype.pop = function () {
-      var node = this._root;
-
-      if (node) {
-        while (node.left) {
-          node = node.left;
-        }
-
-        this._root = splay(node.key, this._root, this._comparator);
-        this._root = this._remove(node.key, this._root, this._comparator);
-        return {
-          key: node.key,
-          data: node.data
+    function __generator(thisArg, body) {
+      var _ = {
+          label: 0,
+          sent: function () {
+            if (t[0] & 1) throw t[1];
+            return t[1];
+          },
+          trys: [],
+          ops: []
+        },
+        f,
+        y,
+        t,
+        g;
+      return g = {
+        next: verb(0),
+        "throw": verb(1),
+        "return": verb(2)
+      }, typeof Symbol === "function" && (g[Symbol.iterator] = function () {
+        return this;
+      }), g;
+      function verb(n) {
+        return function (v) {
+          return step([n, v]);
         };
       }
-
-      return null;
-    };
-    /**
-     * Find without splaying
-     */
-
-
-    Tree.prototype.findStatic = function (key) {
-      var current = this._root;
-      var compare = this._comparator;
-
-      while (current) {
-        var cmp = compare(key, current.key);
-        if (cmp === 0) return current;else if (cmp < 0) current = current.left;else current = current.right;
-      }
-
-      return null;
-    };
-
-    Tree.prototype.find = function (key) {
-      if (this._root) {
-        this._root = splay(key, this._root, this._comparator);
-        if (this._comparator(key, this._root.key) !== 0) return null;
-      }
-
-      return this._root;
-    };
-
-    Tree.prototype.contains = function (key) {
-      var current = this._root;
-      var compare = this._comparator;
-
-      while (current) {
-        var cmp = compare(key, current.key);
-        if (cmp === 0) return true;else if (cmp < 0) current = current.left;else current = current.right;
-      }
-
-      return false;
-    };
-
-    Tree.prototype.forEach = function (visitor, ctx) {
-      var current = this._root;
-      var Q = [];
-      /* Initialize stack s */
-
-      var done = false;
-
-      while (!done) {
-        if (current !== null) {
-          Q.push(current);
-          current = current.left;
-        } else {
-          if (Q.length !== 0) {
-            current = Q.pop();
-            visitor.call(ctx, current);
-            current = current.right;
-          } else done = true;
-        }
-      }
-
-      return this;
-    };
-    /**
-     * Walk key range from `low` to `high`. Stops if `fn` returns a value.
-     */
-
-
-    Tree.prototype.range = function (low, high, fn, ctx) {
-      var Q = [];
-      var compare = this._comparator;
-      var node = this._root;
-      var cmp;
-
-      while (Q.length !== 0 || node) {
-        if (node) {
-          Q.push(node);
-          node = node.left;
-        } else {
-          node = Q.pop();
-          cmp = compare(node.key, high);
-
-          if (cmp > 0) {
-            break;
-          } else if (compare(node.key, low) >= 0) {
-            if (fn.call(ctx, node)) return this; // stop if smth is returned
+      function step(op) {
+        if (f) throw new TypeError("Generator is already executing.");
+        while (_) try {
+          if (f = 1, y && (t = op[0] & 2 ? y["return"] : op[0] ? y["throw"] || ((t = y["return"]) && t.call(y), 0) : y.next) && !(t = t.call(y, op[1])).done) return t;
+          if (y = 0, t) op = [op[0] & 2, t.value];
+          switch (op[0]) {
+            case 0:
+            case 1:
+              t = op;
+              break;
+            case 4:
+              _.label++;
+              return {
+                value: op[1],
+                done: false
+              };
+            case 5:
+              _.label++;
+              y = op[1];
+              op = [0];
+              continue;
+            case 7:
+              op = _.ops.pop();
+              _.trys.pop();
+              continue;
+            default:
+              if (!(t = _.trys, t = t.length > 0 && t[t.length - 1]) && (op[0] === 6 || op[0] === 2)) {
+                _ = 0;
+                continue;
+              }
+              if (op[0] === 3 && (!t || op[1] > t[0] && op[1] < t[3])) {
+                _.label = op[1];
+                break;
+              }
+              if (op[0] === 6 && _.label < t[1]) {
+                _.label = t[1];
+                t = op;
+                break;
+              }
+              if (t && _.label < t[2]) {
+                _.label = t[2];
+                _.ops.push(op);
+                break;
+              }
+              if (t[2]) _.ops.pop();
+              _.trys.pop();
+              continue;
           }
+          op = body.call(thisArg, _);
+        } catch (e) {
+          op = [6, e];
+          y = 0;
+        } finally {
+          f = t = 0;
+        }
+        if (op[0] & 5) throw op[1];
+        return {
+          value: op[0] ? op[1] : void 0,
+          done: true
+        };
+      }
+    }
+    var Node = /** @class */function () {
+      function Node(key, data) {
+        this.next = null;
+        this.key = key;
+        this.data = data;
+        this.left = null;
+        this.right = null;
+      }
+      return Node;
+    }();
 
-          node = node.right;
+    /* follows "An implementation of top-down splaying"
+     * by D. Sleator <sleator@cs.cmu.edu> March 1992
+     */
+    function DEFAULT_COMPARE(a, b) {
+      return a > b ? 1 : a < b ? -1 : 0;
+    }
+    /**
+     * Simple top down splay, not requiring i to be in the tree t.
+     */
+    function splay(i, t, comparator) {
+      var N = new Node(null, null);
+      var l = N;
+      var r = N;
+      while (true) {
+        var cmp = comparator(i, t.key);
+        //if (i < t.key) {
+        if (cmp < 0) {
+          if (t.left === null) break;
+          //if (i < t.left.key) {
+          if (comparator(i, t.left.key) < 0) {
+            var y = t.left; /* rotate right */
+            t.left = y.right;
+            y.right = t;
+            t = y;
+            if (t.left === null) break;
+          }
+          r.left = t; /* link right */
+          r = t;
+          t = t.left;
+          //} else if (i > t.key) {
+        } else if (cmp > 0) {
+          if (t.right === null) break;
+          //if (i > t.right.key) {
+          if (comparator(i, t.right.key) > 0) {
+            var y = t.right; /* rotate left */
+            t.right = y.left;
+            y.left = t;
+            t = y;
+            if (t.right === null) break;
+          }
+          l.right = t; /* link left */
+          l = t;
+          t = t.right;
+        } else break;
+      }
+      /* assemble */
+      l.right = t.left;
+      r.left = t.right;
+      t.left = N.right;
+      t.right = N.left;
+      return t;
+    }
+    function insert(i, data, t, comparator) {
+      var node = new Node(i, data);
+      if (t === null) {
+        node.left = node.right = null;
+        return node;
+      }
+      t = splay(i, t, comparator);
+      var cmp = comparator(i, t.key);
+      if (cmp < 0) {
+        node.left = t.left;
+        node.right = t;
+        t.left = null;
+      } else if (cmp >= 0) {
+        node.right = t.right;
+        node.left = t;
+        t.right = null;
+      }
+      return node;
+    }
+    function split(key, v, comparator) {
+      var left = null;
+      var right = null;
+      if (v) {
+        v = splay(key, v, comparator);
+        var cmp = comparator(v.key, key);
+        if (cmp === 0) {
+          left = v.left;
+          right = v.right;
+        } else if (cmp < 0) {
+          right = v.right;
+          v.right = null;
+          left = v;
+        } else {
+          left = v.left;
+          v.left = null;
+          right = v;
         }
       }
-
-      return this;
-    };
+      return {
+        left: left,
+        right: right
+      };
+    }
+    function merge(left, right, comparator) {
+      if (right === null) return left;
+      if (left === null) return right;
+      right = splay(left.key, right, comparator);
+      right.left = left;
+      return right;
+    }
     /**
-     * Returns array of keys
+     * Prints level of the tree
      */
-
-
-    Tree.prototype.keys = function () {
-      var keys = [];
-      this.forEach(function (_a) {
-        var key = _a.key;
-        return keys.push(key);
+    function printRow(root, prefix, isTail, out, printNode) {
+      if (root) {
+        out("" + prefix + (isTail ? '└── ' : '├── ') + printNode(root) + "\n");
+        var indent = prefix + (isTail ? '    ' : '│   ');
+        if (root.left) printRow(root.left, indent, false, out, printNode);
+        if (root.right) printRow(root.right, indent, true, out, printNode);
+      }
+    }
+    var Tree = /** @class */function () {
+      function Tree(comparator) {
+        if (comparator === void 0) {
+          comparator = DEFAULT_COMPARE;
+        }
+        this._root = null;
+        this._size = 0;
+        this._comparator = comparator;
+      }
+      /**
+       * Inserts a key, allows duplicates
+       */
+      Tree.prototype.insert = function (key, data) {
+        this._size++;
+        return this._root = insert(key, data, this._root, this._comparator);
+      };
+      /**
+       * Adds a key, if it is not present in the tree
+       */
+      Tree.prototype.add = function (key, data) {
+        var node = new Node(key, data);
+        if (this._root === null) {
+          node.left = node.right = null;
+          this._size++;
+          this._root = node;
+        }
+        var comparator = this._comparator;
+        var t = splay(key, this._root, comparator);
+        var cmp = comparator(key, t.key);
+        if (cmp === 0) this._root = t;else {
+          if (cmp < 0) {
+            node.left = t.left;
+            node.right = t;
+            t.left = null;
+          } else if (cmp > 0) {
+            node.right = t.right;
+            node.left = t;
+            t.right = null;
+          }
+          this._size++;
+          this._root = node;
+        }
+        return this._root;
+      };
+      /**
+       * @param  {Key} key
+       * @return {Node|null}
+       */
+      Tree.prototype.remove = function (key) {
+        this._root = this._remove(key, this._root, this._comparator);
+      };
+      /**
+       * Deletes i from the tree if it's there
+       */
+      Tree.prototype._remove = function (i, t, comparator) {
+        var x;
+        if (t === null) return null;
+        t = splay(i, t, comparator);
+        var cmp = comparator(i, t.key);
+        if (cmp === 0) {
+          /* found it */
+          if (t.left === null) {
+            x = t.right;
+          } else {
+            x = splay(i, t.left, comparator);
+            x.right = t.right;
+          }
+          this._size--;
+          return x;
+        }
+        return t; /* It wasn't there */
+      };
+      /**
+       * Removes and returns the node with smallest key
+       */
+      Tree.prototype.pop = function () {
+        var node = this._root;
+        if (node) {
+          while (node.left) node = node.left;
+          this._root = splay(node.key, this._root, this._comparator);
+          this._root = this._remove(node.key, this._root, this._comparator);
+          return {
+            key: node.key,
+            data: node.data
+          };
+        }
+        return null;
+      };
+      /**
+       * Find without splaying
+       */
+      Tree.prototype.findStatic = function (key) {
+        var current = this._root;
+        var compare = this._comparator;
+        while (current) {
+          var cmp = compare(key, current.key);
+          if (cmp === 0) return current;else if (cmp < 0) current = current.left;else current = current.right;
+        }
+        return null;
+      };
+      Tree.prototype.find = function (key) {
+        if (this._root) {
+          this._root = splay(key, this._root, this._comparator);
+          if (this._comparator(key, this._root.key) !== 0) return null;
+        }
+        return this._root;
+      };
+      Tree.prototype.contains = function (key) {
+        var current = this._root;
+        var compare = this._comparator;
+        while (current) {
+          var cmp = compare(key, current.key);
+          if (cmp === 0) return true;else if (cmp < 0) current = current.left;else current = current.right;
+        }
+        return false;
+      };
+      Tree.prototype.forEach = function (visitor, ctx) {
+        var current = this._root;
+        var Q = []; /* Initialize stack s */
+        var done = false;
+        while (!done) {
+          if (current !== null) {
+            Q.push(current);
+            current = current.left;
+          } else {
+            if (Q.length !== 0) {
+              current = Q.pop();
+              visitor.call(ctx, current);
+              current = current.right;
+            } else done = true;
+          }
+        }
+        return this;
+      };
+      /**
+       * Walk key range from `low` to `high`. Stops if `fn` returns a value.
+       */
+      Tree.prototype.range = function (low, high, fn, ctx) {
+        var Q = [];
+        var compare = this._comparator;
+        var node = this._root;
+        var cmp;
+        while (Q.length !== 0 || node) {
+          if (node) {
+            Q.push(node);
+            node = node.left;
+          } else {
+            node = Q.pop();
+            cmp = compare(node.key, high);
+            if (cmp > 0) {
+              break;
+            } else if (compare(node.key, low) >= 0) {
+              if (fn.call(ctx, node)) return this; // stop if smth is returned
+            }
+            node = node.right;
+          }
+        }
+        return this;
+      };
+      /**
+       * Returns array of keys
+       */
+      Tree.prototype.keys = function () {
+        var keys = [];
+        this.forEach(function (_a) {
+          var key = _a.key;
+          return keys.push(key);
+        });
+        return keys;
+      };
+      /**
+       * Returns array of all the data in the nodes
+       */
+      Tree.prototype.values = function () {
+        var values = [];
+        this.forEach(function (_a) {
+          var data = _a.data;
+          return values.push(data);
+        });
+        return values;
+      };
+      Tree.prototype.min = function () {
+        if (this._root) return this.minNode(this._root).key;
+        return null;
+      };
+      Tree.prototype.max = function () {
+        if (this._root) return this.maxNode(this._root).key;
+        return null;
+      };
+      Tree.prototype.minNode = function (t) {
+        if (t === void 0) {
+          t = this._root;
+        }
+        if (t) while (t.left) t = t.left;
+        return t;
+      };
+      Tree.prototype.maxNode = function (t) {
+        if (t === void 0) {
+          t = this._root;
+        }
+        if (t) while (t.right) t = t.right;
+        return t;
+      };
+      /**
+       * Returns node at given index
+       */
+      Tree.prototype.at = function (index) {
+        var current = this._root;
+        var done = false;
+        var i = 0;
+        var Q = [];
+        while (!done) {
+          if (current) {
+            Q.push(current);
+            current = current.left;
+          } else {
+            if (Q.length > 0) {
+              current = Q.pop();
+              if (i === index) return current;
+              i++;
+              current = current.right;
+            } else done = true;
+          }
+        }
+        return null;
+      };
+      Tree.prototype.next = function (d) {
+        var root = this._root;
+        var successor = null;
+        if (d.right) {
+          successor = d.right;
+          while (successor.left) successor = successor.left;
+          return successor;
+        }
+        var comparator = this._comparator;
+        while (root) {
+          var cmp = comparator(d.key, root.key);
+          if (cmp === 0) break;else if (cmp < 0) {
+            successor = root;
+            root = root.left;
+          } else root = root.right;
+        }
+        return successor;
+      };
+      Tree.prototype.prev = function (d) {
+        var root = this._root;
+        var predecessor = null;
+        if (d.left !== null) {
+          predecessor = d.left;
+          while (predecessor.right) predecessor = predecessor.right;
+          return predecessor;
+        }
+        var comparator = this._comparator;
+        while (root) {
+          var cmp = comparator(d.key, root.key);
+          if (cmp === 0) break;else if (cmp < 0) root = root.left;else {
+            predecessor = root;
+            root = root.right;
+          }
+        }
+        return predecessor;
+      };
+      Tree.prototype.clear = function () {
+        this._root = null;
+        this._size = 0;
+        return this;
+      };
+      Tree.prototype.toList = function () {
+        return toList(this._root);
+      };
+      /**
+       * Bulk-load items. Both array have to be same size
+       */
+      Tree.prototype.load = function (keys, values, presort) {
+        if (values === void 0) {
+          values = [];
+        }
+        if (presort === void 0) {
+          presort = false;
+        }
+        var size = keys.length;
+        var comparator = this._comparator;
+        // sort if needed
+        if (presort) sort(keys, values, 0, size - 1, comparator);
+        if (this._root === null) {
+          // empty tree
+          this._root = loadRecursive(keys, values, 0, size);
+          this._size = size;
+        } else {
+          // that re-builds the whole tree from two in-order traversals
+          var mergedList = mergeLists(this.toList(), createList(keys, values), comparator);
+          size = this._size + size;
+          this._root = sortedListToBST({
+            head: mergedList
+          }, 0, size);
+        }
+        return this;
+      };
+      Tree.prototype.isEmpty = function () {
+        return this._root === null;
+      };
+      Object.defineProperty(Tree.prototype, "size", {
+        get: function () {
+          return this._size;
+        },
+        enumerable: true,
+        configurable: true
       });
-      return keys;
-    };
-    /**
-     * Returns array of all the data in the nodes
-     */
-
-
-    Tree.prototype.values = function () {
-      var values = [];
-      this.forEach(function (_a) {
-        var data = _a.data;
-        return values.push(data);
+      Object.defineProperty(Tree.prototype, "root", {
+        get: function () {
+          return this._root;
+        },
+        enumerable: true,
+        configurable: true
       });
-      return values;
-    };
-
-    Tree.prototype.min = function () {
-      if (this._root) return this.minNode(this._root).key;
+      Tree.prototype.toString = function (printNode) {
+        if (printNode === void 0) {
+          printNode = function (n) {
+            return String(n.key);
+          };
+        }
+        var out = [];
+        printRow(this._root, '', true, function (v) {
+          return out.push(v);
+        }, printNode);
+        return out.join('');
+      };
+      Tree.prototype.update = function (key, newKey, newData) {
+        var comparator = this._comparator;
+        var _a = split(key, this._root, comparator),
+          left = _a.left,
+          right = _a.right;
+        if (comparator(key, newKey) < 0) {
+          right = insert(newKey, newData, right, comparator);
+        } else {
+          left = insert(newKey, newData, left, comparator);
+        }
+        this._root = merge(left, right, comparator);
+      };
+      Tree.prototype.split = function (key) {
+        return split(key, this._root, this._comparator);
+      };
+      Tree.prototype[Symbol.iterator] = function () {
+        var current, Q, done;
+        return __generator(this, function (_a) {
+          switch (_a.label) {
+            case 0:
+              current = this._root;
+              Q = [];
+              done = false;
+              _a.label = 1;
+            case 1:
+              if (!!done) return [3 /*break*/, 6];
+              if (!(current !== null)) return [3 /*break*/, 2];
+              Q.push(current);
+              current = current.left;
+              return [3 /*break*/, 5];
+            case 2:
+              if (!(Q.length !== 0)) return [3 /*break*/, 4];
+              current = Q.pop();
+              return [4 /*yield*/, current];
+            case 3:
+              _a.sent();
+              current = current.right;
+              return [3 /*break*/, 5];
+            case 4:
+              done = true;
+              _a.label = 5;
+            case 5:
+              return [3 /*break*/, 1];
+            case 6:
+              return [2 /*return*/];
+          }
+        });
+      };
+      return Tree;
+    }();
+    function loadRecursive(keys, values, start, end) {
+      var size = end - start;
+      if (size > 0) {
+        var middle = start + Math.floor(size / 2);
+        var key = keys[middle];
+        var data = values[middle];
+        var node = new Node(key, data);
+        node.left = loadRecursive(keys, values, start, middle);
+        node.right = loadRecursive(keys, values, middle + 1, end);
+        return node;
+      }
       return null;
-    };
-
-    Tree.prototype.max = function () {
-      if (this._root) return this.maxNode(this._root).key;
-      return null;
-    };
-
-    Tree.prototype.minNode = function (t) {
-      if (t === void 0) {
-        t = this._root;
+    }
+    function createList(keys, values) {
+      var head = new Node(null, null);
+      var p = head;
+      for (var i = 0; i < keys.length; i++) {
+        p = p.next = new Node(keys[i], values[i]);
       }
-
-      if (t) while (t.left) {
-        t = t.left;
-      }
-      return t;
-    };
-
-    Tree.prototype.maxNode = function (t) {
-      if (t === void 0) {
-        t = this._root;
-      }
-
-      if (t) while (t.right) {
-        t = t.right;
-      }
-      return t;
-    };
-    /**
-     * Returns node at given index
-     */
-
-
-    Tree.prototype.at = function (index) {
-      var current = this._root;
-      var done = false;
-      var i = 0;
+      p.next = null;
+      return head.next;
+    }
+    function toList(root) {
+      var current = root;
       var Q = [];
-
+      var done = false;
+      var head = new Node(null, null);
+      var p = head;
       while (!done) {
         if (current) {
           Q.push(current);
           current = current.left;
         } else {
           if (Q.length > 0) {
-            current = Q.pop();
-            if (i === index) return current;
-            i++;
+            current = p = p.next = Q.pop();
             current = current.right;
           } else done = true;
         }
       }
-
+      p.next = null; // that'll work even if the tree was empty
+      return head.next;
+    }
+    function sortedListToBST(list, start, end) {
+      var size = end - start;
+      if (size > 0) {
+        var middle = start + Math.floor(size / 2);
+        var left = sortedListToBST(list, start, middle);
+        var root = list.head;
+        root.left = left;
+        list.head = list.head.next;
+        root.right = sortedListToBST(list, middle + 1, end);
+        return root;
+      }
       return null;
-    };
-
-    Tree.prototype.next = function (d) {
-      var root = this._root;
-      var successor = null;
-
-      if (d.right) {
-        successor = d.right;
-
-        while (successor.left) {
-          successor = successor.left;
+    }
+    function mergeLists(l1, l2, compare) {
+      var head = new Node(null, null); // dummy
+      var p = head;
+      var p1 = l1;
+      var p2 = l2;
+      while (p1 !== null && p2 !== null) {
+        if (compare(p1.key, p2.key) < 0) {
+          p.next = p1;
+          p1 = p1.next;
+        } else {
+          p.next = p2;
+          p2 = p2.next;
         }
-
-        return successor;
+        p = p.next;
       }
-
-      var comparator = this._comparator;
-
-      while (root) {
-        var cmp = comparator(d.key, root.key);
-        if (cmp === 0) break;else if (cmp < 0) {
-          successor = root;
-          root = root.left;
-        } else root = root.right;
+      if (p1 !== null) {
+        p.next = p1;
+      } else if (p2 !== null) {
+        p.next = p2;
       }
-
-      return successor;
-    };
-
-    Tree.prototype.prev = function (d) {
-      var root = this._root;
-      var predecessor = null;
-
-      if (d.left !== null) {
-        predecessor = d.left;
-
-        while (predecessor.right) {
-          predecessor = predecessor.right;
-        }
-
-        return predecessor;
+      return head.next;
+    }
+    function sort(keys, values, left, right, compare) {
+      if (left >= right) return;
+      var pivot = keys[left + right >> 1];
+      var i = left - 1;
+      var j = right + 1;
+      while (true) {
+        do i++; while (compare(keys[i], pivot) < 0);
+        do j--; while (compare(keys[j], pivot) > 0);
+        if (i >= j) break;
+        var tmp = keys[i];
+        keys[i] = keys[j];
+        keys[j] = tmp;
+        tmp = values[i];
+        values[i] = values[j];
+        values[j] = tmp;
       }
+      sort(keys, values, left, j, compare);
+      sort(keys, values, j + 1, right, compare);
+    }
 
-      var comparator = this._comparator;
-
-      while (root) {
-        var cmp = comparator(d.key, root.key);
-        if (cmp === 0) break;else if (cmp < 0) root = root.left;else {
-          predecessor = root;
-          root = root.right;
-        }
-      }
-
-      return predecessor;
-    };
-
-    Tree.prototype.clear = function () {
-      this._root = null;
-      this._size = 0;
-      return this;
-    };
-
-    Tree.prototype.toList = function () {
-      return toList(this._root);
-    };
     /**
-     * Bulk-load items. Both array have to be same size
+     * A bounding box has the format:
+     *
+     *  { ll: { x: xmin, y: ymin }, ur: { x: xmax, y: ymax } }
+     *
      */
 
-
-    Tree.prototype.load = function (keys, values, presort) {
-      if (values === void 0) {
-        values = [];
-      }
-
-      if (presort === void 0) {
-        presort = false;
-      }
-
-      var size = keys.length;
-      var comparator = this._comparator; // sort if needed
-
-      if (presort) sort(keys, values, 0, size - 1, comparator);
-
-      if (this._root === null) {
-        // empty tree
-        this._root = loadRecursive(keys, values, 0, size);
-        this._size = size;
-      } else {
-        // that re-builds the whole tree from two in-order traversals
-        var mergedList = mergeLists(this.toList(), createList(keys, values), comparator);
-        size = this._size + size;
-        this._root = sortedListToBST({
-          head: mergedList
-        }, 0, size);
-      }
-
-      return this;
+    const isInBbox = (bbox, point) => {
+      return bbox.ll.x <= point.x && point.x <= bbox.ur.x && bbox.ll.y <= point.y && point.y <= bbox.ur.y;
     };
 
-    Tree.prototype.isEmpty = function () {
-      return this._root === null;
+    /* Returns either null, or a bbox (aka an ordered pair of points)
+     * If there is only one point of overlap, a bbox with identical points
+     * will be returned */
+    const getBboxOverlap = (b1, b2) => {
+      // check if the bboxes overlap at all
+      if (b2.ur.x < b1.ll.x || b1.ur.x < b2.ll.x || b2.ur.y < b1.ll.y || b1.ur.y < b2.ll.y) return null;
+
+      // find the middle two X values
+      const lowerX = b1.ll.x < b2.ll.x ? b2.ll.x : b1.ll.x;
+      const upperX = b1.ur.x < b2.ur.x ? b1.ur.x : b2.ur.x;
+
+      // find the middle two Y values
+      const lowerY = b1.ll.y < b2.ll.y ? b2.ll.y : b1.ll.y;
+      const upperY = b1.ur.y < b2.ur.y ? b1.ur.y : b2.ur.y;
+
+      // put those middle values together to get the overlap
+      return {
+        ll: {
+          x: lowerX,
+          y: lowerY
+        },
+        ur: {
+          x: upperX,
+          y: upperY
+        }
+      };
     };
 
-    Object.defineProperty(Tree.prototype, "size", {
-      get: function get() {
-        return this._size;
-      },
-      enumerable: true,
-      configurable: true
-    });
-    Object.defineProperty(Tree.prototype, "root", {
-      get: function get() {
-        return this._root;
-      },
-      enumerable: true,
-      configurable: true
-    });
+    /* Javascript doesn't do integer math. Everything is
+     * floating point with percision Number.EPSILON.
+     *
+     * https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number/EPSILON
+     */
 
-    Tree.prototype.toString = function (printNode) {
-      if (printNode === void 0) {
-        printNode = function printNode(n) {
-          return String(n.key);
-        };
+    let epsilon$1 = Number.EPSILON;
+
+    // IE Polyfill
+    if (epsilon$1 === undefined) epsilon$1 = Math.pow(2, -52);
+    const EPSILON_SQ = epsilon$1 * epsilon$1;
+
+    /* FLP comparator */
+    const cmp = (a, b) => {
+      // check if they're both 0
+      if (-epsilon$1 < a && a < epsilon$1) {
+        if (-epsilon$1 < b && b < epsilon$1) {
+          return 0;
+        }
       }
 
-      var out = [];
-      printRow(this._root, '', true, function (v) {
-        return out.push(v);
-      }, printNode);
-      return out.join('');
-    };
-
-    Tree.prototype.update = function (key, newKey, newData) {
-      var comparator = this._comparator;
-
-      var _a = split(key, this._root, comparator),
-          left = _a.left,
-          right = _a.right;
-
-      if (comparator(key, newKey) < 0) {
-        right = insert(newKey, newData, right, comparator);
-      } else {
-        left = insert(newKey, newData, left, comparator);
-      }
-
-      this._root = merge(left, right, comparator);
-    };
-
-    Tree.prototype.split = function (key) {
-      return split(key, this._root, this._comparator);
-    };
-
-    return Tree;
-  }();
-
-  function loadRecursive(keys, values, start, end) {
-    var size = end - start;
-
-    if (size > 0) {
-      var middle = start + Math.floor(size / 2);
-      var key = keys[middle];
-      var data = values[middle];
-      var node = new Node(key, data);
-      node.left = loadRecursive(keys, values, start, middle);
-      node.right = loadRecursive(keys, values, middle + 1, end);
-      return node;
-    }
-
-    return null;
-  }
-
-  function createList(keys, values) {
-    var head = new Node(null, null);
-    var p = head;
-
-    for (var i = 0; i < keys.length; i++) {
-      p = p.next = new Node(keys[i], values[i]);
-    }
-
-    p.next = null;
-    return head.next;
-  }
-
-  function toList(root) {
-    var current = root;
-    var Q = [];
-    var done = false;
-    var head = new Node(null, null);
-    var p = head;
-
-    while (!done) {
-      if (current) {
-        Q.push(current);
-        current = current.left;
-      } else {
-        if (Q.length > 0) {
-          current = p = p.next = Q.pop();
-          current = current.right;
-        } else done = true;
-      }
-    }
-
-    p.next = null; // that'll work even if the tree was empty
-
-    return head.next;
-  }
-
-  function sortedListToBST(list, start, end) {
-    var size = end - start;
-
-    if (size > 0) {
-      var middle = start + Math.floor(size / 2);
-      var left = sortedListToBST(list, start, middle);
-      var root = list.head;
-      root.left = left;
-      list.head = list.head.next;
-      root.right = sortedListToBST(list, middle + 1, end);
-      return root;
-    }
-
-    return null;
-  }
-
-  function mergeLists(l1, l2, compare) {
-    var head = new Node(null, null); // dummy
-
-    var p = head;
-    var p1 = l1;
-    var p2 = l2;
-
-    while (p1 !== null && p2 !== null) {
-      if (compare(p1.key, p2.key) < 0) {
-        p.next = p1;
-        p1 = p1.next;
-      } else {
-        p.next = p2;
-        p2 = p2.next;
-      }
-
-      p = p.next;
-    }
-
-    if (p1 !== null) {
-      p.next = p1;
-    } else if (p2 !== null) {
-      p.next = p2;
-    }
-
-    return head.next;
-  }
-
-  function sort(keys, values, left, right, compare) {
-    if (left >= right) return;
-    var pivot = keys[left + right >> 1];
-    var i = left - 1;
-    var j = right + 1;
-
-    while (true) {
-      do {
-        i++;
-      } while (compare(keys[i], pivot) < 0);
-
-      do {
-        j--;
-      } while (compare(keys[j], pivot) > 0);
-
-      if (i >= j) break;
-      var tmp = keys[i];
-      keys[i] = keys[j];
-      keys[j] = tmp;
-      tmp = values[i];
-      values[i] = values[j];
-      values[j] = tmp;
-    }
-
-    sort(keys, values, left, j, compare);
-    sort(keys, values, j + 1, right, compare);
-  }
-
-  /**
-   * A bounding box has the format:
-   *
-   *  { ll: { x: xmin, y: ymin }, ur: { x: xmax, y: ymax } }
-   *
-   */
-  var isInBbox = function isInBbox(bbox, point) {
-    return bbox.ll.x <= point.x && point.x <= bbox.ur.x && bbox.ll.y <= point.y && point.y <= bbox.ur.y;
-  };
-  /* Returns either null, or a bbox (aka an ordered pair of points)
-   * If there is only one point of overlap, a bbox with identical points
-   * will be returned */
-
-  var getBboxOverlap = function getBboxOverlap(b1, b2) {
-    // check if the bboxes overlap at all
-    if (b2.ur.x < b1.ll.x || b1.ur.x < b2.ll.x || b2.ur.y < b1.ll.y || b1.ur.y < b2.ll.y) return null; // find the middle two X values
-
-    var lowerX = b1.ll.x < b2.ll.x ? b2.ll.x : b1.ll.x;
-    var upperX = b1.ur.x < b2.ur.x ? b1.ur.x : b2.ur.x; // find the middle two Y values
-
-    var lowerY = b1.ll.y < b2.ll.y ? b2.ll.y : b1.ll.y;
-    var upperY = b1.ur.y < b2.ur.y ? b1.ur.y : b2.ur.y; // put those middle values together to get the overlap
-
-    return {
-      ll: {
-        x: lowerX,
-        y: lowerY
-      },
-      ur: {
-        x: upperX,
-        y: upperY
-      }
-    };
-  };
-
-  /* Javascript doesn't do integer math. Everything is
-   * floating point with percision Number.EPSILON.
-   *
-   * https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number/EPSILON
-   */
-  var epsilon = Number.EPSILON; // IE Polyfill
-
-  if (epsilon === undefined) epsilon = Math.pow(2, -52);
-  var EPSILON_SQ = epsilon * epsilon;
-  /* FLP comparator */
-
-  var cmp = function cmp(a, b) {
-    // check if they're both 0
-    if (-epsilon < a && a < epsilon) {
-      if (-epsilon < b && b < epsilon) {
+      // check if they're flp equal
+      const ab = a - b;
+      if (ab * ab < EPSILON_SQ * a * b) {
         return 0;
       }
-    } // check if they're flp equal
 
+      // normal comparison
+      return a < b ? -1 : 1;
+    };
 
-    var ab = a - b;
+    /**
+     * This class rounds incoming values sufficiently so that
+     * floating points problems are, for the most part, avoided.
+     *
+     * Incoming points are have their x & y values tested against
+     * all previously seen x & y values. If either is 'too close'
+     * to a previously seen value, it's value is 'snapped' to the
+     * previously seen value.
+     *
+     * All points should be rounded by this class before being
+     * stored in any data structures in the rest of this algorithm.
+     */
 
-    if (ab * ab < EPSILON_SQ * a * b) {
-      return 0;
-    } // normal comparison
-
-
-    return a < b ? -1 : 1;
-  };
-
-  /**
-   * This class rounds incoming values sufficiently so that
-   * floating points problems are, for the most part, avoided.
-   *
-   * Incoming points are have their x & y values tested against
-   * all previously seen x & y values. If either is 'too close'
-   * to a previously seen value, it's value is 'snapped' to the
-   * previously seen value.
-   *
-   * All points should be rounded by this class before being
-   * stored in any data structures in the rest of this algorithm.
-   */
-
-  var PtRounder = /*#__PURE__*/function () {
-    function PtRounder() {
-      _classCallCheck(this, PtRounder);
-
-      this.reset();
-    }
-
-    _createClass(PtRounder, [{
-      key: "reset",
-      value: function reset() {
+    class PtRounder {
+      constructor() {
+        this.reset();
+      }
+      reset() {
         this.xRounder = new CoordRounder();
         this.yRounder = new CoordRounder();
       }
-    }, {
-      key: "round",
-      value: function round(x, y) {
+      round(x, y) {
         return {
           x: this.xRounder.round(x),
           y: this.yRounder.round(y)
         };
       }
-    }]);
+    }
+    class CoordRounder {
+      constructor() {
+        this.tree = new Tree();
+        // preseed with 0 so we don't end up with values < Number.EPSILON
+        this.round(0);
+      }
 
-    return PtRounder;
-  }();
-
-  var CoordRounder = /*#__PURE__*/function () {
-    function CoordRounder() {
-      _classCallCheck(this, CoordRounder);
-
-      this.tree = new Tree(); // preseed with 0 so we don't end up with values < Number.EPSILON
-
-      this.round(0);
-    } // Note: this can rounds input values backwards or forwards.
-    //       You might ask, why not restrict this to just rounding
-    //       forwards? Wouldn't that allow left endpoints to always
-    //       remain left endpoints during splitting (never change to
-    //       right). No - it wouldn't, because we snap intersections
-    //       to endpoints (to establish independence from the segment
-    //       angle for t-intersections).
-
-
-    _createClass(CoordRounder, [{
-      key: "round",
-      value: function round(coord) {
-        var node = this.tree.add(coord);
-        var prevNode = this.tree.prev(node);
-
+      // Note: this can rounds input values backwards or forwards.
+      //       You might ask, why not restrict this to just rounding
+      //       forwards? Wouldn't that allow left endpoints to always
+      //       remain left endpoints during splitting (never change to
+      //       right). No - it wouldn't, because we snap intersections
+      //       to endpoints (to establish independence from the segment
+      //       angle for t-intersections).
+      round(coord) {
+        const node = this.tree.add(coord);
+        const prevNode = this.tree.prev(node);
         if (prevNode !== null && cmp(node.key, prevNode.key) === 0) {
           this.tree.remove(coord);
           return prevNode.key;
         }
-
-        var nextNode = this.tree.next(node);
-
+        const nextNode = this.tree.next(node);
         if (nextNode !== null && cmp(node.key, nextNode.key) === 0) {
           this.tree.remove(coord);
           return nextNode.key;
         }
-
         return coord;
       }
-    }]);
+    }
 
-    return CoordRounder;
-  }(); // singleton available by import
+    // singleton available by import
+    const rounder = new PtRounder();
 
+    const epsilon = 1.1102230246251565e-16;
+    const splitter = 134217729;
+    const resulterrbound = (3 + 8 * epsilon) * epsilon;
 
-  var rounder = new PtRounder();
+    // fast_expansion_sum_zeroelim routine from oritinal code
+    function sum(elen, e, flen, f, h) {
+      let Q, Qnew, hh, bvirt;
+      let enow = e[0];
+      let fnow = f[0];
+      let eindex = 0;
+      let findex = 0;
+      if (fnow > enow === fnow > -enow) {
+        Q = enow;
+        enow = e[++eindex];
+      } else {
+        Q = fnow;
+        fnow = f[++findex];
+      }
+      let hindex = 0;
+      if (eindex < elen && findex < flen) {
+        if (fnow > enow === fnow > -enow) {
+          Qnew = enow + Q;
+          hh = Q - (Qnew - enow);
+          enow = e[++eindex];
+        } else {
+          Qnew = fnow + Q;
+          hh = Q - (Qnew - fnow);
+          fnow = f[++findex];
+        }
+        Q = Qnew;
+        if (hh !== 0) {
+          h[hindex++] = hh;
+        }
+        while (eindex < elen && findex < flen) {
+          if (fnow > enow === fnow > -enow) {
+            Qnew = Q + enow;
+            bvirt = Qnew - Q;
+            hh = Q - (Qnew - bvirt) + (enow - bvirt);
+            enow = e[++eindex];
+          } else {
+            Qnew = Q + fnow;
+            bvirt = Qnew - Q;
+            hh = Q - (Qnew - bvirt) + (fnow - bvirt);
+            fnow = f[++findex];
+          }
+          Q = Qnew;
+          if (hh !== 0) {
+            h[hindex++] = hh;
+          }
+        }
+      }
+      while (eindex < elen) {
+        Qnew = Q + enow;
+        bvirt = Qnew - Q;
+        hh = Q - (Qnew - bvirt) + (enow - bvirt);
+        enow = e[++eindex];
+        Q = Qnew;
+        if (hh !== 0) {
+          h[hindex++] = hh;
+        }
+      }
+      while (findex < flen) {
+        Qnew = Q + fnow;
+        bvirt = Qnew - Q;
+        hh = Q - (Qnew - bvirt) + (fnow - bvirt);
+        fnow = f[++findex];
+        Q = Qnew;
+        if (hh !== 0) {
+          h[hindex++] = hh;
+        }
+      }
+      if (Q !== 0 || hindex === 0) {
+        h[hindex++] = Q;
+      }
+      return hindex;
+    }
+    function estimate(elen, e) {
+      let Q = e[0];
+      for (let i = 1; i < elen; i++) Q += e[i];
+      return Q;
+    }
+    function vec(n) {
+      return new Float64Array(n);
+    }
 
-  /* Cross Product of two vectors with first point at origin */
+    const ccwerrboundA = (3 + 16 * epsilon) * epsilon;
+    const ccwerrboundB = (2 + 12 * epsilon) * epsilon;
+    const ccwerrboundC = (9 + 64 * epsilon) * epsilon * epsilon;
+    const B = vec(4);
+    const C1 = vec(8);
+    const C2 = vec(12);
+    const D = vec(16);
+    const u = vec(4);
+    function orient2dadapt(ax, ay, bx, by, cx, cy, detsum) {
+      let acxtail, acytail, bcxtail, bcytail;
+      let bvirt, c, ahi, alo, bhi, blo, _i, _j, _0, s1, s0, t1, t0, u3;
+      const acx = ax - cx;
+      const bcx = bx - cx;
+      const acy = ay - cy;
+      const bcy = by - cy;
+      s1 = acx * bcy;
+      c = splitter * acx;
+      ahi = c - (c - acx);
+      alo = acx - ahi;
+      c = splitter * bcy;
+      bhi = c - (c - bcy);
+      blo = bcy - bhi;
+      s0 = alo * blo - (s1 - ahi * bhi - alo * bhi - ahi * blo);
+      t1 = acy * bcx;
+      c = splitter * acy;
+      ahi = c - (c - acy);
+      alo = acy - ahi;
+      c = splitter * bcx;
+      bhi = c - (c - bcx);
+      blo = bcx - bhi;
+      t0 = alo * blo - (t1 - ahi * bhi - alo * bhi - ahi * blo);
+      _i = s0 - t0;
+      bvirt = s0 - _i;
+      B[0] = s0 - (_i + bvirt) + (bvirt - t0);
+      _j = s1 + _i;
+      bvirt = _j - s1;
+      _0 = s1 - (_j - bvirt) + (_i - bvirt);
+      _i = _0 - t1;
+      bvirt = _0 - _i;
+      B[1] = _0 - (_i + bvirt) + (bvirt - t1);
+      u3 = _j + _i;
+      bvirt = u3 - _j;
+      B[2] = _j - (u3 - bvirt) + (_i - bvirt);
+      B[3] = u3;
+      let det = estimate(4, B);
+      let errbound = ccwerrboundB * detsum;
+      if (det >= errbound || -det >= errbound) {
+        return det;
+      }
+      bvirt = ax - acx;
+      acxtail = ax - (acx + bvirt) + (bvirt - cx);
+      bvirt = bx - bcx;
+      bcxtail = bx - (bcx + bvirt) + (bvirt - cx);
+      bvirt = ay - acy;
+      acytail = ay - (acy + bvirt) + (bvirt - cy);
+      bvirt = by - bcy;
+      bcytail = by - (bcy + bvirt) + (bvirt - cy);
+      if (acxtail === 0 && acytail === 0 && bcxtail === 0 && bcytail === 0) {
+        return det;
+      }
+      errbound = ccwerrboundC * detsum + resulterrbound * Math.abs(det);
+      det += acx * bcytail + bcy * acxtail - (acy * bcxtail + bcx * acytail);
+      if (det >= errbound || -det >= errbound) return det;
+      s1 = acxtail * bcy;
+      c = splitter * acxtail;
+      ahi = c - (c - acxtail);
+      alo = acxtail - ahi;
+      c = splitter * bcy;
+      bhi = c - (c - bcy);
+      blo = bcy - bhi;
+      s0 = alo * blo - (s1 - ahi * bhi - alo * bhi - ahi * blo);
+      t1 = acytail * bcx;
+      c = splitter * acytail;
+      ahi = c - (c - acytail);
+      alo = acytail - ahi;
+      c = splitter * bcx;
+      bhi = c - (c - bcx);
+      blo = bcx - bhi;
+      t0 = alo * blo - (t1 - ahi * bhi - alo * bhi - ahi * blo);
+      _i = s0 - t0;
+      bvirt = s0 - _i;
+      u[0] = s0 - (_i + bvirt) + (bvirt - t0);
+      _j = s1 + _i;
+      bvirt = _j - s1;
+      _0 = s1 - (_j - bvirt) + (_i - bvirt);
+      _i = _0 - t1;
+      bvirt = _0 - _i;
+      u[1] = _0 - (_i + bvirt) + (bvirt - t1);
+      u3 = _j + _i;
+      bvirt = u3 - _j;
+      u[2] = _j - (u3 - bvirt) + (_i - bvirt);
+      u[3] = u3;
+      const C1len = sum(4, B, 4, u, C1);
+      s1 = acx * bcytail;
+      c = splitter * acx;
+      ahi = c - (c - acx);
+      alo = acx - ahi;
+      c = splitter * bcytail;
+      bhi = c - (c - bcytail);
+      blo = bcytail - bhi;
+      s0 = alo * blo - (s1 - ahi * bhi - alo * bhi - ahi * blo);
+      t1 = acy * bcxtail;
+      c = splitter * acy;
+      ahi = c - (c - acy);
+      alo = acy - ahi;
+      c = splitter * bcxtail;
+      bhi = c - (c - bcxtail);
+      blo = bcxtail - bhi;
+      t0 = alo * blo - (t1 - ahi * bhi - alo * bhi - ahi * blo);
+      _i = s0 - t0;
+      bvirt = s0 - _i;
+      u[0] = s0 - (_i + bvirt) + (bvirt - t0);
+      _j = s1 + _i;
+      bvirt = _j - s1;
+      _0 = s1 - (_j - bvirt) + (_i - bvirt);
+      _i = _0 - t1;
+      bvirt = _0 - _i;
+      u[1] = _0 - (_i + bvirt) + (bvirt - t1);
+      u3 = _j + _i;
+      bvirt = u3 - _j;
+      u[2] = _j - (u3 - bvirt) + (_i - bvirt);
+      u[3] = u3;
+      const C2len = sum(C1len, C1, 4, u, C2);
+      s1 = acxtail * bcytail;
+      c = splitter * acxtail;
+      ahi = c - (c - acxtail);
+      alo = acxtail - ahi;
+      c = splitter * bcytail;
+      bhi = c - (c - bcytail);
+      blo = bcytail - bhi;
+      s0 = alo * blo - (s1 - ahi * bhi - alo * bhi - ahi * blo);
+      t1 = acytail * bcxtail;
+      c = splitter * acytail;
+      ahi = c - (c - acytail);
+      alo = acytail - ahi;
+      c = splitter * bcxtail;
+      bhi = c - (c - bcxtail);
+      blo = bcxtail - bhi;
+      t0 = alo * blo - (t1 - ahi * bhi - alo * bhi - ahi * blo);
+      _i = s0 - t0;
+      bvirt = s0 - _i;
+      u[0] = s0 - (_i + bvirt) + (bvirt - t0);
+      _j = s1 + _i;
+      bvirt = _j - s1;
+      _0 = s1 - (_j - bvirt) + (_i - bvirt);
+      _i = _0 - t1;
+      bvirt = _0 - _i;
+      u[1] = _0 - (_i + bvirt) + (bvirt - t1);
+      u3 = _j + _i;
+      bvirt = u3 - _j;
+      u[2] = _j - (u3 - bvirt) + (_i - bvirt);
+      u[3] = u3;
+      const Dlen = sum(C2len, C2, 4, u, D);
+      return D[Dlen - 1];
+    }
+    function orient2d(ax, ay, bx, by, cx, cy) {
+      const detleft = (ay - cy) * (bx - cx);
+      const detright = (ax - cx) * (by - cy);
+      const det = detleft - detright;
+      const detsum = Math.abs(detleft + detright);
+      if (Math.abs(det) >= ccwerrboundA * detsum) return det;
+      return -orient2dadapt(ax, ay, bx, by, cx, cy, detsum);
+    }
 
-  var crossProduct = function crossProduct(a, b) {
-    return a.x * b.y - a.y * b.x;
-  };
-  /* Dot Product of two vectors with first point at origin */
+    /* Cross Product of two vectors with first point at origin */
+    const crossProduct = (a, b) => a.x * b.y - a.y * b.x;
 
-  var dotProduct = function dotProduct(a, b) {
-    return a.x * b.x + a.y * b.y;
-  };
-  /* Comparator for two vectors with same starting point */
+    /* Dot Product of two vectors with first point at origin */
+    const dotProduct = (a, b) => a.x * b.x + a.y * b.y;
 
-  var compareVectorAngles = function compareVectorAngles(basePt, endPt1, endPt2) {
-    var v1 = {
-      x: endPt1.x - basePt.x,
-      y: endPt1.y - basePt.y
+    /* Comparator for two vectors with same starting point */
+    const compareVectorAngles = (basePt, endPt1, endPt2) => {
+      const res = orient2d(basePt.x, basePt.y, endPt1.x, endPt1.y, endPt2.x, endPt2.y);
+      if (res > 0) return -1;
+      if (res < 0) return 1;
+      return 0;
     };
-    var v2 = {
-      x: endPt2.x - basePt.x,
-      y: endPt2.y - basePt.y
-    };
-    var kross = crossProduct(v1, v2);
-    return cmp(kross, 0);
-  };
-  var length = function length(v) {
-    return Math.sqrt(dotProduct(v, v));
-  };
-  /* Get the sine of the angle from pShared -> pAngle to pShaed -> pBase */
+    const length = v => Math.sqrt(dotProduct(v, v));
 
-  var sineOfAngle = function sineOfAngle(pShared, pBase, pAngle) {
-    var vBase = {
-      x: pBase.x - pShared.x,
-      y: pBase.y - pShared.y
+    /* Get the sine of the angle from pShared -> pAngle to pShaed -> pBase */
+    const sineOfAngle = (pShared, pBase, pAngle) => {
+      const vBase = {
+        x: pBase.x - pShared.x,
+        y: pBase.y - pShared.y
+      };
+      const vAngle = {
+        x: pAngle.x - pShared.x,
+        y: pAngle.y - pShared.y
+      };
+      return crossProduct(vAngle, vBase) / length(vAngle) / length(vBase);
     };
-    var vAngle = {
-      x: pAngle.x - pShared.x,
-      y: pAngle.y - pShared.y
-    };
-    return crossProduct(vAngle, vBase) / length(vAngle) / length(vBase);
-  };
-  /* Get the cosine of the angle from pShared -> pAngle to pShaed -> pBase */
 
-  var cosineOfAngle = function cosineOfAngle(pShared, pBase, pAngle) {
-    var vBase = {
-      x: pBase.x - pShared.x,
-      y: pBase.y - pShared.y
+    /* Get the cosine of the angle from pShared -> pAngle to pShaed -> pBase */
+    const cosineOfAngle = (pShared, pBase, pAngle) => {
+      const vBase = {
+        x: pBase.x - pShared.x,
+        y: pBase.y - pShared.y
+      };
+      const vAngle = {
+        x: pAngle.x - pShared.x,
+        y: pAngle.y - pShared.y
+      };
+      return dotProduct(vAngle, vBase) / length(vAngle) / length(vBase);
     };
-    var vAngle = {
-      x: pAngle.x - pShared.x,
-      y: pAngle.y - pShared.y
+
+    /* Get the x coordinate where the given line (defined by a point and vector)
+     * crosses the horizontal line with the given y coordiante.
+     * In the case of parrallel lines (including overlapping ones) returns null. */
+    const horizontalIntersection = (pt, v, y) => {
+      if (v.y === 0) return null;
+      return {
+        x: pt.x + v.x / v.y * (y - pt.y),
+        y: y
+      };
     };
-    return dotProduct(vAngle, vBase) / length(vAngle) / length(vBase);
-  };
-  /* Get the x coordinate where the given line (defined by a point and vector)
-   * crosses the horizontal line with the given y coordiante.
-   * In the case of parrallel lines (including overlapping ones) returns null. */
 
-  var horizontalIntersection = function horizontalIntersection(pt, v, y) {
-    if (v.y === 0) return null;
-    return {
-      x: pt.x + v.x / v.y * (y - pt.y),
-      y: y
+    /* Get the y coordinate where the given line (defined by a point and vector)
+     * crosses the vertical line with the given x coordiante.
+     * In the case of parrallel lines (including overlapping ones) returns null. */
+    const verticalIntersection = (pt, v, x) => {
+      if (v.x === 0) return null;
+      return {
+        x: x,
+        y: pt.y + v.y / v.x * (x - pt.x)
+      };
     };
-  };
-  /* Get the y coordinate where the given line (defined by a point and vector)
-   * crosses the vertical line with the given x coordiante.
-   * In the case of parrallel lines (including overlapping ones) returns null. */
 
-  var verticalIntersection = function verticalIntersection(pt, v, x) {
-    if (v.x === 0) return null;
-    return {
-      x: x,
-      y: pt.y + v.y / v.x * (x - pt.x)
-    };
-  };
-  /* Get the intersection of two lines, each defined by a base point and a vector.
-   * In the case of parrallel lines (including overlapping ones) returns null. */
+    /* Get the intersection of two lines, each defined by a base point and a vector.
+     * In the case of parrallel lines (including overlapping ones) returns null. */
+    const intersection$1 = (pt1, v1, pt2, v2) => {
+      // take some shortcuts for vertical and horizontal lines
+      // this also ensures we don't calculate an intersection and then discover
+      // it's actually outside the bounding box of the line
+      if (v1.x === 0) return verticalIntersection(pt2, v2, pt1.x);
+      if (v2.x === 0) return verticalIntersection(pt1, v1, pt2.x);
+      if (v1.y === 0) return horizontalIntersection(pt2, v2, pt1.y);
+      if (v2.y === 0) return horizontalIntersection(pt1, v1, pt2.y);
 
-  var intersection = function intersection(pt1, v1, pt2, v2) {
-    // take some shortcuts for vertical and horizontal lines
-    // this also ensures we don't calculate an intersection and then discover
-    // it's actually outside the bounding box of the line
-    if (v1.x === 0) return verticalIntersection(pt2, v2, pt1.x);
-    if (v2.x === 0) return verticalIntersection(pt1, v1, pt2.x);
-    if (v1.y === 0) return horizontalIntersection(pt2, v2, pt1.y);
-    if (v2.y === 0) return horizontalIntersection(pt1, v1, pt2.y); // General case for non-overlapping segments.
-    // This algorithm is based on Schneider and Eberly.
-    // http://www.cimec.org.ar/~ncalvo/Schneider_Eberly.pdf - pg 244
+      // General case for non-overlapping segments.
+      // This algorithm is based on Schneider and Eberly.
+      // http://www.cimec.org.ar/~ncalvo/Schneider_Eberly.pdf - pg 244
 
-    var kross = crossProduct(v1, v2);
-    if (kross == 0) return null;
-    var ve = {
-      x: pt2.x - pt1.x,
-      y: pt2.y - pt1.y
-    };
-    var d1 = crossProduct(ve, v1) / kross;
-    var d2 = crossProduct(ve, v2) / kross; // take the average of the two calculations to minimize rounding error
+      const kross = crossProduct(v1, v2);
+      if (kross == 0) return null;
+      const ve = {
+        x: pt2.x - pt1.x,
+        y: pt2.y - pt1.y
+      };
+      const d1 = crossProduct(ve, v1) / kross;
+      const d2 = crossProduct(ve, v2) / kross;
 
-    var x1 = pt1.x + d2 * v1.x,
+      // take the average of the two calculations to minimize rounding error
+      const x1 = pt1.x + d2 * v1.x,
         x2 = pt2.x + d1 * v2.x;
-    var y1 = pt1.y + d2 * v1.y,
+      const y1 = pt1.y + d2 * v1.y,
         y2 = pt2.y + d1 * v2.y;
-    var x = (x1 + x2) / 2;
-    var y = (y1 + y2) / 2;
-    return {
-      x: x,
-      y: y
+      const x = (x1 + x2) / 2;
+      const y = (y1 + y2) / 2;
+      return {
+        x: x,
+        y: y
+      };
     };
-  };
 
-  var SweepEvent = /*#__PURE__*/function () {
-    _createClass(SweepEvent, null, [{
-      key: "compare",
+    class SweepEvent {
       // for ordering sweep events in the sweep event queue
-      value: function compare(a, b) {
+      static compare(a, b) {
         // favor event with a point that the sweep line hits first
-        var ptCmp = SweepEvent.comparePoints(a.point, b.point);
-        if (ptCmp !== 0) return ptCmp; // the points are the same, so link them if needed
+        const ptCmp = SweepEvent.comparePoints(a.point, b.point);
+        if (ptCmp !== 0) return ptCmp;
 
-        if (a.point !== b.point) a.link(b); // favor right events over left
+        // the points are the same, so link them if needed
+        if (a.point !== b.point) a.link(b);
 
-        if (a.isLeft !== b.isLeft) return a.isLeft ? 1 : -1; // we have two matching left or right endpoints
+        // favor right events over left
+        if (a.isLeft !== b.isLeft) return a.isLeft ? 1 : -1;
+
+        // we have two matching left or right endpoints
         // ordering of this case is the same as for their segments
-
         return Segment.compare(a.segment, b.segment);
-      } // for ordering points in sweep line order
+      }
 
-    }, {
-      key: "comparePoints",
-      value: function comparePoints(aPt, bPt) {
+      // for ordering points in sweep line order
+      static comparePoints(aPt, bPt) {
         if (aPt.x < bPt.x) return -1;
         if (aPt.x > bPt.x) return 1;
         if (aPt.y < bPt.y) return -1;
         if (aPt.y > bPt.y) return 1;
         return 0;
-      } // Warning: 'point' input will be modified and re-used (for performance)
+      }
 
-    }]);
-
-    function SweepEvent(point, isLeft) {
-      _classCallCheck(this, SweepEvent);
-
-      if (point.events === undefined) point.events = [this];else point.events.push(this);
-      this.point = point;
-      this.isLeft = isLeft; // this.segment, this.otherSE set by factory
-    }
-
-    _createClass(SweepEvent, [{
-      key: "link",
-      value: function link(other) {
+      // Warning: 'point' input will be modified and re-used (for performance)
+      constructor(point, isLeft) {
+        if (point.events === undefined) point.events = [this];else point.events.push(this);
+        this.point = point;
+        this.isLeft = isLeft;
+        // this.segment, this.otherSE set by factory
+      }
+      link(other) {
         if (other.point === this.point) {
-          throw new Error('Tried to link already linked events');
+          throw new Error("Tried to link already linked events");
         }
-
-        var otherEvents = other.point.events;
-
-        for (var i = 0, iMax = otherEvents.length; i < iMax; i++) {
-          var evt = otherEvents[i];
+        const otherEvents = other.point.events;
+        for (let i = 0, iMax = otherEvents.length; i < iMax; i++) {
+          const evt = otherEvents[i];
           this.point.events.push(evt);
           evt.point = this.point;
         }
-
         this.checkForConsuming();
       }
+
       /* Do a pass over our linked events and check to see if any pair
        * of segments match, and should be consumed. */
-
-    }, {
-      key: "checkForConsuming",
-      value: function checkForConsuming() {
+      checkForConsuming() {
         // FIXME: The loops in this method run O(n^2) => no good.
         //        Maintain little ordered sweep event trees?
         //        Can we maintaining an ordering that avoids the need
         //        for the re-sorting with getLeftmostComparator in geom-out?
+
         // Compare each pair of events to see if other events also match
-        var numEvents = this.point.events.length;
-
-        for (var i = 0; i < numEvents; i++) {
-          var evt1 = this.point.events[i];
+        const numEvents = this.point.events.length;
+        for (let i = 0; i < numEvents; i++) {
+          const evt1 = this.point.events[i];
           if (evt1.segment.consumedBy !== undefined) continue;
-
-          for (var j = i + 1; j < numEvents; j++) {
-            var evt2 = this.point.events[j];
+          for (let j = i + 1; j < numEvents; j++) {
+            const evt2 = this.point.events[j];
             if (evt2.consumedBy !== undefined) continue;
             if (evt1.otherSE.point.events !== evt2.otherSE.point.events) continue;
             evt1.segment.consume(evt2.segment);
           }
         }
       }
-    }, {
-      key: "getAvailableLinkedEvents",
-      value: function getAvailableLinkedEvents() {
+      getAvailableLinkedEvents() {
         // point.events is always of length 2 or greater
-        var events = [];
-
-        for (var i = 0, iMax = this.point.events.length; i < iMax; i++) {
-          var evt = this.point.events[i];
-
+        const events = [];
+        for (let i = 0, iMax = this.point.events.length; i < iMax; i++) {
+          const evt = this.point.events[i];
           if (evt !== this && !evt.segment.ringOut && evt.segment.isInResult()) {
             events.push(evt);
           }
         }
-
         return events;
       }
+
       /**
        * Returns a comparator function for sorting linked events that will
        * favor the event that will give us the smallest left-side angle.
@@ -49173,67 +51596,53 @@ module.exports = posix;
        * The comparator function has a compute cache such that it avoids
        * re-computing already-computed values.
        */
-
-    }, {
-      key: "getLeftmostComparator",
-      value: function getLeftmostComparator(baseEvent) {
-        var _this = this;
-
-        var cache = new Map();
-
-        var fillCache = function fillCache(linkedEvent) {
-          var nextEvent = linkedEvent.otherSE;
+      getLeftmostComparator(baseEvent) {
+        const cache = new Map();
+        const fillCache = linkedEvent => {
+          const nextEvent = linkedEvent.otherSE;
           cache.set(linkedEvent, {
-            sine: sineOfAngle(_this.point, baseEvent.point, nextEvent.point),
-            cosine: cosineOfAngle(_this.point, baseEvent.point, nextEvent.point)
+            sine: sineOfAngle(this.point, baseEvent.point, nextEvent.point),
+            cosine: cosineOfAngle(this.point, baseEvent.point, nextEvent.point)
           });
         };
-
-        return function (a, b) {
+        return (a, b) => {
           if (!cache.has(a)) fillCache(a);
           if (!cache.has(b)) fillCache(b);
+          const {
+            sine: asine,
+            cosine: acosine
+          } = cache.get(a);
+          const {
+            sine: bsine,
+            cosine: bcosine
+          } = cache.get(b);
 
-          var _cache$get = cache.get(a),
-              asine = _cache$get.sine,
-              acosine = _cache$get.cosine;
-
-          var _cache$get2 = cache.get(b),
-              bsine = _cache$get2.sine,
-              bcosine = _cache$get2.cosine; // both on or above x-axis
-
-
+          // both on or above x-axis
           if (asine >= 0 && bsine >= 0) {
             if (acosine < bcosine) return 1;
             if (acosine > bcosine) return -1;
             return 0;
-          } // both below x-axis
+          }
 
-
+          // both below x-axis
           if (asine < 0 && bsine < 0) {
             if (acosine < bcosine) return -1;
             if (acosine > bcosine) return 1;
             return 0;
-          } // one above x-axis, one below
+          }
 
-
+          // one above x-axis, one below
           if (bsine < asine) return -1;
           if (bsine > asine) return 1;
           return 0;
         };
       }
-    }]);
+    }
 
-    return SweepEvent;
-  }();
-
-  // segments and sweep events when all else is identical
-
-  var segmentId = 0;
-
-  var Segment = /*#__PURE__*/function () {
-    _createClass(Segment, null, [{
-      key: "compare",
-
+    // Give segments unique ID's to get consistent sorting of
+    // segments and sweep events when all else is identical
+    let segmentId = 0;
+    class Segment {
       /* This compare() function is for ordering segments in the sweep
        * line tree, and does so according to the following criteria:
        *
@@ -49247,135 +51656,157 @@ module.exports = posix;
        * or more of the segments are vertical) then the line to be considered
        * is directly on the right-more of the two left inputs.
        */
-      value: function compare(a, b) {
-        var alx = a.leftSE.point.x;
-        var blx = b.leftSE.point.x;
-        var arx = a.rightSE.point.x;
-        var brx = b.rightSE.point.x; // check if they're even in the same vertical plane
+      static compare(a, b) {
+        const alx = a.leftSE.point.x;
+        const blx = b.leftSE.point.x;
+        const arx = a.rightSE.point.x;
+        const brx = b.rightSE.point.x;
 
+        // check if they're even in the same vertical plane
         if (brx < alx) return 1;
         if (arx < blx) return -1;
-        var aly = a.leftSE.point.y;
-        var bly = b.leftSE.point.y;
-        var ary = a.rightSE.point.y;
-        var bry = b.rightSE.point.y; // is left endpoint of segment B the right-more?
+        const aly = a.leftSE.point.y;
+        const bly = b.leftSE.point.y;
+        const ary = a.rightSE.point.y;
+        const bry = b.rightSE.point.y;
 
+        // is left endpoint of segment B the right-more?
         if (alx < blx) {
           // are the two segments in the same horizontal plane?
           if (bly < aly && bly < ary) return 1;
-          if (bly > aly && bly > ary) return -1; // is the B left endpoint colinear to segment A?
+          if (bly > aly && bly > ary) return -1;
 
-          var aCmpBLeft = a.comparePoint(b.leftSE.point);
+          // is the B left endpoint colinear to segment A?
+          const aCmpBLeft = a.comparePoint(b.leftSE.point);
           if (aCmpBLeft < 0) return 1;
-          if (aCmpBLeft > 0) return -1; // is the A right endpoint colinear to segment B ?
+          if (aCmpBLeft > 0) return -1;
 
-          var bCmpARight = b.comparePoint(a.rightSE.point);
-          if (bCmpARight !== 0) return bCmpARight; // colinear segments, consider the one with left-more
+          // is the A right endpoint colinear to segment B ?
+          const bCmpARight = b.comparePoint(a.rightSE.point);
+          if (bCmpARight !== 0) return bCmpARight;
+
+          // colinear segments, consider the one with left-more
           // left endpoint to be first (arbitrary?)
-
           return -1;
-        } // is left endpoint of segment A the right-more?
-
-
-        if (alx > blx) {
-          if (aly < bly && aly < bry) return -1;
-          if (aly > bly && aly > bry) return 1; // is the A left endpoint colinear to segment B?
-
-          var bCmpALeft = b.comparePoint(a.leftSE.point);
-          if (bCmpALeft !== 0) return bCmpALeft; // is the B right endpoint colinear to segment A?
-
-          var aCmpBRight = a.comparePoint(b.rightSE.point);
-          if (aCmpBRight < 0) return 1;
-          if (aCmpBRight > 0) return -1; // colinear segments, consider the one with left-more
-          // left endpoint to be first (arbitrary?)
-
-          return 1;
-        } // if we get here, the two left endpoints are in the same
-        // vertical plane, ie alx === blx
-        // consider the lower left-endpoint to come first
-
-
-        if (aly < bly) return -1;
-        if (aly > bly) return 1; // left endpoints are identical
-        // check for colinearity by using the left-more right endpoint
-        // is the A right endpoint more left-more?
-
-        if (arx < brx) {
-          var _bCmpARight = b.comparePoint(a.rightSE.point);
-
-          if (_bCmpARight !== 0) return _bCmpARight;
-        } // is the B right endpoint more left-more?
-
-
-        if (arx > brx) {
-          var _aCmpBRight = a.comparePoint(b.rightSE.point);
-
-          if (_aCmpBRight < 0) return 1;
-          if (_aCmpBRight > 0) return -1;
         }
 
+        // is left endpoint of segment A the right-more?
+        if (alx > blx) {
+          if (aly < bly && aly < bry) return -1;
+          if (aly > bly && aly > bry) return 1;
+
+          // is the A left endpoint colinear to segment B?
+          const bCmpALeft = b.comparePoint(a.leftSE.point);
+          if (bCmpALeft !== 0) return bCmpALeft;
+
+          // is the B right endpoint colinear to segment A?
+          const aCmpBRight = a.comparePoint(b.rightSE.point);
+          if (aCmpBRight < 0) return 1;
+          if (aCmpBRight > 0) return -1;
+
+          // colinear segments, consider the one with left-more
+          // left endpoint to be first (arbitrary?)
+          return 1;
+        }
+
+        // if we get here, the two left endpoints are in the same
+        // vertical plane, ie alx === blx
+
+        // consider the lower left-endpoint to come first
+        if (aly < bly) return -1;
+        if (aly > bly) return 1;
+
+        // left endpoints are identical
+        // check for colinearity by using the left-more right endpoint
+
+        // is the A right endpoint more left-more?
+        if (arx < brx) {
+          const bCmpARight = b.comparePoint(a.rightSE.point);
+          if (bCmpARight !== 0) return bCmpARight;
+        }
+
+        // is the B right endpoint more left-more?
+        if (arx > brx) {
+          const aCmpBRight = a.comparePoint(b.rightSE.point);
+          if (aCmpBRight < 0) return 1;
+          if (aCmpBRight > 0) return -1;
+        }
         if (arx !== brx) {
           // are these two [almost] vertical segments with opposite orientation?
           // if so, the one with the lower right endpoint comes first
-          var ay = ary - aly;
-          var ax = arx - alx;
-          var by = bry - bly;
-          var bx = brx - blx;
+          const ay = ary - aly;
+          const ax = arx - alx;
+          const by = bry - bly;
+          const bx = brx - blx;
           if (ay > ax && by < bx) return 1;
           if (ay < ax && by > bx) return -1;
-        } // we have colinear segments with matching orientation
+        }
+
+        // we have colinear segments with matching orientation
         // consider the one with more left-more right endpoint to be first
-
-
         if (arx > brx) return 1;
-        if (arx < brx) return -1; // if we get here, two two right endpoints are in the same
+        if (arx < brx) return -1;
+
+        // if we get here, two two right endpoints are in the same
         // vertical plane, ie arx === brx
+
         // consider the lower right-endpoint to come first
-
         if (ary < bry) return -1;
-        if (ary > bry) return 1; // right endpoints identical as well, so the segments are idential
+        if (ary > bry) return 1;
+
+        // right endpoints identical as well, so the segments are idential
         // fall back on creation order as consistent tie-breaker
-
         if (a.id < b.id) return -1;
-        if (a.id > b.id) return 1; // identical segment, ie a === b
+        if (a.id > b.id) return 1;
 
+        // identical segment, ie a === b
         return 0;
       }
+
       /* Warning: a reference to ringWindings input will be stored,
        *  and possibly will be later modified */
+      constructor(leftSE, rightSE, rings, windings) {
+        this.id = ++segmentId;
+        this.leftSE = leftSE;
+        leftSE.segment = this;
+        leftSE.otherSE = rightSE;
+        this.rightSE = rightSE;
+        rightSE.segment = this;
+        rightSE.otherSE = leftSE;
+        this.rings = rings;
+        this.windings = windings;
+        // left unset for performance, set later in algorithm
+        // this.ringOut, this.consumedBy, this.prev
+      }
+      static fromRing(pt1, pt2, ring) {
+        let leftPt, rightPt, winding;
 
-    }]);
-
-    function Segment(leftSE, rightSE, rings, windings) {
-      _classCallCheck(this, Segment);
-
-      this.id = ++segmentId;
-      this.leftSE = leftSE;
-      leftSE.segment = this;
-      leftSE.otherSE = rightSE;
-      this.rightSE = rightSE;
-      rightSE.segment = this;
-      rightSE.otherSE = leftSE;
-      this.rings = rings;
-      this.windings = windings; // left unset for performance, set later in algorithm
-      // this.ringOut, this.consumedBy, this.prev
-    }
-
-    _createClass(Segment, [{
-      key: "replaceRightSE",
+        // ordering the two points according to sweep line ordering
+        const cmpPts = SweepEvent.comparePoints(pt1, pt2);
+        if (cmpPts < 0) {
+          leftPt = pt1;
+          rightPt = pt2;
+          winding = 1;
+        } else if (cmpPts > 0) {
+          leftPt = pt2;
+          rightPt = pt1;
+          winding = -1;
+        } else throw new Error(`Tried to create degenerate segment at [${pt1.x}, ${pt1.y}]`);
+        const leftSE = new SweepEvent(leftPt, true);
+        const rightSE = new SweepEvent(rightPt, false);
+        return new Segment(leftSE, rightSE, [ring], [winding]);
+      }
 
       /* When a segment is split, the rightSE is replaced with a new sweep event */
-      value: function replaceRightSE(newRightSE) {
+      replaceRightSE(newRightSE) {
         this.rightSE = newRightSE;
         this.rightSE.segment = this;
         this.rightSE.otherSE = this.leftSE;
         this.leftSE.otherSE = this.rightSE;
       }
-    }, {
-      key: "bbox",
-      value: function bbox() {
-        var y1 = this.leftSE.point.y;
-        var y2 = this.rightSE.point.y;
+      bbox() {
+        const y1 = this.leftSE.point.y;
+        const y2 = this.rightSE.point.y;
         return {
           ll: {
             x: this.leftSE.point.x,
@@ -49387,21 +51818,18 @@ module.exports = posix;
           }
         };
       }
-      /* A vector from the left point to the right */
 
-    }, {
-      key: "vector",
-      value: function vector() {
+      /* A vector from the left point to the right */
+      vector() {
         return {
           x: this.rightSE.point.x - this.leftSE.point.x,
           y: this.rightSE.point.y - this.leftSE.point.y
         };
       }
-    }, {
-      key: "isAnEndpoint",
-      value: function isAnEndpoint(pt) {
+      isAnEndpoint(pt) {
         return pt.x === this.leftSE.point.x && pt.y === this.leftSE.point.y || pt.x === this.rightSE.point.x && pt.y === this.rightSE.point.y;
       }
+
       /* Compare this segment with a point.
        *
        * A point P is considered to be colinear to a segment if there
@@ -49415,32 +51843,32 @@ module.exports = posix;
        *   0: point is colinear to segment
        *  -1: point lies below the segment (to the right of vertical)
        */
-
-    }, {
-      key: "comparePoint",
-      value: function comparePoint(point) {
+      comparePoint(point) {
         if (this.isAnEndpoint(point)) return 0;
-        var lPt = this.leftSE.point;
-        var rPt = this.rightSE.point;
-        var v = this.vector(); // Exactly vertical segments.
+        const lPt = this.leftSE.point;
+        const rPt = this.rightSE.point;
+        const v = this.vector();
 
+        // Exactly vertical segments.
         if (lPt.x === rPt.x) {
           if (point.x === lPt.x) return 0;
           return point.x < lPt.x ? 1 : -1;
-        } // Nearly vertical segments with an intersection.
+        }
+
+        // Nearly vertical segments with an intersection.
         // Check to see where a point on the line with matching Y coordinate is.
+        const yDist = (point.y - lPt.y) / v.y;
+        const xFromYDist = lPt.x + yDist * v.x;
+        if (point.x === xFromYDist) return 0;
 
-
-        var yDist = (point.y - lPt.y) / v.y;
-        var xFromYDist = lPt.x + yDist * v.x;
-        if (point.x === xFromYDist) return 0; // General case.
+        // General case.
         // Check to see where a point on the line with matching X coordinate is.
-
-        var xDist = (point.x - lPt.x) / v.x;
-        var yFromXDist = lPt.y + xDist * v.y;
+        const xDist = (point.x - lPt.x) / v.x;
+        const yFromXDist = lPt.y + xDist * v.y;
         if (point.y === yFromXDist) return 0;
         return point.y < yFromXDist ? -1 : 1;
       }
+
       /**
        * Given another segment, returns the first non-trivial intersection
        * between the two segments (in terms of sweep line ordering), if it exists.
@@ -49456,78 +51884,83 @@ module.exports = posix;
        * If no non-trivial intersection exists, return null
        * Else, return null.
        */
-
-    }, {
-      key: "getIntersection",
-      value: function getIntersection(other) {
+      getIntersection(other) {
         // If bboxes don't overlap, there can't be any intersections
-        var tBbox = this.bbox();
-        var oBbox = other.bbox();
-        var bboxOverlap = getBboxOverlap(tBbox, oBbox);
-        if (bboxOverlap === null) return null; // We first check to see if the endpoints can be considered intersections.
+        const tBbox = this.bbox();
+        const oBbox = other.bbox();
+        const bboxOverlap = getBboxOverlap(tBbox, oBbox);
+        if (bboxOverlap === null) return null;
+
+        // We first check to see if the endpoints can be considered intersections.
         // This will 'snap' intersections to endpoints if possible, and will
         // handle cases of colinearity.
 
-        var tlp = this.leftSE.point;
-        var trp = this.rightSE.point;
-        var olp = other.leftSE.point;
-        var orp = other.rightSE.point; // does each endpoint touch the other segment?
+        const tlp = this.leftSE.point;
+        const trp = this.rightSE.point;
+        const olp = other.leftSE.point;
+        const orp = other.rightSE.point;
+
+        // does each endpoint touch the other segment?
         // note that we restrict the 'touching' definition to only allow segments
         // to touch endpoints that lie forward from where we are in the sweep line pass
+        const touchesOtherLSE = isInBbox(tBbox, olp) && this.comparePoint(olp) === 0;
+        const touchesThisLSE = isInBbox(oBbox, tlp) && other.comparePoint(tlp) === 0;
+        const touchesOtherRSE = isInBbox(tBbox, orp) && this.comparePoint(orp) === 0;
+        const touchesThisRSE = isInBbox(oBbox, trp) && other.comparePoint(trp) === 0;
 
-        var touchesOtherLSE = isInBbox(tBbox, olp) && this.comparePoint(olp) === 0;
-        var touchesThisLSE = isInBbox(oBbox, tlp) && other.comparePoint(tlp) === 0;
-        var touchesOtherRSE = isInBbox(tBbox, orp) && this.comparePoint(orp) === 0;
-        var touchesThisRSE = isInBbox(oBbox, trp) && other.comparePoint(trp) === 0; // do left endpoints match?
-
+        // do left endpoints match?
         if (touchesThisLSE && touchesOtherLSE) {
           // these two cases are for colinear segments with matching left
           // endpoints, and one segment being longer than the other
           if (touchesThisRSE && !touchesOtherRSE) return trp;
-          if (!touchesThisRSE && touchesOtherRSE) return orp; // either the two segments match exactly (two trival intersections)
+          if (!touchesThisRSE && touchesOtherRSE) return orp;
+          // either the two segments match exactly (two trival intersections)
           // or just on their left endpoint (one trivial intersection
-
           return null;
-        } // does this left endpoint matches (other doesn't)
+        }
 
-
+        // does this left endpoint matches (other doesn't)
         if (touchesThisLSE) {
           // check for segments that just intersect on opposing endpoints
           if (touchesOtherRSE) {
             if (tlp.x === orp.x && tlp.y === orp.y) return null;
-          } // t-intersection on left endpoint
-
-
+          }
+          // t-intersection on left endpoint
           return tlp;
-        } // does other left endpoint matches (this doesn't)
+        }
 
-
+        // does other left endpoint matches (this doesn't)
         if (touchesOtherLSE) {
           // check for segments that just intersect on opposing endpoints
           if (touchesThisRSE) {
             if (trp.x === olp.x && trp.y === olp.y) return null;
-          } // t-intersection on left endpoint
-
-
+          }
+          // t-intersection on left endpoint
           return olp;
-        } // trivial intersection on right endpoints
+        }
 
+        // trivial intersection on right endpoints
+        if (touchesThisRSE && touchesOtherRSE) return null;
 
-        if (touchesThisRSE && touchesOtherRSE) return null; // t-intersections on just one right endpoint
-
+        // t-intersections on just one right endpoint
         if (touchesThisRSE) return trp;
-        if (touchesOtherRSE) return orp; // None of our endpoints intersect. Look for a general intersection between
+        if (touchesOtherRSE) return orp;
+
+        // None of our endpoints intersect. Look for a general intersection between
         // infinite lines laid over the segments
+        const pt = intersection$1(tlp, this.vector(), olp, other.vector());
 
-        var pt = intersection(tlp, this.vector(), olp, other.vector()); // are the segments parrallel? Note that if they were colinear with overlap,
+        // are the segments parrallel? Note that if they were colinear with overlap,
         // they would have an endpoint intersection and that case was already handled above
+        if (pt === null) return null;
 
-        if (pt === null) return null; // is the intersection found between the lines not on the segments?
+        // is the intersection found between the lines not on the segments?
+        if (!isInBbox(bboxOverlap, pt)) return null;
 
-        if (!isInBbox(bboxOverlap, pt)) return null; // round the the computed point if needed
-
+        // round the the computed point if needed
         return rounder.round(pt.x, pt.y);
       }
+
       /**
        * Split the given segment into multiple segments on the given points.
        *  * Each existing segment will retain its leftSE and a new rightSE will be
@@ -49540,215 +51973,180 @@ module.exports = posix;
        *
        * Warning: input array of points is modified
        */
-
-    }, {
-      key: "split",
-      value: function split(point) {
-        var newEvents = [];
-        var alreadyLinked = point.events !== undefined;
-        var newLeftSE = new SweepEvent(point, true);
-        var newRightSE = new SweepEvent(point, false);
-        var oldRightSE = this.rightSE;
+      split(point) {
+        const newEvents = [];
+        const alreadyLinked = point.events !== undefined;
+        const newLeftSE = new SweepEvent(point, true);
+        const newRightSE = new SweepEvent(point, false);
+        const oldRightSE = this.rightSE;
         this.replaceRightSE(newRightSE);
         newEvents.push(newRightSE);
         newEvents.push(newLeftSE);
-        var newSeg = new Segment(newLeftSE, oldRightSE, this.rings.slice(), this.windings.slice()); // when splitting a nearly vertical downward-facing segment,
+        const newSeg = new Segment(newLeftSE, oldRightSE, this.rings.slice(), this.windings.slice());
+
+        // when splitting a nearly vertical downward-facing segment,
         // sometimes one of the resulting new segments is vertical, in which
         // case its left and right events may need to be swapped
-
         if (SweepEvent.comparePoints(newSeg.leftSE.point, newSeg.rightSE.point) > 0) {
           newSeg.swapEvents();
         }
-
         if (SweepEvent.comparePoints(this.leftSE.point, this.rightSE.point) > 0) {
           this.swapEvents();
-        } // in the point we just used to create new sweep events with was already
+        }
+
+        // in the point we just used to create new sweep events with was already
         // linked to other events, we need to check if either of the affected
         // segments should be consumed
-
-
         if (alreadyLinked) {
           newLeftSE.checkForConsuming();
           newRightSE.checkForConsuming();
         }
-
         return newEvents;
       }
-      /* Swap which event is left and right */
 
-    }, {
-      key: "swapEvents",
-      value: function swapEvents() {
-        var tmpEvt = this.rightSE;
+      /* Swap which event is left and right */
+      swapEvents() {
+        const tmpEvt = this.rightSE;
         this.rightSE = this.leftSE;
         this.leftSE = tmpEvt;
         this.leftSE.isLeft = true;
         this.rightSE.isLeft = false;
-
-        for (var i = 0, iMax = this.windings.length; i < iMax; i++) {
+        for (let i = 0, iMax = this.windings.length; i < iMax; i++) {
           this.windings[i] *= -1;
         }
       }
+
       /* Consume another segment. We take their rings under our wing
        * and mark them as consumed. Use for perfectly overlapping segments */
-
-    }, {
-      key: "consume",
-      value: function consume(other) {
-        var consumer = this;
-        var consumee = other;
-
-        while (consumer.consumedBy) {
-          consumer = consumer.consumedBy;
-        }
-
-        while (consumee.consumedBy) {
-          consumee = consumee.consumedBy;
-        }
-
-        var cmp = Segment.compare(consumer, consumee);
+      consume(other) {
+        let consumer = this;
+        let consumee = other;
+        while (consumer.consumedBy) consumer = consumer.consumedBy;
+        while (consumee.consumedBy) consumee = consumee.consumedBy;
+        const cmp = Segment.compare(consumer, consumee);
         if (cmp === 0) return; // already consumed
         // the winner of the consumption is the earlier segment
         // according to sweep line ordering
-
         if (cmp > 0) {
-          var tmp = consumer;
+          const tmp = consumer;
           consumer = consumee;
           consumee = tmp;
-        } // make sure a segment doesn't consume it's prev
-
-
-        if (consumer.prev === consumee) {
-          var _tmp = consumer;
-          consumer = consumee;
-          consumee = _tmp;
         }
 
-        for (var i = 0, iMax = consumee.rings.length; i < iMax; i++) {
-          var ring = consumee.rings[i];
-          var winding = consumee.windings[i];
-          var index = consumer.rings.indexOf(ring);
-
+        // make sure a segment doesn't consume it's prev
+        if (consumer.prev === consumee) {
+          const tmp = consumer;
+          consumer = consumee;
+          consumee = tmp;
+        }
+        for (let i = 0, iMax = consumee.rings.length; i < iMax; i++) {
+          const ring = consumee.rings[i];
+          const winding = consumee.windings[i];
+          const index = consumer.rings.indexOf(ring);
           if (index === -1) {
             consumer.rings.push(ring);
             consumer.windings.push(winding);
           } else consumer.windings[index] += winding;
         }
-
         consumee.rings = null;
         consumee.windings = null;
-        consumee.consumedBy = consumer; // mark sweep events consumed as to maintain ordering in sweep event queue
+        consumee.consumedBy = consumer;
 
+        // mark sweep events consumed as to maintain ordering in sweep event queue
         consumee.leftSE.consumedBy = consumer.leftSE;
         consumee.rightSE.consumedBy = consumer.rightSE;
       }
-      /* The first segment previous segment chain that is in the result */
 
-    }, {
-      key: "prevInResult",
-      value: function prevInResult() {
+      /* The first segment previous segment chain that is in the result */
+      prevInResult() {
         if (this._prevInResult !== undefined) return this._prevInResult;
         if (!this.prev) this._prevInResult = null;else if (this.prev.isInResult()) this._prevInResult = this.prev;else this._prevInResult = this.prev.prevInResult();
         return this._prevInResult;
       }
-    }, {
-      key: "beforeState",
-      value: function beforeState() {
+      beforeState() {
         if (this._beforeState !== undefined) return this._beforeState;
         if (!this.prev) this._beforeState = {
           rings: [],
           windings: [],
           multiPolys: []
         };else {
-          var seg = this.prev.consumedBy || this.prev;
+          const seg = this.prev.consumedBy || this.prev;
           this._beforeState = seg.afterState();
         }
         return this._beforeState;
       }
-    }, {
-      key: "afterState",
-      value: function afterState() {
+      afterState() {
         if (this._afterState !== undefined) return this._afterState;
-        var beforeState = this.beforeState();
+        const beforeState = this.beforeState();
         this._afterState = {
           rings: beforeState.rings.slice(0),
           windings: beforeState.windings.slice(0),
           multiPolys: []
         };
-        var ringsAfter = this._afterState.rings;
-        var windingsAfter = this._afterState.windings;
-        var mpsAfter = this._afterState.multiPolys; // calculate ringsAfter, windingsAfter
+        const ringsAfter = this._afterState.rings;
+        const windingsAfter = this._afterState.windings;
+        const mpsAfter = this._afterState.multiPolys;
 
-        for (var i = 0, iMax = this.rings.length; i < iMax; i++) {
-          var ring = this.rings[i];
-          var winding = this.windings[i];
-          var index = ringsAfter.indexOf(ring);
-
+        // calculate ringsAfter, windingsAfter
+        for (let i = 0, iMax = this.rings.length; i < iMax; i++) {
+          const ring = this.rings[i];
+          const winding = this.windings[i];
+          const index = ringsAfter.indexOf(ring);
           if (index === -1) {
             ringsAfter.push(ring);
             windingsAfter.push(winding);
           } else windingsAfter[index] += winding;
-        } // calcualte polysAfter
-
-
-        var polysAfter = [];
-        var polysExclude = [];
-
-        for (var _i = 0, _iMax = ringsAfter.length; _i < _iMax; _i++) {
-          if (windingsAfter[_i] === 0) continue; // non-zero rule
-
-          var _ring = ringsAfter[_i];
-          var poly = _ring.poly;
-          if (polysExclude.indexOf(poly) !== -1) continue;
-          if (_ring.isExterior) polysAfter.push(poly);else {
-            if (polysExclude.indexOf(poly) === -1) polysExclude.push(poly);
-
-            var _index = polysAfter.indexOf(_ring.poly);
-
-            if (_index !== -1) polysAfter.splice(_index, 1);
-          }
-        } // calculate multiPolysAfter
-
-
-        for (var _i2 = 0, _iMax2 = polysAfter.length; _i2 < _iMax2; _i2++) {
-          var mp = polysAfter[_i2].multiPoly;
-          if (mpsAfter.indexOf(mp) === -1) mpsAfter.push(mp);
         }
 
+        // calcualte polysAfter
+        const polysAfter = [];
+        const polysExclude = [];
+        for (let i = 0, iMax = ringsAfter.length; i < iMax; i++) {
+          if (windingsAfter[i] === 0) continue; // non-zero rule
+          const ring = ringsAfter[i];
+          const poly = ring.poly;
+          if (polysExclude.indexOf(poly) !== -1) continue;
+          if (ring.isExterior) polysAfter.push(poly);else {
+            if (polysExclude.indexOf(poly) === -1) polysExclude.push(poly);
+            const index = polysAfter.indexOf(ring.poly);
+            if (index !== -1) polysAfter.splice(index, 1);
+          }
+        }
+
+        // calculate multiPolysAfter
+        for (let i = 0, iMax = polysAfter.length; i < iMax; i++) {
+          const mp = polysAfter[i].multiPoly;
+          if (mpsAfter.indexOf(mp) === -1) mpsAfter.push(mp);
+        }
         return this._afterState;
       }
-      /* Is this segment part of the final result? */
 
-    }, {
-      key: "isInResult",
-      value: function isInResult() {
+      /* Is this segment part of the final result? */
+      isInResult() {
         // if we've been consumed, we're not in the result
         if (this.consumedBy) return false;
         if (this._isInResult !== undefined) return this._isInResult;
-        var mpsBefore = this.beforeState().multiPolys;
-        var mpsAfter = this.afterState().multiPolys;
-
+        const mpsBefore = this.beforeState().multiPolys;
+        const mpsAfter = this.afterState().multiPolys;
         switch (operation.type) {
-          case 'union':
+          case "union":
             {
               // UNION - included iff:
               //  * On one side of us there is 0 poly interiors AND
               //  * On the other side there is 1 or more.
-              var noBefores = mpsBefore.length === 0;
-              var noAfters = mpsAfter.length === 0;
+              const noBefores = mpsBefore.length === 0;
+              const noAfters = mpsAfter.length === 0;
               this._isInResult = noBefores !== noAfters;
               break;
             }
-
-          case 'intersection':
+          case "intersection":
             {
               // INTERSECTION - included iff:
               //  * on one side of us all multipolys are rep. with poly interiors AND
               //  * on the other side of us, not all multipolys are repsented
               //    with poly interiors
-              var least;
-              var most;
-
+              let least;
+              let most;
               if (mpsBefore.length < mpsAfter.length) {
                 least = mpsBefore.length;
                 most = mpsAfter.length;
@@ -49756,630 +52154,472 @@ module.exports = posix;
                 least = mpsAfter.length;
                 most = mpsBefore.length;
               }
-
               this._isInResult = most === operation.numMultiPolys && least < most;
               break;
             }
-
-          case 'xor':
+          case "xor":
             {
               // XOR - included iff:
               //  * the difference between the number of multipolys represented
               //    with poly interiors on our two sides is an odd number
-              var diff = Math.abs(mpsBefore.length - mpsAfter.length);
+              const diff = Math.abs(mpsBefore.length - mpsAfter.length);
               this._isInResult = diff % 2 === 1;
               break;
             }
-
-          case 'difference':
+          case "difference":
             {
               // DIFFERENCE included iff:
               //  * on exactly one side, we have just the subject
-              var isJustSubject = function isJustSubject(mps) {
-                return mps.length === 1 && mps[0].isSubject;
-              };
-
+              const isJustSubject = mps => mps.length === 1 && mps[0].isSubject;
               this._isInResult = isJustSubject(mpsBefore) !== isJustSubject(mpsAfter);
               break;
             }
-
           default:
-            throw new Error("Unrecognized operation type found ".concat(operation.type));
+            throw new Error(`Unrecognized operation type found ${operation.type}`);
         }
-
         return this._isInResult;
-      }
-    }], [{
-      key: "fromRing",
-      value: function fromRing(pt1, pt2, ring) {
-        var leftPt, rightPt, winding; // ordering the two points according to sweep line ordering
-
-        var cmpPts = SweepEvent.comparePoints(pt1, pt2);
-
-        if (cmpPts < 0) {
-          leftPt = pt1;
-          rightPt = pt2;
-          winding = 1;
-        } else if (cmpPts > 0) {
-          leftPt = pt2;
-          rightPt = pt1;
-          winding = -1;
-        } else throw new Error("Tried to create degenerate segment at [".concat(pt1.x, ", ").concat(pt1.y, "]"));
-
-        var leftSE = new SweepEvent(leftPt, true);
-        var rightSE = new SweepEvent(rightPt, false);
-        return new Segment(leftSE, rightSE, [ring], [winding]);
-      }
-    }]);
-
-    return Segment;
-  }();
-
-  var RingIn = /*#__PURE__*/function () {
-    function RingIn(geomRing, poly, isExterior) {
-      _classCallCheck(this, RingIn);
-
-      if (!Array.isArray(geomRing) || geomRing.length === 0) {
-        throw new Error('Input geometry is not a valid Polygon or MultiPolygon');
-      }
-
-      this.poly = poly;
-      this.isExterior = isExterior;
-      this.segments = [];
-
-      if (typeof geomRing[0][0] !== 'number' || typeof geomRing[0][1] !== 'number') {
-        throw new Error('Input geometry is not a valid Polygon or MultiPolygon');
-      }
-
-      var firstPoint = rounder.round(geomRing[0][0], geomRing[0][1]);
-      this.bbox = {
-        ll: {
-          x: firstPoint.x,
-          y: firstPoint.y
-        },
-        ur: {
-          x: firstPoint.x,
-          y: firstPoint.y
-        }
-      };
-      var prevPoint = firstPoint;
-
-      for (var i = 1, iMax = geomRing.length; i < iMax; i++) {
-        if (typeof geomRing[i][0] !== 'number' || typeof geomRing[i][1] !== 'number') {
-          throw new Error('Input geometry is not a valid Polygon or MultiPolygon');
-        }
-
-        var point = rounder.round(geomRing[i][0], geomRing[i][1]); // skip repeated points
-
-        if (point.x === prevPoint.x && point.y === prevPoint.y) continue;
-        this.segments.push(Segment.fromRing(prevPoint, point, this));
-        if (point.x < this.bbox.ll.x) this.bbox.ll.x = point.x;
-        if (point.y < this.bbox.ll.y) this.bbox.ll.y = point.y;
-        if (point.x > this.bbox.ur.x) this.bbox.ur.x = point.x;
-        if (point.y > this.bbox.ur.y) this.bbox.ur.y = point.y;
-        prevPoint = point;
-      } // add segment from last to first if last is not the same as first
-
-
-      if (firstPoint.x !== prevPoint.x || firstPoint.y !== prevPoint.y) {
-        this.segments.push(Segment.fromRing(prevPoint, firstPoint, this));
       }
     }
 
-    _createClass(RingIn, [{
-      key: "getSweepEvents",
-      value: function getSweepEvents() {
-        var sweepEvents = [];
-
-        for (var i = 0, iMax = this.segments.length; i < iMax; i++) {
-          var segment = this.segments[i];
+    class RingIn {
+      constructor(geomRing, poly, isExterior) {
+        if (!Array.isArray(geomRing) || geomRing.length === 0) {
+          throw new Error("Input geometry is not a valid Polygon or MultiPolygon");
+        }
+        this.poly = poly;
+        this.isExterior = isExterior;
+        this.segments = [];
+        if (typeof geomRing[0][0] !== "number" || typeof geomRing[0][1] !== "number") {
+          throw new Error("Input geometry is not a valid Polygon or MultiPolygon");
+        }
+        const firstPoint = rounder.round(geomRing[0][0], geomRing[0][1]);
+        this.bbox = {
+          ll: {
+            x: firstPoint.x,
+            y: firstPoint.y
+          },
+          ur: {
+            x: firstPoint.x,
+            y: firstPoint.y
+          }
+        };
+        let prevPoint = firstPoint;
+        for (let i = 1, iMax = geomRing.length; i < iMax; i++) {
+          if (typeof geomRing[i][0] !== "number" || typeof geomRing[i][1] !== "number") {
+            throw new Error("Input geometry is not a valid Polygon or MultiPolygon");
+          }
+          let point = rounder.round(geomRing[i][0], geomRing[i][1]);
+          // skip repeated points
+          if (point.x === prevPoint.x && point.y === prevPoint.y) continue;
+          this.segments.push(Segment.fromRing(prevPoint, point, this));
+          if (point.x < this.bbox.ll.x) this.bbox.ll.x = point.x;
+          if (point.y < this.bbox.ll.y) this.bbox.ll.y = point.y;
+          if (point.x > this.bbox.ur.x) this.bbox.ur.x = point.x;
+          if (point.y > this.bbox.ur.y) this.bbox.ur.y = point.y;
+          prevPoint = point;
+        }
+        // add segment from last to first if last is not the same as first
+        if (firstPoint.x !== prevPoint.x || firstPoint.y !== prevPoint.y) {
+          this.segments.push(Segment.fromRing(prevPoint, firstPoint, this));
+        }
+      }
+      getSweepEvents() {
+        const sweepEvents = [];
+        for (let i = 0, iMax = this.segments.length; i < iMax; i++) {
+          const segment = this.segments[i];
           sweepEvents.push(segment.leftSE);
           sweepEvents.push(segment.rightSE);
         }
-
         return sweepEvents;
       }
-    }]);
-
-    return RingIn;
-  }();
-  var PolyIn = /*#__PURE__*/function () {
-    function PolyIn(geomPoly, multiPoly) {
-      _classCallCheck(this, PolyIn);
-
-      if (!Array.isArray(geomPoly)) {
-        throw new Error('Input geometry is not a valid Polygon or MultiPolygon');
-      }
-
-      this.exteriorRing = new RingIn(geomPoly[0], this, true); // copy by value
-
-      this.bbox = {
-        ll: {
-          x: this.exteriorRing.bbox.ll.x,
-          y: this.exteriorRing.bbox.ll.y
-        },
-        ur: {
-          x: this.exteriorRing.bbox.ur.x,
-          y: this.exteriorRing.bbox.ur.y
-        }
-      };
-      this.interiorRings = [];
-
-      for (var i = 1, iMax = geomPoly.length; i < iMax; i++) {
-        var ring = new RingIn(geomPoly[i], this, false);
-        if (ring.bbox.ll.x < this.bbox.ll.x) this.bbox.ll.x = ring.bbox.ll.x;
-        if (ring.bbox.ll.y < this.bbox.ll.y) this.bbox.ll.y = ring.bbox.ll.y;
-        if (ring.bbox.ur.x > this.bbox.ur.x) this.bbox.ur.x = ring.bbox.ur.x;
-        if (ring.bbox.ur.y > this.bbox.ur.y) this.bbox.ur.y = ring.bbox.ur.y;
-        this.interiorRings.push(ring);
-      }
-
-      this.multiPoly = multiPoly;
     }
-
-    _createClass(PolyIn, [{
-      key: "getSweepEvents",
-      value: function getSweepEvents() {
-        var sweepEvents = this.exteriorRing.getSweepEvents();
-
-        for (var i = 0, iMax = this.interiorRings.length; i < iMax; i++) {
-          var ringSweepEvents = this.interiorRings[i].getSweepEvents();
-
-          for (var j = 0, jMax = ringSweepEvents.length; j < jMax; j++) {
+    class PolyIn {
+      constructor(geomPoly, multiPoly) {
+        if (!Array.isArray(geomPoly)) {
+          throw new Error("Input geometry is not a valid Polygon or MultiPolygon");
+        }
+        this.exteriorRing = new RingIn(geomPoly[0], this, true);
+        // copy by value
+        this.bbox = {
+          ll: {
+            x: this.exteriorRing.bbox.ll.x,
+            y: this.exteriorRing.bbox.ll.y
+          },
+          ur: {
+            x: this.exteriorRing.bbox.ur.x,
+            y: this.exteriorRing.bbox.ur.y
+          }
+        };
+        this.interiorRings = [];
+        for (let i = 1, iMax = geomPoly.length; i < iMax; i++) {
+          const ring = new RingIn(geomPoly[i], this, false);
+          if (ring.bbox.ll.x < this.bbox.ll.x) this.bbox.ll.x = ring.bbox.ll.x;
+          if (ring.bbox.ll.y < this.bbox.ll.y) this.bbox.ll.y = ring.bbox.ll.y;
+          if (ring.bbox.ur.x > this.bbox.ur.x) this.bbox.ur.x = ring.bbox.ur.x;
+          if (ring.bbox.ur.y > this.bbox.ur.y) this.bbox.ur.y = ring.bbox.ur.y;
+          this.interiorRings.push(ring);
+        }
+        this.multiPoly = multiPoly;
+      }
+      getSweepEvents() {
+        const sweepEvents = this.exteriorRing.getSweepEvents();
+        for (let i = 0, iMax = this.interiorRings.length; i < iMax; i++) {
+          const ringSweepEvents = this.interiorRings[i].getSweepEvents();
+          for (let j = 0, jMax = ringSweepEvents.length; j < jMax; j++) {
             sweepEvents.push(ringSweepEvents[j]);
           }
         }
-
         return sweepEvents;
       }
-    }]);
-
-    return PolyIn;
-  }();
-  var MultiPolyIn = /*#__PURE__*/function () {
-    function MultiPolyIn(geom, isSubject) {
-      _classCallCheck(this, MultiPolyIn);
-
-      if (!Array.isArray(geom)) {
-        throw new Error('Input geometry is not a valid Polygon or MultiPolygon');
-      }
-
-      try {
-        // if the input looks like a polygon, convert it to a multipolygon
-        if (typeof geom[0][0][0] === 'number') geom = [geom];
-      } catch (ex) {// The input is either malformed or has empty arrays.
-        // In either case, it will be handled later on.
-      }
-
-      this.polys = [];
-      this.bbox = {
-        ll: {
-          x: Number.POSITIVE_INFINITY,
-          y: Number.POSITIVE_INFINITY
-        },
-        ur: {
-          x: Number.NEGATIVE_INFINITY,
-          y: Number.NEGATIVE_INFINITY
-        }
-      };
-
-      for (var i = 0, iMax = geom.length; i < iMax; i++) {
-        var poly = new PolyIn(geom[i], this);
-        if (poly.bbox.ll.x < this.bbox.ll.x) this.bbox.ll.x = poly.bbox.ll.x;
-        if (poly.bbox.ll.y < this.bbox.ll.y) this.bbox.ll.y = poly.bbox.ll.y;
-        if (poly.bbox.ur.x > this.bbox.ur.x) this.bbox.ur.x = poly.bbox.ur.x;
-        if (poly.bbox.ur.y > this.bbox.ur.y) this.bbox.ur.y = poly.bbox.ur.y;
-        this.polys.push(poly);
-      }
-
-      this.isSubject = isSubject;
     }
-
-    _createClass(MultiPolyIn, [{
-      key: "getSweepEvents",
-      value: function getSweepEvents() {
-        var sweepEvents = [];
-
-        for (var i = 0, iMax = this.polys.length; i < iMax; i++) {
-          var polySweepEvents = this.polys[i].getSweepEvents();
-
-          for (var j = 0, jMax = polySweepEvents.length; j < jMax; j++) {
+    class MultiPolyIn {
+      constructor(geom, isSubject) {
+        if (!Array.isArray(geom)) {
+          throw new Error("Input geometry is not a valid Polygon or MultiPolygon");
+        }
+        try {
+          // if the input looks like a polygon, convert it to a multipolygon
+          if (typeof geom[0][0][0] === "number") geom = [geom];
+        } catch (ex) {
+          // The input is either malformed or has empty arrays.
+          // In either case, it will be handled later on.
+        }
+        this.polys = [];
+        this.bbox = {
+          ll: {
+            x: Number.POSITIVE_INFINITY,
+            y: Number.POSITIVE_INFINITY
+          },
+          ur: {
+            x: Number.NEGATIVE_INFINITY,
+            y: Number.NEGATIVE_INFINITY
+          }
+        };
+        for (let i = 0, iMax = geom.length; i < iMax; i++) {
+          const poly = new PolyIn(geom[i], this);
+          if (poly.bbox.ll.x < this.bbox.ll.x) this.bbox.ll.x = poly.bbox.ll.x;
+          if (poly.bbox.ll.y < this.bbox.ll.y) this.bbox.ll.y = poly.bbox.ll.y;
+          if (poly.bbox.ur.x > this.bbox.ur.x) this.bbox.ur.x = poly.bbox.ur.x;
+          if (poly.bbox.ur.y > this.bbox.ur.y) this.bbox.ur.y = poly.bbox.ur.y;
+          this.polys.push(poly);
+        }
+        this.isSubject = isSubject;
+      }
+      getSweepEvents() {
+        const sweepEvents = [];
+        for (let i = 0, iMax = this.polys.length; i < iMax; i++) {
+          const polySweepEvents = this.polys[i].getSweepEvents();
+          for (let j = 0, jMax = polySweepEvents.length; j < jMax; j++) {
             sweepEvents.push(polySweepEvents[j]);
           }
         }
-
         return sweepEvents;
       }
-    }]);
+    }
 
-    return MultiPolyIn;
-  }();
-
-  var RingOut = /*#__PURE__*/function () {
-    _createClass(RingOut, null, [{
-      key: "factory",
-
+    class RingOut {
       /* Given the segments from the sweep line pass, compute & return a series
        * of closed rings from all the segments marked to be part of the result */
-      value: function factory(allSegments) {
-        var ringsOut = [];
-
-        for (var i = 0, iMax = allSegments.length; i < iMax; i++) {
-          var segment = allSegments[i];
+      static factory(allSegments) {
+        const ringsOut = [];
+        for (let i = 0, iMax = allSegments.length; i < iMax; i++) {
+          const segment = allSegments[i];
           if (!segment.isInResult() || segment.ringOut) continue;
-          var prevEvent = null;
-          var event = segment.leftSE;
-          var nextEvent = segment.rightSE;
-          var events = [event];
-          var startingPoint = event.point;
-          var intersectionLEs = [];
-          /* Walk the chain of linked events to form a closed ring */
+          let prevEvent = null;
+          let event = segment.leftSE;
+          let nextEvent = segment.rightSE;
+          const events = [event];
+          const startingPoint = event.point;
+          const intersectionLEs = [];
 
+          /* Walk the chain of linked events to form a closed ring */
           while (true) {
             prevEvent = event;
             event = nextEvent;
             events.push(event);
+
             /* Is the ring complete? */
-
             if (event.point === startingPoint) break;
-
             while (true) {
-              var availableLEs = event.getAvailableLinkedEvents();
-              /* Did we hit a dead end? This shouldn't happen. Indicates some earlier
-               * part of the algorithm malfunctioned... please file a bug report. */
+              const availableLEs = event.getAvailableLinkedEvents();
 
+              /* Did we hit a dead end? This shouldn't happen.
+               * Indicates some earlier part of the algorithm malfunctioned. */
               if (availableLEs.length === 0) {
-                var firstPt = events[0].point;
-                var lastPt = events[events.length - 1].point;
-                throw new Error("Unable to complete output ring starting at [".concat(firstPt.x, ",") + " ".concat(firstPt.y, "]. Last matching segment found ends at") + " [".concat(lastPt.x, ", ").concat(lastPt.y, "]."));
+                const firstPt = events[0].point;
+                const lastPt = events[events.length - 1].point;
+                throw new Error(`Unable to complete output ring starting at [${firstPt.x},` + ` ${firstPt.y}]. Last matching segment found ends at` + ` [${lastPt.x}, ${lastPt.y}].`);
               }
+
               /* Only one way to go, so cotinue on the path */
-
-
               if (availableLEs.length === 1) {
                 nextEvent = availableLEs[0].otherSE;
                 break;
               }
+
               /* We must have an intersection. Check for a completed loop */
-
-
-              var indexLE = null;
-
-              for (var j = 0, jMax = intersectionLEs.length; j < jMax; j++) {
+              let indexLE = null;
+              for (let j = 0, jMax = intersectionLEs.length; j < jMax; j++) {
                 if (intersectionLEs[j].point === event.point) {
                   indexLE = j;
                   break;
                 }
               }
               /* Found a completed loop. Cut that off and make a ring */
-
-
               if (indexLE !== null) {
-                var intersectionLE = intersectionLEs.splice(indexLE)[0];
-                var ringEvents = events.splice(intersectionLE.index);
+                const intersectionLE = intersectionLEs.splice(indexLE)[0];
+                const ringEvents = events.splice(intersectionLE.index);
                 ringEvents.unshift(ringEvents[0].otherSE);
                 ringsOut.push(new RingOut(ringEvents.reverse()));
                 continue;
               }
               /* register the intersection */
-
-
               intersectionLEs.push({
                 index: events.length,
                 point: event.point
               });
               /* Choose the left-most option to continue the walk */
-
-              var comparator = event.getLeftmostComparator(prevEvent);
+              const comparator = event.getLeftmostComparator(prevEvent);
               nextEvent = availableLEs.sort(comparator)[0].otherSE;
               break;
             }
           }
-
           ringsOut.push(new RingOut(events));
         }
-
         return ringsOut;
       }
-    }]);
-
-    function RingOut(events) {
-      _classCallCheck(this, RingOut);
-
-      this.events = events;
-
-      for (var i = 0, iMax = events.length; i < iMax; i++) {
-        events[i].segment.ringOut = this;
+      constructor(events) {
+        this.events = events;
+        for (let i = 0, iMax = events.length; i < iMax; i++) {
+          events[i].segment.ringOut = this;
+        }
+        this.poly = null;
       }
-
-      this.poly = null;
-    }
-
-    _createClass(RingOut, [{
-      key: "getGeom",
-      value: function getGeom() {
+      getGeom() {
         // Remove superfluous points (ie extra points along a straight line),
-        var prevPt = this.events[0].point;
-        var points = [prevPt];
+        let prevPt = this.events[0].point;
+        const points = [prevPt];
+        for (let i = 1, iMax = this.events.length - 1; i < iMax; i++) {
+          const pt = this.events[i].point;
+          const nextPt = this.events[i + 1].point;
+          if (compareVectorAngles(pt, prevPt, nextPt) === 0) continue;
+          points.push(pt);
+          prevPt = pt;
+        }
 
-        for (var i = 1, iMax = this.events.length - 1; i < iMax; i++) {
-          var _pt = this.events[i].point;
-          var _nextPt = this.events[i + 1].point;
-          if (compareVectorAngles(_pt, prevPt, _nextPt) === 0) continue;
-          points.push(_pt);
-          prevPt = _pt;
-        } // ring was all (within rounding error of angle calc) colinear points
+        // ring was all (within rounding error of angle calc) colinear points
+        if (points.length === 1) return null;
 
-
-        if (points.length === 1) return null; // check if the starting point is necessary
-
-        var pt = points[0];
-        var nextPt = points[1];
+        // check if the starting point is necessary
+        const pt = points[0];
+        const nextPt = points[1];
         if (compareVectorAngles(pt, prevPt, nextPt) === 0) points.shift();
         points.push(points[0]);
-        var step = this.isExteriorRing() ? 1 : -1;
-        var iStart = this.isExteriorRing() ? 0 : points.length - 1;
-        var iEnd = this.isExteriorRing() ? points.length : -1;
-        var orderedPoints = [];
-
-        for (var _i = iStart; _i != iEnd; _i += step) {
-          orderedPoints.push([points[_i].x, points[_i].y]);
-        }
-
+        const step = this.isExteriorRing() ? 1 : -1;
+        const iStart = this.isExteriorRing() ? 0 : points.length - 1;
+        const iEnd = this.isExteriorRing() ? points.length : -1;
+        const orderedPoints = [];
+        for (let i = iStart; i != iEnd; i += step) orderedPoints.push([points[i].x, points[i].y]);
         return orderedPoints;
       }
-    }, {
-      key: "isExteriorRing",
-      value: function isExteriorRing() {
+      isExteriorRing() {
         if (this._isExteriorRing === undefined) {
-          var enclosing = this.enclosingRing();
+          const enclosing = this.enclosingRing();
           this._isExteriorRing = enclosing ? !enclosing.isExteriorRing() : true;
         }
-
         return this._isExteriorRing;
       }
-    }, {
-      key: "enclosingRing",
-      value: function enclosingRing() {
+      enclosingRing() {
         if (this._enclosingRing === undefined) {
           this._enclosingRing = this._calcEnclosingRing();
         }
-
         return this._enclosingRing;
       }
-      /* Returns the ring that encloses this one, if any */
 
-    }, {
-      key: "_calcEnclosingRing",
-      value: function _calcEnclosingRing() {
+      /* Returns the ring that encloses this one, if any */
+      _calcEnclosingRing() {
         // start with the ealier sweep line event so that the prevSeg
         // chain doesn't lead us inside of a loop of ours
-        var leftMostEvt = this.events[0];
-
-        for (var i = 1, iMax = this.events.length; i < iMax; i++) {
-          var evt = this.events[i];
+        let leftMostEvt = this.events[0];
+        for (let i = 1, iMax = this.events.length; i < iMax; i++) {
+          const evt = this.events[i];
           if (SweepEvent.compare(leftMostEvt, evt) > 0) leftMostEvt = evt;
         }
-
-        var prevSeg = leftMostEvt.segment.prevInResult();
-        var prevPrevSeg = prevSeg ? prevSeg.prevInResult() : null;
-
+        let prevSeg = leftMostEvt.segment.prevInResult();
+        let prevPrevSeg = prevSeg ? prevSeg.prevInResult() : null;
         while (true) {
           // no segment found, thus no ring can enclose us
-          if (!prevSeg) return null; // no segments below prev segment found, thus the ring of the prev
-          // segment must loop back around and enclose us
+          if (!prevSeg) return null;
 
-          if (!prevPrevSeg) return prevSeg.ringOut; // if the two segments are of different rings, the ring of the prev
+          // no segments below prev segment found, thus the ring of the prev
+          // segment must loop back around and enclose us
+          if (!prevPrevSeg) return prevSeg.ringOut;
+
+          // if the two segments are of different rings, the ring of the prev
           // segment must either loop around us or the ring of the prev prev
           // seg, which would make us and the ring of the prev peers
-
           if (prevPrevSeg.ringOut !== prevSeg.ringOut) {
             if (prevPrevSeg.ringOut.enclosingRing() !== prevSeg.ringOut) {
               return prevSeg.ringOut;
             } else return prevSeg.ringOut.enclosingRing();
-          } // two segments are from the same ring, so this was a penisula
+          }
+
+          // two segments are from the same ring, so this was a penisula
           // of that ring. iterate downward, keep searching
-
-
           prevSeg = prevPrevSeg.prevInResult();
           prevPrevSeg = prevSeg ? prevSeg.prevInResult() : null;
         }
       }
-    }]);
-
-    return RingOut;
-  }();
-  var PolyOut = /*#__PURE__*/function () {
-    function PolyOut(exteriorRing) {
-      _classCallCheck(this, PolyOut);
-
-      this.exteriorRing = exteriorRing;
-      exteriorRing.poly = this;
-      this.interiorRings = [];
     }
-
-    _createClass(PolyOut, [{
-      key: "addInterior",
-      value: function addInterior(ring) {
+    class PolyOut {
+      constructor(exteriorRing) {
+        this.exteriorRing = exteriorRing;
+        exteriorRing.poly = this;
+        this.interiorRings = [];
+      }
+      addInterior(ring) {
         this.interiorRings.push(ring);
         ring.poly = this;
       }
-    }, {
-      key: "getGeom",
-      value: function getGeom() {
-        var geom = [this.exteriorRing.getGeom()]; // exterior ring was all (within rounding error of angle calc) colinear points
-
+      getGeom() {
+        const geom = [this.exteriorRing.getGeom()];
+        // exterior ring was all (within rounding error of angle calc) colinear points
         if (geom[0] === null) return null;
-
-        for (var i = 0, iMax = this.interiorRings.length; i < iMax; i++) {
-          var ringGeom = this.interiorRings[i].getGeom(); // interior ring was all (within rounding error of angle calc) colinear points
-
+        for (let i = 0, iMax = this.interiorRings.length; i < iMax; i++) {
+          const ringGeom = this.interiorRings[i].getGeom();
+          // interior ring was all (within rounding error of angle calc) colinear points
           if (ringGeom === null) continue;
           geom.push(ringGeom);
         }
-
         return geom;
       }
-    }]);
-
-    return PolyOut;
-  }();
-  var MultiPolyOut = /*#__PURE__*/function () {
-    function MultiPolyOut(rings) {
-      _classCallCheck(this, MultiPolyOut);
-
-      this.rings = rings;
-      this.polys = this._composePolys(rings);
     }
-
-    _createClass(MultiPolyOut, [{
-      key: "getGeom",
-      value: function getGeom() {
-        var geom = [];
-
-        for (var i = 0, iMax = this.polys.length; i < iMax; i++) {
-          var polyGeom = this.polys[i].getGeom(); // exterior ring was all (within rounding error of angle calc) colinear points
-
+    class MultiPolyOut {
+      constructor(rings) {
+        this.rings = rings;
+        this.polys = this._composePolys(rings);
+      }
+      getGeom() {
+        const geom = [];
+        for (let i = 0, iMax = this.polys.length; i < iMax; i++) {
+          const polyGeom = this.polys[i].getGeom();
+          // exterior ring was all (within rounding error of angle calc) colinear points
           if (polyGeom === null) continue;
           geom.push(polyGeom);
         }
-
         return geom;
       }
-    }, {
-      key: "_composePolys",
-      value: function _composePolys(rings) {
-        var polys = [];
-
-        for (var i = 0, iMax = rings.length; i < iMax; i++) {
-          var ring = rings[i];
+      _composePolys(rings) {
+        const polys = [];
+        for (let i = 0, iMax = rings.length; i < iMax; i++) {
+          const ring = rings[i];
           if (ring.poly) continue;
           if (ring.isExteriorRing()) polys.push(new PolyOut(ring));else {
-            var enclosingRing = ring.enclosingRing();
+            const enclosingRing = ring.enclosingRing();
             if (!enclosingRing.poly) polys.push(new PolyOut(enclosingRing));
             enclosingRing.poly.addInterior(ring);
           }
         }
-
         return polys;
       }
-    }]);
-
-    return MultiPolyOut;
-  }();
-
-  /**
-   * NOTE:  We must be careful not to change any segments while
-   *        they are in the SplayTree. AFAIK, there's no way to tell
-   *        the tree to rebalance itself - thus before splitting
-   *        a segment that's in the tree, we remove it from the tree,
-   *        do the split, then re-insert it. (Even though splitting a
-   *        segment *shouldn't* change its correct position in the
-   *        sweep line tree, the reality is because of rounding errors,
-   *        it sometimes does.)
-   */
-
-  var SweepLine = /*#__PURE__*/function () {
-    function SweepLine(queue) {
-      var comparator = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : Segment.compare;
-
-      _classCallCheck(this, SweepLine);
-
-      this.queue = queue;
-      this.tree = new Tree(comparator);
-      this.segments = [];
     }
 
-    _createClass(SweepLine, [{
-      key: "process",
-      value: function process(event) {
-        var segment = event.segment;
-        var newEvents = []; // if we've already been consumed by another segment,
-        // clean up our body parts and get out
+    /**
+     * NOTE:  We must be careful not to change any segments while
+     *        they are in the SplayTree. AFAIK, there's no way to tell
+     *        the tree to rebalance itself - thus before splitting
+     *        a segment that's in the tree, we remove it from the tree,
+     *        do the split, then re-insert it. (Even though splitting a
+     *        segment *shouldn't* change its correct position in the
+     *        sweep line tree, the reality is because of rounding errors,
+     *        it sometimes does.)
+     */
 
+    class SweepLine {
+      constructor(queue) {
+        let comparator = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : Segment.compare;
+        this.queue = queue;
+        this.tree = new Tree(comparator);
+        this.segments = [];
+      }
+      process(event) {
+        const segment = event.segment;
+        const newEvents = [];
+
+        // if we've already been consumed by another segment,
+        // clean up our body parts and get out
         if (event.consumedBy) {
           if (event.isLeft) this.queue.remove(event.otherSE);else this.tree.remove(segment);
           return newEvents;
         }
+        const node = event.isLeft ? this.tree.add(segment) : this.tree.find(segment);
+        if (!node) throw new Error(`Unable to find segment #${segment.id} ` + `[${segment.leftSE.point.x}, ${segment.leftSE.point.y}] -> ` + `[${segment.rightSE.point.x}, ${segment.rightSE.point.y}] ` + "in SweepLine tree.");
+        let prevNode = node;
+        let nextNode = node;
+        let prevSeg = undefined;
+        let nextSeg = undefined;
 
-        var node = event.isLeft ? this.tree.insert(segment) : this.tree.find(segment);
-        if (!node) throw new Error("Unable to find segment #".concat(segment.id, " ") + "[".concat(segment.leftSE.point.x, ", ").concat(segment.leftSE.point.y, "] -> ") + "[".concat(segment.rightSE.point.x, ", ").concat(segment.rightSE.point.y, "] ") + 'in SweepLine tree. Please submit a bug report.');
-        var prevNode = node;
-        var nextNode = node;
-        var prevSeg = undefined;
-        var nextSeg = undefined; // skip consumed segments still in tree
-
+        // skip consumed segments still in tree
         while (prevSeg === undefined) {
           prevNode = this.tree.prev(prevNode);
           if (prevNode === null) prevSeg = null;else if (prevNode.key.consumedBy === undefined) prevSeg = prevNode.key;
-        } // skip consumed segments still in tree
+        }
 
-
+        // skip consumed segments still in tree
         while (nextSeg === undefined) {
           nextNode = this.tree.next(nextNode);
           if (nextNode === null) nextSeg = null;else if (nextNode.key.consumedBy === undefined) nextSeg = nextNode.key;
         }
-
         if (event.isLeft) {
           // Check for intersections against the previous segment in the sweep line
-          var prevMySplitter = null;
-
+          let prevMySplitter = null;
           if (prevSeg) {
-            var prevInter = prevSeg.getIntersection(segment);
-
+            const prevInter = prevSeg.getIntersection(segment);
             if (prevInter !== null) {
               if (!segment.isAnEndpoint(prevInter)) prevMySplitter = prevInter;
-
               if (!prevSeg.isAnEndpoint(prevInter)) {
-                var newEventsFromSplit = this._splitSafely(prevSeg, prevInter);
-
-                for (var i = 0, iMax = newEventsFromSplit.length; i < iMax; i++) {
+                const newEventsFromSplit = this._splitSafely(prevSeg, prevInter);
+                for (let i = 0, iMax = newEventsFromSplit.length; i < iMax; i++) {
                   newEvents.push(newEventsFromSplit[i]);
                 }
               }
             }
-          } // Check for intersections against the next segment in the sweep line
+          }
 
-
-          var nextMySplitter = null;
-
+          // Check for intersections against the next segment in the sweep line
+          let nextMySplitter = null;
           if (nextSeg) {
-            var nextInter = nextSeg.getIntersection(segment);
-
+            const nextInter = nextSeg.getIntersection(segment);
             if (nextInter !== null) {
               if (!segment.isAnEndpoint(nextInter)) nextMySplitter = nextInter;
-
               if (!nextSeg.isAnEndpoint(nextInter)) {
-                var _newEventsFromSplit = this._splitSafely(nextSeg, nextInter);
-
-                for (var _i = 0, _iMax = _newEventsFromSplit.length; _i < _iMax; _i++) {
-                  newEvents.push(_newEventsFromSplit[_i]);
+                const newEventsFromSplit = this._splitSafely(nextSeg, nextInter);
+                for (let i = 0, iMax = newEventsFromSplit.length; i < iMax; i++) {
+                  newEvents.push(newEventsFromSplit[i]);
                 }
               }
             }
-          } // For simplicity, even if we find more than one intersection we only
-          // spilt on the 'earliest' (sweep-line style) of the intersections.
-          // The other intersection will be handled in a future process().
-
-
-          if (prevMySplitter !== null || nextMySplitter !== null) {
-            var mySplitter = null;
-            if (prevMySplitter === null) mySplitter = nextMySplitter;else if (nextMySplitter === null) mySplitter = prevMySplitter;else {
-              var cmpSplitters = SweepEvent.comparePoints(prevMySplitter, nextMySplitter);
-              mySplitter = cmpSplitters <= 0 ? prevMySplitter : nextMySplitter;
-            } // Rounding errors can cause changes in ordering,
-            // so remove afected segments and right sweep events before splitting
-
-            this.queue.remove(segment.rightSE);
-            newEvents.push(segment.rightSE);
-
-            var _newEventsFromSplit2 = segment.split(mySplitter);
-
-            for (var _i2 = 0, _iMax2 = _newEventsFromSplit2.length; _i2 < _iMax2; _i2++) {
-              newEvents.push(_newEventsFromSplit2[_i2]);
-            }
           }
 
+          // For simplicity, even if we find more than one intersection we only
+          // spilt on the 'earliest' (sweep-line style) of the intersections.
+          // The other intersection will be handled in a future process().
+          if (prevMySplitter !== null || nextMySplitter !== null) {
+            let mySplitter = null;
+            if (prevMySplitter === null) mySplitter = nextMySplitter;else if (nextMySplitter === null) mySplitter = prevMySplitter;else {
+              const cmpSplitters = SweepEvent.comparePoints(prevMySplitter, nextMySplitter);
+              mySplitter = cmpSplitters <= 0 ? prevMySplitter : nextMySplitter;
+            }
+
+            // Rounding errors can cause changes in ordering,
+            // so remove afected segments and right sweep events before splitting
+            this.queue.remove(segment.rightSE);
+            newEvents.push(segment.rightSE);
+            const newEventsFromSplit = segment.split(mySplitter);
+            for (let i = 0, iMax = newEventsFromSplit.length; i < iMax; i++) {
+              newEvents.push(newEventsFromSplit[i]);
+            }
+          }
           if (newEvents.length > 0) {
             // We found some intersections, so re-do the current event to
             // make sure sweep line ordering is totally consistent for later
@@ -50393,221 +52633,179 @@ module.exports = posix;
           }
         } else {
           // event.isRight
+
           // since we're about to be removed from the sweep line, check for
           // intersections between our previous and next segments
           if (prevSeg && nextSeg) {
-            var inter = prevSeg.getIntersection(nextSeg);
-
+            const inter = prevSeg.getIntersection(nextSeg);
             if (inter !== null) {
               if (!prevSeg.isAnEndpoint(inter)) {
-                var _newEventsFromSplit3 = this._splitSafely(prevSeg, inter);
-
-                for (var _i3 = 0, _iMax3 = _newEventsFromSplit3.length; _i3 < _iMax3; _i3++) {
-                  newEvents.push(_newEventsFromSplit3[_i3]);
+                const newEventsFromSplit = this._splitSafely(prevSeg, inter);
+                for (let i = 0, iMax = newEventsFromSplit.length; i < iMax; i++) {
+                  newEvents.push(newEventsFromSplit[i]);
                 }
               }
-
               if (!nextSeg.isAnEndpoint(inter)) {
-                var _newEventsFromSplit4 = this._splitSafely(nextSeg, inter);
-
-                for (var _i4 = 0, _iMax4 = _newEventsFromSplit4.length; _i4 < _iMax4; _i4++) {
-                  newEvents.push(_newEventsFromSplit4[_i4]);
+                const newEventsFromSplit = this._splitSafely(nextSeg, inter);
+                for (let i = 0, iMax = newEventsFromSplit.length; i < iMax; i++) {
+                  newEvents.push(newEventsFromSplit[i]);
                 }
               }
             }
           }
-
           this.tree.remove(segment);
         }
-
         return newEvents;
       }
+
       /* Safely split a segment that is currently in the datastructures
        * IE - a segment other than the one that is currently being processed. */
-
-    }, {
-      key: "_splitSafely",
-      value: function _splitSafely(seg, pt) {
+      _splitSafely(seg, pt) {
         // Rounding errors can cause changes in ordering,
         // so remove afected segments and right sweep events before splitting
         // removeNode() doesn't work, so have re-find the seg
         // https://github.com/w8r/splay-tree/pull/5
         this.tree.remove(seg);
-        var rightSE = seg.rightSE;
+        const rightSE = seg.rightSE;
         this.queue.remove(rightSE);
-        var newEvents = seg.split(pt);
-        newEvents.push(rightSE); // splitting can trigger consumption
-
-        if (seg.consumedBy === undefined) this.tree.insert(seg);
+        const newEvents = seg.split(pt);
+        newEvents.push(rightSE);
+        // splitting can trigger consumption
+        if (seg.consumedBy === undefined) this.tree.add(seg);
         return newEvents;
       }
-    }]);
-
-    return SweepLine;
-  }();
-
-  var POLYGON_CLIPPING_MAX_QUEUE_SIZE = typeof process !== 'undefined' && process.env.POLYGON_CLIPPING_MAX_QUEUE_SIZE || 1000000;
-  var POLYGON_CLIPPING_MAX_SWEEPLINE_SEGMENTS = typeof process !== 'undefined' && process.env.POLYGON_CLIPPING_MAX_SWEEPLINE_SEGMENTS || 1000000;
-  var Operation = /*#__PURE__*/function () {
-    function Operation() {
-      _classCallCheck(this, Operation);
     }
 
-    _createClass(Operation, [{
-      key: "run",
-      value: function run(type, geom, moreGeoms) {
+    // Limits on iterative processes to prevent infinite loops - usually caused by floating-point math round-off errors.
+    const POLYGON_CLIPPING_MAX_QUEUE_SIZE = typeof process !== "undefined" && process.env.POLYGON_CLIPPING_MAX_QUEUE_SIZE || 1000000;
+    const POLYGON_CLIPPING_MAX_SWEEPLINE_SEGMENTS = typeof process !== "undefined" && process.env.POLYGON_CLIPPING_MAX_SWEEPLINE_SEGMENTS || 1000000;
+    class Operation {
+      run(type, geom, moreGeoms) {
         operation.type = type;
         rounder.reset();
+
         /* Convert inputs to MultiPoly objects */
-
-        var multipolys = [new MultiPolyIn(geom, true)];
-
-        for (var i = 0, iMax = moreGeoms.length; i < iMax; i++) {
+        const multipolys = [new MultiPolyIn(geom, true)];
+        for (let i = 0, iMax = moreGeoms.length; i < iMax; i++) {
           multipolys.push(new MultiPolyIn(moreGeoms[i], false));
         }
-
         operation.numMultiPolys = multipolys.length;
+
         /* BBox optimization for difference operation
          * If the bbox of a multipolygon that's part of the clipping doesn't
          * intersect the bbox of the subject at all, we can just drop that
          * multiploygon. */
-
-        if (operation.type === 'difference') {
+        if (operation.type === "difference") {
           // in place removal
-          var subject = multipolys[0];
-          var _i = 1;
-
-          while (_i < multipolys.length) {
-            if (getBboxOverlap(multipolys[_i].bbox, subject.bbox) !== null) _i++;else multipolys.splice(_i, 1);
+          const subject = multipolys[0];
+          let i = 1;
+          while (i < multipolys.length) {
+            if (getBboxOverlap(multipolys[i].bbox, subject.bbox) !== null) i++;else multipolys.splice(i, 1);
           }
         }
+
         /* BBox optimization for intersection operation
          * If we can find any pair of multipolygons whose bbox does not overlap,
          * then the result will be empty. */
-
-
-        if (operation.type === 'intersection') {
+        if (operation.type === "intersection") {
           // TODO: this is O(n^2) in number of polygons. By sorting the bboxes,
           //       it could be optimized to O(n * ln(n))
-          for (var _i2 = 0, _iMax = multipolys.length; _i2 < _iMax; _i2++) {
-            var mpA = multipolys[_i2];
-
-            for (var j = _i2 + 1, jMax = multipolys.length; j < jMax; j++) {
+          for (let i = 0, iMax = multipolys.length; i < iMax; i++) {
+            const mpA = multipolys[i];
+            for (let j = i + 1, jMax = multipolys.length; j < jMax; j++) {
               if (getBboxOverlap(mpA.bbox, multipolys[j].bbox) === null) return [];
             }
           }
         }
+
         /* Put segment endpoints in a priority queue */
-
-
-        var queue = new Tree(SweepEvent.compare);
-
-        for (var _i3 = 0, _iMax2 = multipolys.length; _i3 < _iMax2; _i3++) {
-          var sweepEvents = multipolys[_i3].getSweepEvents();
-
-          for (var _j = 0, _jMax = sweepEvents.length; _j < _jMax; _j++) {
-            queue.insert(sweepEvents[_j]);
-
+        const queue = new Tree(SweepEvent.compare);
+        for (let i = 0, iMax = multipolys.length; i < iMax; i++) {
+          const sweepEvents = multipolys[i].getSweepEvents();
+          for (let j = 0, jMax = sweepEvents.length; j < jMax; j++) {
+            queue.insert(sweepEvents[j]);
             if (queue.size > POLYGON_CLIPPING_MAX_QUEUE_SIZE) {
               // prevents an infinite loop, an otherwise common manifestation of bugs
-              throw new Error('Infinite loop when putting segment endpoints in a priority queue ' + '(queue size too big). Please file a bug report.');
+              throw new Error("Infinite loop when putting segment endpoints in a priority queue " + "(queue size too big).");
             }
           }
         }
+
         /* Pass the sweep line over those endpoints */
-
-
-        var sweepLine = new SweepLine(queue);
-        var prevQueueSize = queue.size;
-        var node = queue.pop();
-
+        const sweepLine = new SweepLine(queue);
+        let prevQueueSize = queue.size;
+        let node = queue.pop();
         while (node) {
-          var evt = node.key;
-
+          const evt = node.key;
           if (queue.size === prevQueueSize) {
             // prevents an infinite loop, an otherwise common manifestation of bugs
-            var seg = evt.segment;
-            throw new Error("Unable to pop() ".concat(evt.isLeft ? 'left' : 'right', " SweepEvent ") + "[".concat(evt.point.x, ", ").concat(evt.point.y, "] from segment #").concat(seg.id, " ") + "[".concat(seg.leftSE.point.x, ", ").concat(seg.leftSE.point.y, "] -> ") + "[".concat(seg.rightSE.point.x, ", ").concat(seg.rightSE.point.y, "] from queue. ") + 'Please file a bug report.');
+            const seg = evt.segment;
+            throw new Error(`Unable to pop() ${evt.isLeft ? "left" : "right"} SweepEvent ` + `[${evt.point.x}, ${evt.point.y}] from segment #${seg.id} ` + `[${seg.leftSE.point.x}, ${seg.leftSE.point.y}] -> ` + `[${seg.rightSE.point.x}, ${seg.rightSE.point.y}] from queue.`);
           }
-
           if (queue.size > POLYGON_CLIPPING_MAX_QUEUE_SIZE) {
             // prevents an infinite loop, an otherwise common manifestation of bugs
-            throw new Error('Infinite loop when passing sweep line over endpoints ' + '(queue size too big). Please file a bug report.');
+            throw new Error("Infinite loop when passing sweep line over endpoints " + "(queue size too big).");
           }
-
           if (sweepLine.segments.length > POLYGON_CLIPPING_MAX_SWEEPLINE_SEGMENTS) {
             // prevents an infinite loop, an otherwise common manifestation of bugs
-            throw new Error('Infinite loop when passing sweep line over endpoints ' + '(too many sweep line segments). Please file a bug report.');
+            throw new Error("Infinite loop when passing sweep line over endpoints " + "(too many sweep line segments).");
           }
-
-          var newEvents = sweepLine.process(evt);
-
-          for (var _i4 = 0, _iMax3 = newEvents.length; _i4 < _iMax3; _i4++) {
-            var _evt = newEvents[_i4];
-            if (_evt.consumedBy === undefined) queue.insert(_evt);
+          const newEvents = sweepLine.process(evt);
+          for (let i = 0, iMax = newEvents.length; i < iMax; i++) {
+            const evt = newEvents[i];
+            if (evt.consumedBy === undefined) queue.insert(evt);
           }
-
           prevQueueSize = queue.size;
           node = queue.pop();
-        } // free some memory we don't need anymore
+        }
 
-
+        // free some memory we don't need anymore
         rounder.reset();
-        /* Collect and compile segments we're keeping into a multipolygon */
 
-        var ringsOut = RingOut.factory(sweepLine.segments);
-        var result = new MultiPolyOut(ringsOut);
+        /* Collect and compile segments we're keeping into a multipolygon */
+        const ringsOut = RingOut.factory(sweepLine.segments);
+        const result = new MultiPolyOut(ringsOut);
         return result.getGeom();
       }
-    }]);
-
-    return Operation;
-  }(); // singleton available by import
-
-  var operation = new Operation();
-
-  var union = function union(geom) {
-    for (var _len = arguments.length, moreGeoms = new Array(_len > 1 ? _len - 1 : 0), _key = 1; _key < _len; _key++) {
-      moreGeoms[_key - 1] = arguments[_key];
     }
 
-    return operation.run('union', geom, moreGeoms);
-  };
+    // singleton available by import
+    const operation = new Operation();
 
-  var intersection$1 = function intersection(geom) {
-    for (var _len2 = arguments.length, moreGeoms = new Array(_len2 > 1 ? _len2 - 1 : 0), _key2 = 1; _key2 < _len2; _key2++) {
-      moreGeoms[_key2 - 1] = arguments[_key2];
-    }
+    const union = function (geom) {
+      for (var _len = arguments.length, moreGeoms = new Array(_len > 1 ? _len - 1 : 0), _key = 1; _key < _len; _key++) {
+        moreGeoms[_key - 1] = arguments[_key];
+      }
+      return operation.run("union", geom, moreGeoms);
+    };
+    const intersection = function (geom) {
+      for (var _len2 = arguments.length, moreGeoms = new Array(_len2 > 1 ? _len2 - 1 : 0), _key2 = 1; _key2 < _len2; _key2++) {
+        moreGeoms[_key2 - 1] = arguments[_key2];
+      }
+      return operation.run("intersection", geom, moreGeoms);
+    };
+    const xor = function (geom) {
+      for (var _len3 = arguments.length, moreGeoms = new Array(_len3 > 1 ? _len3 - 1 : 0), _key3 = 1; _key3 < _len3; _key3++) {
+        moreGeoms[_key3 - 1] = arguments[_key3];
+      }
+      return operation.run("xor", geom, moreGeoms);
+    };
+    const difference = function (subjectGeom) {
+      for (var _len4 = arguments.length, clippingGeoms = new Array(_len4 > 1 ? _len4 - 1 : 0), _key4 = 1; _key4 < _len4; _key4++) {
+        clippingGeoms[_key4 - 1] = arguments[_key4];
+      }
+      return operation.run("difference", subjectGeom, clippingGeoms);
+    };
+    var index = {
+      union: union,
+      intersection: intersection,
+      xor: xor,
+      difference: difference
+    };
 
-    return operation.run('intersection', geom, moreGeoms);
-  };
+    return index;
 
-  var xor = function xor(geom) {
-    for (var _len3 = arguments.length, moreGeoms = new Array(_len3 > 1 ? _len3 - 1 : 0), _key3 = 1; _key3 < _len3; _key3++) {
-      moreGeoms[_key3 - 1] = arguments[_key3];
-    }
-
-    return operation.run('xor', geom, moreGeoms);
-  };
-
-  var difference = function difference(subjectGeom) {
-    for (var _len4 = arguments.length, clippingGeoms = new Array(_len4 > 1 ? _len4 - 1 : 0), _key4 = 1; _key4 < _len4; _key4++) {
-      clippingGeoms[_key4 - 1] = arguments[_key4];
-    }
-
-    return operation.run('difference', subjectGeom, clippingGeoms);
-  };
-
-  var index = {
-    union: union,
-    intersection: intersection$1,
-    xor: xor,
-    difference: difference
-  };
-
-  return index;
-
-})));
+}));
 
 }).call(this)}).call(this,require('_process'))
 },{"_process":295}],295:[function(require,module,exports){
@@ -51666,9 +53864,8 @@ module.exports = function (Twig) {
      */
     Twig.tokenize = function (template) {
         const tokens = [];
-        // An offset for reporting errors locations in the template.
-        let errorOffset = 0;
-
+        // An offset for reporting errors locations and the position of the nodes in the template.
+        let currentPosition = 0;
         // The start and type of the first token found in the template.
         let foundToken = null;
         // The end position of the matched token.
@@ -51684,7 +53881,11 @@ module.exports = function (Twig) {
                 // No more tokens -> add the rest of the template as a raw-type token
                 tokens.push({
                     type: Twig.token.type.raw,
-                    value: template
+                    value: template,
+                    position: {
+                        start: currentPosition,
+                        end: currentPosition + foundToken.position
+                    }
                 });
                 template = '';
             } else {
@@ -51692,21 +53893,29 @@ module.exports = function (Twig) {
                 if (foundToken.position > 0) {
                     tokens.push({
                         type: Twig.token.type.raw,
-                        value: template.slice(0, Math.max(0, foundToken.position))
+                        value: template.slice(0, Math.max(0, foundToken.position)),
+                        position: {
+                            start: currentPosition,
+                            end: currentPosition + Math.max(0, foundToken.position)
+                        }
                     });
                 }
 
                 template = template.slice(foundToken.position + foundToken.def.open.length);
-                errorOffset += foundToken.position + foundToken.def.open.length;
+                currentPosition += foundToken.position + foundToken.def.open.length;
 
                 // Find the end of the token
-                end = Twig.token.findEnd(template, foundToken.def, errorOffset);
+                end = Twig.token.findEnd(template, foundToken.def, currentPosition);
 
                 Twig.log.trace('Twig.tokenize: ', 'Token ends at ', end);
 
                 tokens.push({
                     type: foundToken.def.type,
-                    value: template.slice(0, Math.max(0, end)).trim()
+                    value: template.slice(0, Math.max(0, end)).trim(),
+                    position: {
+                        start: currentPosition - foundToken.def.open.length,
+                        end: currentPosition + end + foundToken.def.close.length
+                    }
                 });
 
                 if (template.slice(end + foundToken.def.close.length, end + foundToken.def.close.length + 1) === '\n') {
@@ -51726,7 +53935,7 @@ module.exports = function (Twig) {
                 template = template.slice(end + foundToken.def.close.length);
 
                 // Increment the position in the template
-                errorOffset += end + foundToken.def.close.length;
+                currentPosition += end + foundToken.def.close.length;
             }
         }
 
@@ -51775,6 +53984,7 @@ module.exports = function (Twig) {
             const compileLogic = function (token) {
                 // Compile the logic token
                 logicToken = Twig.logic.compile.call(self, token);
+                logicToken.position = token.position;
 
                 type = logicToken.type;
                 open = Twig.logic.handler[type].open;
@@ -51799,8 +54009,13 @@ module.exports = function (Twig) {
 
                     tokOutput = {
                         type: Twig.token.type.logic,
-                        token: prevToken
+                        token: prevToken,
+                        position: {
+                            open: prevToken.position,
+                            close: token.position
+                        }
                     };
+
                     if (stack.length > 0) {
                         intermediateOutput.push(tokOutput);
                     } else {
@@ -51827,7 +54042,8 @@ module.exports = function (Twig) {
                 } else if (open !== undefined && open) {
                     tokOutput = {
                         type: Twig.token.type.logic,
-                        token: logicToken
+                        token: logicToken,
+                        position: logicToken.position
                     };
                     // Standalone token (like {% set ... %}
                     if (stack.length > 0) {
@@ -53255,9 +55471,9 @@ module.exports = function (Twig) {
         },
         {
             type: Twig.expression.type.operator.binary,
-            // Match any of ??, ?:, +, *, /, -, %, ~, <, <=, >, >=, !=, ==, **, ?, :, and, b-and, or, b-or, b-xor, in, not in
+            // Match any of ??, ?:, +, *, /, -, %, ~, <=>, <, <=, >, >=, !=, ==, **, ?, :, and, b-and, or, b-or, b-xor, in, not in
             // and, or, in, not in, matches, starts with, ends with can be followed by a space or parenthesis
-            regex: /(^\?\?|^\?:|^(b-and)|^(b-or)|^(b-xor)|^[+\-~%?]|^[:](?!\d\])|^[!=]==?|^[!<>]=?|^\*\*?|^\/\/?|^(and)[(|\s+]|^(or)[(|\s+]|^(in)[(|\s+]|^(not in)[(|\s+]|^(matches)|^(starts with)|^(ends with)|^\.\.)/,
+            regex: /(^\?\?|^\?:|^(b-and)|^(b-or)|^(b-xor)|^[+\-~%?]|^(<=>)|^[:](?!\d\])|^[!=]==?|^[!<>]=?|^\*\*?|^\/\/?|^(and)[(|\s+]|^(or)[(|\s+]|^(in)[(|\s+]|^(not in)[(|\s+]|^(matches)|^(starts with)|^(ends with)|^\.\.)/,
             next: Twig.expression.set.expressions,
             transform(match, tokens) {
                 switch (match[0]) {
@@ -53619,14 +55835,14 @@ module.exports = function (Twig) {
         },
         {
             type: Twig.expression.type.slice,
-            regex: /^\[(\d*:\d*)\]/,
+            regex: /^\[(-?\w*:-?\w*)\]/,
             next: Twig.expression.set.operationsExtended,
             compile(token, stack, output) {
                 const sliceRange = token.match[1].split(':');
 
                 // SliceStart can be undefined when we pass parameters to the slice filter later
-                const sliceStart = (sliceRange[0]) ? parseInt(sliceRange[0], 10) : undefined;
-                const sliceEnd = (sliceRange[1]) ? parseInt(sliceRange[1], 10) : undefined;
+                const sliceStart = sliceRange[0];
+                const sliceEnd = sliceRange[1];
 
                 token.value = 'slice';
                 token.params = [sliceStart, sliceEnd];
@@ -53639,10 +55855,38 @@ module.exports = function (Twig) {
 
                 output.push(token);
             },
-            parse(token, stack) {
+            parse(token, stack, context) {
                 const input = stack.pop();
-                const {params} = token;
+                let {params} = token;
                 const state = this;
+
+                if (parseInt(params[0], 10).toString() === params[0]) {
+                    params[0] = parseInt(params[0], 10);
+                } else {
+                    const value = context[params[0]];
+                    if (state.template.options.strictVariables && value === undefined) {
+                        throw new Twig.Error('Variable "' + params[0] + '" does not exist.');
+                    }
+
+                    params[0] = value;
+                }
+
+                if (params[1]) {
+                    if (parseInt(params[1], 10).toString() === params[1]) {
+                        params[1] = parseInt(params[1], 10);
+                    } else {
+                        const value = context[params[1]];
+                        if (state.template.options.strictVariables && value === undefined) {
+                            throw new Twig.Error('Variable "' + params[1] + '" does not exist.');
+                        }
+
+                        if (value === undefined) {
+                            params = [params[0]];
+                        } else {
+                            params[1] = value;
+                        }
+                    }
+                }
 
                 stack.push(Twig.filter.call(state, token.value, input, params));
             }
@@ -53956,7 +56200,7 @@ module.exports = function (Twig) {
         },
         {
             type: Twig.expression.type.key.brackets,
-            regex: /^\[([^\]:]*)\]/,
+            regex: /^\[([^\]]*)\]/,
             next: Twig.expression.set.operationsExtended.concat([
                 Twig.expression.type.parameter.start
             ]),
@@ -54161,11 +56405,12 @@ module.exports = function (Twig) {
     /**
      * Break an expression into tokens defined in Twig.expression.definitions.
      *
-     * @param {string} expression The string to tokenize.
+     * @param {Object} rawToken The string to tokenize.
      *
      * @return {Array} An array of tokens.
      */
-    Twig.expression.tokenize = function (expression) {
+    Twig.expression.tokenize = function (rawToken) {
+        let expression = rawToken.value;
         const tokens = [];
         // Keep an offset of the location in the expression for error messages.
         let expOffset = 0;
@@ -54213,11 +56458,17 @@ module.exports = function (Twig) {
 
             invalidMatches = [];
 
-            tokens.push({
+            const token = {
                 type,
                 value: match[0],
                 match
-            });
+            };
+
+            if (rawToken.position) {
+                token.position = rawToken.position;
+            }
+
+            tokens.push(token);
 
             matchFound = true;
             next = tokenNext;
@@ -54283,15 +56534,14 @@ module.exports = function (Twig) {
      * @return {Object} The compiled token.
      */
     Twig.expression.compile = function (rawToken) {
-        const expression = rawToken.value;
         // Tokenize expression
-        const tokens = Twig.expression.tokenize(expression);
+        const tokens = Twig.expression.tokenize(rawToken);
         let token = null;
         const output = [];
         const stack = [];
         let tokenTemplate = null;
 
-        Twig.log.trace('Twig.expression.compile: ', 'Compiling ', expression);
+        Twig.log.trace('Twig.expression.compile: ', 'Compiling ', rawToken.value);
 
         // Push tokens into RPN stack using the Shunting-yard algorithm
         // See http://en.wikipedia.org/wiki/Shunting_yard_algorithm
@@ -54499,6 +56749,11 @@ module.exports = function (Twig) {
                 token.associativity = Twig.expression.operator.leftToRight;
                 break;
 
+            case '<=>':
+                token.precidence = 9;
+                token.associativity = Twig.expression.operator.leftToRight;
+                break;
+
             case '<':
             case '<=':
             case '>':
@@ -54681,6 +56936,10 @@ module.exports = function (Twig) {
                 stack.push(!Twig.lib.boolval(b));
                 break;
 
+            case '<=>':
+                stack.push(a === b ? 0 : (a < b ? -1 : 1));
+                break;
+
             case '<':
                 stack.push(a < b);
                 break;
@@ -54777,7 +57036,7 @@ module.exports = function (Twig) {
 // This file handles creating the Twig library
 module.exports = function factory() {
     const Twig = {
-        VERSION: '1.16.0'
+        VERSION: '1.17.1'
     };
 
     require('./twig.core')(Twig);
@@ -55448,9 +57707,13 @@ module.exports = function (Twig) {
             // Default to start of string
             const start = params[0] || 0;
             // Default to length of string
-            const length = params.length > 1 ? params[1] : value.length;
+            let length = params.length > 1 ? params[1] : value.length;
             // Handle negative start values
             const startIndex = start >= 0 ? start : Math.max(value.length + start, 0);
+            // Handle negative length values
+            if (length < 0) {
+                length = value.length - startIndex + length;
+            }
 
             if (Twig.lib.is('Array', value)) {
                 const output = [];
@@ -56331,7 +58594,7 @@ module.exports = function (Twig) {
              *  Format: {% elseif expression %}
              */
             type: Twig.logic.type.elseif,
-            regex: /^elseif\s?([^\s].*)$/,
+            regex: /^elseif\s*([^\s].*)$/,
             next: [
                 Twig.logic.type.else_,
                 Twig.logic.type.elseif,
@@ -57907,6 +60170,12 @@ module.exports = function (Twig) {
     'use strict';
     Twig.tests = {
         empty(value) {
+            // Handle boolean true
+            if (value === true) {
+                return false;
+            }
+
+            // Handle null or undefined
             if (value === null || value === undefined) {
                 return true;
             }
