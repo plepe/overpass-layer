@@ -487,6 +487,10 @@ class Sublayer {
       })
     }
 
+    // Fix LeafletJS ^1.8. _source points to wrong object, so it won't open on
+    // FeatureGroups (e.g. Multipolygons)
+    ob.feature._popup._source = ob.feature
+
     // When object is quite smaller than current view, show popup on feature
     const viewBounds = new BoundingBox(this.map.getBounds())
     const obBounds = new BoundingBox(ob.object.bounds)

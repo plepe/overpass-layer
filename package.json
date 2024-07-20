@@ -24,7 +24,7 @@
   "devDependencies": {
     "browserify": "^17.0.0",
     "http-server": "^14.1.1",
-    "leaflet": "~1.7.1",
+    "leaflet": "^1.9.4",
     "leaflet-polylinedecorator": "git+https://github.com/plepe/Leaflet.PolylineDecorator.git",
     "leaflet-polylineoffset": "^1.1.1",
     "leaflet-textpath": "^1.2.3",
