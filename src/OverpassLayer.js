@@ -226,9 +226,11 @@ class OverpassLayer {
       this.lastFilter = this.filter
     }
 
+    // update global twig data
+    this.calcGlobalTwigData()
+
     // When zoom level changed, update visible objects
     if (this.lastZoom !== this.map.getZoom()) {
-      this.calcGlobalTwigData()
       for (const k in this.subLayers) {
         this.subLayers[k].zoomChange()
       }
