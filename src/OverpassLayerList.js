@@ -49,7 +49,7 @@ class OverpassLayerList {
       layer.on('update', (ob, data) => this.updateObject(data))
       layer.on('remove', (ob, data) => this.delObject(data))
       layer.on('selectObject', (ob, data) => {
-        this.selectedId = ob.id
+        this.selectedId = ob.id + ':' + ob.sublayer_id
         this.updateObject(data)
       })
       layer.on('unselectObject', (ob, data) => {
@@ -70,6 +70,8 @@ class OverpassLayerList {
   }
 
   addObject (ob) {
+    const id = ob.id + ':' + ob.sublayer_id
+
     const listExclude = isTrue(ob.data[this.options.prefix + 'Exclude']) ||
       (!(this.options.prefix + 'Exclude' in ob.data) && isTrue(ob.data.exclude))
 
@@ -77,17 +79,17 @@ class OverpassLayerList {
       return
     }
 
-    if (ob.id in this.items) { // already added
+    if (id in this.items) { // already added
       return
     }
 
     const div = document.createElement('li')
 
-    if (this.selectedId === ob.id) {
+    if (this.selectedId === id) {
       div.classList.add('selected')
     }
 
-    this.items[ob.id] = div
+    this.items[id] = div
     ob[this.options.prefix + 'Item'] = div
 
     // CONTENT
@@ -140,10 +142,12 @@ class OverpassLayerList {
   }
 
   updateObject (ob) {
+    const id = ob.id + ':' + ob.sublayer_id
+
     const listExclude = isTrue(ob.data[this.options.prefix + 'Exclude']) ||
       (!(this.options.prefix + 'Exclude' in ob.data) && isTrue(ob.data.exclude))
 
-    if (!(ob.id in this.items) && !listExclude) {
+    if (!(id in this.items) && !listExclude) {
       return this.addObject(ob)
     }
 
@@ -151,9 +155,9 @@ class OverpassLayerList {
       return this.delObject(ob)
     }
 
-    const div = this.items[ob.id]
+    const div = this.items[id]
 
-    if (this.selectedId === ob.id) {
+    if (this.selectedId === id) {
       div.classList.add('selected')
     } else {
       div.classList.remove('selected')
@@ -170,13 +174,15 @@ class OverpassLayerList {
   }
 
   delObject (ob) {
-    const div = this.items[ob.id]
+    const id = ob.id + ':' + ob.sublayer_id
+
+    const div = this.items[id]
 
     if (div) {
       this.dom.removeChild(div)
     }
 
-    delete this.items[ob.id]
+    delete this.items[id]
     delete ob[this.options.prefix + 'Item']
   }
 
