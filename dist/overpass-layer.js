@@ -13,7 +13,7 @@ if (typeof window !== 'undefined') {
 OverpassLayer.List = OverpassLayerList
 module.exports = OverpassLayer
 
-},{"./src/OverpassLayer":328,"./src/OverpassLayerList":330,"overpass-frontend":232}],2:[function(require,module,exports){
+},{"./src/OverpassLayer":337,"./src/OverpassLayerList":339,"overpass-frontend":235}],2:[function(require,module,exports){
 
 module.exports = rewind;
 
@@ -3342,7 +3342,7 @@ function defineProjection(geojson) {
 module.exports = buffer;
 module.exports.default = buffer;
 
-},{"@turf/center":20,"@turf/helpers":30,"@turf/meta":36,"d3-geo":61,"turf-jsts":299}],19:[function(require,module,exports){
+},{"@turf/center":20,"@turf/helpers":30,"@turf/meta":36,"d3-geo":63,"turf-jsts":307}],19:[function(require,module,exports){
 arguments[4][16][0].apply(exports,arguments)
 },{"@turf/meta":36,"dup":16}],20:[function(require,module,exports){
 "use strict";
@@ -3706,7 +3706,7 @@ function difference(polygon1, polygon2) {
 module.exports = difference;
 module.exports.default = difference;
 
-},{"@turf/helpers":30,"@turf/invariant":32,"polygon-clipping":294}],26:[function(require,module,exports){
+},{"@turf/helpers":30,"@turf/invariant":32,"polygon-clipping":302}],26:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 var invariant_1 = require("@turf/invariant");
@@ -4577,7 +4577,7 @@ function intersect(poly1, poly2, options) {
 }
 exports.default = intersect;
 
-},{"@turf/helpers":30,"@turf/invariant":32,"polygon-clipping":294}],32:[function(require,module,exports){
+},{"@turf/helpers":30,"@turf/invariant":32,"polygon-clipping":302}],32:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 var helpers_1 = require("@turf/helpers");
@@ -4960,7 +4960,7 @@ function intersects(line1, line2) {
 }
 exports.default = lineIntersect;
 
-},{"@turf/helpers":30,"@turf/invariant":32,"@turf/line-segment":35,"@turf/meta":36,"geojson-rbush":78}],35:[function(require,module,exports){
+},{"@turf/helpers":30,"@turf/invariant":32,"@turf/line-segment":35,"@turf/meta":36,"geojson-rbush":80}],35:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 var helpers_1 = require("@turf/helpers");
@@ -6980,8 +6980,40 @@ function union(poly1, poly2, options) {
 }
 exports.default = union;
 
-},{"@turf/helpers":30,"@turf/invariant":32,"polygon-clipping":294}],47:[function(require,module,exports){
+},{"@turf/helpers":30,"@turf/invariant":32,"polygon-clipping":302}],47:[function(require,module,exports){
 'use strict'
+
+/**
+ * Ponyfill for `Array.prototype.find` which is only available in ES6 runtimes.
+ *
+ * Works with anything that has a `length` property and index access properties, including NodeList.
+ *
+ * @template {unknown} T
+ * @param {Array<T> | ({length:number, [number]: T})} list
+ * @param {function (item: T, index: number, list:Array<T> | ({length:number, [number]: T})):boolean} predicate
+ * @param {Partial<Pick<ArrayConstructor['prototype'], 'find'>>?} ac `Array.prototype` by default,
+ * 				allows injecting a custom implementation in tests
+ * @returns {T | undefined}
+ *
+ * @see https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/find
+ * @see https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.find
+ */
+function find(list, predicate, ac) {
+	if (ac === undefined) {
+		ac = Array.prototype;
+	}
+	if (list && typeof ac.find === 'function') {
+		return ac.find.call(list, predicate);
+	}
+	for (var i = 0; i < list.length; i++) {
+		if (Object.prototype.hasOwnProperty.call(list, i)) {
+			var item = list[i];
+			if (predicate.call(undefined, item, i, list)) {
+				return item;
+			}
+		}
+	}
+}
 
 /**
  * "Shallow freezes" an object to render it immutable.
@@ -7148,6 +7180,7 @@ var NAMESPACE = freeze({
 })
 
 exports.assign = assign;
+exports.find = find;
 exports.freeze = freeze;
 exports.MIME_TYPE = MIME_TYPE;
 exports.NAMESPACE = NAMESPACE;
@@ -7479,6 +7512,7 @@ exports.DOMParser = DOMParser;
 },{"./conventions":47,"./dom":49,"./entities":50,"./sax":52}],49:[function(require,module,exports){
 var conventions = require("./conventions");
 
+var find = conventions.find;
 var NAMESPACE = conventions.NAMESPACE;
 
 /**
@@ -7637,24 +7671,40 @@ NodeList.prototype = {
 	 * The number of nodes in the list. The range of valid child node indices is 0 to length-1 inclusive.
 	 * @standard level1
 	 */
-	length:0, 
+	length:0,
 	/**
 	 * Returns the indexth item in the collection. If index is greater than or equal to the number of nodes in the list, this returns null.
 	 * @standard level1
-	 * @param index  unsigned long 
+	 * @param index  unsigned long
 	 *   Index into the collection.
 	 * @return Node
-	 * 	The node at the indexth position in the NodeList, or null if that is not a valid index. 
+	 * 	The node at the indexth position in the NodeList, or null if that is not a valid index.
 	 */
 	item: function(index) {
-		return this[index] || null;
+		return index >= 0 && index < this.length ? this[index] : null;
 	},
 	toString:function(isHTML,nodeFilter){
 		for(var buf = [], i = 0;i<this.length;i++){
 			serializeToString(this[i],buf,isHTML,nodeFilter);
 		}
 		return buf.join('');
-	}
+	},
+	/**
+	 * @private
+	 * @param {function (Node):boolean} predicate
+	 * @returns {Node[]}
+	 */
+	filter: function (predicate) {
+		return Array.prototype.filter.call(this, predicate);
+	},
+	/**
+	 * @private
+	 * @param {Node} item
+	 * @returns {number}
+	 */
+	indexOf: function (item) {
+		return Array.prototype.indexOf.call(this, item);
+	},
 };
 
 function LiveNodeList(node,refresh){
@@ -7664,17 +7714,23 @@ function LiveNodeList(node,refresh){
 }
 function _updateLiveList(list){
 	var inc = list._node._inc || list._node.ownerDocument._inc;
-	if(list._inc != inc){
+	if (list._inc !== inc) {
 		var ls = list._refresh(list._node);
-		//console.log(ls.length)
 		__set__(list,'length',ls.length);
+		if (!list.$$length || ls.length < list.$$length) {
+			for (var i = ls.length; i in list; i++) {
+				if (Object.prototype.hasOwnProperty.call(list, i)) {
+					delete list[i];
+				}
+			}
+		}
 		copy(ls,list);
 		list._inc = inc;
 	}
 }
 LiveNodeList.prototype.item = function(i){
 	_updateLiveList(this);
-	return this[i];
+	return this[i] || null;
 }
 
 _extends(LiveNodeList,NodeList);
@@ -7688,7 +7744,7 @@ _extends(LiveNodeList,NodeList);
  * but this is simply to allow convenient enumeration of the contents of a NamedNodeMap,
  * and does not imply that the DOM specifies an order to these Nodes.
  * NamedNodeMap objects in the DOM are live.
- * used for attributes or DocumentType entities 
+ * used for attributes or DocumentType entities
  */
 function NamedNodeMap() {
 };
@@ -7732,7 +7788,7 @@ function _removeNamedNode(el,list,attr){
 			}
 		}
 	}else{
-		throw DOMException(NOT_FOUND_ERR,new Error(el.tagName+'@'+attr))
+		throw new DOMException(NOT_FOUND_ERR,new Error(el.tagName+'@'+attr))
 	}
 }
 NamedNodeMap.prototype = {
@@ -7777,10 +7833,10 @@ NamedNodeMap.prototype = {
 		var attr = this.getNamedItem(key);
 		_removeNamedNode(this._ownerElement,this,attr);
 		return attr;
-		
-		
+
+
 	},// raises: NOT_FOUND_ERR,NO_MODIFICATION_ALLOWED_ERR
-	
+
 	//for level2
 	removeNamedItemNS:function(namespaceURI,localName){
 		var attr = this.getNamedItemNS(namespaceURI,localName);
@@ -7926,11 +7982,11 @@ Node.prototype = {
 	prefix : null,
 	localName : null,
 	// Modified in DOM Level 2:
-	insertBefore:function(newChild, refChild){//raises 
+	insertBefore:function(newChild, refChild){//raises
 		return _insertBefore(this,newChild,refChild);
 	},
-	replaceChild:function(newChild, oldChild){//raises 
-		this.insertBefore(newChild,oldChild);
+	replaceChild:function(newChild, oldChild){//raises
+		_insertBefore(this, newChild,oldChild, assertPreReplacementValidityInDocument);
 		if(oldChild){
 			this.removeChild(oldChild);
 		}
@@ -8052,6 +8108,7 @@ function _visitNode(node,callback){
 
 
 function Document(){
+	this.ownerDocument = this;
 }
 
 function _onAddAttribute(doc,el,newAttr){
@@ -8135,48 +8192,313 @@ function _removeChild (parentNode, child) {
 	_onUpdateChild(parentNode.ownerDocument, parentNode);
 	return child;
 }
+
 /**
- * preformance key(refChild == null)
+ * Returns `true` if `node` can be a parent for insertion.
+ * @param {Node} node
+ * @returns {boolean}
  */
-function _insertBefore(parentNode,newChild,nextChild){
-	var cp = newChild.parentNode;
-	if(cp){
-		cp.removeChild(newChild);//remove and update
+function hasValidParentNodeType(node) {
+	return (
+		node &&
+		(node.nodeType === Node.DOCUMENT_NODE || node.nodeType === Node.DOCUMENT_FRAGMENT_NODE || node.nodeType === Node.ELEMENT_NODE)
+	);
+}
+
+/**
+ * Returns `true` if `node` can be inserted according to it's `nodeType`.
+ * @param {Node} node
+ * @returns {boolean}
+ */
+function hasInsertableNodeType(node) {
+	return (
+		node &&
+		(isElementNode(node) ||
+			isTextNode(node) ||
+			isDocTypeNode(node) ||
+			node.nodeType === Node.DOCUMENT_FRAGMENT_NODE ||
+			node.nodeType === Node.COMMENT_NODE ||
+			node.nodeType === Node.PROCESSING_INSTRUCTION_NODE)
+	);
+}
+
+/**
+ * Returns true if `node` is a DOCTYPE node
+ * @param {Node} node
+ * @returns {boolean}
+ */
+function isDocTypeNode(node) {
+	return node && node.nodeType === Node.DOCUMENT_TYPE_NODE;
+}
+
+/**
+ * Returns true if the node is an element
+ * @param {Node} node
+ * @returns {boolean}
+ */
+function isElementNode(node) {
+	return node && node.nodeType === Node.ELEMENT_NODE;
+}
+/**
+ * Returns true if `node` is a text node
+ * @param {Node} node
+ * @returns {boolean}
+ */
+function isTextNode(node) {
+	return node && node.nodeType === Node.TEXT_NODE;
+}
+
+/**
+ * Check if en element node can be inserted before `child`, or at the end if child is falsy,
+ * according to the presence and position of a doctype node on the same level.
+ *
+ * @param {Document} doc The document node
+ * @param {Node} child the node that would become the nextSibling if the element would be inserted
+ * @returns {boolean} `true` if an element can be inserted before child
+ * @private
+ * https://dom.spec.whatwg.org/#concept-node-ensure-pre-insertion-validity
+ */
+function isElementInsertionPossible(doc, child) {
+	var parentChildNodes = doc.childNodes || [];
+	if (find(parentChildNodes, isElementNode) || isDocTypeNode(child)) {
+		return false;
 	}
-	if(newChild.nodeType === DOCUMENT_FRAGMENT_NODE){
-		var newFirst = newChild.firstChild;
-		if (newFirst == null) {
-			return newChild;
+	var docTypeNode = find(parentChildNodes, isDocTypeNode);
+	return !(child && docTypeNode && parentChildNodes.indexOf(docTypeNode) > parentChildNodes.indexOf(child));
+}
+
+/**
+ * Check if en element node can be inserted before `child`, or at the end if child is falsy,
+ * according to the presence and position of a doctype node on the same level.
+ *
+ * @param {Node} doc The document node
+ * @param {Node} child the node that would become the nextSibling if the element would be inserted
+ * @returns {boolean} `true` if an element can be inserted before child
+ * @private
+ * https://dom.spec.whatwg.org/#concept-node-ensure-pre-insertion-validity
+ */
+function isElementReplacementPossible(doc, child) {
+	var parentChildNodes = doc.childNodes || [];
+
+	function hasElementChildThatIsNotChild(node) {
+		return isElementNode(node) && node !== child;
+	}
+
+	if (find(parentChildNodes, hasElementChildThatIsNotChild)) {
+		return false;
+	}
+	var docTypeNode = find(parentChildNodes, isDocTypeNode);
+	return !(child && docTypeNode && parentChildNodes.indexOf(docTypeNode) > parentChildNodes.indexOf(child));
+}
+
+/**
+ * @private
+ * Steps 1-5 of the checks before inserting and before replacing a child are the same.
+ *
+ * @param {Node} parent the parent node to insert `node` into
+ * @param {Node} node the node to insert
+ * @param {Node=} child the node that should become the `nextSibling` of `node`
+ * @returns {Node}
+ * @throws DOMException for several node combinations that would create a DOM that is not well-formed.
+ * @throws DOMException if `child` is provided but is not a child of `parent`.
+ * @see https://dom.spec.whatwg.org/#concept-node-ensure-pre-insertion-validity
+ * @see https://dom.spec.whatwg.org/#concept-node-replace
+ */
+function assertPreInsertionValidity1to5(parent, node, child) {
+	// 1. If `parent` is not a Document, DocumentFragment, or Element node, then throw a "HierarchyRequestError" DOMException.
+	if (!hasValidParentNodeType(parent)) {
+		throw new DOMException(HIERARCHY_REQUEST_ERR, 'Unexpected parent node type ' + parent.nodeType);
+	}
+	// 2. If `node` is a host-including inclusive ancestor of `parent`, then throw a "HierarchyRequestError" DOMException.
+	// not implemented!
+	// 3. If `child` is non-null and its parent is not `parent`, then throw a "NotFoundError" DOMException.
+	if (child && child.parentNode !== parent) {
+		throw new DOMException(NOT_FOUND_ERR, 'child not in parent');
+	}
+	if (
+		// 4. If `node` is not a DocumentFragment, DocumentType, Element, or CharacterData node, then throw a "HierarchyRequestError" DOMException.
+		!hasInsertableNodeType(node) ||
+		// 5. If either `node` is a Text node and `parent` is a document,
+		// the sax parser currently adds top level text nodes, this will be fixed in 0.9.0
+		// || (node.nodeType === Node.TEXT_NODE && parent.nodeType === Node.DOCUMENT_NODE)
+		// or `node` is a doctype and `parent` is not a document, then throw a "HierarchyRequestError" DOMException.
+		(isDocTypeNode(node) && parent.nodeType !== Node.DOCUMENT_NODE)
+	) {
+		throw new DOMException(
+			HIERARCHY_REQUEST_ERR,
+			'Unexpected node type ' + node.nodeType + ' for parent node type ' + parent.nodeType
+		);
+	}
+}
+
+/**
+ * @private
+ * Step 6 of the checks before inserting and before replacing a child are different.
+ *
+ * @param {Document} parent the parent node to insert `node` into
+ * @param {Node} node the node to insert
+ * @param {Node | undefined} child the node that should become the `nextSibling` of `node`
+ * @returns {Node}
+ * @throws DOMException for several node combinations that would create a DOM that is not well-formed.
+ * @throws DOMException if `child` is provided but is not a child of `parent`.
+ * @see https://dom.spec.whatwg.org/#concept-node-ensure-pre-insertion-validity
+ * @see https://dom.spec.whatwg.org/#concept-node-replace
+ */
+function assertPreInsertionValidityInDocument(parent, node, child) {
+	var parentChildNodes = parent.childNodes || [];
+	var nodeChildNodes = node.childNodes || [];
+
+	// DocumentFragment
+	if (node.nodeType === Node.DOCUMENT_FRAGMENT_NODE) {
+		var nodeChildElements = nodeChildNodes.filter(isElementNode);
+		// If node has more than one element child or has a Text node child.
+		if (nodeChildElements.length > 1 || find(nodeChildNodes, isTextNode)) {
+			throw new DOMException(HIERARCHY_REQUEST_ERR, 'More than one element or text in fragment');
 		}
-		var newLast = newChild.lastChild;
-	}else{
-		newFirst = newLast = newChild;
+		// Otherwise, if `node` has one element child and either `parent` has an element child,
+		// `child` is a doctype, or `child` is non-null and a doctype is following `child`.
+		if (nodeChildElements.length === 1 && !isElementInsertionPossible(parent, child)) {
+			throw new DOMException(HIERARCHY_REQUEST_ERR, 'Element in fragment can not be inserted before doctype');
+		}
 	}
-	var pre = nextChild ? nextChild.previousSibling : parentNode.lastChild;
+	// Element
+	if (isElementNode(node)) {
+		// `parent` has an element child, `child` is a doctype,
+		// or `child` is non-null and a doctype is following `child`.
+		if (!isElementInsertionPossible(parent, child)) {
+			throw new DOMException(HIERARCHY_REQUEST_ERR, 'Only one element can be added and only after doctype');
+		}
+	}
+	// DocumentType
+	if (isDocTypeNode(node)) {
+		// `parent` has a doctype child,
+		if (find(parentChildNodes, isDocTypeNode)) {
+			throw new DOMException(HIERARCHY_REQUEST_ERR, 'Only one doctype is allowed');
+		}
+		var parentElementChild = find(parentChildNodes, isElementNode);
+		// `child` is non-null and an element is preceding `child`,
+		if (child && parentChildNodes.indexOf(parentElementChild) < parentChildNodes.indexOf(child)) {
+			throw new DOMException(HIERARCHY_REQUEST_ERR, 'Doctype can only be inserted before an element');
+		}
+		// or `child` is null and `parent` has an element child.
+		if (!child && parentElementChild) {
+			throw new DOMException(HIERARCHY_REQUEST_ERR, 'Doctype can not be appended since element is present');
+		}
+	}
+}
+
+/**
+ * @private
+ * Step 6 of the checks before inserting and before replacing a child are different.
+ *
+ * @param {Document} parent the parent node to insert `node` into
+ * @param {Node} node the node to insert
+ * @param {Node | undefined} child the node that should become the `nextSibling` of `node`
+ * @returns {Node}
+ * @throws DOMException for several node combinations that would create a DOM that is not well-formed.
+ * @throws DOMException if `child` is provided but is not a child of `parent`.
+ * @see https://dom.spec.whatwg.org/#concept-node-ensure-pre-insertion-validity
+ * @see https://dom.spec.whatwg.org/#concept-node-replace
+ */
+function assertPreReplacementValidityInDocument(parent, node, child) {
+	var parentChildNodes = parent.childNodes || [];
+	var nodeChildNodes = node.childNodes || [];
+
+	// DocumentFragment
+	if (node.nodeType === Node.DOCUMENT_FRAGMENT_NODE) {
+		var nodeChildElements = nodeChildNodes.filter(isElementNode);
+		// If `node` has more than one element child or has a Text node child.
+		if (nodeChildElements.length > 1 || find(nodeChildNodes, isTextNode)) {
+			throw new DOMException(HIERARCHY_REQUEST_ERR, 'More than one element or text in fragment');
+		}
+		// Otherwise, if `node` has one element child and either `parent` has an element child that is not `child` or a doctype is following `child`.
+		if (nodeChildElements.length === 1 && !isElementReplacementPossible(parent, child)) {
+			throw new DOMException(HIERARCHY_REQUEST_ERR, 'Element in fragment can not be inserted before doctype');
+		}
+	}
+	// Element
+	if (isElementNode(node)) {
+		// `parent` has an element child that is not `child` or a doctype is following `child`.
+		if (!isElementReplacementPossible(parent, child)) {
+			throw new DOMException(HIERARCHY_REQUEST_ERR, 'Only one element can be added and only after doctype');
+		}
+	}
+	// DocumentType
+	if (isDocTypeNode(node)) {
+		function hasDoctypeChildThatIsNotChild(node) {
+			return isDocTypeNode(node) && node !== child;
+		}
+
+		// `parent` has a doctype child that is not `child`,
+		if (find(parentChildNodes, hasDoctypeChildThatIsNotChild)) {
+			throw new DOMException(HIERARCHY_REQUEST_ERR, 'Only one doctype is allowed');
+		}
+		var parentElementChild = find(parentChildNodes, isElementNode);
+		// or an element is preceding `child`.
+		if (child && parentChildNodes.indexOf(parentElementChild) < parentChildNodes.indexOf(child)) {
+			throw new DOMException(HIERARCHY_REQUEST_ERR, 'Doctype can only be inserted before an element');
+		}
+	}
+}
+
+/**
+ * @private
+ * @param {Node} parent the parent node to insert `node` into
+ * @param {Node} node the node to insert
+ * @param {Node=} child the node that should become the `nextSibling` of `node`
+ * @returns {Node}
+ * @throws DOMException for several node combinations that would create a DOM that is not well-formed.
+ * @throws DOMException if `child` is provided but is not a child of `parent`.
+ * @see https://dom.spec.whatwg.org/#concept-node-ensure-pre-insertion-validity
+ */
+function _insertBefore(parent, node, child, _inDocumentAssertion) {
+	// To ensure pre-insertion validity of a node into a parent before a child, run these steps:
+	assertPreInsertionValidity1to5(parent, node, child);
+
+	// If parent is a document, and any of the statements below, switched on the interface node implements,
+	// are true, then throw a "HierarchyRequestError" DOMException.
+	if (parent.nodeType === Node.DOCUMENT_NODE) {
+		(_inDocumentAssertion || assertPreInsertionValidityInDocument)(parent, node, child);
+	}
+
+	var cp = node.parentNode;
+	if(cp){
+		cp.removeChild(node);//remove and update
+	}
+	if(node.nodeType === DOCUMENT_FRAGMENT_NODE){
+		var newFirst = node.firstChild;
+		if (newFirst == null) {
+			return node;
+		}
+		var newLast = node.lastChild;
+	}else{
+		newFirst = newLast = node;
+	}
+	var pre = child ? child.previousSibling : parent.lastChild;
 
 	newFirst.previousSibling = pre;
-	newLast.nextSibling = nextChild;
-	
-	
+	newLast.nextSibling = child;
+
+
 	if(pre){
 		pre.nextSibling = newFirst;
 	}else{
-		parentNode.firstChild = newFirst;
+		parent.firstChild = newFirst;
 	}
-	if(nextChild == null){
-		parentNode.lastChild = newLast;
+	if(child == null){
+		parent.lastChild = newLast;
 	}else{
-		nextChild.previousSibling = newLast;
+		child.previousSibling = newLast;
 	}
 	do{
-		newFirst.parentNode = parentNode;
+		newFirst.parentNode = parent;
 	}while(newFirst !== newLast && (newFirst= newFirst.nextSibling))
-	_onUpdateChild(parentNode.ownerDocument||parentNode,parentNode);
-	//console.log(parentNode.lastChild.nextSibling == null)
-	if (newChild.nodeType == DOCUMENT_FRAGMENT_NODE) {
-		newChild.firstChild = newChild.lastChild = null;
+	_onUpdateChild(parent.ownerDocument||parent, parent);
+	//console.log(parent.lastChild.nextSibling == null)
+	if (node.nodeType == DOCUMENT_FRAGMENT_NODE) {
+		node.firstChild = node.lastChild = null;
 	}
-	return newChild;
+	return node;
 }
 
 /**
@@ -8231,17 +8553,30 @@ Document.prototype = {
 			}
 			return newChild;
 		}
-		if(this.documentElement == null && newChild.nodeType == ELEMENT_NODE){
+		_insertBefore(this, newChild, refChild);
+		newChild.ownerDocument = this;
+		if (this.documentElement === null && newChild.nodeType === ELEMENT_NODE) {
 			this.documentElement = newChild;
 		}
 
-		return _insertBefore(this,newChild,refChild),(newChild.ownerDocument = this),newChild;
+		return newChild;
 	},
 	removeChild :  function(oldChild){
 		if(this.documentElement == oldChild){
 			this.documentElement = null;
 		}
 		return _removeChild(this,oldChild);
+	},
+	replaceChild: function (newChild, oldChild) {
+		//raises
+		_insertBefore(this, newChild, oldChild, assertPreReplacementValidityInDocument);
+		newChild.ownerDocument = this;
+		if (oldChild) {
+			this.removeChild(oldChild);
+		}
+		if (isElementNode(newChild)) {
+			this.documentElement = newChild;
+		}
 	},
 	// Introduced in DOM Level 2:
 	importNode : function(importedNode,deep){
@@ -8344,8 +8679,8 @@ Document.prototype = {
 	createProcessingInstruction :	function(target,data){
 		var node = new ProcessingInstruction();
 		node.ownerDocument = this;
-		node.tagName = node.target = target;
-		node.nodeValue= node.data = data;
+		node.tagName = node.nodeName = node.target = target;
+		node.nodeValue = node.data = data;
 		return node;
 	},
 	createAttribute :	function(name){
@@ -8429,7 +8764,7 @@ Element.prototype = {
 		var attr = this.getAttributeNode(name)
 		attr && this.removeAttributeNode(attr);
 	},
-	
+
 	//four real opeartion method
 	appendChild:function(newChild){
 		if(newChild.nodeType === DOCUMENT_FRAGMENT_NODE){
@@ -8453,7 +8788,7 @@ Element.prototype = {
 		var old = this.getAttributeNodeNS(namespaceURI, localName);
 		old && this.removeAttributeNode(old);
 	},
-	
+
 	hasAttributeNS : function(namespaceURI, localName){
 		return this.getAttributeNodeNS(namespaceURI, localName)!=null;
 	},
@@ -8469,7 +8804,7 @@ Element.prototype = {
 	getAttributeNodeNS : function(namespaceURI, localName){
 		return this.attributes.getNamedItemNS(namespaceURI, localName);
 	},
-	
+
 	getElementsByTagName : function(tagName){
 		return new LiveNodeList(this,function(base){
 			var ls = [];
@@ -8490,7 +8825,7 @@ Element.prototype = {
 				}
 			});
 			return ls;
-			
+
 		});
 	}
 };
@@ -8519,7 +8854,7 @@ CharacterData.prototype = {
 	},
 	insertData: function(offset,text) {
 		this.replaceData(offset,0,text);
-	
+
 	},
 	appendChild:function(newChild){
 		throw new Error(ExceptionMessage[HIERARCHY_REQUEST_ERR])
@@ -8613,7 +8948,7 @@ function nodeSerializeToString(isHtml,nodeFilter){
 	var refNode = this.nodeType == 9 && this.documentElement || this;
 	var prefix = refNode.prefix;
 	var uri = refNode.namespaceURI;
-	
+
 	if(uri && prefix == null){
 		//console.log(prefix)
 		var prefix = refNode.lookupPrefix(uri);
@@ -8646,8 +8981,8 @@ function needNamespaceDefine(node, isHTML, visibleNamespaces) {
 	if (prefix === "xml" && uri === NAMESPACE.XML || uri === NAMESPACE.XMLNS) {
 		return false;
 	}
-	
-	var i = visibleNamespaces.length 
+
+	var i = visibleNamespaces.length
 	while (i--) {
 		var ns = visibleNamespaces[i];
 		// get namespace prefix
@@ -8698,7 +9033,7 @@ function serializeToString(node,buf,isHTML,nodeFilter,visibleNamespaces){
 		var len = attrs.length;
 		var child = node.firstChild;
 		var nodeName = node.tagName;
-		
+
 		isHTML = NAMESPACE.isHTML(node.namespaceURI) || isHTML
 
 		var prefixedNodeName = nodeName
@@ -8757,14 +9092,14 @@ function serializeToString(node,buf,isHTML,nodeFilter,visibleNamespaces){
 			serializeToString(attr,buf,isHTML,nodeFilter,visibleNamespaces);
 		}
 
-		// add namespace for current node		
+		// add namespace for current node
 		if (nodeName === prefixedNodeName && needNamespaceDefine(node, isHTML, visibleNamespaces)) {
 			var prefix = node.prefix||'';
 			var uri = node.namespaceURI;
 			addSerializedAttribute(buf, prefix ? 'xmlns:' + prefix : "xmlns", uri);
 			visibleNamespaces.push({ prefix: prefix, namespace:uri });
 		}
-		
+
 		if(child || isHTML && !/^(?:meta|link|img|br|hr|input)$/i.test(nodeName)){
 			buf.push('>');
 			//if is cdata child node
@@ -8979,7 +9314,7 @@ try{
 				}
 			}
 		})
-		
+
 		function getTextContent(node){
 			switch(node.nodeType){
 			case ELEMENT_NODE:
@@ -9017,6 +9352,8 @@ try{
 //}
 
 },{"./conventions":47}],50:[function(require,module,exports){
+'use strict';
+
 var freeze = require('./conventions').freeze;
 
 /**
@@ -9026,270 +9363,2161 @@ var freeze = require('./conventions').freeze;
  * @see https://www.w3.org/TR/2008/REC-xml-20081126/#sec-predefined-ent W3C XML 1.0
  * @see https://en.wikipedia.org/wiki/List_of_XML_and_HTML_character_entity_references#Predefined_entities_in_XML Wikipedia
  */
-exports.XML_ENTITIES = freeze({amp:'&', apos:"'", gt:'>', lt:'<', quot:'"'})
+exports.XML_ENTITIES = freeze({
+	amp: '&',
+	apos: "'",
+	gt: '>',
+	lt: '<',
+	quot: '"',
+});
 
 /**
- * A map of currently 241 entities that are detected in an HTML document.
+ * A map of all entities that are detected in an HTML document.
  * They contain all entries from `XML_ENTITIES`.
  *
  * @see XML_ENTITIES
  * @see DOMParser.parseFromString
  * @see DOMImplementation.prototype.createHTMLDocument
  * @see https://html.spec.whatwg.org/#named-character-references WHATWG HTML(5) Spec
+ * @see https://html.spec.whatwg.org/entities.json JSON
  * @see https://www.w3.org/TR/xml-entity-names/ W3C XML Entity Names
  * @see https://www.w3.org/TR/html4/sgml/entities.html W3C HTML4/SGML
  * @see https://en.wikipedia.org/wiki/List_of_XML_and_HTML_character_entity_references#Character_entity_references_in_HTML Wikipedia (HTML)
  * @see https://en.wikipedia.org/wiki/List_of_XML_and_HTML_character_entity_references#Entities_representing_special_characters_in_XHTML Wikpedia (XHTML)
  */
 exports.HTML_ENTITIES = freeze({
-       lt: '<',
-       gt: '>',
-       amp: '&',
-       quot: '"',
-       apos: "'",
-       Agrave: "À",
-       Aacute: "Á",
-       Acirc: "Â",
-       Atilde: "Ã",
-       Auml: "Ä",
-       Aring: "Å",
-       AElig: "Æ",
-       Ccedil: "Ç",
-       Egrave: "È",
-       Eacute: "É",
-       Ecirc: "Ê",
-       Euml: "Ë",
-       Igrave: "Ì",
-       Iacute: "Í",
-       Icirc: "Î",
-       Iuml: "Ï",
-       ETH: "Ð",
-       Ntilde: "Ñ",
-       Ograve: "Ò",
-       Oacute: "Ó",
-       Ocirc: "Ô",
-       Otilde: "Õ",
-       Ouml: "Ö",
-       Oslash: "Ø",
-       Ugrave: "Ù",
-       Uacute: "Ú",
-       Ucirc: "Û",
-       Uuml: "Ü",
-       Yacute: "Ý",
-       THORN: "Þ",
-       szlig: "ß",
-       agrave: "à",
-       aacute: "á",
-       acirc: "â",
-       atilde: "ã",
-       auml: "ä",
-       aring: "å",
-       aelig: "æ",
-       ccedil: "ç",
-       egrave: "è",
-       eacute: "é",
-       ecirc: "ê",
-       euml: "ë",
-       igrave: "ì",
-       iacute: "í",
-       icirc: "î",
-       iuml: "ï",
-       eth: "ð",
-       ntilde: "ñ",
-       ograve: "ò",
-       oacute: "ó",
-       ocirc: "ô",
-       otilde: "õ",
-       ouml: "ö",
-       oslash: "ø",
-       ugrave: "ù",
-       uacute: "ú",
-       ucirc: "û",
-       uuml: "ü",
-       yacute: "ý",
-       thorn: "þ",
-       yuml: "ÿ",
-       nbsp: "\u00a0",
-       iexcl: "¡",
-       cent: "¢",
-       pound: "£",
-       curren: "¤",
-       yen: "¥",
-       brvbar: "¦",
-       sect: "§",
-       uml: "¨",
-       copy: "©",
-       ordf: "ª",
-       laquo: "«",
-       not: "¬",
-       shy: "­­",
-       reg: "®",
-       macr: "¯",
-       deg: "°",
-       plusmn: "±",
-       sup2: "²",
-       sup3: "³",
-       acute: "´",
-       micro: "µ",
-       para: "¶",
-       middot: "·",
-       cedil: "¸",
-       sup1: "¹",
-       ordm: "º",
-       raquo: "»",
-       frac14: "¼",
-       frac12: "½",
-       frac34: "¾",
-       iquest: "¿",
-       times: "×",
-       divide: "÷",
-       forall: "∀",
-       part: "∂",
-       exist: "∃",
-       empty: "∅",
-       nabla: "∇",
-       isin: "∈",
-       notin: "∉",
-       ni: "∋",
-       prod: "∏",
-       sum: "∑",
-       minus: "−",
-       lowast: "∗",
-       radic: "√",
-       prop: "∝",
-       infin: "∞",
-       ang: "∠",
-       and: "∧",
-       or: "∨",
-       cap: "∩",
-       cup: "∪",
-       'int': "∫",
-       there4: "∴",
-       sim: "∼",
-       cong: "≅",
-       asymp: "≈",
-       ne: "≠",
-       equiv: "≡",
-       le: "≤",
-       ge: "≥",
-       sub: "⊂",
-       sup: "⊃",
-       nsub: "⊄",
-       sube: "⊆",
-       supe: "⊇",
-       oplus: "⊕",
-       otimes: "⊗",
-       perp: "⊥",
-       sdot: "⋅",
-       Alpha: "Α",
-       Beta: "Β",
-       Gamma: "Γ",
-       Delta: "Δ",
-       Epsilon: "Ε",
-       Zeta: "Ζ",
-       Eta: "Η",
-       Theta: "Θ",
-       Iota: "Ι",
-       Kappa: "Κ",
-       Lambda: "Λ",
-       Mu: "Μ",
-       Nu: "Ν",
-       Xi: "Ξ",
-       Omicron: "Ο",
-       Pi: "Π",
-       Rho: "Ρ",
-       Sigma: "Σ",
-       Tau: "Τ",
-       Upsilon: "Υ",
-       Phi: "Φ",
-       Chi: "Χ",
-       Psi: "Ψ",
-       Omega: "Ω",
-       alpha: "α",
-       beta: "β",
-       gamma: "γ",
-       delta: "δ",
-       epsilon: "ε",
-       zeta: "ζ",
-       eta: "η",
-       theta: "θ",
-       iota: "ι",
-       kappa: "κ",
-       lambda: "λ",
-       mu: "μ",
-       nu: "ν",
-       xi: "ξ",
-       omicron: "ο",
-       pi: "π",
-       rho: "ρ",
-       sigmaf: "ς",
-       sigma: "σ",
-       tau: "τ",
-       upsilon: "υ",
-       phi: "φ",
-       chi: "χ",
-       psi: "ψ",
-       omega: "ω",
-       thetasym: "ϑ",
-       upsih: "ϒ",
-       piv: "ϖ",
-       OElig: "Œ",
-       oelig: "œ",
-       Scaron: "Š",
-       scaron: "š",
-       Yuml: "Ÿ",
-       fnof: "ƒ",
-       circ: "ˆ",
-       tilde: "˜",
-       ensp: " ",
-       emsp: " ",
-       thinsp: " ",
-       zwnj: "‌",
-       zwj: "‍",
-       lrm: "‎",
-       rlm: "‏",
-       ndash: "–",
-       mdash: "—",
-       lsquo: "‘",
-       rsquo: "’",
-       sbquo: "‚",
-       ldquo: "“",
-       rdquo: "”",
-       bdquo: "„",
-       dagger: "†",
-       Dagger: "‡",
-       bull: "•",
-       hellip: "…",
-       permil: "‰",
-       prime: "′",
-       Prime: "″",
-       lsaquo: "‹",
-       rsaquo: "›",
-       oline: "‾",
-       euro: "€",
-       trade: "™",
-       larr: "←",
-       uarr: "↑",
-       rarr: "→",
-       darr: "↓",
-       harr: "↔",
-       crarr: "↵",
-       lceil: "⌈",
-       rceil: "⌉",
-       lfloor: "⌊",
-       rfloor: "⌋",
-       loz: "◊",
-       spades: "♠",
-       clubs: "♣",
-       hearts: "♥",
-       diams: "♦"
+	Aacute: '\u00C1',
+	aacute: '\u00E1',
+	Abreve: '\u0102',
+	abreve: '\u0103',
+	ac: '\u223E',
+	acd: '\u223F',
+	acE: '\u223E\u0333',
+	Acirc: '\u00C2',
+	acirc: '\u00E2',
+	acute: '\u00B4',
+	Acy: '\u0410',
+	acy: '\u0430',
+	AElig: '\u00C6',
+	aelig: '\u00E6',
+	af: '\u2061',
+	Afr: '\uD835\uDD04',
+	afr: '\uD835\uDD1E',
+	Agrave: '\u00C0',
+	agrave: '\u00E0',
+	alefsym: '\u2135',
+	aleph: '\u2135',
+	Alpha: '\u0391',
+	alpha: '\u03B1',
+	Amacr: '\u0100',
+	amacr: '\u0101',
+	amalg: '\u2A3F',
+	AMP: '\u0026',
+	amp: '\u0026',
+	And: '\u2A53',
+	and: '\u2227',
+	andand: '\u2A55',
+	andd: '\u2A5C',
+	andslope: '\u2A58',
+	andv: '\u2A5A',
+	ang: '\u2220',
+	ange: '\u29A4',
+	angle: '\u2220',
+	angmsd: '\u2221',
+	angmsdaa: '\u29A8',
+	angmsdab: '\u29A9',
+	angmsdac: '\u29AA',
+	angmsdad: '\u29AB',
+	angmsdae: '\u29AC',
+	angmsdaf: '\u29AD',
+	angmsdag: '\u29AE',
+	angmsdah: '\u29AF',
+	angrt: '\u221F',
+	angrtvb: '\u22BE',
+	angrtvbd: '\u299D',
+	angsph: '\u2222',
+	angst: '\u00C5',
+	angzarr: '\u237C',
+	Aogon: '\u0104',
+	aogon: '\u0105',
+	Aopf: '\uD835\uDD38',
+	aopf: '\uD835\uDD52',
+	ap: '\u2248',
+	apacir: '\u2A6F',
+	apE: '\u2A70',
+	ape: '\u224A',
+	apid: '\u224B',
+	apos: '\u0027',
+	ApplyFunction: '\u2061',
+	approx: '\u2248',
+	approxeq: '\u224A',
+	Aring: '\u00C5',
+	aring: '\u00E5',
+	Ascr: '\uD835\uDC9C',
+	ascr: '\uD835\uDCB6',
+	Assign: '\u2254',
+	ast: '\u002A',
+	asymp: '\u2248',
+	asympeq: '\u224D',
+	Atilde: '\u00C3',
+	atilde: '\u00E3',
+	Auml: '\u00C4',
+	auml: '\u00E4',
+	awconint: '\u2233',
+	awint: '\u2A11',
+	backcong: '\u224C',
+	backepsilon: '\u03F6',
+	backprime: '\u2035',
+	backsim: '\u223D',
+	backsimeq: '\u22CD',
+	Backslash: '\u2216',
+	Barv: '\u2AE7',
+	barvee: '\u22BD',
+	Barwed: '\u2306',
+	barwed: '\u2305',
+	barwedge: '\u2305',
+	bbrk: '\u23B5',
+	bbrktbrk: '\u23B6',
+	bcong: '\u224C',
+	Bcy: '\u0411',
+	bcy: '\u0431',
+	bdquo: '\u201E',
+	becaus: '\u2235',
+	Because: '\u2235',
+	because: '\u2235',
+	bemptyv: '\u29B0',
+	bepsi: '\u03F6',
+	bernou: '\u212C',
+	Bernoullis: '\u212C',
+	Beta: '\u0392',
+	beta: '\u03B2',
+	beth: '\u2136',
+	between: '\u226C',
+	Bfr: '\uD835\uDD05',
+	bfr: '\uD835\uDD1F',
+	bigcap: '\u22C2',
+	bigcirc: '\u25EF',
+	bigcup: '\u22C3',
+	bigodot: '\u2A00',
+	bigoplus: '\u2A01',
+	bigotimes: '\u2A02',
+	bigsqcup: '\u2A06',
+	bigstar: '\u2605',
+	bigtriangledown: '\u25BD',
+	bigtriangleup: '\u25B3',
+	biguplus: '\u2A04',
+	bigvee: '\u22C1',
+	bigwedge: '\u22C0',
+	bkarow: '\u290D',
+	blacklozenge: '\u29EB',
+	blacksquare: '\u25AA',
+	blacktriangle: '\u25B4',
+	blacktriangledown: '\u25BE',
+	blacktriangleleft: '\u25C2',
+	blacktriangleright: '\u25B8',
+	blank: '\u2423',
+	blk12: '\u2592',
+	blk14: '\u2591',
+	blk34: '\u2593',
+	block: '\u2588',
+	bne: '\u003D\u20E5',
+	bnequiv: '\u2261\u20E5',
+	bNot: '\u2AED',
+	bnot: '\u2310',
+	Bopf: '\uD835\uDD39',
+	bopf: '\uD835\uDD53',
+	bot: '\u22A5',
+	bottom: '\u22A5',
+	bowtie: '\u22C8',
+	boxbox: '\u29C9',
+	boxDL: '\u2557',
+	boxDl: '\u2556',
+	boxdL: '\u2555',
+	boxdl: '\u2510',
+	boxDR: '\u2554',
+	boxDr: '\u2553',
+	boxdR: '\u2552',
+	boxdr: '\u250C',
+	boxH: '\u2550',
+	boxh: '\u2500',
+	boxHD: '\u2566',
+	boxHd: '\u2564',
+	boxhD: '\u2565',
+	boxhd: '\u252C',
+	boxHU: '\u2569',
+	boxHu: '\u2567',
+	boxhU: '\u2568',
+	boxhu: '\u2534',
+	boxminus: '\u229F',
+	boxplus: '\u229E',
+	boxtimes: '\u22A0',
+	boxUL: '\u255D',
+	boxUl: '\u255C',
+	boxuL: '\u255B',
+	boxul: '\u2518',
+	boxUR: '\u255A',
+	boxUr: '\u2559',
+	boxuR: '\u2558',
+	boxur: '\u2514',
+	boxV: '\u2551',
+	boxv: '\u2502',
+	boxVH: '\u256C',
+	boxVh: '\u256B',
+	boxvH: '\u256A',
+	boxvh: '\u253C',
+	boxVL: '\u2563',
+	boxVl: '\u2562',
+	boxvL: '\u2561',
+	boxvl: '\u2524',
+	boxVR: '\u2560',
+	boxVr: '\u255F',
+	boxvR: '\u255E',
+	boxvr: '\u251C',
+	bprime: '\u2035',
+	Breve: '\u02D8',
+	breve: '\u02D8',
+	brvbar: '\u00A6',
+	Bscr: '\u212C',
+	bscr: '\uD835\uDCB7',
+	bsemi: '\u204F',
+	bsim: '\u223D',
+	bsime: '\u22CD',
+	bsol: '\u005C',
+	bsolb: '\u29C5',
+	bsolhsub: '\u27C8',
+	bull: '\u2022',
+	bullet: '\u2022',
+	bump: '\u224E',
+	bumpE: '\u2AAE',
+	bumpe: '\u224F',
+	Bumpeq: '\u224E',
+	bumpeq: '\u224F',
+	Cacute: '\u0106',
+	cacute: '\u0107',
+	Cap: '\u22D2',
+	cap: '\u2229',
+	capand: '\u2A44',
+	capbrcup: '\u2A49',
+	capcap: '\u2A4B',
+	capcup: '\u2A47',
+	capdot: '\u2A40',
+	CapitalDifferentialD: '\u2145',
+	caps: '\u2229\uFE00',
+	caret: '\u2041',
+	caron: '\u02C7',
+	Cayleys: '\u212D',
+	ccaps: '\u2A4D',
+	Ccaron: '\u010C',
+	ccaron: '\u010D',
+	Ccedil: '\u00C7',
+	ccedil: '\u00E7',
+	Ccirc: '\u0108',
+	ccirc: '\u0109',
+	Cconint: '\u2230',
+	ccups: '\u2A4C',
+	ccupssm: '\u2A50',
+	Cdot: '\u010A',
+	cdot: '\u010B',
+	cedil: '\u00B8',
+	Cedilla: '\u00B8',
+	cemptyv: '\u29B2',
+	cent: '\u00A2',
+	CenterDot: '\u00B7',
+	centerdot: '\u00B7',
+	Cfr: '\u212D',
+	cfr: '\uD835\uDD20',
+	CHcy: '\u0427',
+	chcy: '\u0447',
+	check: '\u2713',
+	checkmark: '\u2713',
+	Chi: '\u03A7',
+	chi: '\u03C7',
+	cir: '\u25CB',
+	circ: '\u02C6',
+	circeq: '\u2257',
+	circlearrowleft: '\u21BA',
+	circlearrowright: '\u21BB',
+	circledast: '\u229B',
+	circledcirc: '\u229A',
+	circleddash: '\u229D',
+	CircleDot: '\u2299',
+	circledR: '\u00AE',
+	circledS: '\u24C8',
+	CircleMinus: '\u2296',
+	CirclePlus: '\u2295',
+	CircleTimes: '\u2297',
+	cirE: '\u29C3',
+	cire: '\u2257',
+	cirfnint: '\u2A10',
+	cirmid: '\u2AEF',
+	cirscir: '\u29C2',
+	ClockwiseContourIntegral: '\u2232',
+	CloseCurlyDoubleQuote: '\u201D',
+	CloseCurlyQuote: '\u2019',
+	clubs: '\u2663',
+	clubsuit: '\u2663',
+	Colon: '\u2237',
+	colon: '\u003A',
+	Colone: '\u2A74',
+	colone: '\u2254',
+	coloneq: '\u2254',
+	comma: '\u002C',
+	commat: '\u0040',
+	comp: '\u2201',
+	compfn: '\u2218',
+	complement: '\u2201',
+	complexes: '\u2102',
+	cong: '\u2245',
+	congdot: '\u2A6D',
+	Congruent: '\u2261',
+	Conint: '\u222F',
+	conint: '\u222E',
+	ContourIntegral: '\u222E',
+	Copf: '\u2102',
+	copf: '\uD835\uDD54',
+	coprod: '\u2210',
+	Coproduct: '\u2210',
+	COPY: '\u00A9',
+	copy: '\u00A9',
+	copysr: '\u2117',
+	CounterClockwiseContourIntegral: '\u2233',
+	crarr: '\u21B5',
+	Cross: '\u2A2F',
+	cross: '\u2717',
+	Cscr: '\uD835\uDC9E',
+	cscr: '\uD835\uDCB8',
+	csub: '\u2ACF',
+	csube: '\u2AD1',
+	csup: '\u2AD0',
+	csupe: '\u2AD2',
+	ctdot: '\u22EF',
+	cudarrl: '\u2938',
+	cudarrr: '\u2935',
+	cuepr: '\u22DE',
+	cuesc: '\u22DF',
+	cularr: '\u21B6',
+	cularrp: '\u293D',
+	Cup: '\u22D3',
+	cup: '\u222A',
+	cupbrcap: '\u2A48',
+	CupCap: '\u224D',
+	cupcap: '\u2A46',
+	cupcup: '\u2A4A',
+	cupdot: '\u228D',
+	cupor: '\u2A45',
+	cups: '\u222A\uFE00',
+	curarr: '\u21B7',
+	curarrm: '\u293C',
+	curlyeqprec: '\u22DE',
+	curlyeqsucc: '\u22DF',
+	curlyvee: '\u22CE',
+	curlywedge: '\u22CF',
+	curren: '\u00A4',
+	curvearrowleft: '\u21B6',
+	curvearrowright: '\u21B7',
+	cuvee: '\u22CE',
+	cuwed: '\u22CF',
+	cwconint: '\u2232',
+	cwint: '\u2231',
+	cylcty: '\u232D',
+	Dagger: '\u2021',
+	dagger: '\u2020',
+	daleth: '\u2138',
+	Darr: '\u21A1',
+	dArr: '\u21D3',
+	darr: '\u2193',
+	dash: '\u2010',
+	Dashv: '\u2AE4',
+	dashv: '\u22A3',
+	dbkarow: '\u290F',
+	dblac: '\u02DD',
+	Dcaron: '\u010E',
+	dcaron: '\u010F',
+	Dcy: '\u0414',
+	dcy: '\u0434',
+	DD: '\u2145',
+	dd: '\u2146',
+	ddagger: '\u2021',
+	ddarr: '\u21CA',
+	DDotrahd: '\u2911',
+	ddotseq: '\u2A77',
+	deg: '\u00B0',
+	Del: '\u2207',
+	Delta: '\u0394',
+	delta: '\u03B4',
+	demptyv: '\u29B1',
+	dfisht: '\u297F',
+	Dfr: '\uD835\uDD07',
+	dfr: '\uD835\uDD21',
+	dHar: '\u2965',
+	dharl: '\u21C3',
+	dharr: '\u21C2',
+	DiacriticalAcute: '\u00B4',
+	DiacriticalDot: '\u02D9',
+	DiacriticalDoubleAcute: '\u02DD',
+	DiacriticalGrave: '\u0060',
+	DiacriticalTilde: '\u02DC',
+	diam: '\u22C4',
+	Diamond: '\u22C4',
+	diamond: '\u22C4',
+	diamondsuit: '\u2666',
+	diams: '\u2666',
+	die: '\u00A8',
+	DifferentialD: '\u2146',
+	digamma: '\u03DD',
+	disin: '\u22F2',
+	div: '\u00F7',
+	divide: '\u00F7',
+	divideontimes: '\u22C7',
+	divonx: '\u22C7',
+	DJcy: '\u0402',
+	djcy: '\u0452',
+	dlcorn: '\u231E',
+	dlcrop: '\u230D',
+	dollar: '\u0024',
+	Dopf: '\uD835\uDD3B',
+	dopf: '\uD835\uDD55',
+	Dot: '\u00A8',
+	dot: '\u02D9',
+	DotDot: '\u20DC',
+	doteq: '\u2250',
+	doteqdot: '\u2251',
+	DotEqual: '\u2250',
+	dotminus: '\u2238',
+	dotplus: '\u2214',
+	dotsquare: '\u22A1',
+	doublebarwedge: '\u2306',
+	DoubleContourIntegral: '\u222F',
+	DoubleDot: '\u00A8',
+	DoubleDownArrow: '\u21D3',
+	DoubleLeftArrow: '\u21D0',
+	DoubleLeftRightArrow: '\u21D4',
+	DoubleLeftTee: '\u2AE4',
+	DoubleLongLeftArrow: '\u27F8',
+	DoubleLongLeftRightArrow: '\u27FA',
+	DoubleLongRightArrow: '\u27F9',
+	DoubleRightArrow: '\u21D2',
+	DoubleRightTee: '\u22A8',
+	DoubleUpArrow: '\u21D1',
+	DoubleUpDownArrow: '\u21D5',
+	DoubleVerticalBar: '\u2225',
+	DownArrow: '\u2193',
+	Downarrow: '\u21D3',
+	downarrow: '\u2193',
+	DownArrowBar: '\u2913',
+	DownArrowUpArrow: '\u21F5',
+	DownBreve: '\u0311',
+	downdownarrows: '\u21CA',
+	downharpoonleft: '\u21C3',
+	downharpoonright: '\u21C2',
+	DownLeftRightVector: '\u2950',
+	DownLeftTeeVector: '\u295E',
+	DownLeftVector: '\u21BD',
+	DownLeftVectorBar: '\u2956',
+	DownRightTeeVector: '\u295F',
+	DownRightVector: '\u21C1',
+	DownRightVectorBar: '\u2957',
+	DownTee: '\u22A4',
+	DownTeeArrow: '\u21A7',
+	drbkarow: '\u2910',
+	drcorn: '\u231F',
+	drcrop: '\u230C',
+	Dscr: '\uD835\uDC9F',
+	dscr: '\uD835\uDCB9',
+	DScy: '\u0405',
+	dscy: '\u0455',
+	dsol: '\u29F6',
+	Dstrok: '\u0110',
+	dstrok: '\u0111',
+	dtdot: '\u22F1',
+	dtri: '\u25BF',
+	dtrif: '\u25BE',
+	duarr: '\u21F5',
+	duhar: '\u296F',
+	dwangle: '\u29A6',
+	DZcy: '\u040F',
+	dzcy: '\u045F',
+	dzigrarr: '\u27FF',
+	Eacute: '\u00C9',
+	eacute: '\u00E9',
+	easter: '\u2A6E',
+	Ecaron: '\u011A',
+	ecaron: '\u011B',
+	ecir: '\u2256',
+	Ecirc: '\u00CA',
+	ecirc: '\u00EA',
+	ecolon: '\u2255',
+	Ecy: '\u042D',
+	ecy: '\u044D',
+	eDDot: '\u2A77',
+	Edot: '\u0116',
+	eDot: '\u2251',
+	edot: '\u0117',
+	ee: '\u2147',
+	efDot: '\u2252',
+	Efr: '\uD835\uDD08',
+	efr: '\uD835\uDD22',
+	eg: '\u2A9A',
+	Egrave: '\u00C8',
+	egrave: '\u00E8',
+	egs: '\u2A96',
+	egsdot: '\u2A98',
+	el: '\u2A99',
+	Element: '\u2208',
+	elinters: '\u23E7',
+	ell: '\u2113',
+	els: '\u2A95',
+	elsdot: '\u2A97',
+	Emacr: '\u0112',
+	emacr: '\u0113',
+	empty: '\u2205',
+	emptyset: '\u2205',
+	EmptySmallSquare: '\u25FB',
+	emptyv: '\u2205',
+	EmptyVerySmallSquare: '\u25AB',
+	emsp: '\u2003',
+	emsp13: '\u2004',
+	emsp14: '\u2005',
+	ENG: '\u014A',
+	eng: '\u014B',
+	ensp: '\u2002',
+	Eogon: '\u0118',
+	eogon: '\u0119',
+	Eopf: '\uD835\uDD3C',
+	eopf: '\uD835\uDD56',
+	epar: '\u22D5',
+	eparsl: '\u29E3',
+	eplus: '\u2A71',
+	epsi: '\u03B5',
+	Epsilon: '\u0395',
+	epsilon: '\u03B5',
+	epsiv: '\u03F5',
+	eqcirc: '\u2256',
+	eqcolon: '\u2255',
+	eqsim: '\u2242',
+	eqslantgtr: '\u2A96',
+	eqslantless: '\u2A95',
+	Equal: '\u2A75',
+	equals: '\u003D',
+	EqualTilde: '\u2242',
+	equest: '\u225F',
+	Equilibrium: '\u21CC',
+	equiv: '\u2261',
+	equivDD: '\u2A78',
+	eqvparsl: '\u29E5',
+	erarr: '\u2971',
+	erDot: '\u2253',
+	Escr: '\u2130',
+	escr: '\u212F',
+	esdot: '\u2250',
+	Esim: '\u2A73',
+	esim: '\u2242',
+	Eta: '\u0397',
+	eta: '\u03B7',
+	ETH: '\u00D0',
+	eth: '\u00F0',
+	Euml: '\u00CB',
+	euml: '\u00EB',
+	euro: '\u20AC',
+	excl: '\u0021',
+	exist: '\u2203',
+	Exists: '\u2203',
+	expectation: '\u2130',
+	ExponentialE: '\u2147',
+	exponentiale: '\u2147',
+	fallingdotseq: '\u2252',
+	Fcy: '\u0424',
+	fcy: '\u0444',
+	female: '\u2640',
+	ffilig: '\uFB03',
+	fflig: '\uFB00',
+	ffllig: '\uFB04',
+	Ffr: '\uD835\uDD09',
+	ffr: '\uD835\uDD23',
+	filig: '\uFB01',
+	FilledSmallSquare: '\u25FC',
+	FilledVerySmallSquare: '\u25AA',
+	fjlig: '\u0066\u006A',
+	flat: '\u266D',
+	fllig: '\uFB02',
+	fltns: '\u25B1',
+	fnof: '\u0192',
+	Fopf: '\uD835\uDD3D',
+	fopf: '\uD835\uDD57',
+	ForAll: '\u2200',
+	forall: '\u2200',
+	fork: '\u22D4',
+	forkv: '\u2AD9',
+	Fouriertrf: '\u2131',
+	fpartint: '\u2A0D',
+	frac12: '\u00BD',
+	frac13: '\u2153',
+	frac14: '\u00BC',
+	frac15: '\u2155',
+	frac16: '\u2159',
+	frac18: '\u215B',
+	frac23: '\u2154',
+	frac25: '\u2156',
+	frac34: '\u00BE',
+	frac35: '\u2157',
+	frac38: '\u215C',
+	frac45: '\u2158',
+	frac56: '\u215A',
+	frac58: '\u215D',
+	frac78: '\u215E',
+	frasl: '\u2044',
+	frown: '\u2322',
+	Fscr: '\u2131',
+	fscr: '\uD835\uDCBB',
+	gacute: '\u01F5',
+	Gamma: '\u0393',
+	gamma: '\u03B3',
+	Gammad: '\u03DC',
+	gammad: '\u03DD',
+	gap: '\u2A86',
+	Gbreve: '\u011E',
+	gbreve: '\u011F',
+	Gcedil: '\u0122',
+	Gcirc: '\u011C',
+	gcirc: '\u011D',
+	Gcy: '\u0413',
+	gcy: '\u0433',
+	Gdot: '\u0120',
+	gdot: '\u0121',
+	gE: '\u2267',
+	ge: '\u2265',
+	gEl: '\u2A8C',
+	gel: '\u22DB',
+	geq: '\u2265',
+	geqq: '\u2267',
+	geqslant: '\u2A7E',
+	ges: '\u2A7E',
+	gescc: '\u2AA9',
+	gesdot: '\u2A80',
+	gesdoto: '\u2A82',
+	gesdotol: '\u2A84',
+	gesl: '\u22DB\uFE00',
+	gesles: '\u2A94',
+	Gfr: '\uD835\uDD0A',
+	gfr: '\uD835\uDD24',
+	Gg: '\u22D9',
+	gg: '\u226B',
+	ggg: '\u22D9',
+	gimel: '\u2137',
+	GJcy: '\u0403',
+	gjcy: '\u0453',
+	gl: '\u2277',
+	gla: '\u2AA5',
+	glE: '\u2A92',
+	glj: '\u2AA4',
+	gnap: '\u2A8A',
+	gnapprox: '\u2A8A',
+	gnE: '\u2269',
+	gne: '\u2A88',
+	gneq: '\u2A88',
+	gneqq: '\u2269',
+	gnsim: '\u22E7',
+	Gopf: '\uD835\uDD3E',
+	gopf: '\uD835\uDD58',
+	grave: '\u0060',
+	GreaterEqual: '\u2265',
+	GreaterEqualLess: '\u22DB',
+	GreaterFullEqual: '\u2267',
+	GreaterGreater: '\u2AA2',
+	GreaterLess: '\u2277',
+	GreaterSlantEqual: '\u2A7E',
+	GreaterTilde: '\u2273',
+	Gscr: '\uD835\uDCA2',
+	gscr: '\u210A',
+	gsim: '\u2273',
+	gsime: '\u2A8E',
+	gsiml: '\u2A90',
+	Gt: '\u226B',
+	GT: '\u003E',
+	gt: '\u003E',
+	gtcc: '\u2AA7',
+	gtcir: '\u2A7A',
+	gtdot: '\u22D7',
+	gtlPar: '\u2995',
+	gtquest: '\u2A7C',
+	gtrapprox: '\u2A86',
+	gtrarr: '\u2978',
+	gtrdot: '\u22D7',
+	gtreqless: '\u22DB',
+	gtreqqless: '\u2A8C',
+	gtrless: '\u2277',
+	gtrsim: '\u2273',
+	gvertneqq: '\u2269\uFE00',
+	gvnE: '\u2269\uFE00',
+	Hacek: '\u02C7',
+	hairsp: '\u200A',
+	half: '\u00BD',
+	hamilt: '\u210B',
+	HARDcy: '\u042A',
+	hardcy: '\u044A',
+	hArr: '\u21D4',
+	harr: '\u2194',
+	harrcir: '\u2948',
+	harrw: '\u21AD',
+	Hat: '\u005E',
+	hbar: '\u210F',
+	Hcirc: '\u0124',
+	hcirc: '\u0125',
+	hearts: '\u2665',
+	heartsuit: '\u2665',
+	hellip: '\u2026',
+	hercon: '\u22B9',
+	Hfr: '\u210C',
+	hfr: '\uD835\uDD25',
+	HilbertSpace: '\u210B',
+	hksearow: '\u2925',
+	hkswarow: '\u2926',
+	hoarr: '\u21FF',
+	homtht: '\u223B',
+	hookleftarrow: '\u21A9',
+	hookrightarrow: '\u21AA',
+	Hopf: '\u210D',
+	hopf: '\uD835\uDD59',
+	horbar: '\u2015',
+	HorizontalLine: '\u2500',
+	Hscr: '\u210B',
+	hscr: '\uD835\uDCBD',
+	hslash: '\u210F',
+	Hstrok: '\u0126',
+	hstrok: '\u0127',
+	HumpDownHump: '\u224E',
+	HumpEqual: '\u224F',
+	hybull: '\u2043',
+	hyphen: '\u2010',
+	Iacute: '\u00CD',
+	iacute: '\u00ED',
+	ic: '\u2063',
+	Icirc: '\u00CE',
+	icirc: '\u00EE',
+	Icy: '\u0418',
+	icy: '\u0438',
+	Idot: '\u0130',
+	IEcy: '\u0415',
+	iecy: '\u0435',
+	iexcl: '\u00A1',
+	iff: '\u21D4',
+	Ifr: '\u2111',
+	ifr: '\uD835\uDD26',
+	Igrave: '\u00CC',
+	igrave: '\u00EC',
+	ii: '\u2148',
+	iiiint: '\u2A0C',
+	iiint: '\u222D',
+	iinfin: '\u29DC',
+	iiota: '\u2129',
+	IJlig: '\u0132',
+	ijlig: '\u0133',
+	Im: '\u2111',
+	Imacr: '\u012A',
+	imacr: '\u012B',
+	image: '\u2111',
+	ImaginaryI: '\u2148',
+	imagline: '\u2110',
+	imagpart: '\u2111',
+	imath: '\u0131',
+	imof: '\u22B7',
+	imped: '\u01B5',
+	Implies: '\u21D2',
+	in: '\u2208',
+	incare: '\u2105',
+	infin: '\u221E',
+	infintie: '\u29DD',
+	inodot: '\u0131',
+	Int: '\u222C',
+	int: '\u222B',
+	intcal: '\u22BA',
+	integers: '\u2124',
+	Integral: '\u222B',
+	intercal: '\u22BA',
+	Intersection: '\u22C2',
+	intlarhk: '\u2A17',
+	intprod: '\u2A3C',
+	InvisibleComma: '\u2063',
+	InvisibleTimes: '\u2062',
+	IOcy: '\u0401',
+	iocy: '\u0451',
+	Iogon: '\u012E',
+	iogon: '\u012F',
+	Iopf: '\uD835\uDD40',
+	iopf: '\uD835\uDD5A',
+	Iota: '\u0399',
+	iota: '\u03B9',
+	iprod: '\u2A3C',
+	iquest: '\u00BF',
+	Iscr: '\u2110',
+	iscr: '\uD835\uDCBE',
+	isin: '\u2208',
+	isindot: '\u22F5',
+	isinE: '\u22F9',
+	isins: '\u22F4',
+	isinsv: '\u22F3',
+	isinv: '\u2208',
+	it: '\u2062',
+	Itilde: '\u0128',
+	itilde: '\u0129',
+	Iukcy: '\u0406',
+	iukcy: '\u0456',
+	Iuml: '\u00CF',
+	iuml: '\u00EF',
+	Jcirc: '\u0134',
+	jcirc: '\u0135',
+	Jcy: '\u0419',
+	jcy: '\u0439',
+	Jfr: '\uD835\uDD0D',
+	jfr: '\uD835\uDD27',
+	jmath: '\u0237',
+	Jopf: '\uD835\uDD41',
+	jopf: '\uD835\uDD5B',
+	Jscr: '\uD835\uDCA5',
+	jscr: '\uD835\uDCBF',
+	Jsercy: '\u0408',
+	jsercy: '\u0458',
+	Jukcy: '\u0404',
+	jukcy: '\u0454',
+	Kappa: '\u039A',
+	kappa: '\u03BA',
+	kappav: '\u03F0',
+	Kcedil: '\u0136',
+	kcedil: '\u0137',
+	Kcy: '\u041A',
+	kcy: '\u043A',
+	Kfr: '\uD835\uDD0E',
+	kfr: '\uD835\uDD28',
+	kgreen: '\u0138',
+	KHcy: '\u0425',
+	khcy: '\u0445',
+	KJcy: '\u040C',
+	kjcy: '\u045C',
+	Kopf: '\uD835\uDD42',
+	kopf: '\uD835\uDD5C',
+	Kscr: '\uD835\uDCA6',
+	kscr: '\uD835\uDCC0',
+	lAarr: '\u21DA',
+	Lacute: '\u0139',
+	lacute: '\u013A',
+	laemptyv: '\u29B4',
+	lagran: '\u2112',
+	Lambda: '\u039B',
+	lambda: '\u03BB',
+	Lang: '\u27EA',
+	lang: '\u27E8',
+	langd: '\u2991',
+	langle: '\u27E8',
+	lap: '\u2A85',
+	Laplacetrf: '\u2112',
+	laquo: '\u00AB',
+	Larr: '\u219E',
+	lArr: '\u21D0',
+	larr: '\u2190',
+	larrb: '\u21E4',
+	larrbfs: '\u291F',
+	larrfs: '\u291D',
+	larrhk: '\u21A9',
+	larrlp: '\u21AB',
+	larrpl: '\u2939',
+	larrsim: '\u2973',
+	larrtl: '\u21A2',
+	lat: '\u2AAB',
+	lAtail: '\u291B',
+	latail: '\u2919',
+	late: '\u2AAD',
+	lates: '\u2AAD\uFE00',
+	lBarr: '\u290E',
+	lbarr: '\u290C',
+	lbbrk: '\u2772',
+	lbrace: '\u007B',
+	lbrack: '\u005B',
+	lbrke: '\u298B',
+	lbrksld: '\u298F',
+	lbrkslu: '\u298D',
+	Lcaron: '\u013D',
+	lcaron: '\u013E',
+	Lcedil: '\u013B',
+	lcedil: '\u013C',
+	lceil: '\u2308',
+	lcub: '\u007B',
+	Lcy: '\u041B',
+	lcy: '\u043B',
+	ldca: '\u2936',
+	ldquo: '\u201C',
+	ldquor: '\u201E',
+	ldrdhar: '\u2967',
+	ldrushar: '\u294B',
+	ldsh: '\u21B2',
+	lE: '\u2266',
+	le: '\u2264',
+	LeftAngleBracket: '\u27E8',
+	LeftArrow: '\u2190',
+	Leftarrow: '\u21D0',
+	leftarrow: '\u2190',
+	LeftArrowBar: '\u21E4',
+	LeftArrowRightArrow: '\u21C6',
+	leftarrowtail: '\u21A2',
+	LeftCeiling: '\u2308',
+	LeftDoubleBracket: '\u27E6',
+	LeftDownTeeVector: '\u2961',
+	LeftDownVector: '\u21C3',
+	LeftDownVectorBar: '\u2959',
+	LeftFloor: '\u230A',
+	leftharpoondown: '\u21BD',
+	leftharpoonup: '\u21BC',
+	leftleftarrows: '\u21C7',
+	LeftRightArrow: '\u2194',
+	Leftrightarrow: '\u21D4',
+	leftrightarrow: '\u2194',
+	leftrightarrows: '\u21C6',
+	leftrightharpoons: '\u21CB',
+	leftrightsquigarrow: '\u21AD',
+	LeftRightVector: '\u294E',
+	LeftTee: '\u22A3',
+	LeftTeeArrow: '\u21A4',
+	LeftTeeVector: '\u295A',
+	leftthreetimes: '\u22CB',
+	LeftTriangle: '\u22B2',
+	LeftTriangleBar: '\u29CF',
+	LeftTriangleEqual: '\u22B4',
+	LeftUpDownVector: '\u2951',
+	LeftUpTeeVector: '\u2960',
+	LeftUpVector: '\u21BF',
+	LeftUpVectorBar: '\u2958',
+	LeftVector: '\u21BC',
+	LeftVectorBar: '\u2952',
+	lEg: '\u2A8B',
+	leg: '\u22DA',
+	leq: '\u2264',
+	leqq: '\u2266',
+	leqslant: '\u2A7D',
+	les: '\u2A7D',
+	lescc: '\u2AA8',
+	lesdot: '\u2A7F',
+	lesdoto: '\u2A81',
+	lesdotor: '\u2A83',
+	lesg: '\u22DA\uFE00',
+	lesges: '\u2A93',
+	lessapprox: '\u2A85',
+	lessdot: '\u22D6',
+	lesseqgtr: '\u22DA',
+	lesseqqgtr: '\u2A8B',
+	LessEqualGreater: '\u22DA',
+	LessFullEqual: '\u2266',
+	LessGreater: '\u2276',
+	lessgtr: '\u2276',
+	LessLess: '\u2AA1',
+	lesssim: '\u2272',
+	LessSlantEqual: '\u2A7D',
+	LessTilde: '\u2272',
+	lfisht: '\u297C',
+	lfloor: '\u230A',
+	Lfr: '\uD835\uDD0F',
+	lfr: '\uD835\uDD29',
+	lg: '\u2276',
+	lgE: '\u2A91',
+	lHar: '\u2962',
+	lhard: '\u21BD',
+	lharu: '\u21BC',
+	lharul: '\u296A',
+	lhblk: '\u2584',
+	LJcy: '\u0409',
+	ljcy: '\u0459',
+	Ll: '\u22D8',
+	ll: '\u226A',
+	llarr: '\u21C7',
+	llcorner: '\u231E',
+	Lleftarrow: '\u21DA',
+	llhard: '\u296B',
+	lltri: '\u25FA',
+	Lmidot: '\u013F',
+	lmidot: '\u0140',
+	lmoust: '\u23B0',
+	lmoustache: '\u23B0',
+	lnap: '\u2A89',
+	lnapprox: '\u2A89',
+	lnE: '\u2268',
+	lne: '\u2A87',
+	lneq: '\u2A87',
+	lneqq: '\u2268',
+	lnsim: '\u22E6',
+	loang: '\u27EC',
+	loarr: '\u21FD',
+	lobrk: '\u27E6',
+	LongLeftArrow: '\u27F5',
+	Longleftarrow: '\u27F8',
+	longleftarrow: '\u27F5',
+	LongLeftRightArrow: '\u27F7',
+	Longleftrightarrow: '\u27FA',
+	longleftrightarrow: '\u27F7',
+	longmapsto: '\u27FC',
+	LongRightArrow: '\u27F6',
+	Longrightarrow: '\u27F9',
+	longrightarrow: '\u27F6',
+	looparrowleft: '\u21AB',
+	looparrowright: '\u21AC',
+	lopar: '\u2985',
+	Lopf: '\uD835\uDD43',
+	lopf: '\uD835\uDD5D',
+	loplus: '\u2A2D',
+	lotimes: '\u2A34',
+	lowast: '\u2217',
+	lowbar: '\u005F',
+	LowerLeftArrow: '\u2199',
+	LowerRightArrow: '\u2198',
+	loz: '\u25CA',
+	lozenge: '\u25CA',
+	lozf: '\u29EB',
+	lpar: '\u0028',
+	lparlt: '\u2993',
+	lrarr: '\u21C6',
+	lrcorner: '\u231F',
+	lrhar: '\u21CB',
+	lrhard: '\u296D',
+	lrm: '\u200E',
+	lrtri: '\u22BF',
+	lsaquo: '\u2039',
+	Lscr: '\u2112',
+	lscr: '\uD835\uDCC1',
+	Lsh: '\u21B0',
+	lsh: '\u21B0',
+	lsim: '\u2272',
+	lsime: '\u2A8D',
+	lsimg: '\u2A8F',
+	lsqb: '\u005B',
+	lsquo: '\u2018',
+	lsquor: '\u201A',
+	Lstrok: '\u0141',
+	lstrok: '\u0142',
+	Lt: '\u226A',
+	LT: '\u003C',
+	lt: '\u003C',
+	ltcc: '\u2AA6',
+	ltcir: '\u2A79',
+	ltdot: '\u22D6',
+	lthree: '\u22CB',
+	ltimes: '\u22C9',
+	ltlarr: '\u2976',
+	ltquest: '\u2A7B',
+	ltri: '\u25C3',
+	ltrie: '\u22B4',
+	ltrif: '\u25C2',
+	ltrPar: '\u2996',
+	lurdshar: '\u294A',
+	luruhar: '\u2966',
+	lvertneqq: '\u2268\uFE00',
+	lvnE: '\u2268\uFE00',
+	macr: '\u00AF',
+	male: '\u2642',
+	malt: '\u2720',
+	maltese: '\u2720',
+	Map: '\u2905',
+	map: '\u21A6',
+	mapsto: '\u21A6',
+	mapstodown: '\u21A7',
+	mapstoleft: '\u21A4',
+	mapstoup: '\u21A5',
+	marker: '\u25AE',
+	mcomma: '\u2A29',
+	Mcy: '\u041C',
+	mcy: '\u043C',
+	mdash: '\u2014',
+	mDDot: '\u223A',
+	measuredangle: '\u2221',
+	MediumSpace: '\u205F',
+	Mellintrf: '\u2133',
+	Mfr: '\uD835\uDD10',
+	mfr: '\uD835\uDD2A',
+	mho: '\u2127',
+	micro: '\u00B5',
+	mid: '\u2223',
+	midast: '\u002A',
+	midcir: '\u2AF0',
+	middot: '\u00B7',
+	minus: '\u2212',
+	minusb: '\u229F',
+	minusd: '\u2238',
+	minusdu: '\u2A2A',
+	MinusPlus: '\u2213',
+	mlcp: '\u2ADB',
+	mldr: '\u2026',
+	mnplus: '\u2213',
+	models: '\u22A7',
+	Mopf: '\uD835\uDD44',
+	mopf: '\uD835\uDD5E',
+	mp: '\u2213',
+	Mscr: '\u2133',
+	mscr: '\uD835\uDCC2',
+	mstpos: '\u223E',
+	Mu: '\u039C',
+	mu: '\u03BC',
+	multimap: '\u22B8',
+	mumap: '\u22B8',
+	nabla: '\u2207',
+	Nacute: '\u0143',
+	nacute: '\u0144',
+	nang: '\u2220\u20D2',
+	nap: '\u2249',
+	napE: '\u2A70\u0338',
+	napid: '\u224B\u0338',
+	napos: '\u0149',
+	napprox: '\u2249',
+	natur: '\u266E',
+	natural: '\u266E',
+	naturals: '\u2115',
+	nbsp: '\u00A0',
+	nbump: '\u224E\u0338',
+	nbumpe: '\u224F\u0338',
+	ncap: '\u2A43',
+	Ncaron: '\u0147',
+	ncaron: '\u0148',
+	Ncedil: '\u0145',
+	ncedil: '\u0146',
+	ncong: '\u2247',
+	ncongdot: '\u2A6D\u0338',
+	ncup: '\u2A42',
+	Ncy: '\u041D',
+	ncy: '\u043D',
+	ndash: '\u2013',
+	ne: '\u2260',
+	nearhk: '\u2924',
+	neArr: '\u21D7',
+	nearr: '\u2197',
+	nearrow: '\u2197',
+	nedot: '\u2250\u0338',
+	NegativeMediumSpace: '\u200B',
+	NegativeThickSpace: '\u200B',
+	NegativeThinSpace: '\u200B',
+	NegativeVeryThinSpace: '\u200B',
+	nequiv: '\u2262',
+	nesear: '\u2928',
+	nesim: '\u2242\u0338',
+	NestedGreaterGreater: '\u226B',
+	NestedLessLess: '\u226A',
+	NewLine: '\u000A',
+	nexist: '\u2204',
+	nexists: '\u2204',
+	Nfr: '\uD835\uDD11',
+	nfr: '\uD835\uDD2B',
+	ngE: '\u2267\u0338',
+	nge: '\u2271',
+	ngeq: '\u2271',
+	ngeqq: '\u2267\u0338',
+	ngeqslant: '\u2A7E\u0338',
+	nges: '\u2A7E\u0338',
+	nGg: '\u22D9\u0338',
+	ngsim: '\u2275',
+	nGt: '\u226B\u20D2',
+	ngt: '\u226F',
+	ngtr: '\u226F',
+	nGtv: '\u226B\u0338',
+	nhArr: '\u21CE',
+	nharr: '\u21AE',
+	nhpar: '\u2AF2',
+	ni: '\u220B',
+	nis: '\u22FC',
+	nisd: '\u22FA',
+	niv: '\u220B',
+	NJcy: '\u040A',
+	njcy: '\u045A',
+	nlArr: '\u21CD',
+	nlarr: '\u219A',
+	nldr: '\u2025',
+	nlE: '\u2266\u0338',
+	nle: '\u2270',
+	nLeftarrow: '\u21CD',
+	nleftarrow: '\u219A',
+	nLeftrightarrow: '\u21CE',
+	nleftrightarrow: '\u21AE',
+	nleq: '\u2270',
+	nleqq: '\u2266\u0338',
+	nleqslant: '\u2A7D\u0338',
+	nles: '\u2A7D\u0338',
+	nless: '\u226E',
+	nLl: '\u22D8\u0338',
+	nlsim: '\u2274',
+	nLt: '\u226A\u20D2',
+	nlt: '\u226E',
+	nltri: '\u22EA',
+	nltrie: '\u22EC',
+	nLtv: '\u226A\u0338',
+	nmid: '\u2224',
+	NoBreak: '\u2060',
+	NonBreakingSpace: '\u00A0',
+	Nopf: '\u2115',
+	nopf: '\uD835\uDD5F',
+	Not: '\u2AEC',
+	not: '\u00AC',
+	NotCongruent: '\u2262',
+	NotCupCap: '\u226D',
+	NotDoubleVerticalBar: '\u2226',
+	NotElement: '\u2209',
+	NotEqual: '\u2260',
+	NotEqualTilde: '\u2242\u0338',
+	NotExists: '\u2204',
+	NotGreater: '\u226F',
+	NotGreaterEqual: '\u2271',
+	NotGreaterFullEqual: '\u2267\u0338',
+	NotGreaterGreater: '\u226B\u0338',
+	NotGreaterLess: '\u2279',
+	NotGreaterSlantEqual: '\u2A7E\u0338',
+	NotGreaterTilde: '\u2275',
+	NotHumpDownHump: '\u224E\u0338',
+	NotHumpEqual: '\u224F\u0338',
+	notin: '\u2209',
+	notindot: '\u22F5\u0338',
+	notinE: '\u22F9\u0338',
+	notinva: '\u2209',
+	notinvb: '\u22F7',
+	notinvc: '\u22F6',
+	NotLeftTriangle: '\u22EA',
+	NotLeftTriangleBar: '\u29CF\u0338',
+	NotLeftTriangleEqual: '\u22EC',
+	NotLess: '\u226E',
+	NotLessEqual: '\u2270',
+	NotLessGreater: '\u2278',
+	NotLessLess: '\u226A\u0338',
+	NotLessSlantEqual: '\u2A7D\u0338',
+	NotLessTilde: '\u2274',
+	NotNestedGreaterGreater: '\u2AA2\u0338',
+	NotNestedLessLess: '\u2AA1\u0338',
+	notni: '\u220C',
+	notniva: '\u220C',
+	notnivb: '\u22FE',
+	notnivc: '\u22FD',
+	NotPrecedes: '\u2280',
+	NotPrecedesEqual: '\u2AAF\u0338',
+	NotPrecedesSlantEqual: '\u22E0',
+	NotReverseElement: '\u220C',
+	NotRightTriangle: '\u22EB',
+	NotRightTriangleBar: '\u29D0\u0338',
+	NotRightTriangleEqual: '\u22ED',
+	NotSquareSubset: '\u228F\u0338',
+	NotSquareSubsetEqual: '\u22E2',
+	NotSquareSuperset: '\u2290\u0338',
+	NotSquareSupersetEqual: '\u22E3',
+	NotSubset: '\u2282\u20D2',
+	NotSubsetEqual: '\u2288',
+	NotSucceeds: '\u2281',
+	NotSucceedsEqual: '\u2AB0\u0338',
+	NotSucceedsSlantEqual: '\u22E1',
+	NotSucceedsTilde: '\u227F\u0338',
+	NotSuperset: '\u2283\u20D2',
+	NotSupersetEqual: '\u2289',
+	NotTilde: '\u2241',
+	NotTildeEqual: '\u2244',
+	NotTildeFullEqual: '\u2247',
+	NotTildeTilde: '\u2249',
+	NotVerticalBar: '\u2224',
+	npar: '\u2226',
+	nparallel: '\u2226',
+	nparsl: '\u2AFD\u20E5',
+	npart: '\u2202\u0338',
+	npolint: '\u2A14',
+	npr: '\u2280',
+	nprcue: '\u22E0',
+	npre: '\u2AAF\u0338',
+	nprec: '\u2280',
+	npreceq: '\u2AAF\u0338',
+	nrArr: '\u21CF',
+	nrarr: '\u219B',
+	nrarrc: '\u2933\u0338',
+	nrarrw: '\u219D\u0338',
+	nRightarrow: '\u21CF',
+	nrightarrow: '\u219B',
+	nrtri: '\u22EB',
+	nrtrie: '\u22ED',
+	nsc: '\u2281',
+	nsccue: '\u22E1',
+	nsce: '\u2AB0\u0338',
+	Nscr: '\uD835\uDCA9',
+	nscr: '\uD835\uDCC3',
+	nshortmid: '\u2224',
+	nshortparallel: '\u2226',
+	nsim: '\u2241',
+	nsime: '\u2244',
+	nsimeq: '\u2244',
+	nsmid: '\u2224',
+	nspar: '\u2226',
+	nsqsube: '\u22E2',
+	nsqsupe: '\u22E3',
+	nsub: '\u2284',
+	nsubE: '\u2AC5\u0338',
+	nsube: '\u2288',
+	nsubset: '\u2282\u20D2',
+	nsubseteq: '\u2288',
+	nsubseteqq: '\u2AC5\u0338',
+	nsucc: '\u2281',
+	nsucceq: '\u2AB0\u0338',
+	nsup: '\u2285',
+	nsupE: '\u2AC6\u0338',
+	nsupe: '\u2289',
+	nsupset: '\u2283\u20D2',
+	nsupseteq: '\u2289',
+	nsupseteqq: '\u2AC6\u0338',
+	ntgl: '\u2279',
+	Ntilde: '\u00D1',
+	ntilde: '\u00F1',
+	ntlg: '\u2278',
+	ntriangleleft: '\u22EA',
+	ntrianglelefteq: '\u22EC',
+	ntriangleright: '\u22EB',
+	ntrianglerighteq: '\u22ED',
+	Nu: '\u039D',
+	nu: '\u03BD',
+	num: '\u0023',
+	numero: '\u2116',
+	numsp: '\u2007',
+	nvap: '\u224D\u20D2',
+	nVDash: '\u22AF',
+	nVdash: '\u22AE',
+	nvDash: '\u22AD',
+	nvdash: '\u22AC',
+	nvge: '\u2265\u20D2',
+	nvgt: '\u003E\u20D2',
+	nvHarr: '\u2904',
+	nvinfin: '\u29DE',
+	nvlArr: '\u2902',
+	nvle: '\u2264\u20D2',
+	nvlt: '\u003C\u20D2',
+	nvltrie: '\u22B4\u20D2',
+	nvrArr: '\u2903',
+	nvrtrie: '\u22B5\u20D2',
+	nvsim: '\u223C\u20D2',
+	nwarhk: '\u2923',
+	nwArr: '\u21D6',
+	nwarr: '\u2196',
+	nwarrow: '\u2196',
+	nwnear: '\u2927',
+	Oacute: '\u00D3',
+	oacute: '\u00F3',
+	oast: '\u229B',
+	ocir: '\u229A',
+	Ocirc: '\u00D4',
+	ocirc: '\u00F4',
+	Ocy: '\u041E',
+	ocy: '\u043E',
+	odash: '\u229D',
+	Odblac: '\u0150',
+	odblac: '\u0151',
+	odiv: '\u2A38',
+	odot: '\u2299',
+	odsold: '\u29BC',
+	OElig: '\u0152',
+	oelig: '\u0153',
+	ofcir: '\u29BF',
+	Ofr: '\uD835\uDD12',
+	ofr: '\uD835\uDD2C',
+	ogon: '\u02DB',
+	Ograve: '\u00D2',
+	ograve: '\u00F2',
+	ogt: '\u29C1',
+	ohbar: '\u29B5',
+	ohm: '\u03A9',
+	oint: '\u222E',
+	olarr: '\u21BA',
+	olcir: '\u29BE',
+	olcross: '\u29BB',
+	oline: '\u203E',
+	olt: '\u29C0',
+	Omacr: '\u014C',
+	omacr: '\u014D',
+	Omega: '\u03A9',
+	omega: '\u03C9',
+	Omicron: '\u039F',
+	omicron: '\u03BF',
+	omid: '\u29B6',
+	ominus: '\u2296',
+	Oopf: '\uD835\uDD46',
+	oopf: '\uD835\uDD60',
+	opar: '\u29B7',
+	OpenCurlyDoubleQuote: '\u201C',
+	OpenCurlyQuote: '\u2018',
+	operp: '\u29B9',
+	oplus: '\u2295',
+	Or: '\u2A54',
+	or: '\u2228',
+	orarr: '\u21BB',
+	ord: '\u2A5D',
+	order: '\u2134',
+	orderof: '\u2134',
+	ordf: '\u00AA',
+	ordm: '\u00BA',
+	origof: '\u22B6',
+	oror: '\u2A56',
+	orslope: '\u2A57',
+	orv: '\u2A5B',
+	oS: '\u24C8',
+	Oscr: '\uD835\uDCAA',
+	oscr: '\u2134',
+	Oslash: '\u00D8',
+	oslash: '\u00F8',
+	osol: '\u2298',
+	Otilde: '\u00D5',
+	otilde: '\u00F5',
+	Otimes: '\u2A37',
+	otimes: '\u2297',
+	otimesas: '\u2A36',
+	Ouml: '\u00D6',
+	ouml: '\u00F6',
+	ovbar: '\u233D',
+	OverBar: '\u203E',
+	OverBrace: '\u23DE',
+	OverBracket: '\u23B4',
+	OverParenthesis: '\u23DC',
+	par: '\u2225',
+	para: '\u00B6',
+	parallel: '\u2225',
+	parsim: '\u2AF3',
+	parsl: '\u2AFD',
+	part: '\u2202',
+	PartialD: '\u2202',
+	Pcy: '\u041F',
+	pcy: '\u043F',
+	percnt: '\u0025',
+	period: '\u002E',
+	permil: '\u2030',
+	perp: '\u22A5',
+	pertenk: '\u2031',
+	Pfr: '\uD835\uDD13',
+	pfr: '\uD835\uDD2D',
+	Phi: '\u03A6',
+	phi: '\u03C6',
+	phiv: '\u03D5',
+	phmmat: '\u2133',
+	phone: '\u260E',
+	Pi: '\u03A0',
+	pi: '\u03C0',
+	pitchfork: '\u22D4',
+	piv: '\u03D6',
+	planck: '\u210F',
+	planckh: '\u210E',
+	plankv: '\u210F',
+	plus: '\u002B',
+	plusacir: '\u2A23',
+	plusb: '\u229E',
+	pluscir: '\u2A22',
+	plusdo: '\u2214',
+	plusdu: '\u2A25',
+	pluse: '\u2A72',
+	PlusMinus: '\u00B1',
+	plusmn: '\u00B1',
+	plussim: '\u2A26',
+	plustwo: '\u2A27',
+	pm: '\u00B1',
+	Poincareplane: '\u210C',
+	pointint: '\u2A15',
+	Popf: '\u2119',
+	popf: '\uD835\uDD61',
+	pound: '\u00A3',
+	Pr: '\u2ABB',
+	pr: '\u227A',
+	prap: '\u2AB7',
+	prcue: '\u227C',
+	prE: '\u2AB3',
+	pre: '\u2AAF',
+	prec: '\u227A',
+	precapprox: '\u2AB7',
+	preccurlyeq: '\u227C',
+	Precedes: '\u227A',
+	PrecedesEqual: '\u2AAF',
+	PrecedesSlantEqual: '\u227C',
+	PrecedesTilde: '\u227E',
+	preceq: '\u2AAF',
+	precnapprox: '\u2AB9',
+	precneqq: '\u2AB5',
+	precnsim: '\u22E8',
+	precsim: '\u227E',
+	Prime: '\u2033',
+	prime: '\u2032',
+	primes: '\u2119',
+	prnap: '\u2AB9',
+	prnE: '\u2AB5',
+	prnsim: '\u22E8',
+	prod: '\u220F',
+	Product: '\u220F',
+	profalar: '\u232E',
+	profline: '\u2312',
+	profsurf: '\u2313',
+	prop: '\u221D',
+	Proportion: '\u2237',
+	Proportional: '\u221D',
+	propto: '\u221D',
+	prsim: '\u227E',
+	prurel: '\u22B0',
+	Pscr: '\uD835\uDCAB',
+	pscr: '\uD835\uDCC5',
+	Psi: '\u03A8',
+	psi: '\u03C8',
+	puncsp: '\u2008',
+	Qfr: '\uD835\uDD14',
+	qfr: '\uD835\uDD2E',
+	qint: '\u2A0C',
+	Qopf: '\u211A',
+	qopf: '\uD835\uDD62',
+	qprime: '\u2057',
+	Qscr: '\uD835\uDCAC',
+	qscr: '\uD835\uDCC6',
+	quaternions: '\u210D',
+	quatint: '\u2A16',
+	quest: '\u003F',
+	questeq: '\u225F',
+	QUOT: '\u0022',
+	quot: '\u0022',
+	rAarr: '\u21DB',
+	race: '\u223D\u0331',
+	Racute: '\u0154',
+	racute: '\u0155',
+	radic: '\u221A',
+	raemptyv: '\u29B3',
+	Rang: '\u27EB',
+	rang: '\u27E9',
+	rangd: '\u2992',
+	range: '\u29A5',
+	rangle: '\u27E9',
+	raquo: '\u00BB',
+	Rarr: '\u21A0',
+	rArr: '\u21D2',
+	rarr: '\u2192',
+	rarrap: '\u2975',
+	rarrb: '\u21E5',
+	rarrbfs: '\u2920',
+	rarrc: '\u2933',
+	rarrfs: '\u291E',
+	rarrhk: '\u21AA',
+	rarrlp: '\u21AC',
+	rarrpl: '\u2945',
+	rarrsim: '\u2974',
+	Rarrtl: '\u2916',
+	rarrtl: '\u21A3',
+	rarrw: '\u219D',
+	rAtail: '\u291C',
+	ratail: '\u291A',
+	ratio: '\u2236',
+	rationals: '\u211A',
+	RBarr: '\u2910',
+	rBarr: '\u290F',
+	rbarr: '\u290D',
+	rbbrk: '\u2773',
+	rbrace: '\u007D',
+	rbrack: '\u005D',
+	rbrke: '\u298C',
+	rbrksld: '\u298E',
+	rbrkslu: '\u2990',
+	Rcaron: '\u0158',
+	rcaron: '\u0159',
+	Rcedil: '\u0156',
+	rcedil: '\u0157',
+	rceil: '\u2309',
+	rcub: '\u007D',
+	Rcy: '\u0420',
+	rcy: '\u0440',
+	rdca: '\u2937',
+	rdldhar: '\u2969',
+	rdquo: '\u201D',
+	rdquor: '\u201D',
+	rdsh: '\u21B3',
+	Re: '\u211C',
+	real: '\u211C',
+	realine: '\u211B',
+	realpart: '\u211C',
+	reals: '\u211D',
+	rect: '\u25AD',
+	REG: '\u00AE',
+	reg: '\u00AE',
+	ReverseElement: '\u220B',
+	ReverseEquilibrium: '\u21CB',
+	ReverseUpEquilibrium: '\u296F',
+	rfisht: '\u297D',
+	rfloor: '\u230B',
+	Rfr: '\u211C',
+	rfr: '\uD835\uDD2F',
+	rHar: '\u2964',
+	rhard: '\u21C1',
+	rharu: '\u21C0',
+	rharul: '\u296C',
+	Rho: '\u03A1',
+	rho: '\u03C1',
+	rhov: '\u03F1',
+	RightAngleBracket: '\u27E9',
+	RightArrow: '\u2192',
+	Rightarrow: '\u21D2',
+	rightarrow: '\u2192',
+	RightArrowBar: '\u21E5',
+	RightArrowLeftArrow: '\u21C4',
+	rightarrowtail: '\u21A3',
+	RightCeiling: '\u2309',
+	RightDoubleBracket: '\u27E7',
+	RightDownTeeVector: '\u295D',
+	RightDownVector: '\u21C2',
+	RightDownVectorBar: '\u2955',
+	RightFloor: '\u230B',
+	rightharpoondown: '\u21C1',
+	rightharpoonup: '\u21C0',
+	rightleftarrows: '\u21C4',
+	rightleftharpoons: '\u21CC',
+	rightrightarrows: '\u21C9',
+	rightsquigarrow: '\u219D',
+	RightTee: '\u22A2',
+	RightTeeArrow: '\u21A6',
+	RightTeeVector: '\u295B',
+	rightthreetimes: '\u22CC',
+	RightTriangle: '\u22B3',
+	RightTriangleBar: '\u29D0',
+	RightTriangleEqual: '\u22B5',
+	RightUpDownVector: '\u294F',
+	RightUpTeeVector: '\u295C',
+	RightUpVector: '\u21BE',
+	RightUpVectorBar: '\u2954',
+	RightVector: '\u21C0',
+	RightVectorBar: '\u2953',
+	ring: '\u02DA',
+	risingdotseq: '\u2253',
+	rlarr: '\u21C4',
+	rlhar: '\u21CC',
+	rlm: '\u200F',
+	rmoust: '\u23B1',
+	rmoustache: '\u23B1',
+	rnmid: '\u2AEE',
+	roang: '\u27ED',
+	roarr: '\u21FE',
+	robrk: '\u27E7',
+	ropar: '\u2986',
+	Ropf: '\u211D',
+	ropf: '\uD835\uDD63',
+	roplus: '\u2A2E',
+	rotimes: '\u2A35',
+	RoundImplies: '\u2970',
+	rpar: '\u0029',
+	rpargt: '\u2994',
+	rppolint: '\u2A12',
+	rrarr: '\u21C9',
+	Rrightarrow: '\u21DB',
+	rsaquo: '\u203A',
+	Rscr: '\u211B',
+	rscr: '\uD835\uDCC7',
+	Rsh: '\u21B1',
+	rsh: '\u21B1',
+	rsqb: '\u005D',
+	rsquo: '\u2019',
+	rsquor: '\u2019',
+	rthree: '\u22CC',
+	rtimes: '\u22CA',
+	rtri: '\u25B9',
+	rtrie: '\u22B5',
+	rtrif: '\u25B8',
+	rtriltri: '\u29CE',
+	RuleDelayed: '\u29F4',
+	ruluhar: '\u2968',
+	rx: '\u211E',
+	Sacute: '\u015A',
+	sacute: '\u015B',
+	sbquo: '\u201A',
+	Sc: '\u2ABC',
+	sc: '\u227B',
+	scap: '\u2AB8',
+	Scaron: '\u0160',
+	scaron: '\u0161',
+	sccue: '\u227D',
+	scE: '\u2AB4',
+	sce: '\u2AB0',
+	Scedil: '\u015E',
+	scedil: '\u015F',
+	Scirc: '\u015C',
+	scirc: '\u015D',
+	scnap: '\u2ABA',
+	scnE: '\u2AB6',
+	scnsim: '\u22E9',
+	scpolint: '\u2A13',
+	scsim: '\u227F',
+	Scy: '\u0421',
+	scy: '\u0441',
+	sdot: '\u22C5',
+	sdotb: '\u22A1',
+	sdote: '\u2A66',
+	searhk: '\u2925',
+	seArr: '\u21D8',
+	searr: '\u2198',
+	searrow: '\u2198',
+	sect: '\u00A7',
+	semi: '\u003B',
+	seswar: '\u2929',
+	setminus: '\u2216',
+	setmn: '\u2216',
+	sext: '\u2736',
+	Sfr: '\uD835\uDD16',
+	sfr: '\uD835\uDD30',
+	sfrown: '\u2322',
+	sharp: '\u266F',
+	SHCHcy: '\u0429',
+	shchcy: '\u0449',
+	SHcy: '\u0428',
+	shcy: '\u0448',
+	ShortDownArrow: '\u2193',
+	ShortLeftArrow: '\u2190',
+	shortmid: '\u2223',
+	shortparallel: '\u2225',
+	ShortRightArrow: '\u2192',
+	ShortUpArrow: '\u2191',
+	shy: '\u00AD',
+	Sigma: '\u03A3',
+	sigma: '\u03C3',
+	sigmaf: '\u03C2',
+	sigmav: '\u03C2',
+	sim: '\u223C',
+	simdot: '\u2A6A',
+	sime: '\u2243',
+	simeq: '\u2243',
+	simg: '\u2A9E',
+	simgE: '\u2AA0',
+	siml: '\u2A9D',
+	simlE: '\u2A9F',
+	simne: '\u2246',
+	simplus: '\u2A24',
+	simrarr: '\u2972',
+	slarr: '\u2190',
+	SmallCircle: '\u2218',
+	smallsetminus: '\u2216',
+	smashp: '\u2A33',
+	smeparsl: '\u29E4',
+	smid: '\u2223',
+	smile: '\u2323',
+	smt: '\u2AAA',
+	smte: '\u2AAC',
+	smtes: '\u2AAC\uFE00',
+	SOFTcy: '\u042C',
+	softcy: '\u044C',
+	sol: '\u002F',
+	solb: '\u29C4',
+	solbar: '\u233F',
+	Sopf: '\uD835\uDD4A',
+	sopf: '\uD835\uDD64',
+	spades: '\u2660',
+	spadesuit: '\u2660',
+	spar: '\u2225',
+	sqcap: '\u2293',
+	sqcaps: '\u2293\uFE00',
+	sqcup: '\u2294',
+	sqcups: '\u2294\uFE00',
+	Sqrt: '\u221A',
+	sqsub: '\u228F',
+	sqsube: '\u2291',
+	sqsubset: '\u228F',
+	sqsubseteq: '\u2291',
+	sqsup: '\u2290',
+	sqsupe: '\u2292',
+	sqsupset: '\u2290',
+	sqsupseteq: '\u2292',
+	squ: '\u25A1',
+	Square: '\u25A1',
+	square: '\u25A1',
+	SquareIntersection: '\u2293',
+	SquareSubset: '\u228F',
+	SquareSubsetEqual: '\u2291',
+	SquareSuperset: '\u2290',
+	SquareSupersetEqual: '\u2292',
+	SquareUnion: '\u2294',
+	squarf: '\u25AA',
+	squf: '\u25AA',
+	srarr: '\u2192',
+	Sscr: '\uD835\uDCAE',
+	sscr: '\uD835\uDCC8',
+	ssetmn: '\u2216',
+	ssmile: '\u2323',
+	sstarf: '\u22C6',
+	Star: '\u22C6',
+	star: '\u2606',
+	starf: '\u2605',
+	straightepsilon: '\u03F5',
+	straightphi: '\u03D5',
+	strns: '\u00AF',
+	Sub: '\u22D0',
+	sub: '\u2282',
+	subdot: '\u2ABD',
+	subE: '\u2AC5',
+	sube: '\u2286',
+	subedot: '\u2AC3',
+	submult: '\u2AC1',
+	subnE: '\u2ACB',
+	subne: '\u228A',
+	subplus: '\u2ABF',
+	subrarr: '\u2979',
+	Subset: '\u22D0',
+	subset: '\u2282',
+	subseteq: '\u2286',
+	subseteqq: '\u2AC5',
+	SubsetEqual: '\u2286',
+	subsetneq: '\u228A',
+	subsetneqq: '\u2ACB',
+	subsim: '\u2AC7',
+	subsub: '\u2AD5',
+	subsup: '\u2AD3',
+	succ: '\u227B',
+	succapprox: '\u2AB8',
+	succcurlyeq: '\u227D',
+	Succeeds: '\u227B',
+	SucceedsEqual: '\u2AB0',
+	SucceedsSlantEqual: '\u227D',
+	SucceedsTilde: '\u227F',
+	succeq: '\u2AB0',
+	succnapprox: '\u2ABA',
+	succneqq: '\u2AB6',
+	succnsim: '\u22E9',
+	succsim: '\u227F',
+	SuchThat: '\u220B',
+	Sum: '\u2211',
+	sum: '\u2211',
+	sung: '\u266A',
+	Sup: '\u22D1',
+	sup: '\u2283',
+	sup1: '\u00B9',
+	sup2: '\u00B2',
+	sup3: '\u00B3',
+	supdot: '\u2ABE',
+	supdsub: '\u2AD8',
+	supE: '\u2AC6',
+	supe: '\u2287',
+	supedot: '\u2AC4',
+	Superset: '\u2283',
+	SupersetEqual: '\u2287',
+	suphsol: '\u27C9',
+	suphsub: '\u2AD7',
+	suplarr: '\u297B',
+	supmult: '\u2AC2',
+	supnE: '\u2ACC',
+	supne: '\u228B',
+	supplus: '\u2AC0',
+	Supset: '\u22D1',
+	supset: '\u2283',
+	supseteq: '\u2287',
+	supseteqq: '\u2AC6',
+	supsetneq: '\u228B',
+	supsetneqq: '\u2ACC',
+	supsim: '\u2AC8',
+	supsub: '\u2AD4',
+	supsup: '\u2AD6',
+	swarhk: '\u2926',
+	swArr: '\u21D9',
+	swarr: '\u2199',
+	swarrow: '\u2199',
+	swnwar: '\u292A',
+	szlig: '\u00DF',
+	Tab: '\u0009',
+	target: '\u2316',
+	Tau: '\u03A4',
+	tau: '\u03C4',
+	tbrk: '\u23B4',
+	Tcaron: '\u0164',
+	tcaron: '\u0165',
+	Tcedil: '\u0162',
+	tcedil: '\u0163',
+	Tcy: '\u0422',
+	tcy: '\u0442',
+	tdot: '\u20DB',
+	telrec: '\u2315',
+	Tfr: '\uD835\uDD17',
+	tfr: '\uD835\uDD31',
+	there4: '\u2234',
+	Therefore: '\u2234',
+	therefore: '\u2234',
+	Theta: '\u0398',
+	theta: '\u03B8',
+	thetasym: '\u03D1',
+	thetav: '\u03D1',
+	thickapprox: '\u2248',
+	thicksim: '\u223C',
+	ThickSpace: '\u205F\u200A',
+	thinsp: '\u2009',
+	ThinSpace: '\u2009',
+	thkap: '\u2248',
+	thksim: '\u223C',
+	THORN: '\u00DE',
+	thorn: '\u00FE',
+	Tilde: '\u223C',
+	tilde: '\u02DC',
+	TildeEqual: '\u2243',
+	TildeFullEqual: '\u2245',
+	TildeTilde: '\u2248',
+	times: '\u00D7',
+	timesb: '\u22A0',
+	timesbar: '\u2A31',
+	timesd: '\u2A30',
+	tint: '\u222D',
+	toea: '\u2928',
+	top: '\u22A4',
+	topbot: '\u2336',
+	topcir: '\u2AF1',
+	Topf: '\uD835\uDD4B',
+	topf: '\uD835\uDD65',
+	topfork: '\u2ADA',
+	tosa: '\u2929',
+	tprime: '\u2034',
+	TRADE: '\u2122',
+	trade: '\u2122',
+	triangle: '\u25B5',
+	triangledown: '\u25BF',
+	triangleleft: '\u25C3',
+	trianglelefteq: '\u22B4',
+	triangleq: '\u225C',
+	triangleright: '\u25B9',
+	trianglerighteq: '\u22B5',
+	tridot: '\u25EC',
+	trie: '\u225C',
+	triminus: '\u2A3A',
+	TripleDot: '\u20DB',
+	triplus: '\u2A39',
+	trisb: '\u29CD',
+	tritime: '\u2A3B',
+	trpezium: '\u23E2',
+	Tscr: '\uD835\uDCAF',
+	tscr: '\uD835\uDCC9',
+	TScy: '\u0426',
+	tscy: '\u0446',
+	TSHcy: '\u040B',
+	tshcy: '\u045B',
+	Tstrok: '\u0166',
+	tstrok: '\u0167',
+	twixt: '\u226C',
+	twoheadleftarrow: '\u219E',
+	twoheadrightarrow: '\u21A0',
+	Uacute: '\u00DA',
+	uacute: '\u00FA',
+	Uarr: '\u219F',
+	uArr: '\u21D1',
+	uarr: '\u2191',
+	Uarrocir: '\u2949',
+	Ubrcy: '\u040E',
+	ubrcy: '\u045E',
+	Ubreve: '\u016C',
+	ubreve: '\u016D',
+	Ucirc: '\u00DB',
+	ucirc: '\u00FB',
+	Ucy: '\u0423',
+	ucy: '\u0443',
+	udarr: '\u21C5',
+	Udblac: '\u0170',
+	udblac: '\u0171',
+	udhar: '\u296E',
+	ufisht: '\u297E',
+	Ufr: '\uD835\uDD18',
+	ufr: '\uD835\uDD32',
+	Ugrave: '\u00D9',
+	ugrave: '\u00F9',
+	uHar: '\u2963',
+	uharl: '\u21BF',
+	uharr: '\u21BE',
+	uhblk: '\u2580',
+	ulcorn: '\u231C',
+	ulcorner: '\u231C',
+	ulcrop: '\u230F',
+	ultri: '\u25F8',
+	Umacr: '\u016A',
+	umacr: '\u016B',
+	uml: '\u00A8',
+	UnderBar: '\u005F',
+	UnderBrace: '\u23DF',
+	UnderBracket: '\u23B5',
+	UnderParenthesis: '\u23DD',
+	Union: '\u22C3',
+	UnionPlus: '\u228E',
+	Uogon: '\u0172',
+	uogon: '\u0173',
+	Uopf: '\uD835\uDD4C',
+	uopf: '\uD835\uDD66',
+	UpArrow: '\u2191',
+	Uparrow: '\u21D1',
+	uparrow: '\u2191',
+	UpArrowBar: '\u2912',
+	UpArrowDownArrow: '\u21C5',
+	UpDownArrow: '\u2195',
+	Updownarrow: '\u21D5',
+	updownarrow: '\u2195',
+	UpEquilibrium: '\u296E',
+	upharpoonleft: '\u21BF',
+	upharpoonright: '\u21BE',
+	uplus: '\u228E',
+	UpperLeftArrow: '\u2196',
+	UpperRightArrow: '\u2197',
+	Upsi: '\u03D2',
+	upsi: '\u03C5',
+	upsih: '\u03D2',
+	Upsilon: '\u03A5',
+	upsilon: '\u03C5',
+	UpTee: '\u22A5',
+	UpTeeArrow: '\u21A5',
+	upuparrows: '\u21C8',
+	urcorn: '\u231D',
+	urcorner: '\u231D',
+	urcrop: '\u230E',
+	Uring: '\u016E',
+	uring: '\u016F',
+	urtri: '\u25F9',
+	Uscr: '\uD835\uDCB0',
+	uscr: '\uD835\uDCCA',
+	utdot: '\u22F0',
+	Utilde: '\u0168',
+	utilde: '\u0169',
+	utri: '\u25B5',
+	utrif: '\u25B4',
+	uuarr: '\u21C8',
+	Uuml: '\u00DC',
+	uuml: '\u00FC',
+	uwangle: '\u29A7',
+	vangrt: '\u299C',
+	varepsilon: '\u03F5',
+	varkappa: '\u03F0',
+	varnothing: '\u2205',
+	varphi: '\u03D5',
+	varpi: '\u03D6',
+	varpropto: '\u221D',
+	vArr: '\u21D5',
+	varr: '\u2195',
+	varrho: '\u03F1',
+	varsigma: '\u03C2',
+	varsubsetneq: '\u228A\uFE00',
+	varsubsetneqq: '\u2ACB\uFE00',
+	varsupsetneq: '\u228B\uFE00',
+	varsupsetneqq: '\u2ACC\uFE00',
+	vartheta: '\u03D1',
+	vartriangleleft: '\u22B2',
+	vartriangleright: '\u22B3',
+	Vbar: '\u2AEB',
+	vBar: '\u2AE8',
+	vBarv: '\u2AE9',
+	Vcy: '\u0412',
+	vcy: '\u0432',
+	VDash: '\u22AB',
+	Vdash: '\u22A9',
+	vDash: '\u22A8',
+	vdash: '\u22A2',
+	Vdashl: '\u2AE6',
+	Vee: '\u22C1',
+	vee: '\u2228',
+	veebar: '\u22BB',
+	veeeq: '\u225A',
+	vellip: '\u22EE',
+	Verbar: '\u2016',
+	verbar: '\u007C',
+	Vert: '\u2016',
+	vert: '\u007C',
+	VerticalBar: '\u2223',
+	VerticalLine: '\u007C',
+	VerticalSeparator: '\u2758',
+	VerticalTilde: '\u2240',
+	VeryThinSpace: '\u200A',
+	Vfr: '\uD835\uDD19',
+	vfr: '\uD835\uDD33',
+	vltri: '\u22B2',
+	vnsub: '\u2282\u20D2',
+	vnsup: '\u2283\u20D2',
+	Vopf: '\uD835\uDD4D',
+	vopf: '\uD835\uDD67',
+	vprop: '\u221D',
+	vrtri: '\u22B3',
+	Vscr: '\uD835\uDCB1',
+	vscr: '\uD835\uDCCB',
+	vsubnE: '\u2ACB\uFE00',
+	vsubne: '\u228A\uFE00',
+	vsupnE: '\u2ACC\uFE00',
+	vsupne: '\u228B\uFE00',
+	Vvdash: '\u22AA',
+	vzigzag: '\u299A',
+	Wcirc: '\u0174',
+	wcirc: '\u0175',
+	wedbar: '\u2A5F',
+	Wedge: '\u22C0',
+	wedge: '\u2227',
+	wedgeq: '\u2259',
+	weierp: '\u2118',
+	Wfr: '\uD835\uDD1A',
+	wfr: '\uD835\uDD34',
+	Wopf: '\uD835\uDD4E',
+	wopf: '\uD835\uDD68',
+	wp: '\u2118',
+	wr: '\u2240',
+	wreath: '\u2240',
+	Wscr: '\uD835\uDCB2',
+	wscr: '\uD835\uDCCC',
+	xcap: '\u22C2',
+	xcirc: '\u25EF',
+	xcup: '\u22C3',
+	xdtri: '\u25BD',
+	Xfr: '\uD835\uDD1B',
+	xfr: '\uD835\uDD35',
+	xhArr: '\u27FA',
+	xharr: '\u27F7',
+	Xi: '\u039E',
+	xi: '\u03BE',
+	xlArr: '\u27F8',
+	xlarr: '\u27F5',
+	xmap: '\u27FC',
+	xnis: '\u22FB',
+	xodot: '\u2A00',
+	Xopf: '\uD835\uDD4F',
+	xopf: '\uD835\uDD69',
+	xoplus: '\u2A01',
+	xotime: '\u2A02',
+	xrArr: '\u27F9',
+	xrarr: '\u27F6',
+	Xscr: '\uD835\uDCB3',
+	xscr: '\uD835\uDCCD',
+	xsqcup: '\u2A06',
+	xuplus: '\u2A04',
+	xutri: '\u25B3',
+	xvee: '\u22C1',
+	xwedge: '\u22C0',
+	Yacute: '\u00DD',
+	yacute: '\u00FD',
+	YAcy: '\u042F',
+	yacy: '\u044F',
+	Ycirc: '\u0176',
+	ycirc: '\u0177',
+	Ycy: '\u042B',
+	ycy: '\u044B',
+	yen: '\u00A5',
+	Yfr: '\uD835\uDD1C',
+	yfr: '\uD835\uDD36',
+	YIcy: '\u0407',
+	yicy: '\u0457',
+	Yopf: '\uD835\uDD50',
+	yopf: '\uD835\uDD6A',
+	Yscr: '\uD835\uDCB4',
+	yscr: '\uD835\uDCCE',
+	YUcy: '\u042E',
+	yucy: '\u044E',
+	Yuml: '\u0178',
+	yuml: '\u00FF',
+	Zacute: '\u0179',
+	zacute: '\u017A',
+	Zcaron: '\u017D',
+	zcaron: '\u017E',
+	Zcy: '\u0417',
+	zcy: '\u0437',
+	Zdot: '\u017B',
+	zdot: '\u017C',
+	zeetrf: '\u2128',
+	ZeroWidthSpace: '\u200B',
+	Zeta: '\u0396',
+	zeta: '\u03B6',
+	Zfr: '\u2128',
+	zfr: '\uD835\uDD37',
+	ZHcy: '\u0416',
+	zhcy: '\u0436',
+	zigrarr: '\u21DD',
+	Zopf: '\u2124',
+	zopf: '\uD835\uDD6B',
+	Zscr: '\uD835\uDCB5',
+	zscr: '\uD835\uDCCF',
+	zwj: '\u200D',
+	zwnj: '\u200C',
 });
 
 /**
  * @deprecated use `HTML_ENTITIES` instead
  * @see HTML_ENTITIES
  */
-exports.entityMap = exports.HTML_ENTITIES
+exports.entityMap = exports.HTML_ENTITIES;
 
 },{"./conventions":47}],51:[function(require,module,exports){
 var dom = require('./dom')
@@ -9603,7 +11831,9 @@ function parseElementStartPart(source,start,el,currentNSMap,entityReplacer,error
 				el.closed = true;
 			case S_ATTR_NOQUOT_VALUE:
 			case S_ATTR:
-			case S_ATTR_SPACE:
+				break;
+				case S_ATTR_SPACE:
+					el.closed = true;
 				break;
 			//case S_EQ:
 			default:
@@ -9964,8 +12194,8 @@ exports.ParseError = ParseError;
 (function (global, factory) {
     typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports) :
     typeof define === 'function' && define.amd ? define(['exports'], factory) :
-    (factory((global.async = {})));
-}(this, (function (exports) { 'use strict';
+    (global = typeof globalThis !== 'undefined' ? globalThis : global || self, factory(global.async = {}));
+})(this, (function (exports) { 'use strict';
 
     /**
      * Creates a continuation function with some arguments already applied.
@@ -10037,19 +12267,19 @@ exports.ParseError = ParseError;
         return (fn, ...args) => defer(() => fn(...args));
     }
 
-    var _defer;
+    var _defer$1;
 
     if (hasQueueMicrotask) {
-        _defer = queueMicrotask;
+        _defer$1 = queueMicrotask;
     } else if (hasSetImmediate) {
-        _defer = setImmediate;
+        _defer$1 = setImmediate;
     } else if (hasNextTick) {
-        _defer = process.nextTick;
+        _defer$1 = process.nextTick;
     } else {
-        _defer = fallback;
+        _defer$1 = fallback;
     }
 
-    var setImmediate$1 = wrap(_defer);
+    var setImmediate$1 = wrap(_defer$1);
 
     /**
      * Take a sync function and make it async, passing its return value to a
@@ -10136,7 +12366,7 @@ exports.ParseError = ParseError;
         return promise.then(value => {
             invokeCallback(callback, null, value);
         }, err => {
-            invokeCallback(callback, err && err.message ? err : new Error(err));
+            invokeCallback(callback, err && (err instanceof Error || err.message) ? err : new Error(err));
         });
     }
 
@@ -10167,7 +12397,8 @@ exports.ParseError = ParseError;
 
     // conditionally promisify a function.
     // only return a promise if a callback is omitted
-    function awaitify (asyncFn, arity = asyncFn.length) {
+    function awaitify (asyncFn, arity) {
+        if (!arity) arity = asyncFn.length;
         if (!arity) throw new Error('arity is undefined')
         function awaitable (...args) {
             if (typeof args[arity - 1] === 'function') {
@@ -10186,7 +12417,7 @@ exports.ParseError = ParseError;
         return awaitable
     }
 
-    function applyEach (eachfn) {
+    function applyEach$1 (eachfn) {
         return function applyEach(fns, ...callArgs) {
             const go = awaitify(function (callback) {
                 var that = this;
@@ -10353,7 +12584,7 @@ exports.ParseError = ParseError;
         replenish();
     }
 
-    var eachOfLimit = (limit) => {
+    var eachOfLimit$2 = (limit) => {
         return (obj, iteratee, callback) => {
             callback = once(callback);
             if (limit <= 0) {
@@ -10436,11 +12667,11 @@ exports.ParseError = ParseError;
      * `iteratee` functions have finished, or an error occurs. Invoked with (err).
      * @returns {Promise} a promise, if a callback is omitted
      */
-    function eachOfLimit$1(coll, limit, iteratee, callback) {
-        return eachOfLimit(limit)(coll, wrapAsync(iteratee), callback);
+    function eachOfLimit(coll, limit, iteratee, callback) {
+        return eachOfLimit$2(limit)(coll, wrapAsync(iteratee), callback);
     }
 
-    var eachOfLimit$2 = awaitify(eachOfLimit$1, 4);
+    var eachOfLimit$1 = awaitify(eachOfLimit, 4);
 
     // eachOf implementation optimized for array-likes
     function eachOfArrayLike(coll, iteratee, callback) {
@@ -10472,7 +12703,7 @@ exports.ParseError = ParseError;
 
     // a generic version of eachOf which can handle array, object, and iterator cases.
     function eachOfGeneric (coll, iteratee, callback) {
-        return eachOfLimit$2(coll, Infinity, iteratee, callback);
+        return eachOfLimit$1(coll, Infinity, iteratee, callback);
     }
 
     /**
@@ -10752,7 +12983,7 @@ exports.ParseError = ParseError;
      *     callback
      * );
      */
-    var applyEach$1 = applyEach(map$1);
+    var applyEach = applyEach$1(map$1);
 
     /**
      * The same as [`eachOf`]{@link module:Collections.eachOf} but runs only a single async operation at a time.
@@ -10773,7 +13004,7 @@ exports.ParseError = ParseError;
      * @returns {Promise} a promise, if a callback is omitted
      */
     function eachOfSeries(coll, iteratee, callback) {
-        return eachOfLimit$2(coll, 1, iteratee, callback)
+        return eachOfLimit$1(coll, 1, iteratee, callback)
     }
     var eachOfSeries$1 = awaitify(eachOfSeries, 3);
 
@@ -10820,7 +13051,7 @@ exports.ParseError = ParseError;
      * appling the `args` to the list of functions.  It takes no args, other than
      * a callback.
      */
-    var applyEachSeries = applyEach(mapSeries$1);
+    var applyEachSeries = applyEach$1(mapSeries$1);
 
     const PROMISE_SYMBOL = Symbol('promiseCallback');
 
@@ -11156,8 +13387,8 @@ exports.ParseError = ParseError;
         return callback[PROMISE_SYMBOL]
     }
 
-    var FN_ARGS = /^(?:async\s+)?(?:function)?\s*\w*\s*\(\s*([^)]+)\s*\)(?:\s*{)/;
-    var ARROW_FN_ARGS = /^(?:async\s+)?\(?\s*([^)=]+)\s*\)?(?:\s*=>)/;
+    var FN_ARGS = /^(?:async\s)?(?:function)?\s*(?:\w+\s*)?\(([^)]+)\)(?:\s*{)/;
+    var ARROW_FN_ARGS = /^(?:async\s)?\s*(?:\(\s*)?((?:[^)=\s]\s*)*)(?:\)\s*)?=>/;
     var FN_ARG_SPLIT = /,/;
     var FN_ARG = /(=.+)?(\s*)$/;
 
@@ -11418,7 +13649,7 @@ exports.ParseError = ParseError;
         dll.head = dll.tail = node;
     }
 
-    function queue(worker, concurrency, payload) {
+    function queue$1(worker, concurrency, payload) {
         if (concurrency == null) {
             concurrency = 1;
         }
@@ -11736,8 +13967,8 @@ exports.ParseError = ParseError;
      * await cargo.push({name: 'baz'});
      * console.log('finished processing baz');
      */
-    function cargo(worker, payload) {
-        return queue(worker, 1, payload);
+    function cargo$1(worker, payload) {
+        return queue$1(worker, 1, payload);
     }
 
     /**
@@ -11794,8 +14025,8 @@ exports.ParseError = ParseError;
      *     console.log('finished processing boo');
      * });
      */
-    function cargo$1(worker, concurrency, payload) {
-        return queue(worker, concurrency, payload);
+    function cargo(worker, concurrency, payload) {
+        return queue$1(worker, concurrency, payload);
     }
 
     /**
@@ -12051,7 +14282,7 @@ exports.ParseError = ParseError;
      * @returns {Promise} a promise, if no callback is passed
      */
     function mapLimit (coll, limit, iteratee, callback) {
-        return _asyncMap(eachOfLimit(limit), coll, iteratee, callback)
+        return _asyncMap(eachOfLimit$2(limit), coll, iteratee, callback)
     }
     var mapLimit$1 = awaitify(mapLimit, 4);
 
@@ -12261,7 +14492,7 @@ exports.ParseError = ParseError;
      *     //...
      * }, callback);
      */
-    function constant(...args) {
+    function constant$1(...args) {
         return function (...ignoredArgs/*, callback*/) {
             var callback = ignoredArgs.pop();
             return callback(null, ...args);
@@ -12391,7 +14622,7 @@ exports.ParseError = ParseError;
      * @returns {Promise} a promise, if a callback is omitted
      */
     function detectLimit(coll, limit, iteratee, callback) {
-        return _createTester(bool => bool, (res, item) => item)(eachOfLimit(limit), coll, iteratee, callback)
+        return _createTester(bool => bool, (res, item) => item)(eachOfLimit$2(limit), coll, iteratee, callback)
     }
     var detectLimit$1 = awaitify(detectLimit, 4);
 
@@ -12417,7 +14648,7 @@ exports.ParseError = ParseError;
      * @returns {Promise} a promise, if a callback is omitted
      */
     function detectSeries(coll, iteratee, callback) {
-        return _createTester(bool => bool, (res, item) => item)(eachOfLimit(1), coll, iteratee, callback)
+        return _createTester(bool => bool, (res, item) => item)(eachOfLimit$2(1), coll, iteratee, callback)
     }
 
     var detectSeries$1 = awaitify(detectSeries, 3);
@@ -12650,11 +14881,11 @@ exports.ParseError = ParseError;
      * }
      *
      */
-    function eachLimit(coll, iteratee, callback) {
+    function eachLimit$2(coll, iteratee, callback) {
         return eachOf$1(coll, _withoutIndex(wrapAsync(iteratee)), callback);
     }
 
-    var each = awaitify(eachLimit, 3);
+    var each = awaitify(eachLimit$2, 3);
 
     /**
      * The same as [`each`]{@link module:Collections.each} but runs a maximum of `limit` async operations at a time.
@@ -12677,10 +14908,10 @@ exports.ParseError = ParseError;
      * `iteratee` functions have finished, or an error occurs. Invoked with (err).
      * @returns {Promise} a promise, if a callback is omitted
      */
-    function eachLimit$1(coll, limit, iteratee, callback) {
-        return eachOfLimit(limit)(coll, _withoutIndex(wrapAsync(iteratee)), callback);
+    function eachLimit(coll, limit, iteratee, callback) {
+        return eachOfLimit$2(limit)(coll, _withoutIndex(wrapAsync(iteratee)), callback);
     }
-    var eachLimit$2 = awaitify(eachLimit$1, 4);
+    var eachLimit$1 = awaitify(eachLimit, 4);
 
     /**
      * The same as [`each`]{@link module:Collections.each} but runs only a single async operation at a time.
@@ -12706,7 +14937,7 @@ exports.ParseError = ParseError;
      * @returns {Promise} a promise, if a callback is omitted
      */
     function eachSeries(coll, iteratee, callback) {
-        return eachLimit$2(coll, 1, iteratee, callback)
+        return eachLimit$1(coll, 1, iteratee, callback)
     }
     var eachSeries$1 = awaitify(eachSeries, 3);
 
@@ -12883,7 +15114,7 @@ exports.ParseError = ParseError;
      * @returns {Promise} a promise, if no callback provided
      */
     function everyLimit(coll, limit, iteratee, callback) {
-        return _createTester(bool => !bool, res => !res)(eachOfLimit(limit), coll, iteratee, callback)
+        return _createTester(bool => !bool, res => !res)(eachOfLimit$2(limit), coll, iteratee, callback)
     }
     var everyLimit$1 = awaitify(everyLimit, 4);
 
@@ -13046,7 +15277,7 @@ exports.ParseError = ParseError;
      * @returns {Promise} a promise, if no callback provided
      */
     function filterLimit (coll, limit, iteratee, callback) {
-        return _filter(eachOfLimit(limit), coll, iteratee, callback)
+        return _filter(eachOfLimit$2(limit), coll, iteratee, callback)
     }
     var filterLimit$1 = awaitify(filterLimit, 4);
 
@@ -13341,7 +15572,7 @@ exports.ParseError = ParseError;
         callback = once(callback);
         var newObj = {};
         var _iteratee = wrapAsync(iteratee);
-        return eachOfLimit(limit)(obj, (val, key, next) => {
+        return eachOfLimit$2(limit)(obj, (val, key, next) => {
             _iteratee(val, key, (err, result) => {
                 if (err) return next(err);
                 newObj[key] = result;
@@ -13618,19 +15849,19 @@ exports.ParseError = ParseError;
      *     // a, b, and c equal 1, 2, and 3
      * }, 1, 2, 3);
      */
-    var _defer$1;
+    var _defer;
 
     if (hasNextTick) {
-        _defer$1 = process.nextTick;
+        _defer = process.nextTick;
     } else if (hasSetImmediate) {
-        _defer$1 = setImmediate;
+        _defer = setImmediate;
     } else {
-        _defer$1 = fallback;
+        _defer = fallback;
     }
 
-    var nextTick = wrap(_defer$1);
+    var nextTick = wrap(_defer);
 
-    var parallel = awaitify((eachfn, tasks, callback) => {
+    var _parallel = awaitify((eachfn, tasks, callback) => {
         var results = isArrayLike(tasks) ? [] : {};
 
         eachfn(tasks, (task, key, taskCb) => {
@@ -13803,8 +16034,8 @@ exports.ParseError = ParseError;
      * }
      *
      */
-    function parallel$1(tasks, callback) {
-        return parallel(eachOf$1, tasks, callback);
+    function parallel(tasks, callback) {
+        return _parallel(eachOf$1, tasks, callback);
     }
 
     /**
@@ -13828,7 +16059,7 @@ exports.ParseError = ParseError;
      * @returns {Promise} a promise, if a callback is not passed
      */
     function parallelLimit(tasks, limit, callback) {
-        return parallel(eachOfLimit(limit), tasks, callback);
+        return _parallel(eachOfLimit$2(limit), tasks, callback);
     }
 
     /**
@@ -13973,9 +16204,9 @@ exports.ParseError = ParseError;
      *     console.log('finished processing bar');
      * });
      */
-    function queue$1 (worker, concurrency) {
+    function queue (worker, concurrency) {
         var _worker = wrapAsync(worker);
-        return queue((items, cb) => {
+        return queue$1((items, cb) => {
             _worker(items[0], cb);
         }, concurrency, 1);
     }
@@ -14122,7 +16353,7 @@ exports.ParseError = ParseError;
      */
     function priorityQueue(worker, concurrency) {
         // Start with a normal queue
-        var q = queue$1(worker, concurrency);
+        var q = queue(worker, concurrency);
 
         var {
             push,
@@ -14377,7 +16608,7 @@ exports.ParseError = ParseError;
         return results;
     }
 
-    function reject(eachfn, arr, _iteratee, callback) {
+    function reject$2(eachfn, arr, _iteratee, callback) {
         const iteratee = wrapAsync(_iteratee);
         return _filter(eachfn, arr, (value, cb) => {
             iteratee(value, (err, v) => {
@@ -14448,10 +16679,10 @@ exports.ParseError = ParseError;
      * }
      *
      */
-    function reject$1 (coll, iteratee, callback) {
-        return reject(eachOf$1, coll, iteratee, callback)
+    function reject (coll, iteratee, callback) {
+        return reject$2(eachOf$1, coll, iteratee, callback)
     }
-    var reject$2 = awaitify(reject$1, 3);
+    var reject$1 = awaitify(reject, 3);
 
     /**
      * The same as [`reject`]{@link module:Collections.reject} but runs a maximum of `limit` async operations at a
@@ -14474,7 +16705,7 @@ exports.ParseError = ParseError;
      * @returns {Promise} a promise, if no callback is passed
      */
     function rejectLimit (coll, limit, iteratee, callback) {
-        return reject(eachOfLimit(limit), coll, iteratee, callback)
+        return reject$2(eachOfLimit$2(limit), coll, iteratee, callback)
     }
     var rejectLimit$1 = awaitify(rejectLimit, 4);
 
@@ -14497,11 +16728,11 @@ exports.ParseError = ParseError;
      * @returns {Promise} a promise, if no callback is passed
      */
     function rejectSeries (coll, iteratee, callback) {
-        return reject(eachOfSeries$1, coll, iteratee, callback)
+        return reject$2(eachOfSeries$1, coll, iteratee, callback)
     }
     var rejectSeries$1 = awaitify(rejectSeries, 3);
 
-    function constant$1(value) {
+    function constant(value) {
         return function () {
             return value;
         }
@@ -14598,7 +16829,7 @@ exports.ParseError = ParseError;
     function retry(opts, task, callback) {
         var options = {
             times: DEFAULT_TIMES,
-            intervalFunc: constant$1(DEFAULT_INTERVAL)
+            intervalFunc: constant(DEFAULT_INTERVAL)
         };
 
         if (arguments.length < 3 && typeof opts === 'function') {
@@ -14639,7 +16870,7 @@ exports.ParseError = ParseError;
 
             acc.intervalFunc = typeof t.interval === 'function' ?
                 t.interval :
-                constant$1(+t.interval || DEFAULT_INTERVAL);
+                constant(+t.interval || DEFAULT_INTERVAL);
 
             acc.errorFilter = t.errorFilter;
         } else if (typeof t === 'number' || typeof t === 'string') {
@@ -14870,7 +17101,7 @@ exports.ParseError = ParseError;
      *
      */
     function series(tasks, callback) {
-        return parallel(eachOfSeries$1, tasks, callback);
+        return _parallel(eachOfSeries$1, tasks, callback);
     }
 
     /**
@@ -14998,7 +17229,7 @@ exports.ParseError = ParseError;
      * @returns {Promise} a promise, if no callback provided
      */
     function someLimit(coll, limit, iteratee, callback) {
-        return _createTester(Boolean, res => res)(eachOfLimit(limit), coll, iteratee, callback)
+        return _createTester(Boolean, res => res)(eachOfLimit$2(limit), coll, iteratee, callback)
     }
     var someLimit$1 = awaitify(someLimit, 4);
 
@@ -15592,7 +17823,7 @@ exports.ParseError = ParseError;
      * @method
      * @category Control Flow
      * @param {AsyncFunction} test - asynchronous truth test to perform before each
-     * execution of `iteratee`. Invoked with ().
+     * execution of `iteratee`. Invoked with (callback).
      * @param {AsyncFunction} iteratee - An async function which is called each time
      * `test` passes. Invoked with (callback).
      * @param {Function} [callback] - A callback which is called after the test
@@ -15804,20 +18035,21 @@ exports.ParseError = ParseError;
      * @static
      */
 
+
     var index = {
         apply,
-        applyEach: applyEach$1,
+        applyEach,
         applyEachSeries,
         asyncify,
         auto,
         autoInject,
-        cargo,
-        cargoQueue: cargo$1,
+        cargo: cargo$1,
+        cargoQueue: cargo,
         compose,
         concat: concat$1,
         concatLimit: concatLimit$1,
         concatSeries: concatSeries$1,
-        constant,
+        constant: constant$1,
         detect: detect$1,
         detectLimit: detectLimit$1,
         detectSeries: detectSeries$1,
@@ -15825,9 +18057,9 @@ exports.ParseError = ParseError;
         doUntil,
         doWhilst: doWhilst$1,
         each,
-        eachLimit: eachLimit$2,
+        eachLimit: eachLimit$1,
         eachOf: eachOf$1,
-        eachOfLimit: eachOfLimit$2,
+        eachOfLimit: eachOfLimit$1,
         eachOfSeries: eachOfSeries$1,
         eachSeries: eachSeries$1,
         ensureAsync,
@@ -15850,16 +18082,16 @@ exports.ParseError = ParseError;
         mapValuesSeries,
         memoize,
         nextTick,
-        parallel: parallel$1,
+        parallel,
         parallelLimit,
         priorityQueue,
-        queue: queue$1,
+        queue,
         race: race$1,
         reduce: reduce$1,
         reduceRight,
         reflect,
         reflectAll,
-        reject: reject$2,
+        reject: reject$1,
         rejectLimit: rejectLimit$1,
         rejectSeries: rejectSeries$1,
         retry,
@@ -15897,10 +18129,10 @@ exports.ParseError = ParseError;
         flatMapSeries: concatSeries$1,
         forEach: each,
         forEachSeries: eachSeries$1,
-        forEachLimit: eachLimit$2,
+        forEachLimit: eachLimit$1,
         forEachOf: eachOf$1,
         forEachOfSeries: eachOfSeries$1,
-        forEachOfLimit: eachOfLimit$2,
+        forEachOfLimit: eachOfLimit$1,
         inject: reduce$1,
         foldl: reduce$1,
         foldr: reduceRight,
@@ -15912,30 +18144,38 @@ exports.ParseError = ParseError;
         doDuring: doWhilst$1
     };
 
-    exports.default = index;
+    exports.all = every$1;
+    exports.allLimit = everyLimit$1;
+    exports.allSeries = everySeries$1;
+    exports.any = some$1;
+    exports.anyLimit = someLimit$1;
+    exports.anySeries = someSeries$1;
     exports.apply = apply;
-    exports.applyEach = applyEach$1;
+    exports.applyEach = applyEach;
     exports.applyEachSeries = applyEachSeries;
     exports.asyncify = asyncify;
     exports.auto = auto;
     exports.autoInject = autoInject;
-    exports.cargo = cargo;
-    exports.cargoQueue = cargo$1;
+    exports.cargo = cargo$1;
+    exports.cargoQueue = cargo;
     exports.compose = compose;
     exports.concat = concat$1;
     exports.concatLimit = concatLimit$1;
     exports.concatSeries = concatSeries$1;
-    exports.constant = constant;
+    exports.constant = constant$1;
+    exports.default = index;
     exports.detect = detect$1;
     exports.detectLimit = detectLimit$1;
     exports.detectSeries = detectSeries$1;
     exports.dir = dir;
+    exports.doDuring = doWhilst$1;
     exports.doUntil = doUntil;
     exports.doWhilst = doWhilst$1;
+    exports.during = whilst$1;
     exports.each = each;
-    exports.eachLimit = eachLimit$2;
+    exports.eachLimit = eachLimit$1;
     exports.eachOf = eachOf$1;
-    exports.eachOfLimit = eachOfLimit$2;
+    exports.eachOfLimit = eachOfLimit$1;
     exports.eachOfSeries = eachOfSeries$1;
     exports.eachSeries = eachSeries$1;
     exports.ensureAsync = ensureAsync;
@@ -15945,10 +18185,25 @@ exports.ParseError = ParseError;
     exports.filter = filter$1;
     exports.filterLimit = filterLimit$1;
     exports.filterSeries = filterSeries$1;
+    exports.find = detect$1;
+    exports.findLimit = detectLimit$1;
+    exports.findSeries = detectSeries$1;
+    exports.flatMap = concat$1;
+    exports.flatMapLimit = concatLimit$1;
+    exports.flatMapSeries = concatSeries$1;
+    exports.foldl = reduce$1;
+    exports.foldr = reduceRight;
+    exports.forEach = each;
+    exports.forEachLimit = eachLimit$1;
+    exports.forEachOf = eachOf$1;
+    exports.forEachOfLimit = eachOfLimit$1;
+    exports.forEachOfSeries = eachOfSeries$1;
+    exports.forEachSeries = eachSeries$1;
     exports.forever = forever$1;
     exports.groupBy = groupBy;
     exports.groupByLimit = groupByLimit$1;
     exports.groupBySeries = groupBySeries;
+    exports.inject = reduce$1;
     exports.log = log;
     exports.map = map$1;
     exports.mapLimit = mapLimit$1;
@@ -15958,20 +18213,23 @@ exports.ParseError = ParseError;
     exports.mapValuesSeries = mapValuesSeries;
     exports.memoize = memoize;
     exports.nextTick = nextTick;
-    exports.parallel = parallel$1;
+    exports.parallel = parallel;
     exports.parallelLimit = parallelLimit;
     exports.priorityQueue = priorityQueue;
-    exports.queue = queue$1;
+    exports.queue = queue;
     exports.race = race$1;
     exports.reduce = reduce$1;
     exports.reduceRight = reduceRight;
     exports.reflect = reflect;
     exports.reflectAll = reflectAll;
-    exports.reject = reject$2;
+    exports.reject = reject$1;
     exports.rejectLimit = rejectLimit$1;
     exports.rejectSeries = rejectSeries$1;
     exports.retry = retry;
     exports.retryable = retryable;
+    exports.select = filter$1;
+    exports.selectLimit = filterLimit$1;
+    exports.selectSeries = filterSeries$1;
     exports.seq = seq;
     exports.series = series;
     exports.setImmediate = setImmediate$1;
@@ -15989,40 +18247,166 @@ exports.ParseError = ParseError;
     exports.until = until;
     exports.waterfall = waterfall$1;
     exports.whilst = whilst$1;
-    exports.all = every$1;
-    exports.allLimit = everyLimit$1;
-    exports.allSeries = everySeries$1;
-    exports.any = some$1;
-    exports.anyLimit = someLimit$1;
-    exports.anySeries = someSeries$1;
-    exports.find = detect$1;
-    exports.findLimit = detectLimit$1;
-    exports.findSeries = detectSeries$1;
-    exports.flatMap = concat$1;
-    exports.flatMapLimit = concatLimit$1;
-    exports.flatMapSeries = concatSeries$1;
-    exports.forEach = each;
-    exports.forEachSeries = eachSeries$1;
-    exports.forEachLimit = eachLimit$2;
-    exports.forEachOf = eachOf$1;
-    exports.forEachOfSeries = eachOfSeries$1;
-    exports.forEachOfLimit = eachOfLimit$2;
-    exports.inject = reduce$1;
-    exports.foldl = reduce$1;
-    exports.foldr = reduceRight;
-    exports.select = filter$1;
-    exports.selectLimit = filterLimit$1;
-    exports.selectSeries = filterSeries$1;
     exports.wrapSync = asyncify;
-    exports.during = whilst$1;
-    exports.doDuring = doWhilst$1;
 
     Object.defineProperty(exports, '__esModule', { value: true });
 
-})));
+}));
 
 }).call(this)}).call(this,require('_process'),require("timers").setImmediate)
-},{"_process":295,"timers":298}],54:[function(require,module,exports){
+},{"_process":303,"timers":306}],54:[function(require,module,exports){
+'use strict'
+
+exports.byteLength = byteLength
+exports.toByteArray = toByteArray
+exports.fromByteArray = fromByteArray
+
+var lookup = []
+var revLookup = []
+var Arr = typeof Uint8Array !== 'undefined' ? Uint8Array : Array
+
+var code = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+for (var i = 0, len = code.length; i < len; ++i) {
+  lookup[i] = code[i]
+  revLookup[code.charCodeAt(i)] = i
+}
+
+// Support decoding URL-safe base64 strings, as Node.js does.
+// See: https://en.wikipedia.org/wiki/Base64#URL_applications
+revLookup['-'.charCodeAt(0)] = 62
+revLookup['_'.charCodeAt(0)] = 63
+
+function getLens (b64) {
+  var len = b64.length
+
+  if (len % 4 > 0) {
+    throw new Error('Invalid string. Length must be a multiple of 4')
+  }
+
+  // Trim off extra bytes after placeholder bytes are found
+  // See: https://github.com/beatgammit/base64-js/issues/42
+  var validLen = b64.indexOf('=')
+  if (validLen === -1) validLen = len
+
+  var placeHoldersLen = validLen === len
+    ? 0
+    : 4 - (validLen % 4)
+
+  return [validLen, placeHoldersLen]
+}
+
+// base64 is 4/3 + up to two characters of the original data
+function byteLength (b64) {
+  var lens = getLens(b64)
+  var validLen = lens[0]
+  var placeHoldersLen = lens[1]
+  return ((validLen + placeHoldersLen) * 3 / 4) - placeHoldersLen
+}
+
+function _byteLength (b64, validLen, placeHoldersLen) {
+  return ((validLen + placeHoldersLen) * 3 / 4) - placeHoldersLen
+}
+
+function toByteArray (b64) {
+  var tmp
+  var lens = getLens(b64)
+  var validLen = lens[0]
+  var placeHoldersLen = lens[1]
+
+  var arr = new Arr(_byteLength(b64, validLen, placeHoldersLen))
+
+  var curByte = 0
+
+  // if there are placeholders, only get up to the last complete 4 chars
+  var len = placeHoldersLen > 0
+    ? validLen - 4
+    : validLen
+
+  var i
+  for (i = 0; i < len; i += 4) {
+    tmp =
+      (revLookup[b64.charCodeAt(i)] << 18) |
+      (revLookup[b64.charCodeAt(i + 1)] << 12) |
+      (revLookup[b64.charCodeAt(i + 2)] << 6) |
+      revLookup[b64.charCodeAt(i + 3)]
+    arr[curByte++] = (tmp >> 16) & 0xFF
+    arr[curByte++] = (tmp >> 8) & 0xFF
+    arr[curByte++] = tmp & 0xFF
+  }
+
+  if (placeHoldersLen === 2) {
+    tmp =
+      (revLookup[b64.charCodeAt(i)] << 2) |
+      (revLookup[b64.charCodeAt(i + 1)] >> 4)
+    arr[curByte++] = tmp & 0xFF
+  }
+
+  if (placeHoldersLen === 1) {
+    tmp =
+      (revLookup[b64.charCodeAt(i)] << 10) |
+      (revLookup[b64.charCodeAt(i + 1)] << 4) |
+      (revLookup[b64.charCodeAt(i + 2)] >> 2)
+    arr[curByte++] = (tmp >> 8) & 0xFF
+    arr[curByte++] = tmp & 0xFF
+  }
+
+  return arr
+}
+
+function tripletToBase64 (num) {
+  return lookup[num >> 18 & 0x3F] +
+    lookup[num >> 12 & 0x3F] +
+    lookup[num >> 6 & 0x3F] +
+    lookup[num & 0x3F]
+}
+
+function encodeChunk (uint8, start, end) {
+  var tmp
+  var output = []
+  for (var i = start; i < end; i += 3) {
+    tmp =
+      ((uint8[i] << 16) & 0xFF0000) +
+      ((uint8[i + 1] << 8) & 0xFF00) +
+      (uint8[i + 2] & 0xFF)
+    output.push(tripletToBase64(tmp))
+  }
+  return output.join('')
+}
+
+function fromByteArray (uint8) {
+  var tmp
+  var len = uint8.length
+  var extraBytes = len % 3 // if we have 1 byte left, pad 2 bytes
+  var parts = []
+  var maxChunkLength = 16383 // must be multiple of 3
+
+  // go through the array every three bytes, we'll deal with trailing stuff later
+  for (var i = 0, len2 = len - extraBytes; i < len2; i += maxChunkLength) {
+    parts.push(encodeChunk(uint8, i, (i + maxChunkLength) > len2 ? len2 : (i + maxChunkLength)))
+  }
+
+  // pad the end with zeros, but make sure to not forget the extra bytes
+  if (extraBytes === 1) {
+    tmp = uint8[len - 1]
+    parts.push(
+      lookup[tmp >> 2] +
+      lookup[(tmp << 4) & 0x3F] +
+      '=='
+    )
+  } else if (extraBytes === 2) {
+    tmp = (uint8[len - 2] << 8) + uint8[len - 1]
+    parts.push(
+      lookup[tmp >> 10] +
+      lookup[(tmp >> 4) & 0x3F] +
+      lookup[(tmp << 2) & 0x3F] +
+      '='
+    )
+  }
+
+  return parts.join('')
+}
+
+},{}],55:[function(require,module,exports){
 'use strict'
 
 const GeoJSONBounds = require('geojson-bounds')
@@ -16515,9 +18899,9 @@ if (typeof window !== 'undefined') {
   window.BoundingBox = BoundingBox
 }
 
-},{"geojson-bounds":77,"haversine":79}],55:[function(require,module,exports){
+},{"geojson-bounds":79,"haversine":81}],56:[function(require,module,exports){
 
-},{}],56:[function(require,module,exports){
+},{}],57:[function(require,module,exports){
 'use strict';
 // For more information about browser field, check out the browser field at https://github.com/substack/browserify-handbook#browser-field.
 
@@ -16594,9 +18978,1790 @@ module.exports = {
     }
 };
 
-},{}],57:[function(require,module,exports){
-arguments[4][55][0].apply(exports,arguments)
-},{"dup":55}],58:[function(require,module,exports){
+},{}],58:[function(require,module,exports){
+arguments[4][56][0].apply(exports,arguments)
+},{"dup":56}],59:[function(require,module,exports){
+(function (Buffer){(function (){
+/*!
+ * The buffer module from node.js, for the browser.
+ *
+ * @author   Feross Aboukhadijeh <https://feross.org>
+ * @license  MIT
+ */
+/* eslint-disable no-proto */
+
+'use strict'
+
+var base64 = require('base64-js')
+var ieee754 = require('ieee754')
+
+exports.Buffer = Buffer
+exports.SlowBuffer = SlowBuffer
+exports.INSPECT_MAX_BYTES = 50
+
+var K_MAX_LENGTH = 0x7fffffff
+exports.kMaxLength = K_MAX_LENGTH
+
+/**
+ * If `Buffer.TYPED_ARRAY_SUPPORT`:
+ *   === true    Use Uint8Array implementation (fastest)
+ *   === false   Print warning and recommend using `buffer` v4.x which has an Object
+ *               implementation (most compatible, even IE6)
+ *
+ * Browsers that support typed arrays are IE 10+, Firefox 4+, Chrome 7+, Safari 5.1+,
+ * Opera 11.6+, iOS 4.2+.
+ *
+ * We report that the browser does not support typed arrays if the are not subclassable
+ * using __proto__. Firefox 4-29 lacks support for adding new properties to `Uint8Array`
+ * (See: https://bugzilla.mozilla.org/show_bug.cgi?id=695438). IE 10 lacks support
+ * for __proto__ and has a buggy typed array implementation.
+ */
+Buffer.TYPED_ARRAY_SUPPORT = typedArraySupport()
+
+if (!Buffer.TYPED_ARRAY_SUPPORT && typeof console !== 'undefined' &&
+    typeof console.error === 'function') {
+  console.error(
+    'This browser lacks typed array (Uint8Array) support which is required by ' +
+    '`buffer` v5.x. Use `buffer` v4.x if you require old browser support.'
+  )
+}
+
+function typedArraySupport () {
+  // Can typed array instances can be augmented?
+  try {
+    var arr = new Uint8Array(1)
+    arr.__proto__ = { __proto__: Uint8Array.prototype, foo: function () { return 42 } }
+    return arr.foo() === 42
+  } catch (e) {
+    return false
+  }
+}
+
+Object.defineProperty(Buffer.prototype, 'parent', {
+  enumerable: true,
+  get: function () {
+    if (!Buffer.isBuffer(this)) return undefined
+    return this.buffer
+  }
+})
+
+Object.defineProperty(Buffer.prototype, 'offset', {
+  enumerable: true,
+  get: function () {
+    if (!Buffer.isBuffer(this)) return undefined
+    return this.byteOffset
+  }
+})
+
+function createBuffer (length) {
+  if (length > K_MAX_LENGTH) {
+    throw new RangeError('The value "' + length + '" is invalid for option "size"')
+  }
+  // Return an augmented `Uint8Array` instance
+  var buf = new Uint8Array(length)
+  buf.__proto__ = Buffer.prototype
+  return buf
+}
+
+/**
+ * The Buffer constructor returns instances of `Uint8Array` that have their
+ * prototype changed to `Buffer.prototype`. Furthermore, `Buffer` is a subclass of
+ * `Uint8Array`, so the returned instances will have all the node `Buffer` methods
+ * and the `Uint8Array` methods. Square bracket notation works as expected -- it
+ * returns a single octet.
+ *
+ * The `Uint8Array` prototype remains unmodified.
+ */
+
+function Buffer (arg, encodingOrOffset, length) {
+  // Common case.
+  if (typeof arg === 'number') {
+    if (typeof encodingOrOffset === 'string') {
+      throw new TypeError(
+        'The "string" argument must be of type string. Received type number'
+      )
+    }
+    return allocUnsafe(arg)
+  }
+  return from(arg, encodingOrOffset, length)
+}
+
+// Fix subarray() in ES2016. See: https://github.com/feross/buffer/pull/97
+if (typeof Symbol !== 'undefined' && Symbol.species != null &&
+    Buffer[Symbol.species] === Buffer) {
+  Object.defineProperty(Buffer, Symbol.species, {
+    value: null,
+    configurable: true,
+    enumerable: false,
+    writable: false
+  })
+}
+
+Buffer.poolSize = 8192 // not used by this implementation
+
+function from (value, encodingOrOffset, length) {
+  if (typeof value === 'string') {
+    return fromString(value, encodingOrOffset)
+  }
+
+  if (ArrayBuffer.isView(value)) {
+    return fromArrayLike(value)
+  }
+
+  if (value == null) {
+    throw TypeError(
+      'The first argument must be one of type string, Buffer, ArrayBuffer, Array, ' +
+      'or Array-like Object. Received type ' + (typeof value)
+    )
+  }
+
+  if (isInstance(value, ArrayBuffer) ||
+      (value && isInstance(value.buffer, ArrayBuffer))) {
+    return fromArrayBuffer(value, encodingOrOffset, length)
+  }
+
+  if (typeof value === 'number') {
+    throw new TypeError(
+      'The "value" argument must not be of type number. Received type number'
+    )
+  }
+
+  var valueOf = value.valueOf && value.valueOf()
+  if (valueOf != null && valueOf !== value) {
+    return Buffer.from(valueOf, encodingOrOffset, length)
+  }
+
+  var b = fromObject(value)
+  if (b) return b
+
+  if (typeof Symbol !== 'undefined' && Symbol.toPrimitive != null &&
+      typeof value[Symbol.toPrimitive] === 'function') {
+    return Buffer.from(
+      value[Symbol.toPrimitive]('string'), encodingOrOffset, length
+    )
+  }
+
+  throw new TypeError(
+    'The first argument must be one of type string, Buffer, ArrayBuffer, Array, ' +
+    'or Array-like Object. Received type ' + (typeof value)
+  )
+}
+
+/**
+ * Functionally equivalent to Buffer(arg, encoding) but throws a TypeError
+ * if value is a number.
+ * Buffer.from(str[, encoding])
+ * Buffer.from(array)
+ * Buffer.from(buffer)
+ * Buffer.from(arrayBuffer[, byteOffset[, length]])
+ **/
+Buffer.from = function (value, encodingOrOffset, length) {
+  return from(value, encodingOrOffset, length)
+}
+
+// Note: Change prototype *after* Buffer.from is defined to workaround Chrome bug:
+// https://github.com/feross/buffer/pull/148
+Buffer.prototype.__proto__ = Uint8Array.prototype
+Buffer.__proto__ = Uint8Array
+
+function assertSize (size) {
+  if (typeof size !== 'number') {
+    throw new TypeError('"size" argument must be of type number')
+  } else if (size < 0) {
+    throw new RangeError('The value "' + size + '" is invalid for option "size"')
+  }
+}
+
+function alloc (size, fill, encoding) {
+  assertSize(size)
+  if (size <= 0) {
+    return createBuffer(size)
+  }
+  if (fill !== undefined) {
+    // Only pay attention to encoding if it's a string. This
+    // prevents accidentally sending in a number that would
+    // be interpretted as a start offset.
+    return typeof encoding === 'string'
+      ? createBuffer(size).fill(fill, encoding)
+      : createBuffer(size).fill(fill)
+  }
+  return createBuffer(size)
+}
+
+/**
+ * Creates a new filled Buffer instance.
+ * alloc(size[, fill[, encoding]])
+ **/
+Buffer.alloc = function (size, fill, encoding) {
+  return alloc(size, fill, encoding)
+}
+
+function allocUnsafe (size) {
+  assertSize(size)
+  return createBuffer(size < 0 ? 0 : checked(size) | 0)
+}
+
+/**
+ * Equivalent to Buffer(num), by default creates a non-zero-filled Buffer instance.
+ * */
+Buffer.allocUnsafe = function (size) {
+  return allocUnsafe(size)
+}
+/**
+ * Equivalent to SlowBuffer(num), by default creates a non-zero-filled Buffer instance.
+ */
+Buffer.allocUnsafeSlow = function (size) {
+  return allocUnsafe(size)
+}
+
+function fromString (string, encoding) {
+  if (typeof encoding !== 'string' || encoding === '') {
+    encoding = 'utf8'
+  }
+
+  if (!Buffer.isEncoding(encoding)) {
+    throw new TypeError('Unknown encoding: ' + encoding)
+  }
+
+  var length = byteLength(string, encoding) | 0
+  var buf = createBuffer(length)
+
+  var actual = buf.write(string, encoding)
+
+  if (actual !== length) {
+    // Writing a hex string, for example, that contains invalid characters will
+    // cause everything after the first invalid character to be ignored. (e.g.
+    // 'abxxcd' will be treated as 'ab')
+    buf = buf.slice(0, actual)
+  }
+
+  return buf
+}
+
+function fromArrayLike (array) {
+  var length = array.length < 0 ? 0 : checked(array.length) | 0
+  var buf = createBuffer(length)
+  for (var i = 0; i < length; i += 1) {
+    buf[i] = array[i] & 255
+  }
+  return buf
+}
+
+function fromArrayBuffer (array, byteOffset, length) {
+  if (byteOffset < 0 || array.byteLength < byteOffset) {
+    throw new RangeError('"offset" is outside of buffer bounds')
+  }
+
+  if (array.byteLength < byteOffset + (length || 0)) {
+    throw new RangeError('"length" is outside of buffer bounds')
+  }
+
+  var buf
+  if (byteOffset === undefined && length === undefined) {
+    buf = new Uint8Array(array)
+  } else if (length === undefined) {
+    buf = new Uint8Array(array, byteOffset)
+  } else {
+    buf = new Uint8Array(array, byteOffset, length)
+  }
+
+  // Return an augmented `Uint8Array` instance
+  buf.__proto__ = Buffer.prototype
+  return buf
+}
+
+function fromObject (obj) {
+  if (Buffer.isBuffer(obj)) {
+    var len = checked(obj.length) | 0
+    var buf = createBuffer(len)
+
+    if (buf.length === 0) {
+      return buf
+    }
+
+    obj.copy(buf, 0, 0, len)
+    return buf
+  }
+
+  if (obj.length !== undefined) {
+    if (typeof obj.length !== 'number' || numberIsNaN(obj.length)) {
+      return createBuffer(0)
+    }
+    return fromArrayLike(obj)
+  }
+
+  if (obj.type === 'Buffer' && Array.isArray(obj.data)) {
+    return fromArrayLike(obj.data)
+  }
+}
+
+function checked (length) {
+  // Note: cannot use `length < K_MAX_LENGTH` here because that fails when
+  // length is NaN (which is otherwise coerced to zero.)
+  if (length >= K_MAX_LENGTH) {
+    throw new RangeError('Attempt to allocate Buffer larger than maximum ' +
+                         'size: 0x' + K_MAX_LENGTH.toString(16) + ' bytes')
+  }
+  return length | 0
+}
+
+function SlowBuffer (length) {
+  if (+length != length) { // eslint-disable-line eqeqeq
+    length = 0
+  }
+  return Buffer.alloc(+length)
+}
+
+Buffer.isBuffer = function isBuffer (b) {
+  return b != null && b._isBuffer === true &&
+    b !== Buffer.prototype // so Buffer.isBuffer(Buffer.prototype) will be false
+}
+
+Buffer.compare = function compare (a, b) {
+  if (isInstance(a, Uint8Array)) a = Buffer.from(a, a.offset, a.byteLength)
+  if (isInstance(b, Uint8Array)) b = Buffer.from(b, b.offset, b.byteLength)
+  if (!Buffer.isBuffer(a) || !Buffer.isBuffer(b)) {
+    throw new TypeError(
+      'The "buf1", "buf2" arguments must be one of type Buffer or Uint8Array'
+    )
+  }
+
+  if (a === b) return 0
+
+  var x = a.length
+  var y = b.length
+
+  for (var i = 0, len = Math.min(x, y); i < len; ++i) {
+    if (a[i] !== b[i]) {
+      x = a[i]
+      y = b[i]
+      break
+    }
+  }
+
+  if (x < y) return -1
+  if (y < x) return 1
+  return 0
+}
+
+Buffer.isEncoding = function isEncoding (encoding) {
+  switch (String(encoding).toLowerCase()) {
+    case 'hex':
+    case 'utf8':
+    case 'utf-8':
+    case 'ascii':
+    case 'latin1':
+    case 'binary':
+    case 'base64':
+    case 'ucs2':
+    case 'ucs-2':
+    case 'utf16le':
+    case 'utf-16le':
+      return true
+    default:
+      return false
+  }
+}
+
+Buffer.concat = function concat (list, length) {
+  if (!Array.isArray(list)) {
+    throw new TypeError('"list" argument must be an Array of Buffers')
+  }
+
+  if (list.length === 0) {
+    return Buffer.alloc(0)
+  }
+
+  var i
+  if (length === undefined) {
+    length = 0
+    for (i = 0; i < list.length; ++i) {
+      length += list[i].length
+    }
+  }
+
+  var buffer = Buffer.allocUnsafe(length)
+  var pos = 0
+  for (i = 0; i < list.length; ++i) {
+    var buf = list[i]
+    if (isInstance(buf, Uint8Array)) {
+      buf = Buffer.from(buf)
+    }
+    if (!Buffer.isBuffer(buf)) {
+      throw new TypeError('"list" argument must be an Array of Buffers')
+    }
+    buf.copy(buffer, pos)
+    pos += buf.length
+  }
+  return buffer
+}
+
+function byteLength (string, encoding) {
+  if (Buffer.isBuffer(string)) {
+    return string.length
+  }
+  if (ArrayBuffer.isView(string) || isInstance(string, ArrayBuffer)) {
+    return string.byteLength
+  }
+  if (typeof string !== 'string') {
+    throw new TypeError(
+      'The "string" argument must be one of type string, Buffer, or ArrayBuffer. ' +
+      'Received type ' + typeof string
+    )
+  }
+
+  var len = string.length
+  var mustMatch = (arguments.length > 2 && arguments[2] === true)
+  if (!mustMatch && len === 0) return 0
+
+  // Use a for loop to avoid recursion
+  var loweredCase = false
+  for (;;) {
+    switch (encoding) {
+      case 'ascii':
+      case 'latin1':
+      case 'binary':
+        return len
+      case 'utf8':
+      case 'utf-8':
+        return utf8ToBytes(string).length
+      case 'ucs2':
+      case 'ucs-2':
+      case 'utf16le':
+      case 'utf-16le':
+        return len * 2
+      case 'hex':
+        return len >>> 1
+      case 'base64':
+        return base64ToBytes(string).length
+      default:
+        if (loweredCase) {
+          return mustMatch ? -1 : utf8ToBytes(string).length // assume utf8
+        }
+        encoding = ('' + encoding).toLowerCase()
+        loweredCase = true
+    }
+  }
+}
+Buffer.byteLength = byteLength
+
+function slowToString (encoding, start, end) {
+  var loweredCase = false
+
+  // No need to verify that "this.length <= MAX_UINT32" since it's a read-only
+  // property of a typed array.
+
+  // This behaves neither like String nor Uint8Array in that we set start/end
+  // to their upper/lower bounds if the value passed is out of range.
+  // undefined is handled specially as per ECMA-262 6th Edition,
+  // Section 13.3.3.7 Runtime Semantics: KeyedBindingInitialization.
+  if (start === undefined || start < 0) {
+    start = 0
+  }
+  // Return early if start > this.length. Done here to prevent potential uint32
+  // coercion fail below.
+  if (start > this.length) {
+    return ''
+  }
+
+  if (end === undefined || end > this.length) {
+    end = this.length
+  }
+
+  if (end <= 0) {
+    return ''
+  }
+
+  // Force coersion to uint32. This will also coerce falsey/NaN values to 0.
+  end >>>= 0
+  start >>>= 0
+
+  if (end <= start) {
+    return ''
+  }
+
+  if (!encoding) encoding = 'utf8'
+
+  while (true) {
+    switch (encoding) {
+      case 'hex':
+        return hexSlice(this, start, end)
+
+      case 'utf8':
+      case 'utf-8':
+        return utf8Slice(this, start, end)
+
+      case 'ascii':
+        return asciiSlice(this, start, end)
+
+      case 'latin1':
+      case 'binary':
+        return latin1Slice(this, start, end)
+
+      case 'base64':
+        return base64Slice(this, start, end)
+
+      case 'ucs2':
+      case 'ucs-2':
+      case 'utf16le':
+      case 'utf-16le':
+        return utf16leSlice(this, start, end)
+
+      default:
+        if (loweredCase) throw new TypeError('Unknown encoding: ' + encoding)
+        encoding = (encoding + '').toLowerCase()
+        loweredCase = true
+    }
+  }
+}
+
+// This property is used by `Buffer.isBuffer` (and the `is-buffer` npm package)
+// to detect a Buffer instance. It's not possible to use `instanceof Buffer`
+// reliably in a browserify context because there could be multiple different
+// copies of the 'buffer' package in use. This method works even for Buffer
+// instances that were created from another copy of the `buffer` package.
+// See: https://github.com/feross/buffer/issues/154
+Buffer.prototype._isBuffer = true
+
+function swap (b, n, m) {
+  var i = b[n]
+  b[n] = b[m]
+  b[m] = i
+}
+
+Buffer.prototype.swap16 = function swap16 () {
+  var len = this.length
+  if (len % 2 !== 0) {
+    throw new RangeError('Buffer size must be a multiple of 16-bits')
+  }
+  for (var i = 0; i < len; i += 2) {
+    swap(this, i, i + 1)
+  }
+  return this
+}
+
+Buffer.prototype.swap32 = function swap32 () {
+  var len = this.length
+  if (len % 4 !== 0) {
+    throw new RangeError('Buffer size must be a multiple of 32-bits')
+  }
+  for (var i = 0; i < len; i += 4) {
+    swap(this, i, i + 3)
+    swap(this, i + 1, i + 2)
+  }
+  return this
+}
+
+Buffer.prototype.swap64 = function swap64 () {
+  var len = this.length
+  if (len % 8 !== 0) {
+    throw new RangeError('Buffer size must be a multiple of 64-bits')
+  }
+  for (var i = 0; i < len; i += 8) {
+    swap(this, i, i + 7)
+    swap(this, i + 1, i + 6)
+    swap(this, i + 2, i + 5)
+    swap(this, i + 3, i + 4)
+  }
+  return this
+}
+
+Buffer.prototype.toString = function toString () {
+  var length = this.length
+  if (length === 0) return ''
+  if (arguments.length === 0) return utf8Slice(this, 0, length)
+  return slowToString.apply(this, arguments)
+}
+
+Buffer.prototype.toLocaleString = Buffer.prototype.toString
+
+Buffer.prototype.equals = function equals (b) {
+  if (!Buffer.isBuffer(b)) throw new TypeError('Argument must be a Buffer')
+  if (this === b) return true
+  return Buffer.compare(this, b) === 0
+}
+
+Buffer.prototype.inspect = function inspect () {
+  var str = ''
+  var max = exports.INSPECT_MAX_BYTES
+  str = this.toString('hex', 0, max).replace(/(.{2})/g, '$1 ').trim()
+  if (this.length > max) str += ' ... '
+  return '<Buffer ' + str + '>'
+}
+
+Buffer.prototype.compare = function compare (target, start, end, thisStart, thisEnd) {
+  if (isInstance(target, Uint8Array)) {
+    target = Buffer.from(target, target.offset, target.byteLength)
+  }
+  if (!Buffer.isBuffer(target)) {
+    throw new TypeError(
+      'The "target" argument must be one of type Buffer or Uint8Array. ' +
+      'Received type ' + (typeof target)
+    )
+  }
+
+  if (start === undefined) {
+    start = 0
+  }
+  if (end === undefined) {
+    end = target ? target.length : 0
+  }
+  if (thisStart === undefined) {
+    thisStart = 0
+  }
+  if (thisEnd === undefined) {
+    thisEnd = this.length
+  }
+
+  if (start < 0 || end > target.length || thisStart < 0 || thisEnd > this.length) {
+    throw new RangeError('out of range index')
+  }
+
+  if (thisStart >= thisEnd && start >= end) {
+    return 0
+  }
+  if (thisStart >= thisEnd) {
+    return -1
+  }
+  if (start >= end) {
+    return 1
+  }
+
+  start >>>= 0
+  end >>>= 0
+  thisStart >>>= 0
+  thisEnd >>>= 0
+
+  if (this === target) return 0
+
+  var x = thisEnd - thisStart
+  var y = end - start
+  var len = Math.min(x, y)
+
+  var thisCopy = this.slice(thisStart, thisEnd)
+  var targetCopy = target.slice(start, end)
+
+  for (var i = 0; i < len; ++i) {
+    if (thisCopy[i] !== targetCopy[i]) {
+      x = thisCopy[i]
+      y = targetCopy[i]
+      break
+    }
+  }
+
+  if (x < y) return -1
+  if (y < x) return 1
+  return 0
+}
+
+// Finds either the first index of `val` in `buffer` at offset >= `byteOffset`,
+// OR the last index of `val` in `buffer` at offset <= `byteOffset`.
+//
+// Arguments:
+// - buffer - a Buffer to search
+// - val - a string, Buffer, or number
+// - byteOffset - an index into `buffer`; will be clamped to an int32
+// - encoding - an optional encoding, relevant is val is a string
+// - dir - true for indexOf, false for lastIndexOf
+function bidirectionalIndexOf (buffer, val, byteOffset, encoding, dir) {
+  // Empty buffer means no match
+  if (buffer.length === 0) return -1
+
+  // Normalize byteOffset
+  if (typeof byteOffset === 'string') {
+    encoding = byteOffset
+    byteOffset = 0
+  } else if (byteOffset > 0x7fffffff) {
+    byteOffset = 0x7fffffff
+  } else if (byteOffset < -0x80000000) {
+    byteOffset = -0x80000000
+  }
+  byteOffset = +byteOffset // Coerce to Number.
+  if (numberIsNaN(byteOffset)) {
+    // byteOffset: it it's undefined, null, NaN, "foo", etc, search whole buffer
+    byteOffset = dir ? 0 : (buffer.length - 1)
+  }
+
+  // Normalize byteOffset: negative offsets start from the end of the buffer
+  if (byteOffset < 0) byteOffset = buffer.length + byteOffset
+  if (byteOffset >= buffer.length) {
+    if (dir) return -1
+    else byteOffset = buffer.length - 1
+  } else if (byteOffset < 0) {
+    if (dir) byteOffset = 0
+    else return -1
+  }
+
+  // Normalize val
+  if (typeof val === 'string') {
+    val = Buffer.from(val, encoding)
+  }
+
+  // Finally, search either indexOf (if dir is true) or lastIndexOf
+  if (Buffer.isBuffer(val)) {
+    // Special case: looking for empty string/buffer always fails
+    if (val.length === 0) {
+      return -1
+    }
+    return arrayIndexOf(buffer, val, byteOffset, encoding, dir)
+  } else if (typeof val === 'number') {
+    val = val & 0xFF // Search for a byte value [0-255]
+    if (typeof Uint8Array.prototype.indexOf === 'function') {
+      if (dir) {
+        return Uint8Array.prototype.indexOf.call(buffer, val, byteOffset)
+      } else {
+        return Uint8Array.prototype.lastIndexOf.call(buffer, val, byteOffset)
+      }
+    }
+    return arrayIndexOf(buffer, [ val ], byteOffset, encoding, dir)
+  }
+
+  throw new TypeError('val must be string, number or Buffer')
+}
+
+function arrayIndexOf (arr, val, byteOffset, encoding, dir) {
+  var indexSize = 1
+  var arrLength = arr.length
+  var valLength = val.length
+
+  if (encoding !== undefined) {
+    encoding = String(encoding).toLowerCase()
+    if (encoding === 'ucs2' || encoding === 'ucs-2' ||
+        encoding === 'utf16le' || encoding === 'utf-16le') {
+      if (arr.length < 2 || val.length < 2) {
+        return -1
+      }
+      indexSize = 2
+      arrLength /= 2
+      valLength /= 2
+      byteOffset /= 2
+    }
+  }
+
+  function read (buf, i) {
+    if (indexSize === 1) {
+      return buf[i]
+    } else {
+      return buf.readUInt16BE(i * indexSize)
+    }
+  }
+
+  var i
+  if (dir) {
+    var foundIndex = -1
+    for (i = byteOffset; i < arrLength; i++) {
+      if (read(arr, i) === read(val, foundIndex === -1 ? 0 : i - foundIndex)) {
+        if (foundIndex === -1) foundIndex = i
+        if (i - foundIndex + 1 === valLength) return foundIndex * indexSize
+      } else {
+        if (foundIndex !== -1) i -= i - foundIndex
+        foundIndex = -1
+      }
+    }
+  } else {
+    if (byteOffset + valLength > arrLength) byteOffset = arrLength - valLength
+    for (i = byteOffset; i >= 0; i--) {
+      var found = true
+      for (var j = 0; j < valLength; j++) {
+        if (read(arr, i + j) !== read(val, j)) {
+          found = false
+          break
+        }
+      }
+      if (found) return i
+    }
+  }
+
+  return -1
+}
+
+Buffer.prototype.includes = function includes (val, byteOffset, encoding) {
+  return this.indexOf(val, byteOffset, encoding) !== -1
+}
+
+Buffer.prototype.indexOf = function indexOf (val, byteOffset, encoding) {
+  return bidirectionalIndexOf(this, val, byteOffset, encoding, true)
+}
+
+Buffer.prototype.lastIndexOf = function lastIndexOf (val, byteOffset, encoding) {
+  return bidirectionalIndexOf(this, val, byteOffset, encoding, false)
+}
+
+function hexWrite (buf, string, offset, length) {
+  offset = Number(offset) || 0
+  var remaining = buf.length - offset
+  if (!length) {
+    length = remaining
+  } else {
+    length = Number(length)
+    if (length > remaining) {
+      length = remaining
+    }
+  }
+
+  var strLen = string.length
+
+  if (length > strLen / 2) {
+    length = strLen / 2
+  }
+  for (var i = 0; i < length; ++i) {
+    var parsed = parseInt(string.substr(i * 2, 2), 16)
+    if (numberIsNaN(parsed)) return i
+    buf[offset + i] = parsed
+  }
+  return i
+}
+
+function utf8Write (buf, string, offset, length) {
+  return blitBuffer(utf8ToBytes(string, buf.length - offset), buf, offset, length)
+}
+
+function asciiWrite (buf, string, offset, length) {
+  return blitBuffer(asciiToBytes(string), buf, offset, length)
+}
+
+function latin1Write (buf, string, offset, length) {
+  return asciiWrite(buf, string, offset, length)
+}
+
+function base64Write (buf, string, offset, length) {
+  return blitBuffer(base64ToBytes(string), buf, offset, length)
+}
+
+function ucs2Write (buf, string, offset, length) {
+  return blitBuffer(utf16leToBytes(string, buf.length - offset), buf, offset, length)
+}
+
+Buffer.prototype.write = function write (string, offset, length, encoding) {
+  // Buffer#write(string)
+  if (offset === undefined) {
+    encoding = 'utf8'
+    length = this.length
+    offset = 0
+  // Buffer#write(string, encoding)
+  } else if (length === undefined && typeof offset === 'string') {
+    encoding = offset
+    length = this.length
+    offset = 0
+  // Buffer#write(string, offset[, length][, encoding])
+  } else if (isFinite(offset)) {
+    offset = offset >>> 0
+    if (isFinite(length)) {
+      length = length >>> 0
+      if (encoding === undefined) encoding = 'utf8'
+    } else {
+      encoding = length
+      length = undefined
+    }
+  } else {
+    throw new Error(
+      'Buffer.write(string, encoding, offset[, length]) is no longer supported'
+    )
+  }
+
+  var remaining = this.length - offset
+  if (length === undefined || length > remaining) length = remaining
+
+  if ((string.length > 0 && (length < 0 || offset < 0)) || offset > this.length) {
+    throw new RangeError('Attempt to write outside buffer bounds')
+  }
+
+  if (!encoding) encoding = 'utf8'
+
+  var loweredCase = false
+  for (;;) {
+    switch (encoding) {
+      case 'hex':
+        return hexWrite(this, string, offset, length)
+
+      case 'utf8':
+      case 'utf-8':
+        return utf8Write(this, string, offset, length)
+
+      case 'ascii':
+        return asciiWrite(this, string, offset, length)
+
+      case 'latin1':
+      case 'binary':
+        return latin1Write(this, string, offset, length)
+
+      case 'base64':
+        // Warning: maxLength not taken into account in base64Write
+        return base64Write(this, string, offset, length)
+
+      case 'ucs2':
+      case 'ucs-2':
+      case 'utf16le':
+      case 'utf-16le':
+        return ucs2Write(this, string, offset, length)
+
+      default:
+        if (loweredCase) throw new TypeError('Unknown encoding: ' + encoding)
+        encoding = ('' + encoding).toLowerCase()
+        loweredCase = true
+    }
+  }
+}
+
+Buffer.prototype.toJSON = function toJSON () {
+  return {
+    type: 'Buffer',
+    data: Array.prototype.slice.call(this._arr || this, 0)
+  }
+}
+
+function base64Slice (buf, start, end) {
+  if (start === 0 && end === buf.length) {
+    return base64.fromByteArray(buf)
+  } else {
+    return base64.fromByteArray(buf.slice(start, end))
+  }
+}
+
+function utf8Slice (buf, start, end) {
+  end = Math.min(buf.length, end)
+  var res = []
+
+  var i = start
+  while (i < end) {
+    var firstByte = buf[i]
+    var codePoint = null
+    var bytesPerSequence = (firstByte > 0xEF) ? 4
+      : (firstByte > 0xDF) ? 3
+        : (firstByte > 0xBF) ? 2
+          : 1
+
+    if (i + bytesPerSequence <= end) {
+      var secondByte, thirdByte, fourthByte, tempCodePoint
+
+      switch (bytesPerSequence) {
+        case 1:
+          if (firstByte < 0x80) {
+            codePoint = firstByte
+          }
+          break
+        case 2:
+          secondByte = buf[i + 1]
+          if ((secondByte & 0xC0) === 0x80) {
+            tempCodePoint = (firstByte & 0x1F) << 0x6 | (secondByte & 0x3F)
+            if (tempCodePoint > 0x7F) {
+              codePoint = tempCodePoint
+            }
+          }
+          break
+        case 3:
+          secondByte = buf[i + 1]
+          thirdByte = buf[i + 2]
+          if ((secondByte & 0xC0) === 0x80 && (thirdByte & 0xC0) === 0x80) {
+            tempCodePoint = (firstByte & 0xF) << 0xC | (secondByte & 0x3F) << 0x6 | (thirdByte & 0x3F)
+            if (tempCodePoint > 0x7FF && (tempCodePoint < 0xD800 || tempCodePoint > 0xDFFF)) {
+              codePoint = tempCodePoint
+            }
+          }
+          break
+        case 4:
+          secondByte = buf[i + 1]
+          thirdByte = buf[i + 2]
+          fourthByte = buf[i + 3]
+          if ((secondByte & 0xC0) === 0x80 && (thirdByte & 0xC0) === 0x80 && (fourthByte & 0xC0) === 0x80) {
+            tempCodePoint = (firstByte & 0xF) << 0x12 | (secondByte & 0x3F) << 0xC | (thirdByte & 0x3F) << 0x6 | (fourthByte & 0x3F)
+            if (tempCodePoint > 0xFFFF && tempCodePoint < 0x110000) {
+              codePoint = tempCodePoint
+            }
+          }
+      }
+    }
+
+    if (codePoint === null) {
+      // we did not generate a valid codePoint so insert a
+      // replacement char (U+FFFD) and advance only 1 byte
+      codePoint = 0xFFFD
+      bytesPerSequence = 1
+    } else if (codePoint > 0xFFFF) {
+      // encode to utf16 (surrogate pair dance)
+      codePoint -= 0x10000
+      res.push(codePoint >>> 10 & 0x3FF | 0xD800)
+      codePoint = 0xDC00 | codePoint & 0x3FF
+    }
+
+    res.push(codePoint)
+    i += bytesPerSequence
+  }
+
+  return decodeCodePointsArray(res)
+}
+
+// Based on http://stackoverflow.com/a/22747272/680742, the browser with
+// the lowest limit is Chrome, with 0x10000 args.
+// We go 1 magnitude less, for safety
+var MAX_ARGUMENTS_LENGTH = 0x1000
+
+function decodeCodePointsArray (codePoints) {
+  var len = codePoints.length
+  if (len <= MAX_ARGUMENTS_LENGTH) {
+    return String.fromCharCode.apply(String, codePoints) // avoid extra slice()
+  }
+
+  // Decode in chunks to avoid "call stack size exceeded".
+  var res = ''
+  var i = 0
+  while (i < len) {
+    res += String.fromCharCode.apply(
+      String,
+      codePoints.slice(i, i += MAX_ARGUMENTS_LENGTH)
+    )
+  }
+  return res
+}
+
+function asciiSlice (buf, start, end) {
+  var ret = ''
+  end = Math.min(buf.length, end)
+
+  for (var i = start; i < end; ++i) {
+    ret += String.fromCharCode(buf[i] & 0x7F)
+  }
+  return ret
+}
+
+function latin1Slice (buf, start, end) {
+  var ret = ''
+  end = Math.min(buf.length, end)
+
+  for (var i = start; i < end; ++i) {
+    ret += String.fromCharCode(buf[i])
+  }
+  return ret
+}
+
+function hexSlice (buf, start, end) {
+  var len = buf.length
+
+  if (!start || start < 0) start = 0
+  if (!end || end < 0 || end > len) end = len
+
+  var out = ''
+  for (var i = start; i < end; ++i) {
+    out += toHex(buf[i])
+  }
+  return out
+}
+
+function utf16leSlice (buf, start, end) {
+  var bytes = buf.slice(start, end)
+  var res = ''
+  for (var i = 0; i < bytes.length; i += 2) {
+    res += String.fromCharCode(bytes[i] + (bytes[i + 1] * 256))
+  }
+  return res
+}
+
+Buffer.prototype.slice = function slice (start, end) {
+  var len = this.length
+  start = ~~start
+  end = end === undefined ? len : ~~end
+
+  if (start < 0) {
+    start += len
+    if (start < 0) start = 0
+  } else if (start > len) {
+    start = len
+  }
+
+  if (end < 0) {
+    end += len
+    if (end < 0) end = 0
+  } else if (end > len) {
+    end = len
+  }
+
+  if (end < start) end = start
+
+  var newBuf = this.subarray(start, end)
+  // Return an augmented `Uint8Array` instance
+  newBuf.__proto__ = Buffer.prototype
+  return newBuf
+}
+
+/*
+ * Need to make sure that buffer isn't trying to write out of bounds.
+ */
+function checkOffset (offset, ext, length) {
+  if ((offset % 1) !== 0 || offset < 0) throw new RangeError('offset is not uint')
+  if (offset + ext > length) throw new RangeError('Trying to access beyond buffer length')
+}
+
+Buffer.prototype.readUIntLE = function readUIntLE (offset, byteLength, noAssert) {
+  offset = offset >>> 0
+  byteLength = byteLength >>> 0
+  if (!noAssert) checkOffset(offset, byteLength, this.length)
+
+  var val = this[offset]
+  var mul = 1
+  var i = 0
+  while (++i < byteLength && (mul *= 0x100)) {
+    val += this[offset + i] * mul
+  }
+
+  return val
+}
+
+Buffer.prototype.readUIntBE = function readUIntBE (offset, byteLength, noAssert) {
+  offset = offset >>> 0
+  byteLength = byteLength >>> 0
+  if (!noAssert) {
+    checkOffset(offset, byteLength, this.length)
+  }
+
+  var val = this[offset + --byteLength]
+  var mul = 1
+  while (byteLength > 0 && (mul *= 0x100)) {
+    val += this[offset + --byteLength] * mul
+  }
+
+  return val
+}
+
+Buffer.prototype.readUInt8 = function readUInt8 (offset, noAssert) {
+  offset = offset >>> 0
+  if (!noAssert) checkOffset(offset, 1, this.length)
+  return this[offset]
+}
+
+Buffer.prototype.readUInt16LE = function readUInt16LE (offset, noAssert) {
+  offset = offset >>> 0
+  if (!noAssert) checkOffset(offset, 2, this.length)
+  return this[offset] | (this[offset + 1] << 8)
+}
+
+Buffer.prototype.readUInt16BE = function readUInt16BE (offset, noAssert) {
+  offset = offset >>> 0
+  if (!noAssert) checkOffset(offset, 2, this.length)
+  return (this[offset] << 8) | this[offset + 1]
+}
+
+Buffer.prototype.readUInt32LE = function readUInt32LE (offset, noAssert) {
+  offset = offset >>> 0
+  if (!noAssert) checkOffset(offset, 4, this.length)
+
+  return ((this[offset]) |
+      (this[offset + 1] << 8) |
+      (this[offset + 2] << 16)) +
+      (this[offset + 3] * 0x1000000)
+}
+
+Buffer.prototype.readUInt32BE = function readUInt32BE (offset, noAssert) {
+  offset = offset >>> 0
+  if (!noAssert) checkOffset(offset, 4, this.length)
+
+  return (this[offset] * 0x1000000) +
+    ((this[offset + 1] << 16) |
+    (this[offset + 2] << 8) |
+    this[offset + 3])
+}
+
+Buffer.prototype.readIntLE = function readIntLE (offset, byteLength, noAssert) {
+  offset = offset >>> 0
+  byteLength = byteLength >>> 0
+  if (!noAssert) checkOffset(offset, byteLength, this.length)
+
+  var val = this[offset]
+  var mul = 1
+  var i = 0
+  while (++i < byteLength && (mul *= 0x100)) {
+    val += this[offset + i] * mul
+  }
+  mul *= 0x80
+
+  if (val >= mul) val -= Math.pow(2, 8 * byteLength)
+
+  return val
+}
+
+Buffer.prototype.readIntBE = function readIntBE (offset, byteLength, noAssert) {
+  offset = offset >>> 0
+  byteLength = byteLength >>> 0
+  if (!noAssert) checkOffset(offset, byteLength, this.length)
+
+  var i = byteLength
+  var mul = 1
+  var val = this[offset + --i]
+  while (i > 0 && (mul *= 0x100)) {
+    val += this[offset + --i] * mul
+  }
+  mul *= 0x80
+
+  if (val >= mul) val -= Math.pow(2, 8 * byteLength)
+
+  return val
+}
+
+Buffer.prototype.readInt8 = function readInt8 (offset, noAssert) {
+  offset = offset >>> 0
+  if (!noAssert) checkOffset(offset, 1, this.length)
+  if (!(this[offset] & 0x80)) return (this[offset])
+  return ((0xff - this[offset] + 1) * -1)
+}
+
+Buffer.prototype.readInt16LE = function readInt16LE (offset, noAssert) {
+  offset = offset >>> 0
+  if (!noAssert) checkOffset(offset, 2, this.length)
+  var val = this[offset] | (this[offset + 1] << 8)
+  return (val & 0x8000) ? val | 0xFFFF0000 : val
+}
+
+Buffer.prototype.readInt16BE = function readInt16BE (offset, noAssert) {
+  offset = offset >>> 0
+  if (!noAssert) checkOffset(offset, 2, this.length)
+  var val = this[offset + 1] | (this[offset] << 8)
+  return (val & 0x8000) ? val | 0xFFFF0000 : val
+}
+
+Buffer.prototype.readInt32LE = function readInt32LE (offset, noAssert) {
+  offset = offset >>> 0
+  if (!noAssert) checkOffset(offset, 4, this.length)
+
+  return (this[offset]) |
+    (this[offset + 1] << 8) |
+    (this[offset + 2] << 16) |
+    (this[offset + 3] << 24)
+}
+
+Buffer.prototype.readInt32BE = function readInt32BE (offset, noAssert) {
+  offset = offset >>> 0
+  if (!noAssert) checkOffset(offset, 4, this.length)
+
+  return (this[offset] << 24) |
+    (this[offset + 1] << 16) |
+    (this[offset + 2] << 8) |
+    (this[offset + 3])
+}
+
+Buffer.prototype.readFloatLE = function readFloatLE (offset, noAssert) {
+  offset = offset >>> 0
+  if (!noAssert) checkOffset(offset, 4, this.length)
+  return ieee754.read(this, offset, true, 23, 4)
+}
+
+Buffer.prototype.readFloatBE = function readFloatBE (offset, noAssert) {
+  offset = offset >>> 0
+  if (!noAssert) checkOffset(offset, 4, this.length)
+  return ieee754.read(this, offset, false, 23, 4)
+}
+
+Buffer.prototype.readDoubleLE = function readDoubleLE (offset, noAssert) {
+  offset = offset >>> 0
+  if (!noAssert) checkOffset(offset, 8, this.length)
+  return ieee754.read(this, offset, true, 52, 8)
+}
+
+Buffer.prototype.readDoubleBE = function readDoubleBE (offset, noAssert) {
+  offset = offset >>> 0
+  if (!noAssert) checkOffset(offset, 8, this.length)
+  return ieee754.read(this, offset, false, 52, 8)
+}
+
+function checkInt (buf, value, offset, ext, max, min) {
+  if (!Buffer.isBuffer(buf)) throw new TypeError('"buffer" argument must be a Buffer instance')
+  if (value > max || value < min) throw new RangeError('"value" argument is out of bounds')
+  if (offset + ext > buf.length) throw new RangeError('Index out of range')
+}
+
+Buffer.prototype.writeUIntLE = function writeUIntLE (value, offset, byteLength, noAssert) {
+  value = +value
+  offset = offset >>> 0
+  byteLength = byteLength >>> 0
+  if (!noAssert) {
+    var maxBytes = Math.pow(2, 8 * byteLength) - 1
+    checkInt(this, value, offset, byteLength, maxBytes, 0)
+  }
+
+  var mul = 1
+  var i = 0
+  this[offset] = value & 0xFF
+  while (++i < byteLength && (mul *= 0x100)) {
+    this[offset + i] = (value / mul) & 0xFF
+  }
+
+  return offset + byteLength
+}
+
+Buffer.prototype.writeUIntBE = function writeUIntBE (value, offset, byteLength, noAssert) {
+  value = +value
+  offset = offset >>> 0
+  byteLength = byteLength >>> 0
+  if (!noAssert) {
+    var maxBytes = Math.pow(2, 8 * byteLength) - 1
+    checkInt(this, value, offset, byteLength, maxBytes, 0)
+  }
+
+  var i = byteLength - 1
+  var mul = 1
+  this[offset + i] = value & 0xFF
+  while (--i >= 0 && (mul *= 0x100)) {
+    this[offset + i] = (value / mul) & 0xFF
+  }
+
+  return offset + byteLength
+}
+
+Buffer.prototype.writeUInt8 = function writeUInt8 (value, offset, noAssert) {
+  value = +value
+  offset = offset >>> 0
+  if (!noAssert) checkInt(this, value, offset, 1, 0xff, 0)
+  this[offset] = (value & 0xff)
+  return offset + 1
+}
+
+Buffer.prototype.writeUInt16LE = function writeUInt16LE (value, offset, noAssert) {
+  value = +value
+  offset = offset >>> 0
+  if (!noAssert) checkInt(this, value, offset, 2, 0xffff, 0)
+  this[offset] = (value & 0xff)
+  this[offset + 1] = (value >>> 8)
+  return offset + 2
+}
+
+Buffer.prototype.writeUInt16BE = function writeUInt16BE (value, offset, noAssert) {
+  value = +value
+  offset = offset >>> 0
+  if (!noAssert) checkInt(this, value, offset, 2, 0xffff, 0)
+  this[offset] = (value >>> 8)
+  this[offset + 1] = (value & 0xff)
+  return offset + 2
+}
+
+Buffer.prototype.writeUInt32LE = function writeUInt32LE (value, offset, noAssert) {
+  value = +value
+  offset = offset >>> 0
+  if (!noAssert) checkInt(this, value, offset, 4, 0xffffffff, 0)
+  this[offset + 3] = (value >>> 24)
+  this[offset + 2] = (value >>> 16)
+  this[offset + 1] = (value >>> 8)
+  this[offset] = (value & 0xff)
+  return offset + 4
+}
+
+Buffer.prototype.writeUInt32BE = function writeUInt32BE (value, offset, noAssert) {
+  value = +value
+  offset = offset >>> 0
+  if (!noAssert) checkInt(this, value, offset, 4, 0xffffffff, 0)
+  this[offset] = (value >>> 24)
+  this[offset + 1] = (value >>> 16)
+  this[offset + 2] = (value >>> 8)
+  this[offset + 3] = (value & 0xff)
+  return offset + 4
+}
+
+Buffer.prototype.writeIntLE = function writeIntLE (value, offset, byteLength, noAssert) {
+  value = +value
+  offset = offset >>> 0
+  if (!noAssert) {
+    var limit = Math.pow(2, (8 * byteLength) - 1)
+
+    checkInt(this, value, offset, byteLength, limit - 1, -limit)
+  }
+
+  var i = 0
+  var mul = 1
+  var sub = 0
+  this[offset] = value & 0xFF
+  while (++i < byteLength && (mul *= 0x100)) {
+    if (value < 0 && sub === 0 && this[offset + i - 1] !== 0) {
+      sub = 1
+    }
+    this[offset + i] = ((value / mul) >> 0) - sub & 0xFF
+  }
+
+  return offset + byteLength
+}
+
+Buffer.prototype.writeIntBE = function writeIntBE (value, offset, byteLength, noAssert) {
+  value = +value
+  offset = offset >>> 0
+  if (!noAssert) {
+    var limit = Math.pow(2, (8 * byteLength) - 1)
+
+    checkInt(this, value, offset, byteLength, limit - 1, -limit)
+  }
+
+  var i = byteLength - 1
+  var mul = 1
+  var sub = 0
+  this[offset + i] = value & 0xFF
+  while (--i >= 0 && (mul *= 0x100)) {
+    if (value < 0 && sub === 0 && this[offset + i + 1] !== 0) {
+      sub = 1
+    }
+    this[offset + i] = ((value / mul) >> 0) - sub & 0xFF
+  }
+
+  return offset + byteLength
+}
+
+Buffer.prototype.writeInt8 = function writeInt8 (value, offset, noAssert) {
+  value = +value
+  offset = offset >>> 0
+  if (!noAssert) checkInt(this, value, offset, 1, 0x7f, -0x80)
+  if (value < 0) value = 0xff + value + 1
+  this[offset] = (value & 0xff)
+  return offset + 1
+}
+
+Buffer.prototype.writeInt16LE = function writeInt16LE (value, offset, noAssert) {
+  value = +value
+  offset = offset >>> 0
+  if (!noAssert) checkInt(this, value, offset, 2, 0x7fff, -0x8000)
+  this[offset] = (value & 0xff)
+  this[offset + 1] = (value >>> 8)
+  return offset + 2
+}
+
+Buffer.prototype.writeInt16BE = function writeInt16BE (value, offset, noAssert) {
+  value = +value
+  offset = offset >>> 0
+  if (!noAssert) checkInt(this, value, offset, 2, 0x7fff, -0x8000)
+  this[offset] = (value >>> 8)
+  this[offset + 1] = (value & 0xff)
+  return offset + 2
+}
+
+Buffer.prototype.writeInt32LE = function writeInt32LE (value, offset, noAssert) {
+  value = +value
+  offset = offset >>> 0
+  if (!noAssert) checkInt(this, value, offset, 4, 0x7fffffff, -0x80000000)
+  this[offset] = (value & 0xff)
+  this[offset + 1] = (value >>> 8)
+  this[offset + 2] = (value >>> 16)
+  this[offset + 3] = (value >>> 24)
+  return offset + 4
+}
+
+Buffer.prototype.writeInt32BE = function writeInt32BE (value, offset, noAssert) {
+  value = +value
+  offset = offset >>> 0
+  if (!noAssert) checkInt(this, value, offset, 4, 0x7fffffff, -0x80000000)
+  if (value < 0) value = 0xffffffff + value + 1
+  this[offset] = (value >>> 24)
+  this[offset + 1] = (value >>> 16)
+  this[offset + 2] = (value >>> 8)
+  this[offset + 3] = (value & 0xff)
+  return offset + 4
+}
+
+function checkIEEE754 (buf, value, offset, ext, max, min) {
+  if (offset + ext > buf.length) throw new RangeError('Index out of range')
+  if (offset < 0) throw new RangeError('Index out of range')
+}
+
+function writeFloat (buf, value, offset, littleEndian, noAssert) {
+  value = +value
+  offset = offset >>> 0
+  if (!noAssert) {
+    checkIEEE754(buf, value, offset, 4, 3.4028234663852886e+38, -3.4028234663852886e+38)
+  }
+  ieee754.write(buf, value, offset, littleEndian, 23, 4)
+  return offset + 4
+}
+
+Buffer.prototype.writeFloatLE = function writeFloatLE (value, offset, noAssert) {
+  return writeFloat(this, value, offset, true, noAssert)
+}
+
+Buffer.prototype.writeFloatBE = function writeFloatBE (value, offset, noAssert) {
+  return writeFloat(this, value, offset, false, noAssert)
+}
+
+function writeDouble (buf, value, offset, littleEndian, noAssert) {
+  value = +value
+  offset = offset >>> 0
+  if (!noAssert) {
+    checkIEEE754(buf, value, offset, 8, 1.7976931348623157E+308, -1.7976931348623157E+308)
+  }
+  ieee754.write(buf, value, offset, littleEndian, 52, 8)
+  return offset + 8
+}
+
+Buffer.prototype.writeDoubleLE = function writeDoubleLE (value, offset, noAssert) {
+  return writeDouble(this, value, offset, true, noAssert)
+}
+
+Buffer.prototype.writeDoubleBE = function writeDoubleBE (value, offset, noAssert) {
+  return writeDouble(this, value, offset, false, noAssert)
+}
+
+// copy(targetBuffer, targetStart=0, sourceStart=0, sourceEnd=buffer.length)
+Buffer.prototype.copy = function copy (target, targetStart, start, end) {
+  if (!Buffer.isBuffer(target)) throw new TypeError('argument should be a Buffer')
+  if (!start) start = 0
+  if (!end && end !== 0) end = this.length
+  if (targetStart >= target.length) targetStart = target.length
+  if (!targetStart) targetStart = 0
+  if (end > 0 && end < start) end = start
+
+  // Copy 0 bytes; we're done
+  if (end === start) return 0
+  if (target.length === 0 || this.length === 0) return 0
+
+  // Fatal error conditions
+  if (targetStart < 0) {
+    throw new RangeError('targetStart out of bounds')
+  }
+  if (start < 0 || start >= this.length) throw new RangeError('Index out of range')
+  if (end < 0) throw new RangeError('sourceEnd out of bounds')
+
+  // Are we oob?
+  if (end > this.length) end = this.length
+  if (target.length - targetStart < end - start) {
+    end = target.length - targetStart + start
+  }
+
+  var len = end - start
+
+  if (this === target && typeof Uint8Array.prototype.copyWithin === 'function') {
+    // Use built-in when available, missing from IE11
+    this.copyWithin(targetStart, start, end)
+  } else if (this === target && start < targetStart && targetStart < end) {
+    // descending copy from end
+    for (var i = len - 1; i >= 0; --i) {
+      target[i + targetStart] = this[i + start]
+    }
+  } else {
+    Uint8Array.prototype.set.call(
+      target,
+      this.subarray(start, end),
+      targetStart
+    )
+  }
+
+  return len
+}
+
+// Usage:
+//    buffer.fill(number[, offset[, end]])
+//    buffer.fill(buffer[, offset[, end]])
+//    buffer.fill(string[, offset[, end]][, encoding])
+Buffer.prototype.fill = function fill (val, start, end, encoding) {
+  // Handle string cases:
+  if (typeof val === 'string') {
+    if (typeof start === 'string') {
+      encoding = start
+      start = 0
+      end = this.length
+    } else if (typeof end === 'string') {
+      encoding = end
+      end = this.length
+    }
+    if (encoding !== undefined && typeof encoding !== 'string') {
+      throw new TypeError('encoding must be a string')
+    }
+    if (typeof encoding === 'string' && !Buffer.isEncoding(encoding)) {
+      throw new TypeError('Unknown encoding: ' + encoding)
+    }
+    if (val.length === 1) {
+      var code = val.charCodeAt(0)
+      if ((encoding === 'utf8' && code < 128) ||
+          encoding === 'latin1') {
+        // Fast path: If `val` fits into a single byte, use that numeric value.
+        val = code
+      }
+    }
+  } else if (typeof val === 'number') {
+    val = val & 255
+  }
+
+  // Invalid ranges are not set to a default, so can range check early.
+  if (start < 0 || this.length < start || this.length < end) {
+    throw new RangeError('Out of range index')
+  }
+
+  if (end <= start) {
+    return this
+  }
+
+  start = start >>> 0
+  end = end === undefined ? this.length : end >>> 0
+
+  if (!val) val = 0
+
+  var i
+  if (typeof val === 'number') {
+    for (i = start; i < end; ++i) {
+      this[i] = val
+    }
+  } else {
+    var bytes = Buffer.isBuffer(val)
+      ? val
+      : Buffer.from(val, encoding)
+    var len = bytes.length
+    if (len === 0) {
+      throw new TypeError('The value "' + val +
+        '" is invalid for argument "value"')
+    }
+    for (i = 0; i < end - start; ++i) {
+      this[i + start] = bytes[i % len]
+    }
+  }
+
+  return this
+}
+
+// HELPER FUNCTIONS
+// ================
+
+var INVALID_BASE64_RE = /[^+/0-9A-Za-z-_]/g
+
+function base64clean (str) {
+  // Node takes equal signs as end of the Base64 encoding
+  str = str.split('=')[0]
+  // Node strips out invalid characters like \n and \t from the string, base64-js does not
+  str = str.trim().replace(INVALID_BASE64_RE, '')
+  // Node converts strings with length < 2 to ''
+  if (str.length < 2) return ''
+  // Node allows for non-padded base64 strings (missing trailing ===), base64-js does not
+  while (str.length % 4 !== 0) {
+    str = str + '='
+  }
+  return str
+}
+
+function toHex (n) {
+  if (n < 16) return '0' + n.toString(16)
+  return n.toString(16)
+}
+
+function utf8ToBytes (string, units) {
+  units = units || Infinity
+  var codePoint
+  var length = string.length
+  var leadSurrogate = null
+  var bytes = []
+
+  for (var i = 0; i < length; ++i) {
+    codePoint = string.charCodeAt(i)
+
+    // is surrogate component
+    if (codePoint > 0xD7FF && codePoint < 0xE000) {
+      // last char was a lead
+      if (!leadSurrogate) {
+        // no lead yet
+        if (codePoint > 0xDBFF) {
+          // unexpected trail
+          if ((units -= 3) > -1) bytes.push(0xEF, 0xBF, 0xBD)
+          continue
+        } else if (i + 1 === length) {
+          // unpaired lead
+          if ((units -= 3) > -1) bytes.push(0xEF, 0xBF, 0xBD)
+          continue
+        }
+
+        // valid lead
+        leadSurrogate = codePoint
+
+        continue
+      }
+
+      // 2 leads in a row
+      if (codePoint < 0xDC00) {
+        if ((units -= 3) > -1) bytes.push(0xEF, 0xBF, 0xBD)
+        leadSurrogate = codePoint
+        continue
+      }
+
+      // valid surrogate pair
+      codePoint = (leadSurrogate - 0xD800 << 10 | codePoint - 0xDC00) + 0x10000
+    } else if (leadSurrogate) {
+      // valid bmp char, but last char was a lead
+      if ((units -= 3) > -1) bytes.push(0xEF, 0xBF, 0xBD)
+    }
+
+    leadSurrogate = null
+
+    // encode utf8
+    if (codePoint < 0x80) {
+      if ((units -= 1) < 0) break
+      bytes.push(codePoint)
+    } else if (codePoint < 0x800) {
+      if ((units -= 2) < 0) break
+      bytes.push(
+        codePoint >> 0x6 | 0xC0,
+        codePoint & 0x3F | 0x80
+      )
+    } else if (codePoint < 0x10000) {
+      if ((units -= 3) < 0) break
+      bytes.push(
+        codePoint >> 0xC | 0xE0,
+        codePoint >> 0x6 & 0x3F | 0x80,
+        codePoint & 0x3F | 0x80
+      )
+    } else if (codePoint < 0x110000) {
+      if ((units -= 4) < 0) break
+      bytes.push(
+        codePoint >> 0x12 | 0xF0,
+        codePoint >> 0xC & 0x3F | 0x80,
+        codePoint >> 0x6 & 0x3F | 0x80,
+        codePoint & 0x3F | 0x80
+      )
+    } else {
+      throw new Error('Invalid code point')
+    }
+  }
+
+  return bytes
+}
+
+function asciiToBytes (str) {
+  var byteArray = []
+  for (var i = 0; i < str.length; ++i) {
+    // Node's code seems to be doing this and not & 0x7F..
+    byteArray.push(str.charCodeAt(i) & 0xFF)
+  }
+  return byteArray
+}
+
+function utf16leToBytes (str, units) {
+  var c, hi, lo
+  var byteArray = []
+  for (var i = 0; i < str.length; ++i) {
+    if ((units -= 2) < 0) break
+
+    c = str.charCodeAt(i)
+    hi = c >> 8
+    lo = c % 256
+    byteArray.push(lo)
+    byteArray.push(hi)
+  }
+
+  return byteArray
+}
+
+function base64ToBytes (str) {
+  return base64.toByteArray(base64clean(str))
+}
+
+function blitBuffer (src, dst, offset, length) {
+  for (var i = 0; i < length; ++i) {
+    if ((i + offset >= dst.length) || (i >= src.length)) break
+    dst[i + offset] = src[i]
+  }
+  return i
+}
+
+// ArrayBuffer or Uint8Array objects from other contexts (i.e. iframes) do not pass
+// the `instanceof` check but they should be treated as of that type.
+// See: https://github.com/feross/buffer/issues/166
+function isInstance (obj, type) {
+  return obj instanceof type ||
+    (obj != null && obj.constructor != null && obj.constructor.name != null &&
+      obj.constructor.name === type.name)
+}
+function numberIsNaN (obj) {
+  // For IE11 support
+  return obj !== obj // eslint-disable-line no-self-compare
+}
+
+}).call(this)}).call(this,require("buffer").Buffer)
+},{"base64-js":54,"buffer":59,"ieee754":83}],60:[function(require,module,exports){
 /*
 bzip2.js - a small bzip2 decompression implementation
 
@@ -16905,7 +21070,7 @@ bzip2.decompress = function (bits, size, len) {
 
 module.exports = bzip2;
 
-},{}],59:[function(require,module,exports){
+},{}],61:[function(require,module,exports){
 "use strict";
 
 var isValue         = require("type/value/is")
@@ -16969,7 +21134,7 @@ d.gs = function (dscr, get, set/*, options*/) {
 	return !options ? desc : assign(normalizeOpts(options), desc);
 };
 
-},{"es5-ext/object/assign":63,"es5-ext/object/normalize-options":70,"es5-ext/string/#/contains":73,"type/plain-function/is":320,"type/value/is":322}],60:[function(require,module,exports){
+},{"es5-ext/object/assign":65,"es5-ext/object/normalize-options":72,"es5-ext/string/#/contains":75,"type/plain-function/is":328,"type/value/is":330}],62:[function(require,module,exports){
 // https://d3js.org/d3-array/ v1.2.4 Copyright 2018 Mike Bostock
 (function (global, factory) {
 typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports) :
@@ -17561,7 +21726,7 @@ Object.defineProperty(exports, '__esModule', { value: true });
 
 })));
 
-},{}],61:[function(require,module,exports){
+},{}],63:[function(require,module,exports){
 // https://d3js.org/d3-geo/ Version 1.7.1. Copyright 2017 Mike Bostock.
 (function (global, factory) {
 	typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports, require('d3-array')) :
@@ -20550,18 +24715,18 @@ Object.defineProperty(exports, '__esModule', { value: true });
 
 })));
 
-},{"d3-array":60}],62:[function(require,module,exports){
+},{"d3-array":62}],64:[function(require,module,exports){
 "use strict";
 
 // eslint-disable-next-line no-empty-function
 module.exports = function () {};
 
-},{}],63:[function(require,module,exports){
+},{}],65:[function(require,module,exports){
 "use strict";
 
 module.exports = require("./is-implemented")() ? Object.assign : require("./shim");
 
-},{"./is-implemented":64,"./shim":65}],64:[function(require,module,exports){
+},{"./is-implemented":66,"./shim":67}],66:[function(require,module,exports){
 "use strict";
 
 module.exports = function () {
@@ -20572,7 +24737,7 @@ module.exports = function () {
 	return obj.foo + obj.bar + obj.trzy === "razdwatrzy";
 };
 
-},{}],65:[function(require,module,exports){
+},{}],67:[function(require,module,exports){
 "use strict";
 
 var keys  = require("../keys")
@@ -20597,19 +24762,19 @@ module.exports = function (dest, src /*, …srcn*/) {
 	return dest;
 };
 
-},{"../keys":67,"../valid-value":72}],66:[function(require,module,exports){
+},{"../keys":69,"../valid-value":74}],68:[function(require,module,exports){
 "use strict";
 
 var _undefined = require("../function/noop")(); // Support ES3 engines
 
 module.exports = function (val) { return val !== _undefined && val !== null; };
 
-},{"../function/noop":62}],67:[function(require,module,exports){
+},{"../function/noop":64}],69:[function(require,module,exports){
 "use strict";
 
 module.exports = require("./is-implemented")() ? Object.keys : require("./shim");
 
-},{"./is-implemented":68,"./shim":69}],68:[function(require,module,exports){
+},{"./is-implemented":70,"./shim":71}],70:[function(require,module,exports){
 "use strict";
 
 module.exports = function () {
@@ -20621,7 +24786,7 @@ module.exports = function () {
 	}
 };
 
-},{}],69:[function(require,module,exports){
+},{}],71:[function(require,module,exports){
 "use strict";
 
 var isValue = require("../is-value");
@@ -20630,7 +24795,7 @@ var keys = Object.keys;
 
 module.exports = function (object) { return keys(isValue(object) ? Object(object) : object); };
 
-},{"../is-value":66}],70:[function(require,module,exports){
+},{"../is-value":68}],72:[function(require,module,exports){
 "use strict";
 
 var isValue = require("./is-value");
@@ -20652,7 +24817,7 @@ module.exports = function (opts1 /*, …options*/) {
 	return result;
 };
 
-},{"./is-value":66}],71:[function(require,module,exports){
+},{"./is-value":68}],73:[function(require,module,exports){
 "use strict";
 
 module.exports = function (fn) {
@@ -20660,7 +24825,7 @@ module.exports = function (fn) {
 	return fn;
 };
 
-},{}],72:[function(require,module,exports){
+},{}],74:[function(require,module,exports){
 "use strict";
 
 var isValue = require("./is-value");
@@ -20670,12 +24835,12 @@ module.exports = function (value) {
 	return value;
 };
 
-},{"./is-value":66}],73:[function(require,module,exports){
+},{"./is-value":68}],75:[function(require,module,exports){
 "use strict";
 
 module.exports = require("./is-implemented")() ? String.prototype.contains : require("./shim");
 
-},{"./is-implemented":74,"./shim":75}],74:[function(require,module,exports){
+},{"./is-implemented":76,"./shim":77}],76:[function(require,module,exports){
 "use strict";
 
 var str = "razdwatrzy";
@@ -20685,7 +24850,7 @@ module.exports = function () {
 	return str.contains("dwa") === true && str.contains("foo") === false;
 };
 
-},{}],75:[function(require,module,exports){
+},{}],77:[function(require,module,exports){
 "use strict";
 
 var indexOf = String.prototype.indexOf;
@@ -20694,7 +24859,7 @@ module.exports = function (searchString /*, position*/) {
 	return indexOf.call(this, searchString, arguments[1]) > -1;
 };
 
-},{}],76:[function(require,module,exports){
+},{}],78:[function(require,module,exports){
 'use strict';
 
 var d        = require('d')
@@ -20828,7 +24993,7 @@ module.exports = exports = function (o) {
 };
 exports.methods = methods;
 
-},{"d":59,"es5-ext/object/valid-callable":71}],77:[function(require,module,exports){
+},{"d":61,"es5-ext/object/valid-callable":73}],79:[function(require,module,exports){
 (function (process){(function (){
 (function() {
   /*
@@ -20849,20 +25014,55 @@ exports.methods = methods;
     return (Array.isArray(output[0])) ? output : [output];
   };
 
+  // Different JavaScript engines have a different maximum number of arguments
+  // that can be passed to a function. Since the native Math.min and Math.max
+  // accept a list of arguments we can hit a maxium call stack size with large features 
+  function chunkArray(array, maxLength = 32000) {
+    const output = []
+    for (let i = 0; i < array.length; i += maxLength) {
+      output.push(
+        array.slice(i, i + maxLength)
+      )
+    }
+    return output
+  }
+
+  function minOfArrayOfArrays(array) {
+    return Math.min.apply(
+      null,
+      array.map(subArray => Math.min.apply(null, subArray))
+    )
+  }
+
+  function maxOfArrayOfArrays(array) {
+    return Math.max.apply(
+      null,
+      array.map(subArray => Math.max.apply(null, subArray))
+    )
+  }
+
   function maxLat(coords) {
-    return Math.max.apply(null, coords.map(function(d) { return d[1]; }));
+    return maxOfArrayOfArrays(
+      chunkArray(coords.map(function(d) { return d[1]; }))
+    )
   }
 
   function maxLng(coords) {
-    return Math.max.apply(null, coords.map(function(d) { return d[0]; }));
+    return maxOfArrayOfArrays(
+      chunkArray(coords.map(function(d) { return d[0]; }))
+    )
   }
 
   function minLat(coords) {
-    return Math.min.apply(null, coords.map(function(d) { return d[1]; }));
+    return minOfArrayOfArrays(
+      chunkArray(coords.map(function(d) { return d[1]; }))
+    )
   }
 
   function minLng(coords) {
-    return Math.min.apply(null, coords.map(function(d) { return d[0]; }));
+    return minOfArrayOfArrays(
+      chunkArray(coords.map(function(d) { return d[0]; }))
+    )
   }
 
   function fetchEnvelope(coords) {
@@ -20941,7 +25141,14 @@ exports.methods = methods;
   }
 
   function feature(obj) {
-    return flatten(obj.geometry.coordinates);
+    switch (obj.geometry.type) {
+      case "GeometryCollection":
+        return geometryCollection(obj.geometry)
+      case "FeatureCollection":
+        return featureCollection(obj.geometry)
+      default:
+        return flatten(obj.geometry.coordinates)
+    }
   }
 
   function featureCollection(f) {
@@ -21014,7 +25221,7 @@ exports.methods = methods;
 }());
 
 }).call(this)}).call(this,require('_process'))
-},{"_process":295}],78:[function(require,module,exports){
+},{"_process":303}],80:[function(require,module,exports){
 var rbush = require('rbush');
 var helpers = require('@turf/helpers');
 var meta = require('@turf/meta');
@@ -21224,7 +25431,7 @@ function geojsonRbush(maxEntries) {
 module.exports = geojsonRbush;
 module.exports.default = geojsonRbush;
 
-},{"@turf/bbox":4,"@turf/helpers":30,"@turf/meta":36,"rbush":296}],79:[function(require,module,exports){
+},{"@turf/bbox":4,"@turf/helpers":30,"@turf/meta":36,"rbush":304}],81:[function(require,module,exports){
 var haversine = (function () {
   var RADII = {
     km:    6371,
@@ -21288,7 +25495,7 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = haversine
 }
 
-},{}],80:[function(require,module,exports){
+},{}],82:[function(require,module,exports){
 "use strict";
 
 // Implementation originally from Twitter's Hogan.js:
@@ -21321,7 +25528,94 @@ module.exports = function(str) {
   }
 };
 
-},{}],81:[function(require,module,exports){
+},{}],83:[function(require,module,exports){
+/*! ieee754. BSD-3-Clause License. Feross Aboukhadijeh <https://feross.org/opensource> */
+exports.read = function (buffer, offset, isLE, mLen, nBytes) {
+  var e, m
+  var eLen = (nBytes * 8) - mLen - 1
+  var eMax = (1 << eLen) - 1
+  var eBias = eMax >> 1
+  var nBits = -7
+  var i = isLE ? (nBytes - 1) : 0
+  var d = isLE ? -1 : 1
+  var s = buffer[offset + i]
+
+  i += d
+
+  e = s & ((1 << (-nBits)) - 1)
+  s >>= (-nBits)
+  nBits += eLen
+  for (; nBits > 0; e = (e * 256) + buffer[offset + i], i += d, nBits -= 8) {}
+
+  m = e & ((1 << (-nBits)) - 1)
+  e >>= (-nBits)
+  nBits += mLen
+  for (; nBits > 0; m = (m * 256) + buffer[offset + i], i += d, nBits -= 8) {}
+
+  if (e === 0) {
+    e = 1 - eBias
+  } else if (e === eMax) {
+    return m ? NaN : ((s ? -1 : 1) * Infinity)
+  } else {
+    m = m + Math.pow(2, mLen)
+    e = e - eBias
+  }
+  return (s ? -1 : 1) * m * Math.pow(2, e - mLen)
+}
+
+exports.write = function (buffer, value, offset, isLE, mLen, nBytes) {
+  var e, m, c
+  var eLen = (nBytes * 8) - mLen - 1
+  var eMax = (1 << eLen) - 1
+  var eBias = eMax >> 1
+  var rt = (mLen === 23 ? Math.pow(2, -24) - Math.pow(2, -77) : 0)
+  var i = isLE ? 0 : (nBytes - 1)
+  var d = isLE ? 1 : -1
+  var s = value < 0 || (value === 0 && 1 / value < 0) ? 1 : 0
+
+  value = Math.abs(value)
+
+  if (isNaN(value) || value === Infinity) {
+    m = isNaN(value) ? 1 : 0
+    e = eMax
+  } else {
+    e = Math.floor(Math.log(value) / Math.LN2)
+    if (value * (c = Math.pow(2, -e)) < 1) {
+      e--
+      c *= 2
+    }
+    if (e + eBias >= 1) {
+      value += rt / c
+    } else {
+      value += rt * Math.pow(2, 1 - eBias)
+    }
+    if (value * c >= 2) {
+      e++
+      c /= 2
+    }
+
+    if (e + eBias >= eMax) {
+      m = 0
+      e = eMax
+    } else if (e + eBias >= 1) {
+      m = ((value * c) - 1) * Math.pow(2, mLen)
+      e = e + eBias
+    } else {
+      m = value * Math.pow(2, eBias - 1) * Math.pow(2, mLen)
+      e = 0
+    }
+  }
+
+  for (; mLen >= 8; buffer[offset + i] = m & 0xff, i += d, m /= 256, mLen -= 8) {}
+
+  e = (e << mLen) | m
+  eLen += mLen
+  for (; eLen > 0; buffer[offset + i] = e & 0xff, i += d, e /= 256, eLen -= 8) {}
+
+  buffer[offset + i - d] |= s * 128
+}
+
+},{}],84:[function(require,module,exports){
 'use strict';
 
 var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol" ? function (obj) { return typeof obj; } : function (obj) { return obj && typeof Symbol === "function" && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj; };
@@ -21391,13 +25685,12 @@ module.exports = function _phpCastString(value) {
   }
 };
 
-},{}],82:[function(require,module,exports){
+},{}],85:[function(require,module,exports){
 'use strict';
 
 var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol" ? function (obj) { return typeof obj; } : function (obj) { return obj && typeof Symbol === "function" && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj; };
 
 module.exports = function _php_cast_float(value) {
-  // eslint-disable-line camelcase
   // original by: Rafał Kukawski
   //   example 1: _php_cast_float(false)
   //   returns 1: 0
@@ -21444,13 +25737,12 @@ module.exports = function _php_cast_float(value) {
   }
 };
 
-},{"./_php_cast_int":83}],83:[function(require,module,exports){
+},{"./_php_cast_int":86}],86:[function(require,module,exports){
 'use strict';
 
 var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol" ? function (obj) { return typeof obj; } : function (obj) { return obj && typeof Symbol === "function" && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj; };
 
 module.exports = function _php_cast_int(value) {
-  // eslint-disable-line camelcase
   // original by: Rafał Kukawski
   //   example 1: _php_cast_int(false)
   //   returns 1: 0
@@ -21503,7 +25795,7 @@ module.exports = function _php_cast_int(value) {
   }
 };
 
-},{}],84:[function(require,module,exports){
+},{}],87:[function(require,module,exports){
 'use strict';
 
 module.exports = function date(format, timestamp) {
@@ -21815,15 +26107,14 @@ module.exports = function date(format, timestamp) {
   var _date = function _date(format, timestamp) {
     jsdate = timestamp === undefined ? new Date() // Not provided
     : timestamp instanceof Date ? new Date(timestamp) // JS Date()
-    : new Date(timestamp * 1000) // UNIX timestamp (auto-convert to int)
-    ;
+    : new Date(timestamp * 1000); // UNIX timestamp (auto-convert to int)
     return format.replace(formatChr, formatChrCb);
   };
 
   return _date(format, timestamp);
 };
 
-},{}],85:[function(require,module,exports){
+},{}],88:[function(require,module,exports){
 'use strict';
 
 var reSpace = '[ \\t]+';
@@ -22258,6 +26549,28 @@ var formats = {
     }
   },
 
+  oracledate: {
+    regex: /^(\d{2})-([A-Z]{3})-(\d{2})$/i,
+    name: 'd-M-y',
+    callback: function callback(match, day, monthText, year) {
+      var month = {
+        JAN: 0,
+        FEB: 1,
+        MAR: 2,
+        APR: 3,
+        MAY: 4,
+        JUN: 5,
+        JUL: 6,
+        AUG: 7,
+        SEP: 8,
+        OCT: 9,
+        NOV: 10,
+        DEC: 11
+      }[monthText.toUpperCase()];
+      return this.ymd(2000 + parseInt(year, 10), month, parseInt(day, 10));
+    }
+  },
+
   timeLong12: {
     regex: RegExp('^' + reHour12 + '[:.]' + reMinute + '[:.]' + reSecondlz + reSpaceOpt + reMeridian, 'i'),
     name: 'timelong12',
@@ -22609,13 +26922,20 @@ var formats = {
         case 'years':
           this.ry += amount;
           break;
-        case 'mon':case 'monday':
-        case 'tue':case 'tuesday':
-        case 'wed':case 'wednesday':
-        case 'thu':case 'thursday':
-        case 'fri':case 'friday':
-        case 'sat':case 'saturday':
-        case 'sun':case 'sunday':
+        case 'mon':
+        case 'monday':
+        case 'tue':
+        case 'tuesday':
+        case 'wed':
+        case 'wednesday':
+        case 'thu':
+        case 'thursday':
+        case 'fri':
+        case 'friday':
+        case 'sat':
+        case 'saturday':
+        case 'sun':
+        case 'sunday':
           this.resetTime();
           this.weekday = lookupWeekday(relUnit, 7);
           this.weekdayBehavior = 1;
@@ -22676,13 +26996,20 @@ var formats = {
         case 'years':
           this.ry += amount;
           break;
-        case 'mon':case 'monday':
-        case 'tue':case 'tuesday':
-        case 'wed':case 'wednesday':
-        case 'thu':case 'thursday':
-        case 'fri':case 'friday':
-        case 'sat':case 'saturday':
-        case 'sun':case 'sunday':
+        case 'mon':
+        case 'monday':
+        case 'tue':
+        case 'tuesday':
+        case 'wed':
+        case 'wednesday':
+        case 'thu':
+        case 'thursday':
+        case 'fri':
+        case 'friday':
+        case 'sat':
+        case 'saturday':
+        case 'sun':
+        case 'sunday':
           this.resetTime();
           this.weekday = lookupWeekday(relUnit, 7);
           this.weekdayBehavior = 1;
@@ -23060,6 +27387,8 @@ module.exports = function strtotime(str, now) {
   //        returns 5: 1241418600
   //        example 6: strtotime('2009-05-04 08:30:00 YWT')
   //        returns 6: 1241454600
+  //        example 7: strtotime('10-JUL-17')
+  //        returns 7: 1499644800
 
   if (now == null) {
     now = Math.floor(Date.now() / 1000);
@@ -23070,7 +27399,7 @@ module.exports = function strtotime(str, now) {
   // if multiple rules match the same string, the first match wins
   var rules = [formats.yesterday, formats.now, formats.noon, formats.midnightOrToday, formats.tomorrow, formats.timestamp, formats.firstOrLastDay, formats.backOrFrontOf,
   // formats.weekdayOf, // not yet implemented
-  formats.timeTiny12, formats.timeShort12, formats.timeLong12, formats.mssqltime, formats.timeShort24, formats.timeLong24, formats.iso8601long, formats.gnuNoColon, formats.iso8601noColon, formats.americanShort, formats.american, formats.iso8601date4, formats.iso8601dateSlash, formats.dateSlash, formats.gnuDateShortOrIso8601date2, formats.gnuDateShorter, formats.dateFull, formats.pointedDate4, formats.pointedDate2, formats.dateNoDay, formats.dateNoDayRev, formats.dateTextual, formats.dateNoYear, formats.dateNoYearRev, formats.dateNoColon, formats.xmlRpc, formats.xmlRpcNoColon, formats.soap, formats.wddx, formats.exif, formats.pgydotd, formats.isoWeekDay, formats.pgTextShort, formats.pgTextReverse, formats.clf, formats.year4, formats.ago, formats.dayText, formats.relativeTextWeek, formats.relativeText, formats.monthFullOrMonthAbbr, formats.tzCorrection, formats.tzAbbr, formats.dateShortWithTimeShort12, formats.dateShortWithTimeLong12, formats.dateShortWithTimeShort, formats.dateShortWithTimeLong, formats.relative, formats.whitespace];
+  formats.timeTiny12, formats.timeShort12, formats.timeLong12, formats.mssqltime, formats.oracledate, formats.timeShort24, formats.timeLong24, formats.iso8601long, formats.gnuNoColon, formats.iso8601noColon, formats.americanShort, formats.american, formats.iso8601date4, formats.iso8601dateSlash, formats.dateSlash, formats.gnuDateShortOrIso8601date2, formats.gnuDateShorter, formats.dateFull, formats.pointedDate4, formats.pointedDate2, formats.dateNoDay, formats.dateNoDayRev, formats.dateTextual, formats.dateNoYear, formats.dateNoYearRev, formats.dateNoColon, formats.xmlRpc, formats.xmlRpcNoColon, formats.soap, formats.wddx, formats.exif, formats.pgydotd, formats.isoWeekDay, formats.pgTextShort, formats.pgTextReverse, formats.clf, formats.year4, formats.ago, formats.dayText, formats.relativeTextWeek, formats.relativeText, formats.monthFullOrMonthAbbr, formats.tzCorrection, formats.tzAbbr, formats.dateShortWithTimeShort12, formats.dateShortWithTimeLong12, formats.dateShortWithTimeShort, formats.dateShortWithTimeLong, formats.relative, formats.whitespace];
 
   var result = Object.create(resultProto);
 
@@ -23103,7 +27432,7 @@ module.exports = function strtotime(str, now) {
   return Math.floor(result.toDate(new Date(now * 1000)) / 1000);
 };
 
-},{}],86:[function(require,module,exports){
+},{}],89:[function(require,module,exports){
 'use strict';
 
 var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol" ? function (obj) { return typeof obj; } : function (obj) { return obj && typeof Symbol === "function" && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj; };
@@ -23223,7 +27552,7 @@ module.exports = function max() {
   return retVal;
 };
 
-},{}],87:[function(require,module,exports){
+},{}],90:[function(require,module,exports){
 'use strict';
 
 var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol" ? function (obj) { return typeof obj; } : function (obj) { return obj && typeof Symbol === "function" && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj; };
@@ -23345,7 +27674,7 @@ module.exports = function min() {
   return retVal;
 };
 
-},{}],88:[function(require,module,exports){
+},{}],91:[function(require,module,exports){
 'use strict';
 
 function roundToInt(value, mode) {
@@ -23423,7 +27752,7 @@ module.exports = function round(value) {
   return value / p;
 };
 
-},{"../_helpers/_php_cast_float":82,"../_helpers/_php_cast_int":83}],89:[function(require,module,exports){
+},{"../_helpers/_php_cast_float":85,"../_helpers/_php_cast_int":86}],92:[function(require,module,exports){
 'use strict';
 
 module.exports = function sprintf() {
@@ -23622,11 +27951,10 @@ module.exports = function sprintf() {
   }
 };
 
-},{}],90:[function(require,module,exports){
+},{}],93:[function(require,module,exports){
 'use strict';
 
 module.exports = function strip_tags(input, allowed) {
-  // eslint-disable-line camelcase
   //  discuss at: https://locutus.io/php/strip_tags/
   // original by: Kevin van Zonneveld (https://kvz.io)
   // improved by: Luke Godfrey
@@ -23692,7 +28020,7 @@ module.exports = function strip_tags(input, allowed) {
   }
 };
 
-},{"../_helpers/_phpCastString":81}],91:[function(require,module,exports){
+},{"../_helpers/_phpCastString":84}],94:[function(require,module,exports){
 'use strict';
 
 module.exports = function vsprintf(format, args) {
@@ -23706,7 +28034,7 @@ module.exports = function vsprintf(format, args) {
   return sprintf.apply(this, [format].concat(args));
 };
 
-},{"../strings/sprintf":89}],92:[function(require,module,exports){
+},{"../strings/sprintf":92}],95:[function(require,module,exports){
 'use strict';
 
 module.exports = function boolval(mixedVar) {
@@ -23757,7 +28085,7 @@ module.exports = function boolval(mixedVar) {
   return true;
 };
 
-},{}],93:[function(require,module,exports){
+},{}],96:[function(require,module,exports){
 var getNative = require('./_getNative'),
     root = require('./_root');
 
@@ -23766,7 +28094,7 @@ var DataView = getNative(root, 'DataView');
 
 module.exports = DataView;
 
-},{"./_getNative":148,"./_root":183}],94:[function(require,module,exports){
+},{"./_getNative":151,"./_root":186}],97:[function(require,module,exports){
 var hashClear = require('./_hashClear'),
     hashDelete = require('./_hashDelete'),
     hashGet = require('./_hashGet'),
@@ -23800,7 +28128,7 @@ Hash.prototype.set = hashSet;
 
 module.exports = Hash;
 
-},{"./_hashClear":154,"./_hashDelete":155,"./_hashGet":156,"./_hashHas":157,"./_hashSet":158}],95:[function(require,module,exports){
+},{"./_hashClear":157,"./_hashDelete":158,"./_hashGet":159,"./_hashHas":160,"./_hashSet":161}],98:[function(require,module,exports){
 var listCacheClear = require('./_listCacheClear'),
     listCacheDelete = require('./_listCacheDelete'),
     listCacheGet = require('./_listCacheGet'),
@@ -23834,7 +28162,7 @@ ListCache.prototype.set = listCacheSet;
 
 module.exports = ListCache;
 
-},{"./_listCacheClear":165,"./_listCacheDelete":166,"./_listCacheGet":167,"./_listCacheHas":168,"./_listCacheSet":169}],96:[function(require,module,exports){
+},{"./_listCacheClear":168,"./_listCacheDelete":169,"./_listCacheGet":170,"./_listCacheHas":171,"./_listCacheSet":172}],99:[function(require,module,exports){
 var getNative = require('./_getNative'),
     root = require('./_root');
 
@@ -23843,7 +28171,7 @@ var Map = getNative(root, 'Map');
 
 module.exports = Map;
 
-},{"./_getNative":148,"./_root":183}],97:[function(require,module,exports){
+},{"./_getNative":151,"./_root":186}],100:[function(require,module,exports){
 var mapCacheClear = require('./_mapCacheClear'),
     mapCacheDelete = require('./_mapCacheDelete'),
     mapCacheGet = require('./_mapCacheGet'),
@@ -23877,7 +28205,7 @@ MapCache.prototype.set = mapCacheSet;
 
 module.exports = MapCache;
 
-},{"./_mapCacheClear":170,"./_mapCacheDelete":171,"./_mapCacheGet":172,"./_mapCacheHas":173,"./_mapCacheSet":174}],98:[function(require,module,exports){
+},{"./_mapCacheClear":173,"./_mapCacheDelete":174,"./_mapCacheGet":175,"./_mapCacheHas":176,"./_mapCacheSet":177}],101:[function(require,module,exports){
 var getNative = require('./_getNative'),
     root = require('./_root');
 
@@ -23886,7 +28214,7 @@ var Promise = getNative(root, 'Promise');
 
 module.exports = Promise;
 
-},{"./_getNative":148,"./_root":183}],99:[function(require,module,exports){
+},{"./_getNative":151,"./_root":186}],102:[function(require,module,exports){
 var getNative = require('./_getNative'),
     root = require('./_root');
 
@@ -23895,7 +28223,7 @@ var Set = getNative(root, 'Set');
 
 module.exports = Set;
 
-},{"./_getNative":148,"./_root":183}],100:[function(require,module,exports){
+},{"./_getNative":151,"./_root":186}],103:[function(require,module,exports){
 var MapCache = require('./_MapCache'),
     setCacheAdd = require('./_setCacheAdd'),
     setCacheHas = require('./_setCacheHas');
@@ -23924,7 +28252,7 @@ SetCache.prototype.has = setCacheHas;
 
 module.exports = SetCache;
 
-},{"./_MapCache":97,"./_setCacheAdd":184,"./_setCacheHas":185}],101:[function(require,module,exports){
+},{"./_MapCache":100,"./_setCacheAdd":187,"./_setCacheHas":188}],104:[function(require,module,exports){
 var ListCache = require('./_ListCache'),
     stackClear = require('./_stackClear'),
     stackDelete = require('./_stackDelete'),
@@ -23953,7 +28281,7 @@ Stack.prototype.set = stackSet;
 
 module.exports = Stack;
 
-},{"./_ListCache":95,"./_stackClear":187,"./_stackDelete":188,"./_stackGet":189,"./_stackHas":190,"./_stackSet":191}],102:[function(require,module,exports){
+},{"./_ListCache":98,"./_stackClear":190,"./_stackDelete":191,"./_stackGet":192,"./_stackHas":193,"./_stackSet":194}],105:[function(require,module,exports){
 var root = require('./_root');
 
 /** Built-in value references. */
@@ -23961,7 +28289,7 @@ var Symbol = root.Symbol;
 
 module.exports = Symbol;
 
-},{"./_root":183}],103:[function(require,module,exports){
+},{"./_root":186}],106:[function(require,module,exports){
 var root = require('./_root');
 
 /** Built-in value references. */
@@ -23969,7 +28297,7 @@ var Uint8Array = root.Uint8Array;
 
 module.exports = Uint8Array;
 
-},{"./_root":183}],104:[function(require,module,exports){
+},{"./_root":186}],107:[function(require,module,exports){
 var getNative = require('./_getNative'),
     root = require('./_root');
 
@@ -23978,7 +28306,7 @@ var WeakMap = getNative(root, 'WeakMap');
 
 module.exports = WeakMap;
 
-},{"./_getNative":148,"./_root":183}],105:[function(require,module,exports){
+},{"./_getNative":151,"./_root":186}],108:[function(require,module,exports){
 /**
  * A specialized version of `_.forEach` for arrays without support for
  * iteratee shorthands.
@@ -24002,7 +28330,7 @@ function arrayEach(array, iteratee) {
 
 module.exports = arrayEach;
 
-},{}],106:[function(require,module,exports){
+},{}],109:[function(require,module,exports){
 /**
  * A specialized version of `_.filter` for arrays without support for
  * iteratee shorthands.
@@ -24029,7 +28357,7 @@ function arrayFilter(array, predicate) {
 
 module.exports = arrayFilter;
 
-},{}],107:[function(require,module,exports){
+},{}],110:[function(require,module,exports){
 var baseTimes = require('./_baseTimes'),
     isArguments = require('./isArguments'),
     isArray = require('./isArray'),
@@ -24080,7 +28408,7 @@ function arrayLikeKeys(value, inherited) {
 
 module.exports = arrayLikeKeys;
 
-},{"./_baseTimes":132,"./_isIndex":159,"./isArguments":200,"./isArray":201,"./isBuffer":203,"./isTypedArray":209}],108:[function(require,module,exports){
+},{"./_baseTimes":135,"./_isIndex":162,"./isArguments":203,"./isArray":204,"./isBuffer":206,"./isTypedArray":212}],111:[function(require,module,exports){
 /**
  * A specialized version of `_.map` for arrays without support for iteratee
  * shorthands.
@@ -24103,7 +28431,7 @@ function arrayMap(array, iteratee) {
 
 module.exports = arrayMap;
 
-},{}],109:[function(require,module,exports){
+},{}],112:[function(require,module,exports){
 /**
  * Appends the elements of `values` to `array`.
  *
@@ -24125,7 +28453,7 @@ function arrayPush(array, values) {
 
 module.exports = arrayPush;
 
-},{}],110:[function(require,module,exports){
+},{}],113:[function(require,module,exports){
 /**
  * A specialized version of `_.some` for arrays without support for iteratee
  * shorthands.
@@ -24150,7 +28478,7 @@ function arraySome(array, predicate) {
 
 module.exports = arraySome;
 
-},{}],111:[function(require,module,exports){
+},{}],114:[function(require,module,exports){
 var eq = require('./eq');
 
 /**
@@ -24173,7 +28501,7 @@ function assocIndexOf(array, key) {
 
 module.exports = assocIndexOf;
 
-},{"./eq":195}],112:[function(require,module,exports){
+},{"./eq":198}],115:[function(require,module,exports){
 var baseForOwn = require('./_baseForOwn'),
     createBaseEach = require('./_createBaseEach');
 
@@ -24189,7 +28517,7 @@ var baseEach = createBaseEach(baseForOwn);
 
 module.exports = baseEach;
 
-},{"./_baseForOwn":114,"./_createBaseEach":139}],113:[function(require,module,exports){
+},{"./_baseForOwn":117,"./_createBaseEach":142}],116:[function(require,module,exports){
 var createBaseFor = require('./_createBaseFor');
 
 /**
@@ -24207,7 +28535,7 @@ var baseFor = createBaseFor();
 
 module.exports = baseFor;
 
-},{"./_createBaseFor":140}],114:[function(require,module,exports){
+},{"./_createBaseFor":143}],117:[function(require,module,exports){
 var baseFor = require('./_baseFor'),
     keys = require('./keys');
 
@@ -24225,7 +28553,7 @@ function baseForOwn(object, iteratee) {
 
 module.exports = baseForOwn;
 
-},{"./_baseFor":113,"./keys":210}],115:[function(require,module,exports){
+},{"./_baseFor":116,"./keys":213}],118:[function(require,module,exports){
 var castPath = require('./_castPath'),
     toKey = require('./_toKey');
 
@@ -24251,7 +28579,7 @@ function baseGet(object, path) {
 
 module.exports = baseGet;
 
-},{"./_castPath":137,"./_toKey":193}],116:[function(require,module,exports){
+},{"./_castPath":140,"./_toKey":196}],119:[function(require,module,exports){
 var arrayPush = require('./_arrayPush'),
     isArray = require('./isArray');
 
@@ -24273,7 +28601,7 @@ function baseGetAllKeys(object, keysFunc, symbolsFunc) {
 
 module.exports = baseGetAllKeys;
 
-},{"./_arrayPush":109,"./isArray":201}],117:[function(require,module,exports){
+},{"./_arrayPush":112,"./isArray":204}],120:[function(require,module,exports){
 var Symbol = require('./_Symbol'),
     getRawTag = require('./_getRawTag'),
     objectToString = require('./_objectToString');
@@ -24303,7 +28631,7 @@ function baseGetTag(value) {
 
 module.exports = baseGetTag;
 
-},{"./_Symbol":102,"./_getRawTag":149,"./_objectToString":181}],118:[function(require,module,exports){
+},{"./_Symbol":105,"./_getRawTag":152,"./_objectToString":184}],121:[function(require,module,exports){
 /**
  * The base implementation of `_.hasIn` without support for deep paths.
  *
@@ -24318,7 +28646,7 @@ function baseHasIn(object, key) {
 
 module.exports = baseHasIn;
 
-},{}],119:[function(require,module,exports){
+},{}],122:[function(require,module,exports){
 var baseGetTag = require('./_baseGetTag'),
     isObjectLike = require('./isObjectLike');
 
@@ -24338,7 +28666,7 @@ function baseIsArguments(value) {
 
 module.exports = baseIsArguments;
 
-},{"./_baseGetTag":117,"./isObjectLike":207}],120:[function(require,module,exports){
+},{"./_baseGetTag":120,"./isObjectLike":210}],123:[function(require,module,exports){
 var baseIsEqualDeep = require('./_baseIsEqualDeep'),
     isObjectLike = require('./isObjectLike');
 
@@ -24368,7 +28696,7 @@ function baseIsEqual(value, other, bitmask, customizer, stack) {
 
 module.exports = baseIsEqual;
 
-},{"./_baseIsEqualDeep":121,"./isObjectLike":207}],121:[function(require,module,exports){
+},{"./_baseIsEqualDeep":124,"./isObjectLike":210}],124:[function(require,module,exports){
 var Stack = require('./_Stack'),
     equalArrays = require('./_equalArrays'),
     equalByTag = require('./_equalByTag'),
@@ -24453,7 +28781,7 @@ function baseIsEqualDeep(object, other, bitmask, customizer, equalFunc, stack) {
 
 module.exports = baseIsEqualDeep;
 
-},{"./_Stack":101,"./_equalArrays":141,"./_equalByTag":142,"./_equalObjects":143,"./_getTag":151,"./isArray":201,"./isBuffer":203,"./isTypedArray":209}],122:[function(require,module,exports){
+},{"./_Stack":104,"./_equalArrays":144,"./_equalByTag":145,"./_equalObjects":146,"./_getTag":154,"./isArray":204,"./isBuffer":206,"./isTypedArray":212}],125:[function(require,module,exports){
 var Stack = require('./_Stack'),
     baseIsEqual = require('./_baseIsEqual');
 
@@ -24517,7 +28845,7 @@ function baseIsMatch(object, source, matchData, customizer) {
 
 module.exports = baseIsMatch;
 
-},{"./_Stack":101,"./_baseIsEqual":120}],123:[function(require,module,exports){
+},{"./_Stack":104,"./_baseIsEqual":123}],126:[function(require,module,exports){
 var isFunction = require('./isFunction'),
     isMasked = require('./_isMasked'),
     isObject = require('./isObject'),
@@ -24566,7 +28894,7 @@ function baseIsNative(value) {
 
 module.exports = baseIsNative;
 
-},{"./_isMasked":162,"./_toSource":194,"./isFunction":204,"./isObject":206}],124:[function(require,module,exports){
+},{"./_isMasked":165,"./_toSource":197,"./isFunction":207,"./isObject":209}],127:[function(require,module,exports){
 var baseGetTag = require('./_baseGetTag'),
     isLength = require('./isLength'),
     isObjectLike = require('./isObjectLike');
@@ -24628,7 +28956,7 @@ function baseIsTypedArray(value) {
 
 module.exports = baseIsTypedArray;
 
-},{"./_baseGetTag":117,"./isLength":205,"./isObjectLike":207}],125:[function(require,module,exports){
+},{"./_baseGetTag":120,"./isLength":208,"./isObjectLike":210}],128:[function(require,module,exports){
 var baseMatches = require('./_baseMatches'),
     baseMatchesProperty = require('./_baseMatchesProperty'),
     identity = require('./identity'),
@@ -24661,7 +28989,7 @@ function baseIteratee(value) {
 
 module.exports = baseIteratee;
 
-},{"./_baseMatches":128,"./_baseMatchesProperty":129,"./identity":199,"./isArray":201,"./property":213}],126:[function(require,module,exports){
+},{"./_baseMatches":131,"./_baseMatchesProperty":132,"./identity":202,"./isArray":204,"./property":216}],129:[function(require,module,exports){
 var isPrototype = require('./_isPrototype'),
     nativeKeys = require('./_nativeKeys');
 
@@ -24693,7 +29021,7 @@ function baseKeys(object) {
 
 module.exports = baseKeys;
 
-},{"./_isPrototype":163,"./_nativeKeys":179}],127:[function(require,module,exports){
+},{"./_isPrototype":166,"./_nativeKeys":182}],130:[function(require,module,exports){
 var baseEach = require('./_baseEach'),
     isArrayLike = require('./isArrayLike');
 
@@ -24717,7 +29045,7 @@ function baseMap(collection, iteratee) {
 
 module.exports = baseMap;
 
-},{"./_baseEach":112,"./isArrayLike":202}],128:[function(require,module,exports){
+},{"./_baseEach":115,"./isArrayLike":205}],131:[function(require,module,exports){
 var baseIsMatch = require('./_baseIsMatch'),
     getMatchData = require('./_getMatchData'),
     matchesStrictComparable = require('./_matchesStrictComparable');
@@ -24741,7 +29069,7 @@ function baseMatches(source) {
 
 module.exports = baseMatches;
 
-},{"./_baseIsMatch":122,"./_getMatchData":147,"./_matchesStrictComparable":176}],129:[function(require,module,exports){
+},{"./_baseIsMatch":125,"./_getMatchData":150,"./_matchesStrictComparable":179}],132:[function(require,module,exports){
 var baseIsEqual = require('./_baseIsEqual'),
     get = require('./get'),
     hasIn = require('./hasIn'),
@@ -24776,7 +29104,7 @@ function baseMatchesProperty(path, srcValue) {
 
 module.exports = baseMatchesProperty;
 
-},{"./_baseIsEqual":120,"./_isKey":160,"./_isStrictComparable":164,"./_matchesStrictComparable":176,"./_toKey":193,"./get":197,"./hasIn":198}],130:[function(require,module,exports){
+},{"./_baseIsEqual":123,"./_isKey":163,"./_isStrictComparable":167,"./_matchesStrictComparable":179,"./_toKey":196,"./get":200,"./hasIn":201}],133:[function(require,module,exports){
 /**
  * The base implementation of `_.property` without support for deep paths.
  *
@@ -24792,7 +29120,7 @@ function baseProperty(key) {
 
 module.exports = baseProperty;
 
-},{}],131:[function(require,module,exports){
+},{}],134:[function(require,module,exports){
 var baseGet = require('./_baseGet');
 
 /**
@@ -24810,7 +29138,7 @@ function basePropertyDeep(path) {
 
 module.exports = basePropertyDeep;
 
-},{"./_baseGet":115}],132:[function(require,module,exports){
+},{"./_baseGet":118}],135:[function(require,module,exports){
 /**
  * The base implementation of `_.times` without support for iteratee shorthands
  * or max array length checks.
@@ -24832,7 +29160,7 @@ function baseTimes(n, iteratee) {
 
 module.exports = baseTimes;
 
-},{}],133:[function(require,module,exports){
+},{}],136:[function(require,module,exports){
 var Symbol = require('./_Symbol'),
     arrayMap = require('./_arrayMap'),
     isArray = require('./isArray'),
@@ -24871,7 +29199,7 @@ function baseToString(value) {
 
 module.exports = baseToString;
 
-},{"./_Symbol":102,"./_arrayMap":108,"./isArray":201,"./isSymbol":208}],134:[function(require,module,exports){
+},{"./_Symbol":105,"./_arrayMap":111,"./isArray":204,"./isSymbol":211}],137:[function(require,module,exports){
 /**
  * The base implementation of `_.unary` without support for storing metadata.
  *
@@ -24887,7 +29215,7 @@ function baseUnary(func) {
 
 module.exports = baseUnary;
 
-},{}],135:[function(require,module,exports){
+},{}],138:[function(require,module,exports){
 /**
  * Checks if a `cache` value for `key` exists.
  *
@@ -24902,7 +29230,7 @@ function cacheHas(cache, key) {
 
 module.exports = cacheHas;
 
-},{}],136:[function(require,module,exports){
+},{}],139:[function(require,module,exports){
 var identity = require('./identity');
 
 /**
@@ -24918,7 +29246,7 @@ function castFunction(value) {
 
 module.exports = castFunction;
 
-},{"./identity":199}],137:[function(require,module,exports){
+},{"./identity":202}],140:[function(require,module,exports){
 var isArray = require('./isArray'),
     isKey = require('./_isKey'),
     stringToPath = require('./_stringToPath'),
@@ -24941,7 +29269,7 @@ function castPath(value, object) {
 
 module.exports = castPath;
 
-},{"./_isKey":160,"./_stringToPath":192,"./isArray":201,"./toString":216}],138:[function(require,module,exports){
+},{"./_isKey":163,"./_stringToPath":195,"./isArray":204,"./toString":219}],141:[function(require,module,exports){
 var root = require('./_root');
 
 /** Used to detect overreaching core-js shims. */
@@ -24949,7 +29277,7 @@ var coreJsData = root['__core-js_shared__'];
 
 module.exports = coreJsData;
 
-},{"./_root":183}],139:[function(require,module,exports){
+},{"./_root":186}],142:[function(require,module,exports){
 var isArrayLike = require('./isArrayLike');
 
 /**
@@ -24983,7 +29311,7 @@ function createBaseEach(eachFunc, fromRight) {
 
 module.exports = createBaseEach;
 
-},{"./isArrayLike":202}],140:[function(require,module,exports){
+},{"./isArrayLike":205}],143:[function(require,module,exports){
 /**
  * Creates a base function for methods like `_.forIn` and `_.forOwn`.
  *
@@ -25010,7 +29338,7 @@ function createBaseFor(fromRight) {
 
 module.exports = createBaseFor;
 
-},{}],141:[function(require,module,exports){
+},{}],144:[function(require,module,exports){
 var SetCache = require('./_SetCache'),
     arraySome = require('./_arraySome'),
     cacheHas = require('./_cacheHas');
@@ -25096,7 +29424,7 @@ function equalArrays(array, other, bitmask, customizer, equalFunc, stack) {
 
 module.exports = equalArrays;
 
-},{"./_SetCache":100,"./_arraySome":110,"./_cacheHas":135}],142:[function(require,module,exports){
+},{"./_SetCache":103,"./_arraySome":113,"./_cacheHas":138}],145:[function(require,module,exports){
 var Symbol = require('./_Symbol'),
     Uint8Array = require('./_Uint8Array'),
     eq = require('./eq'),
@@ -25210,7 +29538,7 @@ function equalByTag(object, other, tag, bitmask, customizer, equalFunc, stack) {
 
 module.exports = equalByTag;
 
-},{"./_Symbol":102,"./_Uint8Array":103,"./_equalArrays":141,"./_mapToArray":175,"./_setToArray":186,"./eq":195}],143:[function(require,module,exports){
+},{"./_Symbol":105,"./_Uint8Array":106,"./_equalArrays":144,"./_mapToArray":178,"./_setToArray":189,"./eq":198}],146:[function(require,module,exports){
 var getAllKeys = require('./_getAllKeys');
 
 /** Used to compose bitmasks for value comparisons. */
@@ -25302,7 +29630,7 @@ function equalObjects(object, other, bitmask, customizer, equalFunc, stack) {
 
 module.exports = equalObjects;
 
-},{"./_getAllKeys":145}],144:[function(require,module,exports){
+},{"./_getAllKeys":148}],147:[function(require,module,exports){
 (function (global){(function (){
 /** Detect free variable `global` from Node.js. */
 var freeGlobal = typeof global == 'object' && global && global.Object === Object && global;
@@ -25310,7 +29638,7 @@ var freeGlobal = typeof global == 'object' && global && global.Object === Object
 module.exports = freeGlobal;
 
 }).call(this)}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}],145:[function(require,module,exports){
+},{}],148:[function(require,module,exports){
 var baseGetAllKeys = require('./_baseGetAllKeys'),
     getSymbols = require('./_getSymbols'),
     keys = require('./keys');
@@ -25328,7 +29656,7 @@ function getAllKeys(object) {
 
 module.exports = getAllKeys;
 
-},{"./_baseGetAllKeys":116,"./_getSymbols":150,"./keys":210}],146:[function(require,module,exports){
+},{"./_baseGetAllKeys":119,"./_getSymbols":153,"./keys":213}],149:[function(require,module,exports){
 var isKeyable = require('./_isKeyable');
 
 /**
@@ -25348,7 +29676,7 @@ function getMapData(map, key) {
 
 module.exports = getMapData;
 
-},{"./_isKeyable":161}],147:[function(require,module,exports){
+},{"./_isKeyable":164}],150:[function(require,module,exports){
 var isStrictComparable = require('./_isStrictComparable'),
     keys = require('./keys');
 
@@ -25374,7 +29702,7 @@ function getMatchData(object) {
 
 module.exports = getMatchData;
 
-},{"./_isStrictComparable":164,"./keys":210}],148:[function(require,module,exports){
+},{"./_isStrictComparable":167,"./keys":213}],151:[function(require,module,exports){
 var baseIsNative = require('./_baseIsNative'),
     getValue = require('./_getValue');
 
@@ -25393,7 +29721,7 @@ function getNative(object, key) {
 
 module.exports = getNative;
 
-},{"./_baseIsNative":123,"./_getValue":152}],149:[function(require,module,exports){
+},{"./_baseIsNative":126,"./_getValue":155}],152:[function(require,module,exports){
 var Symbol = require('./_Symbol');
 
 /** Used for built-in method references. */
@@ -25441,7 +29769,7 @@ function getRawTag(value) {
 
 module.exports = getRawTag;
 
-},{"./_Symbol":102}],150:[function(require,module,exports){
+},{"./_Symbol":105}],153:[function(require,module,exports){
 var arrayFilter = require('./_arrayFilter'),
     stubArray = require('./stubArray');
 
@@ -25473,7 +29801,7 @@ var getSymbols = !nativeGetSymbols ? stubArray : function(object) {
 
 module.exports = getSymbols;
 
-},{"./_arrayFilter":106,"./stubArray":214}],151:[function(require,module,exports){
+},{"./_arrayFilter":109,"./stubArray":217}],154:[function(require,module,exports){
 var DataView = require('./_DataView'),
     Map = require('./_Map'),
     Promise = require('./_Promise'),
@@ -25533,7 +29861,7 @@ if ((DataView && getTag(new DataView(new ArrayBuffer(1))) != dataViewTag) ||
 
 module.exports = getTag;
 
-},{"./_DataView":93,"./_Map":96,"./_Promise":98,"./_Set":99,"./_WeakMap":104,"./_baseGetTag":117,"./_toSource":194}],152:[function(require,module,exports){
+},{"./_DataView":96,"./_Map":99,"./_Promise":101,"./_Set":102,"./_WeakMap":107,"./_baseGetTag":120,"./_toSource":197}],155:[function(require,module,exports){
 /**
  * Gets the value at `key` of `object`.
  *
@@ -25548,7 +29876,7 @@ function getValue(object, key) {
 
 module.exports = getValue;
 
-},{}],153:[function(require,module,exports){
+},{}],156:[function(require,module,exports){
 var castPath = require('./_castPath'),
     isArguments = require('./isArguments'),
     isArray = require('./isArray'),
@@ -25589,7 +29917,7 @@ function hasPath(object, path, hasFunc) {
 
 module.exports = hasPath;
 
-},{"./_castPath":137,"./_isIndex":159,"./_toKey":193,"./isArguments":200,"./isArray":201,"./isLength":205}],154:[function(require,module,exports){
+},{"./_castPath":140,"./_isIndex":162,"./_toKey":196,"./isArguments":203,"./isArray":204,"./isLength":208}],157:[function(require,module,exports){
 var nativeCreate = require('./_nativeCreate');
 
 /**
@@ -25606,7 +29934,7 @@ function hashClear() {
 
 module.exports = hashClear;
 
-},{"./_nativeCreate":178}],155:[function(require,module,exports){
+},{"./_nativeCreate":181}],158:[function(require,module,exports){
 /**
  * Removes `key` and its value from the hash.
  *
@@ -25625,7 +29953,7 @@ function hashDelete(key) {
 
 module.exports = hashDelete;
 
-},{}],156:[function(require,module,exports){
+},{}],159:[function(require,module,exports){
 var nativeCreate = require('./_nativeCreate');
 
 /** Used to stand-in for `undefined` hash values. */
@@ -25657,7 +29985,7 @@ function hashGet(key) {
 
 module.exports = hashGet;
 
-},{"./_nativeCreate":178}],157:[function(require,module,exports){
+},{"./_nativeCreate":181}],160:[function(require,module,exports){
 var nativeCreate = require('./_nativeCreate');
 
 /** Used for built-in method references. */
@@ -25682,7 +30010,7 @@ function hashHas(key) {
 
 module.exports = hashHas;
 
-},{"./_nativeCreate":178}],158:[function(require,module,exports){
+},{"./_nativeCreate":181}],161:[function(require,module,exports){
 var nativeCreate = require('./_nativeCreate');
 
 /** Used to stand-in for `undefined` hash values. */
@@ -25707,7 +30035,7 @@ function hashSet(key, value) {
 
 module.exports = hashSet;
 
-},{"./_nativeCreate":178}],159:[function(require,module,exports){
+},{"./_nativeCreate":181}],162:[function(require,module,exports){
 /** Used as references for various `Number` constants. */
 var MAX_SAFE_INTEGER = 9007199254740991;
 
@@ -25734,7 +30062,7 @@ function isIndex(value, length) {
 
 module.exports = isIndex;
 
-},{}],160:[function(require,module,exports){
+},{}],163:[function(require,module,exports){
 var isArray = require('./isArray'),
     isSymbol = require('./isSymbol');
 
@@ -25765,7 +30093,7 @@ function isKey(value, object) {
 
 module.exports = isKey;
 
-},{"./isArray":201,"./isSymbol":208}],161:[function(require,module,exports){
+},{"./isArray":204,"./isSymbol":211}],164:[function(require,module,exports){
 /**
  * Checks if `value` is suitable for use as unique object key.
  *
@@ -25782,7 +30110,7 @@ function isKeyable(value) {
 
 module.exports = isKeyable;
 
-},{}],162:[function(require,module,exports){
+},{}],165:[function(require,module,exports){
 var coreJsData = require('./_coreJsData');
 
 /** Used to detect methods masquerading as native. */
@@ -25804,7 +30132,7 @@ function isMasked(func) {
 
 module.exports = isMasked;
 
-},{"./_coreJsData":138}],163:[function(require,module,exports){
+},{"./_coreJsData":141}],166:[function(require,module,exports){
 /** Used for built-in method references. */
 var objectProto = Object.prototype;
 
@@ -25824,7 +30152,7 @@ function isPrototype(value) {
 
 module.exports = isPrototype;
 
-},{}],164:[function(require,module,exports){
+},{}],167:[function(require,module,exports){
 var isObject = require('./isObject');
 
 /**
@@ -25841,7 +30169,7 @@ function isStrictComparable(value) {
 
 module.exports = isStrictComparable;
 
-},{"./isObject":206}],165:[function(require,module,exports){
+},{"./isObject":209}],168:[function(require,module,exports){
 /**
  * Removes all key-value entries from the list cache.
  *
@@ -25856,7 +30184,7 @@ function listCacheClear() {
 
 module.exports = listCacheClear;
 
-},{}],166:[function(require,module,exports){
+},{}],169:[function(require,module,exports){
 var assocIndexOf = require('./_assocIndexOf');
 
 /** Used for built-in method references. */
@@ -25893,7 +30221,7 @@ function listCacheDelete(key) {
 
 module.exports = listCacheDelete;
 
-},{"./_assocIndexOf":111}],167:[function(require,module,exports){
+},{"./_assocIndexOf":114}],170:[function(require,module,exports){
 var assocIndexOf = require('./_assocIndexOf');
 
 /**
@@ -25914,7 +30242,7 @@ function listCacheGet(key) {
 
 module.exports = listCacheGet;
 
-},{"./_assocIndexOf":111}],168:[function(require,module,exports){
+},{"./_assocIndexOf":114}],171:[function(require,module,exports){
 var assocIndexOf = require('./_assocIndexOf');
 
 /**
@@ -25932,7 +30260,7 @@ function listCacheHas(key) {
 
 module.exports = listCacheHas;
 
-},{"./_assocIndexOf":111}],169:[function(require,module,exports){
+},{"./_assocIndexOf":114}],172:[function(require,module,exports){
 var assocIndexOf = require('./_assocIndexOf');
 
 /**
@@ -25960,7 +30288,7 @@ function listCacheSet(key, value) {
 
 module.exports = listCacheSet;
 
-},{"./_assocIndexOf":111}],170:[function(require,module,exports){
+},{"./_assocIndexOf":114}],173:[function(require,module,exports){
 var Hash = require('./_Hash'),
     ListCache = require('./_ListCache'),
     Map = require('./_Map');
@@ -25983,7 +30311,7 @@ function mapCacheClear() {
 
 module.exports = mapCacheClear;
 
-},{"./_Hash":94,"./_ListCache":95,"./_Map":96}],171:[function(require,module,exports){
+},{"./_Hash":97,"./_ListCache":98,"./_Map":99}],174:[function(require,module,exports){
 var getMapData = require('./_getMapData');
 
 /**
@@ -26003,7 +30331,7 @@ function mapCacheDelete(key) {
 
 module.exports = mapCacheDelete;
 
-},{"./_getMapData":146}],172:[function(require,module,exports){
+},{"./_getMapData":149}],175:[function(require,module,exports){
 var getMapData = require('./_getMapData');
 
 /**
@@ -26021,7 +30349,7 @@ function mapCacheGet(key) {
 
 module.exports = mapCacheGet;
 
-},{"./_getMapData":146}],173:[function(require,module,exports){
+},{"./_getMapData":149}],176:[function(require,module,exports){
 var getMapData = require('./_getMapData');
 
 /**
@@ -26039,7 +30367,7 @@ function mapCacheHas(key) {
 
 module.exports = mapCacheHas;
 
-},{"./_getMapData":146}],174:[function(require,module,exports){
+},{"./_getMapData":149}],177:[function(require,module,exports){
 var getMapData = require('./_getMapData');
 
 /**
@@ -26063,7 +30391,7 @@ function mapCacheSet(key, value) {
 
 module.exports = mapCacheSet;
 
-},{"./_getMapData":146}],175:[function(require,module,exports){
+},{"./_getMapData":149}],178:[function(require,module,exports){
 /**
  * Converts `map` to its key-value pairs.
  *
@@ -26083,7 +30411,7 @@ function mapToArray(map) {
 
 module.exports = mapToArray;
 
-},{}],176:[function(require,module,exports){
+},{}],179:[function(require,module,exports){
 /**
  * A specialized version of `matchesProperty` for source values suitable
  * for strict equality comparisons, i.e. `===`.
@@ -26105,7 +30433,7 @@ function matchesStrictComparable(key, srcValue) {
 
 module.exports = matchesStrictComparable;
 
-},{}],177:[function(require,module,exports){
+},{}],180:[function(require,module,exports){
 var memoize = require('./memoize');
 
 /** Used as the maximum memoize cache size. */
@@ -26133,7 +30461,7 @@ function memoizeCapped(func) {
 
 module.exports = memoizeCapped;
 
-},{"./memoize":212}],178:[function(require,module,exports){
+},{"./memoize":215}],181:[function(require,module,exports){
 var getNative = require('./_getNative');
 
 /* Built-in method references that are verified to be native. */
@@ -26141,7 +30469,7 @@ var nativeCreate = getNative(Object, 'create');
 
 module.exports = nativeCreate;
 
-},{"./_getNative":148}],179:[function(require,module,exports){
+},{"./_getNative":151}],182:[function(require,module,exports){
 var overArg = require('./_overArg');
 
 /* Built-in method references for those with the same name as other `lodash` methods. */
@@ -26149,7 +30477,7 @@ var nativeKeys = overArg(Object.keys, Object);
 
 module.exports = nativeKeys;
 
-},{"./_overArg":182}],180:[function(require,module,exports){
+},{"./_overArg":185}],183:[function(require,module,exports){
 var freeGlobal = require('./_freeGlobal');
 
 /** Detect free variable `exports`. */
@@ -26181,7 +30509,7 @@ var nodeUtil = (function() {
 
 module.exports = nodeUtil;
 
-},{"./_freeGlobal":144}],181:[function(require,module,exports){
+},{"./_freeGlobal":147}],184:[function(require,module,exports){
 /** Used for built-in method references. */
 var objectProto = Object.prototype;
 
@@ -26205,7 +30533,7 @@ function objectToString(value) {
 
 module.exports = objectToString;
 
-},{}],182:[function(require,module,exports){
+},{}],185:[function(require,module,exports){
 /**
  * Creates a unary function that invokes `func` with its argument transformed.
  *
@@ -26222,7 +30550,7 @@ function overArg(func, transform) {
 
 module.exports = overArg;
 
-},{}],183:[function(require,module,exports){
+},{}],186:[function(require,module,exports){
 var freeGlobal = require('./_freeGlobal');
 
 /** Detect free variable `self`. */
@@ -26233,7 +30561,7 @@ var root = freeGlobal || freeSelf || Function('return this')();
 
 module.exports = root;
 
-},{"./_freeGlobal":144}],184:[function(require,module,exports){
+},{"./_freeGlobal":147}],187:[function(require,module,exports){
 /** Used to stand-in for `undefined` hash values. */
 var HASH_UNDEFINED = '__lodash_hash_undefined__';
 
@@ -26254,7 +30582,7 @@ function setCacheAdd(value) {
 
 module.exports = setCacheAdd;
 
-},{}],185:[function(require,module,exports){
+},{}],188:[function(require,module,exports){
 /**
  * Checks if `value` is in the array cache.
  *
@@ -26270,7 +30598,7 @@ function setCacheHas(value) {
 
 module.exports = setCacheHas;
 
-},{}],186:[function(require,module,exports){
+},{}],189:[function(require,module,exports){
 /**
  * Converts `set` to an array of its values.
  *
@@ -26290,7 +30618,7 @@ function setToArray(set) {
 
 module.exports = setToArray;
 
-},{}],187:[function(require,module,exports){
+},{}],190:[function(require,module,exports){
 var ListCache = require('./_ListCache');
 
 /**
@@ -26307,7 +30635,7 @@ function stackClear() {
 
 module.exports = stackClear;
 
-},{"./_ListCache":95}],188:[function(require,module,exports){
+},{"./_ListCache":98}],191:[function(require,module,exports){
 /**
  * Removes `key` and its value from the stack.
  *
@@ -26327,7 +30655,7 @@ function stackDelete(key) {
 
 module.exports = stackDelete;
 
-},{}],189:[function(require,module,exports){
+},{}],192:[function(require,module,exports){
 /**
  * Gets the stack value for `key`.
  *
@@ -26343,7 +30671,7 @@ function stackGet(key) {
 
 module.exports = stackGet;
 
-},{}],190:[function(require,module,exports){
+},{}],193:[function(require,module,exports){
 /**
  * Checks if a stack value for `key` exists.
  *
@@ -26359,7 +30687,7 @@ function stackHas(key) {
 
 module.exports = stackHas;
 
-},{}],191:[function(require,module,exports){
+},{}],194:[function(require,module,exports){
 var ListCache = require('./_ListCache'),
     Map = require('./_Map'),
     MapCache = require('./_MapCache');
@@ -26395,7 +30723,7 @@ function stackSet(key, value) {
 
 module.exports = stackSet;
 
-},{"./_ListCache":95,"./_Map":96,"./_MapCache":97}],192:[function(require,module,exports){
+},{"./_ListCache":98,"./_Map":99,"./_MapCache":100}],195:[function(require,module,exports){
 var memoizeCapped = require('./_memoizeCapped');
 
 /** Used to match property names within property paths. */
@@ -26424,7 +30752,7 @@ var stringToPath = memoizeCapped(function(string) {
 
 module.exports = stringToPath;
 
-},{"./_memoizeCapped":177}],193:[function(require,module,exports){
+},{"./_memoizeCapped":180}],196:[function(require,module,exports){
 var isSymbol = require('./isSymbol');
 
 /** Used as references for various `Number` constants. */
@@ -26447,7 +30775,7 @@ function toKey(value) {
 
 module.exports = toKey;
 
-},{"./isSymbol":208}],194:[function(require,module,exports){
+},{"./isSymbol":211}],197:[function(require,module,exports){
 /** Used for built-in method references. */
 var funcProto = Function.prototype;
 
@@ -26475,7 +30803,7 @@ function toSource(func) {
 
 module.exports = toSource;
 
-},{}],195:[function(require,module,exports){
+},{}],198:[function(require,module,exports){
 /**
  * Performs a
  * [`SameValueZero`](http://ecma-international.org/ecma-262/7.0/#sec-samevaluezero)
@@ -26514,7 +30842,7 @@ function eq(value, other) {
 
 module.exports = eq;
 
-},{}],196:[function(require,module,exports){
+},{}],199:[function(require,module,exports){
 var arrayEach = require('./_arrayEach'),
     baseEach = require('./_baseEach'),
     castFunction = require('./_castFunction'),
@@ -26557,7 +30885,7 @@ function forEach(collection, iteratee) {
 
 module.exports = forEach;
 
-},{"./_arrayEach":105,"./_baseEach":112,"./_castFunction":136,"./isArray":201}],197:[function(require,module,exports){
+},{"./_arrayEach":108,"./_baseEach":115,"./_castFunction":139,"./isArray":204}],200:[function(require,module,exports){
 var baseGet = require('./_baseGet');
 
 /**
@@ -26592,7 +30920,7 @@ function get(object, path, defaultValue) {
 
 module.exports = get;
 
-},{"./_baseGet":115}],198:[function(require,module,exports){
+},{"./_baseGet":118}],201:[function(require,module,exports){
 var baseHasIn = require('./_baseHasIn'),
     hasPath = require('./_hasPath');
 
@@ -26628,7 +30956,7 @@ function hasIn(object, path) {
 
 module.exports = hasIn;
 
-},{"./_baseHasIn":118,"./_hasPath":153}],199:[function(require,module,exports){
+},{"./_baseHasIn":121,"./_hasPath":156}],202:[function(require,module,exports){
 /**
  * This method returns the first argument it receives.
  *
@@ -26651,7 +30979,7 @@ function identity(value) {
 
 module.exports = identity;
 
-},{}],200:[function(require,module,exports){
+},{}],203:[function(require,module,exports){
 var baseIsArguments = require('./_baseIsArguments'),
     isObjectLike = require('./isObjectLike');
 
@@ -26689,7 +31017,7 @@ var isArguments = baseIsArguments(function() { return arguments; }()) ? baseIsAr
 
 module.exports = isArguments;
 
-},{"./_baseIsArguments":119,"./isObjectLike":207}],201:[function(require,module,exports){
+},{"./_baseIsArguments":122,"./isObjectLike":210}],204:[function(require,module,exports){
 /**
  * Checks if `value` is classified as an `Array` object.
  *
@@ -26717,7 +31045,7 @@ var isArray = Array.isArray;
 
 module.exports = isArray;
 
-},{}],202:[function(require,module,exports){
+},{}],205:[function(require,module,exports){
 var isFunction = require('./isFunction'),
     isLength = require('./isLength');
 
@@ -26752,7 +31080,7 @@ function isArrayLike(value) {
 
 module.exports = isArrayLike;
 
-},{"./isFunction":204,"./isLength":205}],203:[function(require,module,exports){
+},{"./isFunction":207,"./isLength":208}],206:[function(require,module,exports){
 var root = require('./_root'),
     stubFalse = require('./stubFalse');
 
@@ -26792,7 +31120,7 @@ var isBuffer = nativeIsBuffer || stubFalse;
 
 module.exports = isBuffer;
 
-},{"./_root":183,"./stubFalse":215}],204:[function(require,module,exports){
+},{"./_root":186,"./stubFalse":218}],207:[function(require,module,exports){
 var baseGetTag = require('./_baseGetTag'),
     isObject = require('./isObject');
 
@@ -26831,7 +31159,7 @@ function isFunction(value) {
 
 module.exports = isFunction;
 
-},{"./_baseGetTag":117,"./isObject":206}],205:[function(require,module,exports){
+},{"./_baseGetTag":120,"./isObject":209}],208:[function(require,module,exports){
 /** Used as references for various `Number` constants. */
 var MAX_SAFE_INTEGER = 9007199254740991;
 
@@ -26868,7 +31196,7 @@ function isLength(value) {
 
 module.exports = isLength;
 
-},{}],206:[function(require,module,exports){
+},{}],209:[function(require,module,exports){
 /**
  * Checks if `value` is the
  * [language type](http://www.ecma-international.org/ecma-262/7.0/#sec-ecmascript-language-types)
@@ -26901,7 +31229,7 @@ function isObject(value) {
 
 module.exports = isObject;
 
-},{}],207:[function(require,module,exports){
+},{}],210:[function(require,module,exports){
 /**
  * Checks if `value` is object-like. A value is object-like if it's not `null`
  * and has a `typeof` result of "object".
@@ -26932,7 +31260,7 @@ function isObjectLike(value) {
 
 module.exports = isObjectLike;
 
-},{}],208:[function(require,module,exports){
+},{}],211:[function(require,module,exports){
 var baseGetTag = require('./_baseGetTag'),
     isObjectLike = require('./isObjectLike');
 
@@ -26963,7 +31291,7 @@ function isSymbol(value) {
 
 module.exports = isSymbol;
 
-},{"./_baseGetTag":117,"./isObjectLike":207}],209:[function(require,module,exports){
+},{"./_baseGetTag":120,"./isObjectLike":210}],212:[function(require,module,exports){
 var baseIsTypedArray = require('./_baseIsTypedArray'),
     baseUnary = require('./_baseUnary'),
     nodeUtil = require('./_nodeUtil');
@@ -26992,7 +31320,7 @@ var isTypedArray = nodeIsTypedArray ? baseUnary(nodeIsTypedArray) : baseIsTypedA
 
 module.exports = isTypedArray;
 
-},{"./_baseIsTypedArray":124,"./_baseUnary":134,"./_nodeUtil":180}],210:[function(require,module,exports){
+},{"./_baseIsTypedArray":127,"./_baseUnary":137,"./_nodeUtil":183}],213:[function(require,module,exports){
 var arrayLikeKeys = require('./_arrayLikeKeys'),
     baseKeys = require('./_baseKeys'),
     isArrayLike = require('./isArrayLike');
@@ -27031,7 +31359,7 @@ function keys(object) {
 
 module.exports = keys;
 
-},{"./_arrayLikeKeys":107,"./_baseKeys":126,"./isArrayLike":202}],211:[function(require,module,exports){
+},{"./_arrayLikeKeys":110,"./_baseKeys":129,"./isArrayLike":205}],214:[function(require,module,exports){
 var arrayMap = require('./_arrayMap'),
     baseIteratee = require('./_baseIteratee'),
     baseMap = require('./_baseMap'),
@@ -27086,7 +31414,7 @@ function map(collection, iteratee) {
 
 module.exports = map;
 
-},{"./_arrayMap":108,"./_baseIteratee":125,"./_baseMap":127,"./isArray":201}],212:[function(require,module,exports){
+},{"./_arrayMap":111,"./_baseIteratee":128,"./_baseMap":130,"./isArray":204}],215:[function(require,module,exports){
 var MapCache = require('./_MapCache');
 
 /** Error message constants. */
@@ -27161,7 +31489,7 @@ memoize.Cache = MapCache;
 
 module.exports = memoize;
 
-},{"./_MapCache":97}],213:[function(require,module,exports){
+},{"./_MapCache":100}],216:[function(require,module,exports){
 var baseProperty = require('./_baseProperty'),
     basePropertyDeep = require('./_basePropertyDeep'),
     isKey = require('./_isKey'),
@@ -27195,7 +31523,7 @@ function property(path) {
 
 module.exports = property;
 
-},{"./_baseProperty":130,"./_basePropertyDeep":131,"./_isKey":160,"./_toKey":193}],214:[function(require,module,exports){
+},{"./_baseProperty":133,"./_basePropertyDeep":134,"./_isKey":163,"./_toKey":196}],217:[function(require,module,exports){
 /**
  * This method returns a new empty array.
  *
@@ -27220,7 +31548,7 @@ function stubArray() {
 
 module.exports = stubArray;
 
-},{}],215:[function(require,module,exports){
+},{}],218:[function(require,module,exports){
 /**
  * This method returns `false`.
  *
@@ -27240,7 +31568,7 @@ function stubFalse() {
 
 module.exports = stubFalse;
 
-},{}],216:[function(require,module,exports){
+},{}],219:[function(require,module,exports){
 var baseToString = require('./_baseToString');
 
 /**
@@ -27270,7 +31598,7 @@ function toString(value) {
 
 module.exports = toString;
 
-},{"./_baseToString":133}],217:[function(require,module,exports){
+},{"./_baseToString":136}],220:[function(require,module,exports){
 /*
   Loki IndexedDb Adapter (need to include this script to use it)
 
@@ -27904,7 +32232,7 @@ module.exports = toString;
   }());
 }));
 
-},{}],218:[function(require,module,exports){
+},{}],221:[function(require,module,exports){
 (function (process,global){(function (){
 /**
  * LokiJS
@@ -35649,9 +39977,9 @@ module.exports = toString;
 }));
 
 }).call(this)}).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./loki-indexed-adapter.js":217,"_process":295,"fs":57}],219:[function(require,module,exports){
+},{"./loki-indexed-adapter.js":220,"_process":303,"fs":58}],222:[function(require,module,exports){
 arguments[4][9][0].apply(exports,arguments)
-},{"@turf/invariant":32,"dup":9}],220:[function(require,module,exports){
+},{"@turf/invariant":32,"dup":9}],223:[function(require,module,exports){
 const turf = {
   nearestPointOnLine: require('@turf/nearest-point-on-line').default,
   booleanPointInPolygon: require('@turf/boolean-point-in-polygon').default
@@ -35741,10 +40069,10 @@ function nearestPointOnGeometry (feature, pt, options) {
 
 module.exports = nearestPointOnGeometry
 
-},{"@turf/boolean-point-in-polygon":219,"@turf/nearest-point-on-line":37}],221:[function(require,module,exports){
+},{"@turf/boolean-point-in-polygon":222,"@turf/nearest-point-on-line":37}],224:[function(require,module,exports){
 module.exports = require('./polygon-features.json')
 
-},{"./polygon-features.json":222}],222:[function(require,module,exports){
+},{"./polygon-features.json":225}],225:[function(require,module,exports){
 module.exports=[
     {
         "key": "building",
@@ -35903,7 +40231,7 @@ module.exports=[
     }
 ]
 
-},{}],223:[function(require,module,exports){
+},{}],226:[function(require,module,exports){
 var _ = require("./lodash.custom.js");
 var rewind = require("@mapbox/geojson-rewind");
 
@@ -36970,7 +41298,7 @@ osmtogeojson.toGeojson = osmtogeojson;
 
 module.exports = osmtogeojson;
 
-},{"./lodash.custom.js":224,"@mapbox/geojson-rewind":2,"osm-polygon-features":221}],224:[function(require,module,exports){
+},{"./lodash.custom.js":227,"@mapbox/geojson-rewind":2,"osm-polygon-features":224}],227:[function(require,module,exports){
 (function (global){(function (){
 /**
  * @license
@@ -40677,17 +45005,36 @@ module.exports = osmtogeojson;
 }.call(this));
 
 }).call(this)}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}],225:[function(require,module,exports){
+},{}],228:[function(require,module,exports){
 const BoundingBox = require('boundingbox')
 const turf = require('./turf')
 
 const Filter = require('./Filter')
 
-const list = {}
-
 class BBoxQueryCache {
-  constructor (overpass, id) {
+  constructor (overpass) {
     this.overpass = overpass
+    this.list = {}
+  }
+
+  get (id) {
+    if (!(id in this.list)) {
+      this.list[id] = new BBoxQueryCacheItem(this, id)
+    }
+
+    return this.list[id]
+  }
+
+  clear () {
+    for (const k in this.list) {
+      delete this.list[k]
+    }
+  }
+}
+
+class BBoxQueryCacheItem {
+  constructor (main, id) {
+    this.main = main
     this.id = id
     this.filter = new Filter(id)
     this.area = null
@@ -40731,7 +45078,7 @@ class BBoxQueryCache {
 
       return types.every(type =>
         cacheDescriptors.ids.every(id =>
-          (type.substr(0, 1) + id) in this.overpass.cacheElements
+          (type.substr(0, 1) + id) in this.main.overpass.cacheElements
         )
       )
     }
@@ -40751,7 +45098,7 @@ class BBoxQueryCache {
     }
 
     // check if a superset matches
-    return Object.values(list).some(cache => {
+    return Object.values(this.main.list).some(cache => {
       if (cache.id === this.id) { return false }
 
       if (cache.filter.isSupersetOf(this.filter)) {
@@ -40769,7 +45116,7 @@ class BBoxQueryCache {
    */
   clear () {
     this.area = null
-    delete list[this.id]
+    delete this.main.list[this.id]
   }
 
   /**
@@ -40780,25 +45127,9 @@ class BBoxQueryCache {
   }
 }
 
-BBoxQueryCache.get = (overpass, id) => {
-  if (!(id in list)) {
-    list[id] = new BBoxQueryCache(overpass, id)
-  }
-
-  return list[id]
-}
-
-BBoxQueryCache.clear = () => {
-  for (const k in list) {
-    delete list[k]
-  }
-}
-
-BBoxQueryCache.list = list
-
 module.exports = BBoxQueryCache
 
-},{"./Filter":231,"./turf":292,"boundingbox":54}],226:[function(require,module,exports){
+},{"./Filter":234,"./turf":299,"boundingbox":55}],229:[function(require,module,exports){
 const parseString = require('./parseString')
 
 const EvaluatorFunctions = require('./evaluator/__functions__')
@@ -41003,7 +45334,7 @@ class Evaluator {
 
 module.exports = Evaluator
 
-},{"./EvaluatorValue":230,"./evaluator/__functions__":251,"./evaluator/__operators__":252,"./evaluatorExport":269,"./parseString":278}],227:[function(require,module,exports){
+},{"./EvaluatorValue":233,"./evaluator/__functions__":254,"./evaluator/__operators__":255,"./evaluatorExport":272,"./parseString":285}],230:[function(require,module,exports){
 const evaluatorExport = require('./evaluatorExport')
 const EvaluatorPart = require('./EvaluatorPart')
 const EvaluatorValue = require('./EvaluatorValue')
@@ -41050,7 +45381,7 @@ module.exports = class EvaluatorFunction extends EvaluatorPart {
   }
 }
 
-},{"./EvaluatorPart":229,"./EvaluatorValue":230,"./evaluatorExport":269}],228:[function(require,module,exports){
+},{"./EvaluatorPart":232,"./EvaluatorValue":233,"./evaluatorExport":272}],231:[function(require,module,exports){
 const evaluatorExport = require('./evaluatorExport')
 const EvaluatorPart = require('./EvaluatorPart')
 const EvaluatorValue = require('./EvaluatorValue')
@@ -41100,7 +45431,7 @@ module.exports = class EvaluatorOperator extends EvaluatorPart {
   }
 }
 
-},{"./EvaluatorPart":229,"./EvaluatorValue":230,"./evaluatorExport":269}],229:[function(require,module,exports){
+},{"./EvaluatorPart":232,"./EvaluatorValue":233,"./evaluatorExport":272}],232:[function(require,module,exports){
 module.exports = class EvaluatorPart {
   compileLokiJS () {
     return { needMatch: true }
@@ -41136,7 +45467,7 @@ module.exports = class EvaluatorPart {
   }
 }
 
-},{}],230:[function(require,module,exports){
+},{}],233:[function(require,module,exports){
 const EvaluatorPart = require('./EvaluatorPart')
 
 module.exports = class EvaluatorValue extends EvaluatorPart {
@@ -41182,7 +45513,7 @@ module.exports = class EvaluatorValue extends EvaluatorPart {
   }
 }
 
-},{"./EvaluatorPart":229}],231:[function(require,module,exports){
+},{"./EvaluatorPart":232}],234:[function(require,module,exports){
 const turf = require('./turf')
 const strsearch2regexp = require('strsearch2regexp')
 const filterJoin = require('./filterJoin')
@@ -41482,7 +45813,7 @@ function parse (def, rek = 0) {
       const r = parseParentheses(def)
       def = r[1]
       const mId = r[0].match(/^\s*(\d+)\s*$/)
-      const mBbox = r[0].match(/^((\s*\d+(.\d+)?\s*,){3}\s*\d+(.\d+)?\s*)$/)
+      const mBbox = r[0].match(/^((\s*-?\d+(.\d+)?\s*,){3}\s*-?\d+(.\d+)?\s*)$/)
       const m = r[0].match(/^\s*(\w+)\s*:\s*(.*)\s*$/)
       /* eslint-disable new-cap */
       if (mId) {
@@ -42045,7 +46376,7 @@ class Filter {
 
 module.exports = Filter
 
-},{"./defines":250,"./filterJoin":271,"./parseParentheses":277,"./parseString":278,"./qlFunctions/__index__":279,"./qlFunctions/qlFunction":287,"./turf":292,"strsearch2regexp":297}],232:[function(require,module,exports){
+},{"./defines":253,"./filterJoin":277,"./parseParentheses":284,"./parseString":285,"./qlFunctions/__index__":286,"./qlFunctions/qlFunction":294,"./turf":299,"strsearch2regexp":305}],235:[function(require,module,exports){
 (function (global){(function (){
 const ee = require('event-emitter')
 const async = require('async')
@@ -42065,12 +46396,13 @@ const RequestGet = require('./RequestGet')
 const RequestBBox = require('./RequestBBox')
 const RequestMulti = require('./RequestMulti')
 const defines = require('./defines')
-const loadOsmFile = require('./loadOsmFile')
+const loadFile = require('./loadFile')
 const copyOsm3sMetaFrom = require('./copyOsm3sMeta')
 const timestamp = require('./timestamp')
 const Filter = require('./Filter')
 const isGeoJSON = require('./isGeoJSON')
 const boundsIsFullWorld = require('./boundsIsFullWorld')
+const isFileURL = require('./isFileURL')
 
 /**
  * An error occured
@@ -42124,6 +46456,10 @@ const boundsIsFullWorld = require('./boundsIsFullWorld')
  * A connection to an Overpass API Server or an OpenStreetMap file
  * @param {string} url The URL of the API, e.g. 'https://overpass-api.de/api/'. If you omit the protocol, it will use the protocol which is in use for the current page (or https: on nodejs): '//overpass-api.de/api/'. If the url ends in .json, .osm or .osm.bz2 it will load this OpenStreetMap file and use the data from there.
  * @param {object} options Options
+ * @param {boolean} [options.isFile] true, if the URL is a file; false if the URL points to an Overpass API server. if unset, will be autodetected.
+ * @param {string} [options.filename] override file name; if undefined, the last part of the URL.
+ * @param {string} [options.fileFormat] force file format; if undefined, auto-detect.
+ * @param {object} [options.fileFormatOptions] options for the file format parser.
  * @param {number} [options.count=0] Only return a maximum of count items. If count=0, no limit is used (default).
  * @param {number} [options.effortPerRequest=1000] To avoid huge requests to the Overpass API, the request will be split into smaller chunks. This value defines, how many objects will be requested per API call (for get() calls see effortNode, effortWay, effortRelation, e.g. up to 1000 nodes or 250 ways or (500 nodes and 125 ways) at default values; for BBoxQuery() calls the setting will be divided by 4).
  * @param {number} [options.effortNode=1] The effort for request a node. Default: 1.
@@ -42156,6 +46492,7 @@ class OverpassFrontend {
 
     const db = new LokiJS()
     this.db = db.addCollection('osm', { unique: ['id'] })
+    this.bboxQueryCache = new BBoxQueryCache(this)
 
     this.clearCache()
 
@@ -42166,12 +46503,12 @@ class OverpassFrontend {
     this.pendingNotifyMemberUpdate = {}
     this.pendingUpdateEmit = {}
 
-    if (this.url.match(/\.(json|osm\.bz2|osm)$/)) {
-      this.localOnly = true
+    if (this.options.isFile ?? isFileURL(this.url)) {
+      this.options.isFile = true
       this.ready = false
-      this._loadFile()
+      global.setTimeout(() => this._loadFile(), 0)
     } else {
-      this.remote = true
+      this.options.isFile = false
       this.ready = true
     }
   }
@@ -42180,7 +46517,7 @@ class OverpassFrontend {
    * clear all caches
    */
   clearCache () {
-    if (this.localOnly) {
+    if (this.options.isFile) {
       return
     }
 
@@ -42188,72 +46525,88 @@ class OverpassFrontend {
     this.cacheElementsMemberOf = {}
     this.cacheTimestamp = timestamp()
     this.db.clear()
-    BBoxQueryCache.clear()
+    this.bboxQueryCache.clear()
 
     // Set default properties
     this.hasStretchLon180 = false
   }
 
   _loadFile () {
-    let osm3sMeta
+    loadFile(this.url, this.options, (err, content, filename) => {
+      if (err) {
+        console.log('Error loading file', err)
+        return this.emit('error', err)
+      }
 
-    loadOsmFile(this.url,
-      (err, result) => {
+      let handler
+      if (this.options.fileFormat) {
+        handler = OverpassFrontend.fileFormats.filter(format => format.id === this.options.fileFormat)
+      } else {
+        handler = OverpassFrontend.fileFormats.filter(format => format.willLoad(filename, content, this.options.fileFormatOptions ?? {}))
+      }
+
+      if (!handler.length) {
+        console.log('No file format handler found')
+        return this.emit('error', new Error('No file format handler found'))
+      }
+
+      handler = handler[0]
+
+      handler.load(content, this.options.fileFormatOptions ?? {}, (err, result) => {
         if (err) {
-          console.log('Error loading file', err)
+          console.log('Error loading file with handler ' + handler.id, err)
+          return this.emit('error', new Error('Error loading file with handler ' + handler.id + ': ' + err.message))
+        }
+
+        this._loadFileContent(result)
+      })
+    })
+  }
+
+  _loadFileContent (result) {
+    const osm3sMeta = copyOsm3sMetaFrom(result)
+
+    const chunks = []
+    for (let i = 0; i < result.elements.length; i += this.options.loadChunkSize) {
+      chunks.push(result.elements.slice(i, i + this.options.loadChunkSize))
+    }
+
+    // collect all objects, so they can be completed later-on
+    const obs = []
+    async.eachLimit(
+      chunks,
+      1,
+      (chunk, done) => {
+        chunk.forEach(
+          (element) => {
+            const ob = this.createOrUpdateOSMObject(element, {
+              osm3sMeta,
+              properties: OverpassFrontend.TAGS | OverpassFrontend.META | OverpassFrontend.MEMBERS
+            })
+
+            obs.push(ob)
+          }
+        )
+
+        global.setTimeout(done, 0)
+      },
+      (err) => {
+        this.pendingNotifies()
+
+        // Set objects to fully known, as no more data can be loaded from the file
+        obs.forEach(ob => {
+          ob.properties |= OverpassFrontend.ALL
+        })
+
+        if (err) {
           return this.emit('error', err)
         }
 
-        osm3sMeta = copyOsm3sMetaFrom(result)
+        this.meta = osm3sMeta
+        this.emit('load', osm3sMeta)
 
-        const chunks = []
-        for (let i = 0; i < result.elements.length; i += this.options.loadChunkSize) {
-          chunks.push(result.elements.slice(i, i + this.options.loadChunkSize))
-        }
-
-        // collect all objects, so they can be completed later-on
-        const obs = []
-        async.eachLimit(
-          chunks,
-          1,
-          (chunk, done) => {
-            chunk.forEach(
-              (element) => {
-                const ob = this.createOrUpdateOSMObject(element, {
-                  osm3sMeta,
-                  properties: OverpassFrontend.TAGS | OverpassFrontend.META | OverpassFrontend.MEMBERS
-                })
-
-                obs.push(ob)
-              }
-            )
-
-            global.setTimeout(done, 0)
-          },
-          (err) => {
-            this.pendingNotifies()
-
-            // Set objects to fully known, as no more data can be loaded from the file
-            obs.forEach(ob => {
-              ob.properties |= OverpassFrontend.ALL
-              if (osm3sMeta.bounds) {
-                osm3sMeta.bounds.extend(ob.bounds)
-              } else {
-                osm3sMeta.bounds = new BoundingBox(ob.bounds)
-              }
-            })
-
-            if (err) {
-              console.log('Error loading file', err)
-              return this.emit('error', err)
-            }
-
-            this.emit('load', osm3sMeta)
-
-            this.ready = true
-            this._overpassProcess()
-          }
-        )
+        this.ready = true
+        this._overpassProcess()
       }
     )
   }
@@ -42349,7 +46702,7 @@ class OverpassFrontend {
 
         if (request.finished) {
           this.requests[i] = null
-        } else if (request.mayFinish() || this.localOnly) {
+        } else if (request.mayFinish() || this.options.isFile) {
           request.finish()
         }
       }
@@ -42516,6 +46869,7 @@ class OverpassFrontend {
     this.errorCount = 0
 
     const osm3sMeta = copyOsm3sMetaFrom(results)
+    this.meta = osm3sMeta
     this.emit('load', osm3sMeta, context)
 
     let subRequestsIndex = 0
@@ -42686,8 +47040,8 @@ class OverpassFrontend {
   clearBBoxQuery (query) {
     const cacheDescriptors = new Filter(query).cacheDescriptors()
 
-    cacheDescriptors.forEach(id => {
-      BBoxQueryCache.get({ id }).clear()
+    cacheDescriptors.forEach(descriptor => {
+      this.bboxQueryCache.get(descriptor.id).clear()
     })
   }
 
@@ -42841,6 +47195,30 @@ class OverpassFrontend {
       .replace('^', '\\^')
       .replace('$', '\\$')
   }
+
+  /**
+   * get meta data of last request or - if no request was submitted - the first.
+   * @params [function] callback - a callback which will receive (err, meta)
+   */
+  getMeta (callback) {
+    if (this.meta) {
+      return callback(null, this.meta)
+    }
+
+    this.once('load', () => {
+      callback(null, this.meta)
+    })
+  }
+}
+
+OverpassFrontend.fileFormats = [
+  require('./fileFormatOSMXML'),
+  require('./fileFormatOSMJSON'),
+  require('./fileFormatGeoJSON')
+]
+
+OverpassFrontend.registerFileFormat = (format) => {
+  OverpassFrontend.fileFormats.push(format)
 }
 
 for (const k in defines) {
@@ -42858,7 +47236,7 @@ OverpassFrontend.Filter = Filter
 module.exports = OverpassFrontend
 
 }).call(this)}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./BBoxQueryCache":225,"./Filter":231,"./OverpassNode":233,"./OverpassObject":234,"./OverpassRelation":235,"./OverpassWay":236,"./RequestBBox":238,"./RequestGet":240,"./RequestMulti":242,"./boundsIsFullWorld":246,"./copyOsm3sMeta":249,"./defines":250,"./httpLoad":273,"./isGeoJSON":274,"./loadOsmFile":275,"./removeNullEntries":290,"./timestamp":291,"async":53,"boundingbox":54,"event-emitter":76,"lokijs":218,"weight-sort":323}],233:[function(require,module,exports){
+},{"./BBoxQueryCache":228,"./Filter":234,"./OverpassNode":236,"./OverpassObject":237,"./OverpassRelation":238,"./OverpassWay":239,"./RequestBBox":241,"./RequestGet":243,"./RequestMulti":245,"./boundsIsFullWorld":249,"./copyOsm3sMeta":252,"./defines":253,"./fileFormatGeoJSON":274,"./fileFormatOSMJSON":275,"./fileFormatOSMXML":276,"./httpLoad":279,"./isFileURL":280,"./isGeoJSON":281,"./loadFile":282,"./removeNullEntries":297,"./timestamp":298,"async":53,"boundingbox":55,"event-emitter":78,"lokijs":221,"weight-sort":332}],236:[function(require,module,exports){
 /* global L:false */
 
 const OverpassObject = require('./OverpassObject')
@@ -43003,7 +47381,7 @@ class OverpassNode extends OverpassObject {
 
 module.exports = OverpassNode
 
-},{"./OverpassObject":234,"./defines":250,"./turf":292,"boundingbox":54}],234:[function(require,module,exports){
+},{"./OverpassObject":237,"./defines":253,"./turf":299,"boundingbox":55}],237:[function(require,module,exports){
 const ee = require('event-emitter')
 const BoundingBox = require('boundingbox')
 const OverpassFrontend = require('./defines')
@@ -43400,7 +47778,7 @@ ee(OverpassObject.prototype)
 
 module.exports = OverpassObject
 
-},{"./booleanWithin":245,"./defines":250,"./isGeoJSON":274,"./turf":292,"boundingbox":54,"event-emitter":76}],235:[function(require,module,exports){
+},{"./booleanWithin":248,"./defines":253,"./isGeoJSON":281,"./turf":299,"boundingbox":55,"event-emitter":78}],238:[function(require,module,exports){
 /* global L:false */
 
 const async = require('async')
@@ -43878,7 +48256,7 @@ class OverpassRelation extends OverpassObject {
 
 module.exports = OverpassRelation
 
-},{"./OverpassObject":234,"./defines":250,"./geojsonShiftWorld":272,"./turf":292,"async":53,"boundingbox":54,"osmtogeojson":223}],236:[function(require,module,exports){
+},{"./OverpassObject":237,"./defines":253,"./geojsonShiftWorld":278,"./turf":299,"async":53,"boundingbox":55,"osmtogeojson":226}],239:[function(require,module,exports){
 /* global L:false */
 
 const async = require('async')
@@ -44169,7 +48547,7 @@ class OverpassWay extends OverpassObject {
 
 module.exports = OverpassWay
 
-},{"./OverpassObject":234,"./defines":250,"./turf":292,"async":53,"boundingbox":54}],237:[function(require,module,exports){
+},{"./OverpassObject":237,"./defines":253,"./turf":299,"async":53,"boundingbox":55}],240:[function(require,module,exports){
 const ee = require('event-emitter')
 const SortedCallbacks = require('./SortedCallbacks')
 
@@ -44318,11 +48696,10 @@ ee(Request.prototype)
 
 module.exports = Request
 
-},{"./SortedCallbacks":243,"event-emitter":76}],238:[function(require,module,exports){
+},{"./SortedCallbacks":246,"event-emitter":78}],241:[function(require,module,exports){
 const Request = require('./Request')
 const overpassOutOptions = require('./overpassOutOptions')
 const defines = require('./defines')
-const BBoxQueryCache = require('./BBoxQueryCache')
 const RequestBBoxMembers = require('./RequestBBoxMembers')
 const Filter = require('./Filter')
 const boundsToLokiQuery = require('./boundsToLokiQuery')
@@ -44377,7 +48754,7 @@ class RequestBBox extends Request {
 
       this.cacheDescriptors = cacheFilter.cacheDescriptors().map(cacheDescriptors => {
         return {
-          cache: BBoxQueryCache.get(this.overpass, cacheDescriptors.id),
+          cache: this.overpass.bboxQueryCache.get(cacheDescriptors.id),
           cacheDescriptors
         }
       })
@@ -44607,7 +48984,7 @@ class RequestBBox extends Request {
 
 module.exports = RequestBBox
 
-},{"./BBoxQueryCache":225,"./Filter":231,"./Request":237,"./RequestBBoxMembers":239,"./boundsIsFullWorld":246,"./boundsToLokiQuery":247,"./defines":250,"./overpassOutOptions":276}],239:[function(require,module,exports){
+},{"./Filter":234,"./Request":240,"./RequestBBoxMembers":242,"./boundsIsFullWorld":249,"./boundsToLokiQuery":250,"./defines":253,"./overpassOutOptions":283}],242:[function(require,module,exports){
 const defines = require('./defines')
 const overpassOutOptions = require('./overpassOutOptions')
 const each = require('lodash/forEach')
@@ -44825,7 +49202,7 @@ module.exports = function (request) {
   return new RequestBBoxMembers(request)
 }
 
-},{"./Request":237,"./SortedCallbacks":243,"./defines":250,"./isGeoJSON":274,"./overpassOutOptions":276,"boundingbox":54,"lodash/forEach":196,"lodash/keys":210,"lodash/map":211}],240:[function(require,module,exports){
+},{"./Request":240,"./SortedCallbacks":246,"./defines":253,"./isGeoJSON":281,"./overpassOutOptions":283,"boundingbox":55,"lodash/forEach":199,"lodash/keys":213,"lodash/map":214}],243:[function(require,module,exports){
 const Request = require('./Request')
 const defines = require('./defines')
 const BoundingBox = require('boundingbox')
@@ -45138,7 +49515,7 @@ class RequestGet extends Request {
 
 module.exports = RequestGet
 
-},{"./Request":237,"./RequestGetMembers":241,"./defines":250,"./isGeoJSON":274,"./overpassOutOptions":276,"boundingbox":54}],241:[function(require,module,exports){
+},{"./Request":240,"./RequestGetMembers":244,"./defines":253,"./isGeoJSON":281,"./overpassOutOptions":283,"boundingbox":55}],244:[function(require,module,exports){
 const defines = require('./defines')
 const overpassOutOptions = require('./overpassOutOptions')
 const each = require('lodash/forEach')
@@ -45373,7 +49750,7 @@ module.exports = function (request) {
   return new RequestGetMembers(request)
 }
 
-},{"./Request":237,"./defines":250,"./isGeoJSON":274,"./overpassOutOptions":276,"boundingbox":54,"lodash/forEach":196,"lodash/keys":210,"lodash/map":211}],242:[function(require,module,exports){
+},{"./Request":240,"./defines":253,"./isGeoJSON":281,"./overpassOutOptions":283,"boundingbox":55,"lodash/forEach":199,"lodash/keys":213,"lodash/map":214}],245:[function(require,module,exports){
 const Request = require('./Request')
 
 /**
@@ -45430,7 +49807,7 @@ class RequestMulti extends Request {
 
 module.exports = RequestMulti
 
-},{"./Request":237}],243:[function(require,module,exports){
+},{"./Request":240}],246:[function(require,module,exports){
 const async = require('async')
 const weightSort = require('weight-sort')
 const OverpassFrontend = require('./defines')
@@ -45513,7 +49890,7 @@ class SortedCallbacks {
 
 module.exports = SortedCallbacks
 
-},{"./defines":250,"async":53,"weight-sort":323}],244:[function(require,module,exports){
+},{"./defines":253,"async":53,"weight-sort":332}],247:[function(require,module,exports){
 module.exports = function arrayToCoords (list) {
   return list.reduce(
     (arr, current, i) => {
@@ -45528,7 +49905,7 @@ module.exports = function arrayToCoords (list) {
   )
 }
 
-},{}],245:[function(require,module,exports){
+},{}],248:[function(require,module,exports){
 const turf = require('./turf')
 
 module.exports = function booleanWithin (feature1, feature2) {
@@ -45556,10 +49933,10 @@ function splitGeometry (feature) {
   return [feature]
 }
 
-},{"./turf":292}],246:[function(require,module,exports){
+},{"./turf":299}],249:[function(require,module,exports){
 module.exports = (bounds) => bounds.minlat === -90 && bounds.maxlat === 90 && bounds.minlon === -180 && bounds.maxlon === 180
 
-},{}],247:[function(require,module,exports){
+},{}],250:[function(require,module,exports){
 module.exports = function boundsToLokiQuery (bounds, overpass) {
   if (bounds.minlon <= bounds.maxlon) {
     if (overpass.hasStretchLon180) {
@@ -45608,7 +49985,9 @@ module.exports = function boundsToLokiQuery (bounds, overpass) {
   }
 }
 
-},{}],248:[function(require,module,exports){
+},{}],251:[function(require,module,exports){
+const BoundingBox = require('boundingbox')
+
 module.exports = function convertFromXML (xml) {
   const result = {
     version: parseFloat(xml.getAttribute('version')),
@@ -45707,6 +50086,19 @@ module.exports = function convertFromXML (xml) {
       }
 
       result.elements.push(element)
+    } else if (current.nodeName === 'bounds') {
+      const bounds = new BoundingBox({
+        minlat: parseFloat(current.getAttribute('minlat')),
+        minlon: parseFloat(current.getAttribute('minlon')),
+        maxlat: parseFloat(current.getAttribute('maxlat')),
+        maxlon: parseFloat(current.getAttribute('maxlon'))
+      })
+
+      if (result.bounds) {
+        result.bounds = result.bounds.extend(bounds)
+      } else {
+        result.bounds = bounds
+      }
     }
 
     current = current.nextSibling
@@ -45715,7 +50107,7 @@ module.exports = function convertFromXML (xml) {
   return result
 }
 
-},{}],249:[function(require,module,exports){
+},{"boundingbox":55}],252:[function(require,module,exports){
 module.exports = function copyOsm3sMetaFrom (results) {
   const osm3sMeta = {}
 
@@ -45734,7 +50126,7 @@ module.exports = function copyOsm3sMetaFrom (results) {
   return osm3sMeta
 }
 
-},{}],250:[function(require,module,exports){
+},{}],253:[function(require,module,exports){
 module.exports = {
   ID_ONLY: 0,
   TAGS: 1,
@@ -45747,7 +50139,7 @@ module.exports = {
   DEFAULT: 13
 }
 
-},{}],251:[function(require,module,exports){
+},{}],254:[function(require,module,exports){
 module.exports = {
   '': require('./parantheses'),
   changeset: require('./meta'),
@@ -45769,7 +50161,7 @@ module.exports = {
   version: require('./meta')
 }
 
-},{"./count_members":255,"./count_tags":256,"./debug":257,"./is_closed":259,"./is_tag":260,"./length":261,"./meta":262,"./parantheses":264,"./tag":266}],252:[function(require,module,exports){
+},{"./count_members":258,"./count_tags":259,"./debug":260,"./is_closed":262,"./is_tag":263,"./length":264,"./meta":265,"./parantheses":267,"./tag":269}],255:[function(require,module,exports){
 module.exports = {
   '?': require('./ternary'),
   '||': require('./disjunction'),
@@ -45788,7 +50180,7 @@ module.exports = {
   '—': require('./unaryMinus')
 }
 
-},{"./comparison":253,"./conjunction":254,"./disjunction":258,"./negation":263,"./simpleMath":265,"./ternary":267,"./unaryMinus":268}],253:[function(require,module,exports){
+},{"./comparison":256,"./conjunction":257,"./disjunction":261,"./negation":266,"./simpleMath":268,"./ternary":270,"./unaryMinus":271}],256:[function(require,module,exports){
 const EvaluatorOperator = require('../EvaluatorOperator')
 const evaluatorHelper = require('../evaluatorHelper')
 
@@ -45978,7 +50370,7 @@ module.exports = class EvaluatorOperatorComparison extends EvaluatorOperator {
   }
 }
 
-},{"../EvaluatorOperator":228,"../evaluatorHelper":270}],254:[function(require,module,exports){
+},{"../EvaluatorOperator":231,"../evaluatorHelper":273}],257:[function(require,module,exports){
 const EvaluatorOperator = require('../EvaluatorOperator')
 const evaluatorHelper = require('../evaluatorHelper')
 
@@ -46035,7 +50427,7 @@ module.exports = class EvaluatorOperatorConjunction extends EvaluatorOperator {
   }
 }
 
-},{"../EvaluatorOperator":228,"../evaluatorHelper":270}],255:[function(require,module,exports){
+},{"../EvaluatorOperator":231,"../evaluatorHelper":273}],258:[function(require,module,exports){
 const EvaluatorFunction = require('../EvaluatorFunction')
 const OverpassFrontend = require('../defines')
 
@@ -46068,7 +50460,7 @@ module.exports = class EvaluatorFunctionCountTags extends EvaluatorFunction {
   }
 }
 
-},{"../EvaluatorFunction":227,"../defines":250}],256:[function(require,module,exports){
+},{"../EvaluatorFunction":230,"../defines":253}],259:[function(require,module,exports){
 const EvaluatorFunction = require('../EvaluatorFunction')
 const OverpassFrontend = require('../defines')
 
@@ -46083,7 +50475,7 @@ module.exports = class EvaluatorFunctionCountTags extends EvaluatorFunction {
   }
 }
 
-},{"../EvaluatorFunction":227,"../defines":250}],257:[function(require,module,exports){
+},{"../EvaluatorFunction":230,"../defines":253}],260:[function(require,module,exports){
 const EvaluatorFunction = require('../EvaluatorFunction')
 
 module.exports = class EvaluatorFunctionLength extends EvaluatorFunction {
@@ -46110,7 +50502,7 @@ module.exports = class EvaluatorFunctionLength extends EvaluatorFunction {
   }
 }
 
-},{"../EvaluatorFunction":227}],258:[function(require,module,exports){
+},{"../EvaluatorFunction":230}],261:[function(require,module,exports){
 const EvaluatorOperator = require('../EvaluatorOperator')
 const evaluatorHelper = require('../evaluatorHelper')
 
@@ -46179,7 +50571,7 @@ module.exports = class EvaluatorOperatorDisjunction extends EvaluatorOperator {
   }
 }
 
-},{"../EvaluatorOperator":228,"../evaluatorHelper":270}],259:[function(require,module,exports){
+},{"../EvaluatorOperator":231,"../evaluatorHelper":273}],262:[function(require,module,exports){
 const EvaluatorFunction = require('../EvaluatorFunction')
 const OverpassFrontend = require('../defines')
 
@@ -46207,7 +50599,7 @@ module.exports = class EvaluatorFunctionIsClosed extends EvaluatorFunction {
   }
 }
 
-},{"../EvaluatorFunction":227,"../defines":250}],260:[function(require,module,exports){
+},{"../EvaluatorFunction":230,"../defines":253}],263:[function(require,module,exports){
 const EvaluatorFunction = require('../EvaluatorFunction')
 const OverpassFrontend = require('../defines')
 
@@ -46233,7 +50625,7 @@ module.exports = class EvaluatorFunctionIsTag extends EvaluatorFunction {
   }
 }
 
-},{"../EvaluatorFunction":227,"../defines":250}],261:[function(require,module,exports){
+},{"../EvaluatorFunction":230,"../defines":253}],264:[function(require,module,exports){
 const turf = require('../turf')
 const EvaluatorFunction = require('../EvaluatorFunction')
 const OverpassFrontend = require('../defines')
@@ -46263,7 +50655,7 @@ module.exports = class EvaluatorFunctionLength extends EvaluatorFunction {
   }
 }
 
-},{"../EvaluatorFunction":227,"../defines":250,"../turf":292}],262:[function(require,module,exports){
+},{"../EvaluatorFunction":230,"../defines":253,"../turf":299}],265:[function(require,module,exports){
 const EvaluatorFunction = require('../EvaluatorFunction')
 const OverpassFrontend = require('../defines')
 
@@ -46302,7 +50694,7 @@ module.exports = class EvaluatorFunctionMeta extends EvaluatorFunction {
   }
 }
 
-},{"../EvaluatorFunction":227,"../defines":250}],263:[function(require,module,exports){
+},{"../EvaluatorFunction":230,"../defines":253}],266:[function(require,module,exports){
 const EvaluatorOperator = require('../EvaluatorOperator')
 const evaluatorHelper = require('../evaluatorHelper')
 
@@ -46349,7 +50741,7 @@ module.exports = class EvaluatorOperatorNegation extends EvaluatorOperator {
   }
 }
 
-},{"../EvaluatorOperator":228,"../evaluatorHelper":270}],264:[function(require,module,exports){
+},{"../EvaluatorOperator":231,"../evaluatorHelper":273}],267:[function(require,module,exports){
 const EvaluatorFunction = require('../EvaluatorFunction')
 
 module.exports = class EvaluatorFunctionParantheses extends EvaluatorFunction {
@@ -46366,7 +50758,7 @@ module.exports = class EvaluatorFunctionParantheses extends EvaluatorFunction {
   }
 }
 
-},{"../EvaluatorFunction":227}],265:[function(require,module,exports){
+},{"../EvaluatorFunction":230}],268:[function(require,module,exports){
 const EvaluatorOperator = require('../EvaluatorOperator')
 const evaluatorHelper = require('../evaluatorHelper')
 
@@ -46417,7 +50809,7 @@ module.exports = class EvaluatorOperatorSimpleMath extends EvaluatorOperator {
   }
 }
 
-},{"../EvaluatorOperator":228,"../evaluatorHelper":270}],266:[function(require,module,exports){
+},{"../EvaluatorOperator":231,"../evaluatorHelper":273}],269:[function(require,module,exports){
 const EvaluatorFunction = require('../EvaluatorFunction')
 const OverpassFrontend = require('../defines')
 
@@ -46448,7 +50840,7 @@ module.exports = class EvaluatorFunctionTag extends EvaluatorFunction {
   }
 }
 
-},{"../EvaluatorFunction":227,"../defines":250}],267:[function(require,module,exports){
+},{"../EvaluatorFunction":230,"../defines":253}],270:[function(require,module,exports){
 const evaluatorExport = require('../evaluatorExport')
 const EvaluatorOperator = require('../EvaluatorOperator')
 const EvaluatorValue = require('../EvaluatorValue')
@@ -46530,7 +50922,7 @@ module.exports = class EvaluatorOperatorTernary extends EvaluatorOperator {
   }
 }
 
-},{"../EvaluatorOperator":228,"../EvaluatorValue":230,"../evaluatorExport":269}],268:[function(require,module,exports){
+},{"../EvaluatorOperator":231,"../EvaluatorValue":233,"../evaluatorExport":272}],271:[function(require,module,exports){
 const EvaluatorOperator = require('../EvaluatorOperator')
 const evaluatorHelper = require('../evaluatorHelper')
 
@@ -46568,7 +50960,7 @@ module.exports = class EvaluatorOperatorUnaryMinus extends EvaluatorOperator {
   }
 }
 
-},{"../EvaluatorOperator":228,"../evaluatorHelper":270}],269:[function(require,module,exports){
+},{"../EvaluatorOperator":231,"../evaluatorHelper":273}],272:[function(require,module,exports){
 module.exports = function evaluatorExport (current) {
   if (current === null || ['number', 'string', 'boolean'].includes(typeof current)) {
     return current
@@ -46577,7 +50969,7 @@ module.exports = function evaluatorExport (current) {
   return current.toJSON()
 }
 
-},{}],270:[function(require,module,exports){
+},{}],273:[function(require,module,exports){
 module.exports = {
   isNumber (v) {
     if (typeof v === 'number') {
@@ -46594,7 +50986,159 @@ module.exports = {
   }
 }
 
-},{}],271:[function(require,module,exports){
+},{}],274:[function(require,module,exports){
+const elementIds = {
+  node: 0,
+  way: 0,
+  relation: 0
+}
+
+module.exports = {
+  id: 'GeoJSON',
+
+  willLoad (url, content, options) {
+    return url.match(/\.geojson$/i)
+  },
+
+  load (content, options, callback) {
+    const data = JSON.parse(content)
+
+    const result = {
+      version: 0.6,
+      elements: []
+    }
+
+    try {
+      geojson2elements(data, result.elements, options)
+    } catch (e) {
+      return callback(e)
+    }
+
+    callback(null, result)
+  }
+}
+
+function geojson2elements (data, elements, options) {
+  if (data.type === 'FeatureCollection') {
+    return data.features.forEach(feature => {
+      geojson2elements(feature, elements, options)
+    })
+  }
+
+  if (data.type !== 'Feature') {
+    throw new Error('Unknown type ' + data.type)
+  }
+
+  let element
+
+  switch (data.geometry.type) {
+    case 'Point':
+      element = {
+        type: 'node',
+        lon: data.geometry.coordinates[0],
+        lat: data.geometry.coordinates[1]
+      }
+      break
+    case 'LineString':
+      element = {
+        type: 'way',
+        geometry: data.geometry.coordinates.map(c => {
+          return { lon: c[0], lat: c[1] }
+        })
+      }
+      break
+    case 'Polygon':
+      if (data.geometry.coordinates.length === 1) {
+        element = {
+          type: 'way',
+          geometry: data.geometry.coordinates[0].map(c => {
+            return { lon: c[0], lat: c[1] }
+          })
+        }
+      } else {
+        element = {
+          type: 'relation',
+          members: data.geometry.coordinates.map((ring, i) => {
+            return {
+              type: 'way',
+              ref: --elementIds.way,
+              role: i ? 'inner' : 'outer',
+              geometry: ring.map(c => {
+                return { lon: c[0], lat: c[1] }
+              })
+            }
+          })
+        }
+        data.properties = { ...data.properties, type: 'multipolygon' }
+      }
+      break
+    default:
+      console.log('Unknown geometry type ' + data.geometry.type)
+      return
+  }
+
+  if (data.properties) {
+    element.tags = data.properties
+  }
+
+  element.id = --elementIds[element.type]
+
+  elements.push(element)
+}
+
+},{}],275:[function(require,module,exports){
+module.exports = {
+  id: 'OSMJSON',
+
+  willLoad (url, content, options) {
+    return url.match(/\.osm\.json$/)
+  },
+
+  load (content, options, callback) {
+    let result
+
+    try {
+      result = JSON.parse(content)
+    } catch (err) {
+      return callback(new Error('Error parsing JSON file: ' + err.message))
+    }
+
+    callback(null, result)
+  }
+}
+
+},{}],276:[function(require,module,exports){
+const DOMParser = require('@xmldom/xmldom').DOMParser
+const convertFromXML = require('./convertFromXML')
+
+module.exports = {
+  id: 'OSMXML',
+
+  willLoad (url, content, options) {
+    return url.match(/\.osm$/)
+  },
+
+  load (content, options, callback) {
+    let data
+    const parser = new DOMParser({
+      errorHandler: {
+        error: (err) => { throw new Error('Error parsing XML file: ' + err) },
+        fatalError: (err) => { throw new Error('Error parsing XML file: ' + err) }
+      }
+    })
+    try {
+      data = parser.parseFromString(content.toString(), 'text/xml')
+    } catch (err) {
+      return callback(err)
+    }
+
+    const result = convertFromXML(data.getElementsByTagName('osm')[0])
+
+    callback(null, result)
+  }
+}
+
+},{"./convertFromXML":251,"@xmldom/xmldom":51}],277:[function(require,module,exports){
 module.exports = function filterJoin (def) {
   let result = ['']
 
@@ -46619,7 +51163,7 @@ module.exports = function filterJoin (def) {
   return result
 }
 
-},{}],272:[function(require,module,exports){
+},{}],278:[function(require,module,exports){
 function geojsonShiftWorld (geojson, shift) {
   switch (geojson.type) {
     case 'FeatureCollection':
@@ -46668,7 +51212,7 @@ function geojsonShiftWorld (geojson, shift) {
 
 module.exports = geojsonShiftWorld
 
-},{}],273:[function(require,module,exports){
+},{}],279:[function(require,module,exports){
 (function (global){(function (){
 /* global location:false */
 
@@ -46753,44 +51297,88 @@ function httpLoad (url, getParam, postParam, callback) {
 module.exports = httpLoad
 
 }).call(this)}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}],274:[function(require,module,exports){
+},{}],280:[function(require,module,exports){
+module.exports = (url) => {
+  if (url && url.match(/^data:/)) {
+    return true
+  }
+
+  if (!url || url.match(/\/\/[^/]+$/)) { // url without path
+    return false
+  }
+
+  if (url.match(/\/[^/.]+$/)) { // last url part without '.'
+    return false
+  }
+
+  if (url.match(/\.(php)(\?.*)?$/)) { // php script -> assume server
+    return false
+  }
+
+  return true
+}
+
+},{}],281:[function(require,module,exports){
 module.exports = geom => geom && (geom.type === 'Feature' || geom.type === 'FeatureCollection')
 
-},{}],275:[function(require,module,exports){
+},{}],282:[function(require,module,exports){
 (function (global){(function (){
 const fs = require('fs')
-const DOMParser = require('@xmldom/xmldom').DOMParser
 const bzip2 = require('bzip2')
+const parseDataUrl = require('parse-data-url')
 
-const convertFromXML = require('./convertFromXML')
+module.exports = function loadFile (url, options, callback) {
+  let filename = url
+  if ('filename' in options) {
+    filename = options.filename
+  }
 
-module.exports = function loadOsmFile (url, callback) {
+  if (url.match(/^data:/)) {
+    const parsed = parseDataUrl(url)
+    if (!parsed) {
+      const e = new Error('Error parsing data URL')
+      return callback(e)
+    }
+
+    let content = parsed.toBuffer()
+
+    const m = filename.match(/^(.*)\.bz2$/)
+    if (m || parsed.contentType.match(/^application\/x-bzip/)) {
+      try {
+        content = bzip2decode(content)
+      } catch (err) {
+        return callback(err)
+      }
+      filename = m ? m[1] : filename
+    }
+
+    if (filename === url) {
+      filename = parsed.contentType === 'application/json'
+        ? 'file.osm.json'
+        : 'file.osm'
+    }
+
+    return callback(null, content, filename)
+  }
+
   if (typeof location === 'undefined' && !url.match(/^(http:|https:|)\/\//)) {
     fs.readFile(url,
       (err, content) => {
-        let data
-
         if (err) {
           return callback(err)
         }
 
-        if (url.match(/\.osm(\.bz2)?$/)) {
-          if (url.match(/\.osm\.bz2$/)) {
-            data = bzip2.simple(bzip2.array(content))
-            content = ''
-            for (let i = 0; i < data.byteLength; i++) {
-              content += String.fromCharCode(data[i])
-            }
-            content = decodeURIComponent(escape(content))
+        const m = filename.match(/^(.*)\.bz2$/)
+        if (m) {
+          try {
+            content = bzip2decode(content)
+          } catch (err) {
+            return callback(err)
           }
-
-          data = new DOMParser().parseFromString(content.toString(), 'text/xml')
-          data = convertFromXML(data.getElementsByTagName('osm')[0])
-        } else {
-          data = JSON.parse(content)
+          filename = m[1]
         }
 
-        callback(null, data)
+        callback(null, content, filename)
       }
     )
 
@@ -46802,28 +51390,23 @@ module.exports = function loadOsmFile (url, callback) {
   req.onreadystatechange = function () {
     if (req.readyState === 4) {
       if (req.status === 200) {
-        let data
+        let content
 
-        if (url.match(/\.osm\.bz2$/)) {
-          let content = new Uint8Array(req.response)
-          data = bzip2.simple(bzip2.array(content))
-          content = ''
-          for (let i = 0; i < data.byteLength; i++) {
-            content += String.fromCharCode(data[i])
+        const m = filename.match(/^(.*)\.bz2$/)
+        if (m) {
+          try {
+            content = bzip2decode(new Uint8Array(req.response))
+          } catch (err) {
+            return callback(err)
           }
-
-          content = decodeURIComponent(escape(content))
-          data = new DOMParser().parseFromString(content.toString(), 'text/xml')
-          data = convertFromXML(data.getElementsByTagName('osm')[0])
-        } else if (req.responseXML) {
-          data = convertFromXML(req.responseXML.firstChild)
+          filename = m[1]
         } else {
-          data = JSON.parse(req.responseText)
+          content = req.response
         }
 
-        callback(null, data)
+        callback(null, content, filename)
       } else {
-        callback(req)
+        callback(new Error('Received error ' + req.status + ' (' + req.statusText + ')'))
       }
     }
   }
@@ -46836,17 +51419,34 @@ module.exports = function loadOsmFile (url, callback) {
     }
   }
 
-  if (url.match(/\.osm\.bz2$/)) {
+  if (filename.match(/\.bz2$/)) {
     req.responseType = 'arraybuffer'
   }
 
-  req.overrideMimeType('text/xml')
   req.open('GET', url)
   req.send()
 }
 
+function bzip2decode (file) {
+  let data
+
+  try {
+    data = bzip2.simple(bzip2.array(file))
+  } catch (err) {
+    throw new Error('Error decoding bzip2 stream')
+  }
+
+  let content = ''
+
+  for (let i = 0; i < data.byteLength; i++) {
+    content += String.fromCharCode(data[i])
+  }
+
+  return decodeURIComponent(escape(content))
+}
+
 }).call(this)}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./convertFromXML":248,"@xmldom/xmldom":51,"bzip2":58,"fs":57}],276:[function(require,module,exports){
+},{"bzip2":60,"fs":58,"parse-data-url":300}],283:[function(require,module,exports){
 const defines = require('./defines')
 
 function overpassOutOptions (options, optionsOverride) {
@@ -46887,7 +51487,7 @@ function overpassOutOptions (options, optionsOverride) {
 
 module.exports = overpassOutOptions
 
-},{"./defines":250}],277:[function(require,module,exports){
+},{"./defines":253}],284:[function(require,module,exports){
 const parseString = require('./parseString')
 
 module.exports = function parseParentheses (str) {
@@ -46935,7 +51535,7 @@ module.exports = function parseParentheses (str) {
   throw new Error("Can't parse string, no string end detected!")
 }
 
-},{"./parseString":278}],278:[function(require,module,exports){
+},{"./parseString":285}],285:[function(require,module,exports){
 module.exports = function parseString (str) {
   let result = ''
   const chr = str[0]
@@ -46960,7 +51560,7 @@ module.exports = function parseString (str) {
   throw new Error("Can't parse string, no string end detected!")
 }
 
-},{}],279:[function(require,module,exports){
+},{}],286:[function(require,module,exports){
 module.exports = {
   around: require('./around'),
   bbox: require('./bbox'),
@@ -46973,7 +51573,7 @@ module.exports = {
   properties: require('./properties')
 }
 
-},{"./around":280,"./bbox":281,"./id":282,"./if":283,"./newer":284,"./poly":285,"./properties":286,"./uid":288,"./user":289}],280:[function(require,module,exports){
+},{"./around":287,"./bbox":288,"./id":289,"./if":290,"./newer":291,"./poly":292,"./properties":293,"./uid":295,"./user":296}],287:[function(require,module,exports){
 const turf = require('../turf')
 const arrayToCoords = require('../arrayToCoords')
 const OverpassFrontend = require('../defines')
@@ -47042,7 +51642,7 @@ module.exports = class around extends qlFunction {
   }
 }
 
-},{"../arrayToCoords":244,"../defines":250,"../turf":292,"./qlFunction":287}],281:[function(require,module,exports){
+},{"../arrayToCoords":247,"../defines":253,"../turf":299,"./qlFunction":294}],288:[function(require,module,exports){
 const BoundingBox = require('boundingbox')
 const turf = require('../turf')
 const OverpassFrontend = require('../defines')
@@ -47110,7 +51710,7 @@ module.exports = class bbox extends qlFunction {
   }
 }
 
-},{"../defines":250,"../turf":292,"./qlFunction":287,"boundingbox":54}],282:[function(require,module,exports){
+},{"../defines":253,"../turf":299,"./qlFunction":294,"boundingbox":55}],289:[function(require,module,exports){
 const OverpassFrontend = require('../defines')
 const qlFunction = require('./qlFunction')
 
@@ -47161,7 +51761,7 @@ module.exports = class id extends qlFunction {
   }
 }
 
-},{"../defines":250,"./qlFunction":287}],283:[function(require,module,exports){
+},{"../defines":253,"./qlFunction":294}],290:[function(require,module,exports){
 const qlFunction = require('./qlFunction')
 
 const Evaluator = require('../Evaluator')
@@ -47207,7 +51807,7 @@ module.exports = class If extends qlFunction {
   }
 }
 
-},{"../Evaluator":226,"./qlFunction":287}],284:[function(require,module,exports){
+},{"../Evaluator":229,"./qlFunction":294}],291:[function(require,module,exports){
 const OverpassFrontend = require('../defines')
 const qlFunction = require('./qlFunction')
 const parseString = require('../parseString')
@@ -47249,7 +51849,7 @@ module.exports = class newer extends qlFunction {
   }
 }
 
-},{"../defines":250,"../parseString":278,"./qlFunction":287}],285:[function(require,module,exports){
+},{"../defines":253,"../parseString":285,"./qlFunction":294}],292:[function(require,module,exports){
 const turf = require('../turf')
 const OverpassFrontend = require('../defines')
 const arrayToCoords = require('../arrayToCoords')
@@ -47322,7 +51922,7 @@ module.exports = class poly extends qlFunction {
   }
 }
 
-},{"../arrayToCoords":244,"../defines":250,"../turf":292,"./qlFunction":287}],286:[function(require,module,exports){
+},{"../arrayToCoords":247,"../defines":253,"../turf":299,"./qlFunction":294}],293:[function(require,module,exports){
 const qlFunction = require('./qlFunction')
 
 module.exports = class properties extends qlFunction {
@@ -47362,7 +51962,7 @@ module.exports = class properties extends qlFunction {
   }
 }
 
-},{"./qlFunction":287}],287:[function(require,module,exports){
+},{"./qlFunction":294}],294:[function(require,module,exports){
 module.exports = class qlFunction {
   cacheDescriptors (descriptors) {
     descriptors.forEach(d => {
@@ -47372,7 +51972,7 @@ module.exports = class qlFunction {
   }
 }
 
-},{}],288:[function(require,module,exports){
+},{}],295:[function(require,module,exports){
 const OverpassFrontend = require('../defines')
 const qlFunction = require('./qlFunction')
 
@@ -47418,7 +52018,7 @@ module.exports = class uid extends qlFunction {
   }
 }
 
-},{"../defines":250,"./qlFunction":287}],289:[function(require,module,exports){
+},{"../defines":253,"./qlFunction":294}],296:[function(require,module,exports){
 const OverpassFrontend = require('../defines')
 const qlFunction = require('./qlFunction')
 const parseString = require('../parseString')
@@ -47486,7 +52086,7 @@ module.exports = class user extends qlFunction {
   }
 }
 
-},{"../defines":250,"../parseString":278,"./qlFunction":287}],290:[function(require,module,exports){
+},{"../defines":253,"../parseString":285,"./qlFunction":294}],297:[function(require,module,exports){
 function removeNullEntries (arr) {
   let p
 
@@ -47499,12 +52099,12 @@ function removeNullEntries (arr) {
 
 module.exports = removeNullEntries
 
-},{}],291:[function(require,module,exports){
+},{}],298:[function(require,module,exports){
 module.exports = function timestamp () {
   return new Date().getTime()
 }
 
-},{}],292:[function(require,module,exports){
+},{}],299:[function(require,module,exports){
 module.exports = {
   booleanIntersects: require('@turf/boolean-intersects').default,
   booleanWithin: require('@turf/boolean-within').default,
@@ -47516,7 +52116,47 @@ module.exports = {
   union: require('@turf/union').default
 }
 
-},{"@turf/boolean-intersects":10,"@turf/boolean-within":15,"@turf/buffer":18,"@turf/difference":25,"@turf/distance":26,"@turf/intersect":31,"@turf/length":33,"@turf/union":46}],293:[function(require,module,exports){
+},{"@turf/boolean-intersects":10,"@turf/boolean-within":15,"@turf/buffer":18,"@turf/difference":25,"@turf/distance":26,"@turf/intersect":31,"@turf/length":33,"@turf/union":46}],300:[function(require,module,exports){
+(function (Buffer){(function (){
+'use strict';
+
+const validDataUrl = require('valid-data-url');
+
+module.exports = (s) => {
+  if (!validDataUrl(s)) {
+    return false;
+  }
+
+  const parts = s.trim().match(validDataUrl.regex);
+  const parsed = {};
+
+  if (parts[1]) {
+    parsed.mediaType = parts[1].toLowerCase();
+
+    const mediaTypeParts = parts[1].split(';').map(x => x.toLowerCase());
+
+    parsed.contentType = mediaTypeParts[0];
+
+    mediaTypeParts.slice(1).forEach((attribute) => {
+      const p = attribute.split('=');
+      parsed[p[0]] = p[1];
+    });
+  }
+
+  parsed.base64 = !!parts[parts.length - 2];
+  parsed.data = parts[parts.length - 1] || '';
+
+  parsed.toBuffer = () => {
+    const encoding = parsed.base64 ? 'base64' : 'utf8';
+
+    return Buffer.from(parsed.base64 ? parsed.data : decodeURIComponent(parsed.data), encoding);
+  };
+
+  return parsed;
+};
+
+}).call(this)}).call(this,require("buffer").Buffer)
+},{"buffer":59,"valid-data-url":331}],301:[function(require,module,exports){
 (function (process){(function (){
 // 'path' module extracted from Node.js v8.11.1 (only the posix part)
 // transplited with Babel
@@ -48049,1120 +52689,1284 @@ posix.posix = posix;
 module.exports = posix;
 
 }).call(this)}).call(this,require('_process'))
-},{"_process":295}],294:[function(require,module,exports){
+},{"_process":303}],302:[function(require,module,exports){
 (function (process){(function (){
 (function (global, factory) {
-  typeof exports === 'object' && typeof module !== 'undefined' ? module.exports = factory() :
-  typeof define === 'function' && define.amd ? define(factory) :
-  (global = typeof globalThis !== 'undefined' ? globalThis : global || self, global.polygonClipping = factory());
-}(this, (function () { 'use strict';
+    typeof exports === 'object' && typeof module !== 'undefined' ? module.exports = factory() :
+    typeof define === 'function' && define.amd ? define(factory) :
+    (global = typeof globalThis !== 'undefined' ? globalThis : global || self, global.polygonClipping = factory());
+})(this, (function () { 'use strict';
 
-  function _classCallCheck(instance, Constructor) {
-    if (!(instance instanceof Constructor)) {
-      throw new TypeError("Cannot call a class as a function");
-    }
-  }
-
-  function _defineProperties(target, props) {
-    for (var i = 0; i < props.length; i++) {
-      var descriptor = props[i];
-      descriptor.enumerable = descriptor.enumerable || false;
-      descriptor.configurable = true;
-      if ("value" in descriptor) descriptor.writable = true;
-      Object.defineProperty(target, descriptor.key, descriptor);
-    }
-  }
-
-  function _createClass(Constructor, protoProps, staticProps) {
-    if (protoProps) _defineProperties(Constructor.prototype, protoProps);
-    if (staticProps) _defineProperties(Constructor, staticProps);
-    return Constructor;
-  }
-
-  /**
-   * splaytree v3.1.0
-   * Fast Splay tree for Node and browser
-   *
-   * @author Alexander Milevski <info@w8r.name>
-   * @license MIT
-   * @preserve
-   */
-  var Node =
-  /** @class */
-  function () {
-    function Node(key, data) {
-      this.next = null;
-      this.key = key;
-      this.data = data;
-      this.left = null;
-      this.right = null;
-    }
-
-    return Node;
-  }();
-  /* follows "An implementation of top-down splaying"
-   * by D. Sleator <sleator@cs.cmu.edu> March 1992
-   */
-
-
-  function DEFAULT_COMPARE(a, b) {
-    return a > b ? 1 : a < b ? -1 : 0;
-  }
-  /**
-   * Simple top down splay, not requiring i to be in the tree t.
-   */
-
-
-  function splay(i, t, comparator) {
-    var N = new Node(null, null);
-    var l = N;
-    var r = N;
-
-    while (true) {
-      var cmp = comparator(i, t.key); //if (i < t.key) {
-
-      if (cmp < 0) {
-        if (t.left === null) break; //if (i < t.left.key) {
-
-        if (comparator(i, t.left.key) < 0) {
-          var y = t.left;
-          /* rotate right */
-
-          t.left = y.right;
-          y.right = t;
-          t = y;
-          if (t.left === null) break;
-        }
-
-        r.left = t;
-        /* link right */
-
-        r = t;
-        t = t.left; //} else if (i > t.key) {
-      } else if (cmp > 0) {
-        if (t.right === null) break; //if (i > t.right.key) {
-
-        if (comparator(i, t.right.key) > 0) {
-          var y = t.right;
-          /* rotate left */
-
-          t.right = y.left;
-          y.left = t;
-          t = y;
-          if (t.right === null) break;
-        }
-
-        l.right = t;
-        /* link left */
-
-        l = t;
-        t = t.right;
-      } else break;
-    }
-    /* assemble */
-
-
-    l.right = t.left;
-    r.left = t.right;
-    t.left = N.right;
-    t.right = N.left;
-    return t;
-  }
-
-  function insert(i, data, t, comparator) {
-    var node = new Node(i, data);
-
-    if (t === null) {
-      node.left = node.right = null;
-      return node;
-    }
-
-    t = splay(i, t, comparator);
-    var cmp = comparator(i, t.key);
-
-    if (cmp < 0) {
-      node.left = t.left;
-      node.right = t;
-      t.left = null;
-    } else if (cmp >= 0) {
-      node.right = t.right;
-      node.left = t;
-      t.right = null;
-    }
-
-    return node;
-  }
-
-  function split(key, v, comparator) {
-    var left = null;
-    var right = null;
-
-    if (v) {
-      v = splay(key, v, comparator);
-      var cmp = comparator(v.key, key);
-
-      if (cmp === 0) {
-        left = v.left;
-        right = v.right;
-      } else if (cmp < 0) {
-        right = v.right;
-        v.right = null;
-        left = v;
-      } else {
-        left = v.left;
-        v.left = null;
-        right = v;
-      }
-    }
-
-    return {
-      left: left,
-      right: right
-    };
-  }
-
-  function merge(left, right, comparator) {
-    if (right === null) return left;
-    if (left === null) return right;
-    right = splay(left.key, right, comparator);
-    right.left = left;
-    return right;
-  }
-  /**
-   * Prints level of the tree
-   */
-
-
-  function printRow(root, prefix, isTail, out, printNode) {
-    if (root) {
-      out("" + prefix + (isTail ? '└── ' : '├── ') + printNode(root) + "\n");
-      var indent = prefix + (isTail ? '    ' : '│   ');
-      if (root.left) printRow(root.left, indent, false, out, printNode);
-      if (root.right) printRow(root.right, indent, true, out, printNode);
-    }
-  }
-
-  var Tree =
-  /** @class */
-  function () {
-    function Tree(comparator) {
-      if (comparator === void 0) {
-        comparator = DEFAULT_COMPARE;
-      }
-
-      this._root = null;
-      this._size = 0;
-      this._comparator = comparator;
-    }
     /**
-     * Inserts a key, allows duplicates
+     * splaytree v3.1.2
+     * Fast Splay tree for Node and browser
+     *
+     * @author Alexander Milevski <info@w8r.name>
+     * @license MIT
+     * @preserve
      */
 
+    /*! *****************************************************************************
+    Copyright (c) Microsoft Corporation. All rights reserved.
+    Licensed under the Apache License, Version 2.0 (the "License"); you may not use
+    this file except in compliance with the License. You may obtain a copy of the
+    License at http://www.apache.org/licenses/LICENSE-2.0
 
-    Tree.prototype.insert = function (key, data) {
-      this._size++;
-      return this._root = insert(key, data, this._root, this._comparator);
-    };
-    /**
-     * Adds a key, if it is not present in the tree
-     */
+    THIS CODE IS PROVIDED ON AN *AS IS* BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+    KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT LIMITATION ANY IMPLIED
+    WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR A PARTICULAR PURPOSE,
+    MERCHANTABLITY OR NON-INFRINGEMENT.
 
+    See the Apache Version 2.0 License for specific language governing permissions
+    and limitations under the License.
+    ***************************************************************************** */
 
-    Tree.prototype.add = function (key, data) {
-      var node = new Node(key, data);
-
-      if (this._root === null) {
-        node.left = node.right = null;
-        this._size++;
-        this._root = node;
-      }
-
-      var comparator = this._comparator;
-      var t = splay(key, this._root, comparator);
-      var cmp = comparator(key, t.key);
-      if (cmp === 0) this._root = t;else {
-        if (cmp < 0) {
-          node.left = t.left;
-          node.right = t;
-          t.left = null;
-        } else if (cmp > 0) {
-          node.right = t.right;
-          node.left = t;
-          t.right = null;
-        }
-
-        this._size++;
-        this._root = node;
-      }
-      return this._root;
-    };
-    /**
-     * @param  {Key} key
-     * @return {Node|null}
-     */
-
-
-    Tree.prototype.remove = function (key) {
-      this._root = this._remove(key, this._root, this._comparator);
-    };
-    /**
-     * Deletes i from the tree if it's there
-     */
-
-
-    Tree.prototype._remove = function (i, t, comparator) {
-      var x;
-      if (t === null) return null;
-      t = splay(i, t, comparator);
-      var cmp = comparator(i, t.key);
-
-      if (cmp === 0) {
-        /* found it */
-        if (t.left === null) {
-          x = t.right;
-        } else {
-          x = splay(i, t.left, comparator);
-          x.right = t.right;
-        }
-
-        this._size--;
-        return x;
-      }
-
-      return t;
-      /* It wasn't there */
-    };
-    /**
-     * Removes and returns the node with smallest key
-     */
-
-
-    Tree.prototype.pop = function () {
-      var node = this._root;
-
-      if (node) {
-        while (node.left) {
-          node = node.left;
-        }
-
-        this._root = splay(node.key, this._root, this._comparator);
-        this._root = this._remove(node.key, this._root, this._comparator);
-        return {
-          key: node.key,
-          data: node.data
+    function __generator(thisArg, body) {
+      var _ = {
+          label: 0,
+          sent: function () {
+            if (t[0] & 1) throw t[1];
+            return t[1];
+          },
+          trys: [],
+          ops: []
+        },
+        f,
+        y,
+        t,
+        g;
+      return g = {
+        next: verb(0),
+        "throw": verb(1),
+        "return": verb(2)
+      }, typeof Symbol === "function" && (g[Symbol.iterator] = function () {
+        return this;
+      }), g;
+      function verb(n) {
+        return function (v) {
+          return step([n, v]);
         };
       }
-
-      return null;
-    };
-    /**
-     * Find without splaying
-     */
-
-
-    Tree.prototype.findStatic = function (key) {
-      var current = this._root;
-      var compare = this._comparator;
-
-      while (current) {
-        var cmp = compare(key, current.key);
-        if (cmp === 0) return current;else if (cmp < 0) current = current.left;else current = current.right;
-      }
-
-      return null;
-    };
-
-    Tree.prototype.find = function (key) {
-      if (this._root) {
-        this._root = splay(key, this._root, this._comparator);
-        if (this._comparator(key, this._root.key) !== 0) return null;
-      }
-
-      return this._root;
-    };
-
-    Tree.prototype.contains = function (key) {
-      var current = this._root;
-      var compare = this._comparator;
-
-      while (current) {
-        var cmp = compare(key, current.key);
-        if (cmp === 0) return true;else if (cmp < 0) current = current.left;else current = current.right;
-      }
-
-      return false;
-    };
-
-    Tree.prototype.forEach = function (visitor, ctx) {
-      var current = this._root;
-      var Q = [];
-      /* Initialize stack s */
-
-      var done = false;
-
-      while (!done) {
-        if (current !== null) {
-          Q.push(current);
-          current = current.left;
-        } else {
-          if (Q.length !== 0) {
-            current = Q.pop();
-            visitor.call(ctx, current);
-            current = current.right;
-          } else done = true;
-        }
-      }
-
-      return this;
-    };
-    /**
-     * Walk key range from `low` to `high`. Stops if `fn` returns a value.
-     */
-
-
-    Tree.prototype.range = function (low, high, fn, ctx) {
-      var Q = [];
-      var compare = this._comparator;
-      var node = this._root;
-      var cmp;
-
-      while (Q.length !== 0 || node) {
-        if (node) {
-          Q.push(node);
-          node = node.left;
-        } else {
-          node = Q.pop();
-          cmp = compare(node.key, high);
-
-          if (cmp > 0) {
-            break;
-          } else if (compare(node.key, low) >= 0) {
-            if (fn.call(ctx, node)) return this; // stop if smth is returned
+      function step(op) {
+        if (f) throw new TypeError("Generator is already executing.");
+        while (_) try {
+          if (f = 1, y && (t = op[0] & 2 ? y["return"] : op[0] ? y["throw"] || ((t = y["return"]) && t.call(y), 0) : y.next) && !(t = t.call(y, op[1])).done) return t;
+          if (y = 0, t) op = [op[0] & 2, t.value];
+          switch (op[0]) {
+            case 0:
+            case 1:
+              t = op;
+              break;
+            case 4:
+              _.label++;
+              return {
+                value: op[1],
+                done: false
+              };
+            case 5:
+              _.label++;
+              y = op[1];
+              op = [0];
+              continue;
+            case 7:
+              op = _.ops.pop();
+              _.trys.pop();
+              continue;
+            default:
+              if (!(t = _.trys, t = t.length > 0 && t[t.length - 1]) && (op[0] === 6 || op[0] === 2)) {
+                _ = 0;
+                continue;
+              }
+              if (op[0] === 3 && (!t || op[1] > t[0] && op[1] < t[3])) {
+                _.label = op[1];
+                break;
+              }
+              if (op[0] === 6 && _.label < t[1]) {
+                _.label = t[1];
+                t = op;
+                break;
+              }
+              if (t && _.label < t[2]) {
+                _.label = t[2];
+                _.ops.push(op);
+                break;
+              }
+              if (t[2]) _.ops.pop();
+              _.trys.pop();
+              continue;
           }
+          op = body.call(thisArg, _);
+        } catch (e) {
+          op = [6, e];
+          y = 0;
+        } finally {
+          f = t = 0;
+        }
+        if (op[0] & 5) throw op[1];
+        return {
+          value: op[0] ? op[1] : void 0,
+          done: true
+        };
+      }
+    }
+    var Node = /** @class */function () {
+      function Node(key, data) {
+        this.next = null;
+        this.key = key;
+        this.data = data;
+        this.left = null;
+        this.right = null;
+      }
+      return Node;
+    }();
 
-          node = node.right;
+    /* follows "An implementation of top-down splaying"
+     * by D. Sleator <sleator@cs.cmu.edu> March 1992
+     */
+    function DEFAULT_COMPARE(a, b) {
+      return a > b ? 1 : a < b ? -1 : 0;
+    }
+    /**
+     * Simple top down splay, not requiring i to be in the tree t.
+     */
+    function splay(i, t, comparator) {
+      var N = new Node(null, null);
+      var l = N;
+      var r = N;
+      while (true) {
+        var cmp = comparator(i, t.key);
+        //if (i < t.key) {
+        if (cmp < 0) {
+          if (t.left === null) break;
+          //if (i < t.left.key) {
+          if (comparator(i, t.left.key) < 0) {
+            var y = t.left; /* rotate right */
+            t.left = y.right;
+            y.right = t;
+            t = y;
+            if (t.left === null) break;
+          }
+          r.left = t; /* link right */
+          r = t;
+          t = t.left;
+          //} else if (i > t.key) {
+        } else if (cmp > 0) {
+          if (t.right === null) break;
+          //if (i > t.right.key) {
+          if (comparator(i, t.right.key) > 0) {
+            var y = t.right; /* rotate left */
+            t.right = y.left;
+            y.left = t;
+            t = y;
+            if (t.right === null) break;
+          }
+          l.right = t; /* link left */
+          l = t;
+          t = t.right;
+        } else break;
+      }
+      /* assemble */
+      l.right = t.left;
+      r.left = t.right;
+      t.left = N.right;
+      t.right = N.left;
+      return t;
+    }
+    function insert(i, data, t, comparator) {
+      var node = new Node(i, data);
+      if (t === null) {
+        node.left = node.right = null;
+        return node;
+      }
+      t = splay(i, t, comparator);
+      var cmp = comparator(i, t.key);
+      if (cmp < 0) {
+        node.left = t.left;
+        node.right = t;
+        t.left = null;
+      } else if (cmp >= 0) {
+        node.right = t.right;
+        node.left = t;
+        t.right = null;
+      }
+      return node;
+    }
+    function split(key, v, comparator) {
+      var left = null;
+      var right = null;
+      if (v) {
+        v = splay(key, v, comparator);
+        var cmp = comparator(v.key, key);
+        if (cmp === 0) {
+          left = v.left;
+          right = v.right;
+        } else if (cmp < 0) {
+          right = v.right;
+          v.right = null;
+          left = v;
+        } else {
+          left = v.left;
+          v.left = null;
+          right = v;
         }
       }
-
-      return this;
-    };
+      return {
+        left: left,
+        right: right
+      };
+    }
+    function merge(left, right, comparator) {
+      if (right === null) return left;
+      if (left === null) return right;
+      right = splay(left.key, right, comparator);
+      right.left = left;
+      return right;
+    }
     /**
-     * Returns array of keys
+     * Prints level of the tree
      */
-
-
-    Tree.prototype.keys = function () {
-      var keys = [];
-      this.forEach(function (_a) {
-        var key = _a.key;
-        return keys.push(key);
+    function printRow(root, prefix, isTail, out, printNode) {
+      if (root) {
+        out("" + prefix + (isTail ? '└── ' : '├── ') + printNode(root) + "\n");
+        var indent = prefix + (isTail ? '    ' : '│   ');
+        if (root.left) printRow(root.left, indent, false, out, printNode);
+        if (root.right) printRow(root.right, indent, true, out, printNode);
+      }
+    }
+    var Tree = /** @class */function () {
+      function Tree(comparator) {
+        if (comparator === void 0) {
+          comparator = DEFAULT_COMPARE;
+        }
+        this._root = null;
+        this._size = 0;
+        this._comparator = comparator;
+      }
+      /**
+       * Inserts a key, allows duplicates
+       */
+      Tree.prototype.insert = function (key, data) {
+        this._size++;
+        return this._root = insert(key, data, this._root, this._comparator);
+      };
+      /**
+       * Adds a key, if it is not present in the tree
+       */
+      Tree.prototype.add = function (key, data) {
+        var node = new Node(key, data);
+        if (this._root === null) {
+          node.left = node.right = null;
+          this._size++;
+          this._root = node;
+        }
+        var comparator = this._comparator;
+        var t = splay(key, this._root, comparator);
+        var cmp = comparator(key, t.key);
+        if (cmp === 0) this._root = t;else {
+          if (cmp < 0) {
+            node.left = t.left;
+            node.right = t;
+            t.left = null;
+          } else if (cmp > 0) {
+            node.right = t.right;
+            node.left = t;
+            t.right = null;
+          }
+          this._size++;
+          this._root = node;
+        }
+        return this._root;
+      };
+      /**
+       * @param  {Key} key
+       * @return {Node|null}
+       */
+      Tree.prototype.remove = function (key) {
+        this._root = this._remove(key, this._root, this._comparator);
+      };
+      /**
+       * Deletes i from the tree if it's there
+       */
+      Tree.prototype._remove = function (i, t, comparator) {
+        var x;
+        if (t === null) return null;
+        t = splay(i, t, comparator);
+        var cmp = comparator(i, t.key);
+        if (cmp === 0) {
+          /* found it */
+          if (t.left === null) {
+            x = t.right;
+          } else {
+            x = splay(i, t.left, comparator);
+            x.right = t.right;
+          }
+          this._size--;
+          return x;
+        }
+        return t; /* It wasn't there */
+      };
+      /**
+       * Removes and returns the node with smallest key
+       */
+      Tree.prototype.pop = function () {
+        var node = this._root;
+        if (node) {
+          while (node.left) node = node.left;
+          this._root = splay(node.key, this._root, this._comparator);
+          this._root = this._remove(node.key, this._root, this._comparator);
+          return {
+            key: node.key,
+            data: node.data
+          };
+        }
+        return null;
+      };
+      /**
+       * Find without splaying
+       */
+      Tree.prototype.findStatic = function (key) {
+        var current = this._root;
+        var compare = this._comparator;
+        while (current) {
+          var cmp = compare(key, current.key);
+          if (cmp === 0) return current;else if (cmp < 0) current = current.left;else current = current.right;
+        }
+        return null;
+      };
+      Tree.prototype.find = function (key) {
+        if (this._root) {
+          this._root = splay(key, this._root, this._comparator);
+          if (this._comparator(key, this._root.key) !== 0) return null;
+        }
+        return this._root;
+      };
+      Tree.prototype.contains = function (key) {
+        var current = this._root;
+        var compare = this._comparator;
+        while (current) {
+          var cmp = compare(key, current.key);
+          if (cmp === 0) return true;else if (cmp < 0) current = current.left;else current = current.right;
+        }
+        return false;
+      };
+      Tree.prototype.forEach = function (visitor, ctx) {
+        var current = this._root;
+        var Q = []; /* Initialize stack s */
+        var done = false;
+        while (!done) {
+          if (current !== null) {
+            Q.push(current);
+            current = current.left;
+          } else {
+            if (Q.length !== 0) {
+              current = Q.pop();
+              visitor.call(ctx, current);
+              current = current.right;
+            } else done = true;
+          }
+        }
+        return this;
+      };
+      /**
+       * Walk key range from `low` to `high`. Stops if `fn` returns a value.
+       */
+      Tree.prototype.range = function (low, high, fn, ctx) {
+        var Q = [];
+        var compare = this._comparator;
+        var node = this._root;
+        var cmp;
+        while (Q.length !== 0 || node) {
+          if (node) {
+            Q.push(node);
+            node = node.left;
+          } else {
+            node = Q.pop();
+            cmp = compare(node.key, high);
+            if (cmp > 0) {
+              break;
+            } else if (compare(node.key, low) >= 0) {
+              if (fn.call(ctx, node)) return this; // stop if smth is returned
+            }
+            node = node.right;
+          }
+        }
+        return this;
+      };
+      /**
+       * Returns array of keys
+       */
+      Tree.prototype.keys = function () {
+        var keys = [];
+        this.forEach(function (_a) {
+          var key = _a.key;
+          return keys.push(key);
+        });
+        return keys;
+      };
+      /**
+       * Returns array of all the data in the nodes
+       */
+      Tree.prototype.values = function () {
+        var values = [];
+        this.forEach(function (_a) {
+          var data = _a.data;
+          return values.push(data);
+        });
+        return values;
+      };
+      Tree.prototype.min = function () {
+        if (this._root) return this.minNode(this._root).key;
+        return null;
+      };
+      Tree.prototype.max = function () {
+        if (this._root) return this.maxNode(this._root).key;
+        return null;
+      };
+      Tree.prototype.minNode = function (t) {
+        if (t === void 0) {
+          t = this._root;
+        }
+        if (t) while (t.left) t = t.left;
+        return t;
+      };
+      Tree.prototype.maxNode = function (t) {
+        if (t === void 0) {
+          t = this._root;
+        }
+        if (t) while (t.right) t = t.right;
+        return t;
+      };
+      /**
+       * Returns node at given index
+       */
+      Tree.prototype.at = function (index) {
+        var current = this._root;
+        var done = false;
+        var i = 0;
+        var Q = [];
+        while (!done) {
+          if (current) {
+            Q.push(current);
+            current = current.left;
+          } else {
+            if (Q.length > 0) {
+              current = Q.pop();
+              if (i === index) return current;
+              i++;
+              current = current.right;
+            } else done = true;
+          }
+        }
+        return null;
+      };
+      Tree.prototype.next = function (d) {
+        var root = this._root;
+        var successor = null;
+        if (d.right) {
+          successor = d.right;
+          while (successor.left) successor = successor.left;
+          return successor;
+        }
+        var comparator = this._comparator;
+        while (root) {
+          var cmp = comparator(d.key, root.key);
+          if (cmp === 0) break;else if (cmp < 0) {
+            successor = root;
+            root = root.left;
+          } else root = root.right;
+        }
+        return successor;
+      };
+      Tree.prototype.prev = function (d) {
+        var root = this._root;
+        var predecessor = null;
+        if (d.left !== null) {
+          predecessor = d.left;
+          while (predecessor.right) predecessor = predecessor.right;
+          return predecessor;
+        }
+        var comparator = this._comparator;
+        while (root) {
+          var cmp = comparator(d.key, root.key);
+          if (cmp === 0) break;else if (cmp < 0) root = root.left;else {
+            predecessor = root;
+            root = root.right;
+          }
+        }
+        return predecessor;
+      };
+      Tree.prototype.clear = function () {
+        this._root = null;
+        this._size = 0;
+        return this;
+      };
+      Tree.prototype.toList = function () {
+        return toList(this._root);
+      };
+      /**
+       * Bulk-load items. Both array have to be same size
+       */
+      Tree.prototype.load = function (keys, values, presort) {
+        if (values === void 0) {
+          values = [];
+        }
+        if (presort === void 0) {
+          presort = false;
+        }
+        var size = keys.length;
+        var comparator = this._comparator;
+        // sort if needed
+        if (presort) sort(keys, values, 0, size - 1, comparator);
+        if (this._root === null) {
+          // empty tree
+          this._root = loadRecursive(keys, values, 0, size);
+          this._size = size;
+        } else {
+          // that re-builds the whole tree from two in-order traversals
+          var mergedList = mergeLists(this.toList(), createList(keys, values), comparator);
+          size = this._size + size;
+          this._root = sortedListToBST({
+            head: mergedList
+          }, 0, size);
+        }
+        return this;
+      };
+      Tree.prototype.isEmpty = function () {
+        return this._root === null;
+      };
+      Object.defineProperty(Tree.prototype, "size", {
+        get: function () {
+          return this._size;
+        },
+        enumerable: true,
+        configurable: true
       });
-      return keys;
-    };
-    /**
-     * Returns array of all the data in the nodes
-     */
-
-
-    Tree.prototype.values = function () {
-      var values = [];
-      this.forEach(function (_a) {
-        var data = _a.data;
-        return values.push(data);
+      Object.defineProperty(Tree.prototype, "root", {
+        get: function () {
+          return this._root;
+        },
+        enumerable: true,
+        configurable: true
       });
-      return values;
-    };
-
-    Tree.prototype.min = function () {
-      if (this._root) return this.minNode(this._root).key;
+      Tree.prototype.toString = function (printNode) {
+        if (printNode === void 0) {
+          printNode = function (n) {
+            return String(n.key);
+          };
+        }
+        var out = [];
+        printRow(this._root, '', true, function (v) {
+          return out.push(v);
+        }, printNode);
+        return out.join('');
+      };
+      Tree.prototype.update = function (key, newKey, newData) {
+        var comparator = this._comparator;
+        var _a = split(key, this._root, comparator),
+          left = _a.left,
+          right = _a.right;
+        if (comparator(key, newKey) < 0) {
+          right = insert(newKey, newData, right, comparator);
+        } else {
+          left = insert(newKey, newData, left, comparator);
+        }
+        this._root = merge(left, right, comparator);
+      };
+      Tree.prototype.split = function (key) {
+        return split(key, this._root, this._comparator);
+      };
+      Tree.prototype[Symbol.iterator] = function () {
+        var current, Q, done;
+        return __generator(this, function (_a) {
+          switch (_a.label) {
+            case 0:
+              current = this._root;
+              Q = [];
+              done = false;
+              _a.label = 1;
+            case 1:
+              if (!!done) return [3 /*break*/, 6];
+              if (!(current !== null)) return [3 /*break*/, 2];
+              Q.push(current);
+              current = current.left;
+              return [3 /*break*/, 5];
+            case 2:
+              if (!(Q.length !== 0)) return [3 /*break*/, 4];
+              current = Q.pop();
+              return [4 /*yield*/, current];
+            case 3:
+              _a.sent();
+              current = current.right;
+              return [3 /*break*/, 5];
+            case 4:
+              done = true;
+              _a.label = 5;
+            case 5:
+              return [3 /*break*/, 1];
+            case 6:
+              return [2 /*return*/];
+          }
+        });
+      };
+      return Tree;
+    }();
+    function loadRecursive(keys, values, start, end) {
+      var size = end - start;
+      if (size > 0) {
+        var middle = start + Math.floor(size / 2);
+        var key = keys[middle];
+        var data = values[middle];
+        var node = new Node(key, data);
+        node.left = loadRecursive(keys, values, start, middle);
+        node.right = loadRecursive(keys, values, middle + 1, end);
+        return node;
+      }
       return null;
-    };
-
-    Tree.prototype.max = function () {
-      if (this._root) return this.maxNode(this._root).key;
-      return null;
-    };
-
-    Tree.prototype.minNode = function (t) {
-      if (t === void 0) {
-        t = this._root;
+    }
+    function createList(keys, values) {
+      var head = new Node(null, null);
+      var p = head;
+      for (var i = 0; i < keys.length; i++) {
+        p = p.next = new Node(keys[i], values[i]);
       }
-
-      if (t) while (t.left) {
-        t = t.left;
-      }
-      return t;
-    };
-
-    Tree.prototype.maxNode = function (t) {
-      if (t === void 0) {
-        t = this._root;
-      }
-
-      if (t) while (t.right) {
-        t = t.right;
-      }
-      return t;
-    };
-    /**
-     * Returns node at given index
-     */
-
-
-    Tree.prototype.at = function (index) {
-      var current = this._root;
-      var done = false;
-      var i = 0;
+      p.next = null;
+      return head.next;
+    }
+    function toList(root) {
+      var current = root;
       var Q = [];
-
+      var done = false;
+      var head = new Node(null, null);
+      var p = head;
       while (!done) {
         if (current) {
           Q.push(current);
           current = current.left;
         } else {
           if (Q.length > 0) {
-            current = Q.pop();
-            if (i === index) return current;
-            i++;
+            current = p = p.next = Q.pop();
             current = current.right;
           } else done = true;
         }
       }
-
+      p.next = null; // that'll work even if the tree was empty
+      return head.next;
+    }
+    function sortedListToBST(list, start, end) {
+      var size = end - start;
+      if (size > 0) {
+        var middle = start + Math.floor(size / 2);
+        var left = sortedListToBST(list, start, middle);
+        var root = list.head;
+        root.left = left;
+        list.head = list.head.next;
+        root.right = sortedListToBST(list, middle + 1, end);
+        return root;
+      }
       return null;
-    };
-
-    Tree.prototype.next = function (d) {
-      var root = this._root;
-      var successor = null;
-
-      if (d.right) {
-        successor = d.right;
-
-        while (successor.left) {
-          successor = successor.left;
+    }
+    function mergeLists(l1, l2, compare) {
+      var head = new Node(null, null); // dummy
+      var p = head;
+      var p1 = l1;
+      var p2 = l2;
+      while (p1 !== null && p2 !== null) {
+        if (compare(p1.key, p2.key) < 0) {
+          p.next = p1;
+          p1 = p1.next;
+        } else {
+          p.next = p2;
+          p2 = p2.next;
         }
-
-        return successor;
+        p = p.next;
       }
-
-      var comparator = this._comparator;
-
-      while (root) {
-        var cmp = comparator(d.key, root.key);
-        if (cmp === 0) break;else if (cmp < 0) {
-          successor = root;
-          root = root.left;
-        } else root = root.right;
+      if (p1 !== null) {
+        p.next = p1;
+      } else if (p2 !== null) {
+        p.next = p2;
       }
-
-      return successor;
-    };
-
-    Tree.prototype.prev = function (d) {
-      var root = this._root;
-      var predecessor = null;
-
-      if (d.left !== null) {
-        predecessor = d.left;
-
-        while (predecessor.right) {
-          predecessor = predecessor.right;
-        }
-
-        return predecessor;
+      return head.next;
+    }
+    function sort(keys, values, left, right, compare) {
+      if (left >= right) return;
+      var pivot = keys[left + right >> 1];
+      var i = left - 1;
+      var j = right + 1;
+      while (true) {
+        do i++; while (compare(keys[i], pivot) < 0);
+        do j--; while (compare(keys[j], pivot) > 0);
+        if (i >= j) break;
+        var tmp = keys[i];
+        keys[i] = keys[j];
+        keys[j] = tmp;
+        tmp = values[i];
+        values[i] = values[j];
+        values[j] = tmp;
       }
+      sort(keys, values, left, j, compare);
+      sort(keys, values, j + 1, right, compare);
+    }
 
-      var comparator = this._comparator;
-
-      while (root) {
-        var cmp = comparator(d.key, root.key);
-        if (cmp === 0) break;else if (cmp < 0) root = root.left;else {
-          predecessor = root;
-          root = root.right;
-        }
-      }
-
-      return predecessor;
-    };
-
-    Tree.prototype.clear = function () {
-      this._root = null;
-      this._size = 0;
-      return this;
-    };
-
-    Tree.prototype.toList = function () {
-      return toList(this._root);
-    };
     /**
-     * Bulk-load items. Both array have to be same size
+     * A bounding box has the format:
+     *
+     *  { ll: { x: xmin, y: ymin }, ur: { x: xmax, y: ymax } }
+     *
      */
 
-
-    Tree.prototype.load = function (keys, values, presort) {
-      if (values === void 0) {
-        values = [];
-      }
-
-      if (presort === void 0) {
-        presort = false;
-      }
-
-      var size = keys.length;
-      var comparator = this._comparator; // sort if needed
-
-      if (presort) sort(keys, values, 0, size - 1, comparator);
-
-      if (this._root === null) {
-        // empty tree
-        this._root = loadRecursive(keys, values, 0, size);
-        this._size = size;
-      } else {
-        // that re-builds the whole tree from two in-order traversals
-        var mergedList = mergeLists(this.toList(), createList(keys, values), comparator);
-        size = this._size + size;
-        this._root = sortedListToBST({
-          head: mergedList
-        }, 0, size);
-      }
-
-      return this;
+    const isInBbox = (bbox, point) => {
+      return bbox.ll.x <= point.x && point.x <= bbox.ur.x && bbox.ll.y <= point.y && point.y <= bbox.ur.y;
     };
 
-    Tree.prototype.isEmpty = function () {
-      return this._root === null;
+    /* Returns either null, or a bbox (aka an ordered pair of points)
+     * If there is only one point of overlap, a bbox with identical points
+     * will be returned */
+    const getBboxOverlap = (b1, b2) => {
+      // check if the bboxes overlap at all
+      if (b2.ur.x < b1.ll.x || b1.ur.x < b2.ll.x || b2.ur.y < b1.ll.y || b1.ur.y < b2.ll.y) return null;
+
+      // find the middle two X values
+      const lowerX = b1.ll.x < b2.ll.x ? b2.ll.x : b1.ll.x;
+      const upperX = b1.ur.x < b2.ur.x ? b1.ur.x : b2.ur.x;
+
+      // find the middle two Y values
+      const lowerY = b1.ll.y < b2.ll.y ? b2.ll.y : b1.ll.y;
+      const upperY = b1.ur.y < b2.ur.y ? b1.ur.y : b2.ur.y;
+
+      // put those middle values together to get the overlap
+      return {
+        ll: {
+          x: lowerX,
+          y: lowerY
+        },
+        ur: {
+          x: upperX,
+          y: upperY
+        }
+      };
     };
 
-    Object.defineProperty(Tree.prototype, "size", {
-      get: function get() {
-        return this._size;
-      },
-      enumerable: true,
-      configurable: true
-    });
-    Object.defineProperty(Tree.prototype, "root", {
-      get: function get() {
-        return this._root;
-      },
-      enumerable: true,
-      configurable: true
-    });
+    /* Javascript doesn't do integer math. Everything is
+     * floating point with percision Number.EPSILON.
+     *
+     * https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number/EPSILON
+     */
 
-    Tree.prototype.toString = function (printNode) {
-      if (printNode === void 0) {
-        printNode = function printNode(n) {
-          return String(n.key);
-        };
+    let epsilon$1 = Number.EPSILON;
+
+    // IE Polyfill
+    if (epsilon$1 === undefined) epsilon$1 = Math.pow(2, -52);
+    const EPSILON_SQ = epsilon$1 * epsilon$1;
+
+    /* FLP comparator */
+    const cmp = (a, b) => {
+      // check if they're both 0
+      if (-epsilon$1 < a && a < epsilon$1) {
+        if (-epsilon$1 < b && b < epsilon$1) {
+          return 0;
+        }
       }
 
-      var out = [];
-      printRow(this._root, '', true, function (v) {
-        return out.push(v);
-      }, printNode);
-      return out.join('');
-    };
-
-    Tree.prototype.update = function (key, newKey, newData) {
-      var comparator = this._comparator;
-
-      var _a = split(key, this._root, comparator),
-          left = _a.left,
-          right = _a.right;
-
-      if (comparator(key, newKey) < 0) {
-        right = insert(newKey, newData, right, comparator);
-      } else {
-        left = insert(newKey, newData, left, comparator);
-      }
-
-      this._root = merge(left, right, comparator);
-    };
-
-    Tree.prototype.split = function (key) {
-      return split(key, this._root, this._comparator);
-    };
-
-    return Tree;
-  }();
-
-  function loadRecursive(keys, values, start, end) {
-    var size = end - start;
-
-    if (size > 0) {
-      var middle = start + Math.floor(size / 2);
-      var key = keys[middle];
-      var data = values[middle];
-      var node = new Node(key, data);
-      node.left = loadRecursive(keys, values, start, middle);
-      node.right = loadRecursive(keys, values, middle + 1, end);
-      return node;
-    }
-
-    return null;
-  }
-
-  function createList(keys, values) {
-    var head = new Node(null, null);
-    var p = head;
-
-    for (var i = 0; i < keys.length; i++) {
-      p = p.next = new Node(keys[i], values[i]);
-    }
-
-    p.next = null;
-    return head.next;
-  }
-
-  function toList(root) {
-    var current = root;
-    var Q = [];
-    var done = false;
-    var head = new Node(null, null);
-    var p = head;
-
-    while (!done) {
-      if (current) {
-        Q.push(current);
-        current = current.left;
-      } else {
-        if (Q.length > 0) {
-          current = p = p.next = Q.pop();
-          current = current.right;
-        } else done = true;
-      }
-    }
-
-    p.next = null; // that'll work even if the tree was empty
-
-    return head.next;
-  }
-
-  function sortedListToBST(list, start, end) {
-    var size = end - start;
-
-    if (size > 0) {
-      var middle = start + Math.floor(size / 2);
-      var left = sortedListToBST(list, start, middle);
-      var root = list.head;
-      root.left = left;
-      list.head = list.head.next;
-      root.right = sortedListToBST(list, middle + 1, end);
-      return root;
-    }
-
-    return null;
-  }
-
-  function mergeLists(l1, l2, compare) {
-    var head = new Node(null, null); // dummy
-
-    var p = head;
-    var p1 = l1;
-    var p2 = l2;
-
-    while (p1 !== null && p2 !== null) {
-      if (compare(p1.key, p2.key) < 0) {
-        p.next = p1;
-        p1 = p1.next;
-      } else {
-        p.next = p2;
-        p2 = p2.next;
-      }
-
-      p = p.next;
-    }
-
-    if (p1 !== null) {
-      p.next = p1;
-    } else if (p2 !== null) {
-      p.next = p2;
-    }
-
-    return head.next;
-  }
-
-  function sort(keys, values, left, right, compare) {
-    if (left >= right) return;
-    var pivot = keys[left + right >> 1];
-    var i = left - 1;
-    var j = right + 1;
-
-    while (true) {
-      do {
-        i++;
-      } while (compare(keys[i], pivot) < 0);
-
-      do {
-        j--;
-      } while (compare(keys[j], pivot) > 0);
-
-      if (i >= j) break;
-      var tmp = keys[i];
-      keys[i] = keys[j];
-      keys[j] = tmp;
-      tmp = values[i];
-      values[i] = values[j];
-      values[j] = tmp;
-    }
-
-    sort(keys, values, left, j, compare);
-    sort(keys, values, j + 1, right, compare);
-  }
-
-  /**
-   * A bounding box has the format:
-   *
-   *  { ll: { x: xmin, y: ymin }, ur: { x: xmax, y: ymax } }
-   *
-   */
-  var isInBbox = function isInBbox(bbox, point) {
-    return bbox.ll.x <= point.x && point.x <= bbox.ur.x && bbox.ll.y <= point.y && point.y <= bbox.ur.y;
-  };
-  /* Returns either null, or a bbox (aka an ordered pair of points)
-   * If there is only one point of overlap, a bbox with identical points
-   * will be returned */
-
-  var getBboxOverlap = function getBboxOverlap(b1, b2) {
-    // check if the bboxes overlap at all
-    if (b2.ur.x < b1.ll.x || b1.ur.x < b2.ll.x || b2.ur.y < b1.ll.y || b1.ur.y < b2.ll.y) return null; // find the middle two X values
-
-    var lowerX = b1.ll.x < b2.ll.x ? b2.ll.x : b1.ll.x;
-    var upperX = b1.ur.x < b2.ur.x ? b1.ur.x : b2.ur.x; // find the middle two Y values
-
-    var lowerY = b1.ll.y < b2.ll.y ? b2.ll.y : b1.ll.y;
-    var upperY = b1.ur.y < b2.ur.y ? b1.ur.y : b2.ur.y; // put those middle values together to get the overlap
-
-    return {
-      ll: {
-        x: lowerX,
-        y: lowerY
-      },
-      ur: {
-        x: upperX,
-        y: upperY
-      }
-    };
-  };
-
-  /* Javascript doesn't do integer math. Everything is
-   * floating point with percision Number.EPSILON.
-   *
-   * https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number/EPSILON
-   */
-  var epsilon = Number.EPSILON; // IE Polyfill
-
-  if (epsilon === undefined) epsilon = Math.pow(2, -52);
-  var EPSILON_SQ = epsilon * epsilon;
-  /* FLP comparator */
-
-  var cmp = function cmp(a, b) {
-    // check if they're both 0
-    if (-epsilon < a && a < epsilon) {
-      if (-epsilon < b && b < epsilon) {
+      // check if they're flp equal
+      const ab = a - b;
+      if (ab * ab < EPSILON_SQ * a * b) {
         return 0;
       }
-    } // check if they're flp equal
 
+      // normal comparison
+      return a < b ? -1 : 1;
+    };
 
-    var ab = a - b;
+    /**
+     * This class rounds incoming values sufficiently so that
+     * floating points problems are, for the most part, avoided.
+     *
+     * Incoming points are have their x & y values tested against
+     * all previously seen x & y values. If either is 'too close'
+     * to a previously seen value, it's value is 'snapped' to the
+     * previously seen value.
+     *
+     * All points should be rounded by this class before being
+     * stored in any data structures in the rest of this algorithm.
+     */
 
-    if (ab * ab < EPSILON_SQ * a * b) {
-      return 0;
-    } // normal comparison
-
-
-    return a < b ? -1 : 1;
-  };
-
-  /**
-   * This class rounds incoming values sufficiently so that
-   * floating points problems are, for the most part, avoided.
-   *
-   * Incoming points are have their x & y values tested against
-   * all previously seen x & y values. If either is 'too close'
-   * to a previously seen value, it's value is 'snapped' to the
-   * previously seen value.
-   *
-   * All points should be rounded by this class before being
-   * stored in any data structures in the rest of this algorithm.
-   */
-
-  var PtRounder = /*#__PURE__*/function () {
-    function PtRounder() {
-      _classCallCheck(this, PtRounder);
-
-      this.reset();
-    }
-
-    _createClass(PtRounder, [{
-      key: "reset",
-      value: function reset() {
+    class PtRounder {
+      constructor() {
+        this.reset();
+      }
+      reset() {
         this.xRounder = new CoordRounder();
         this.yRounder = new CoordRounder();
       }
-    }, {
-      key: "round",
-      value: function round(x, y) {
+      round(x, y) {
         return {
           x: this.xRounder.round(x),
           y: this.yRounder.round(y)
         };
       }
-    }]);
+    }
+    class CoordRounder {
+      constructor() {
+        this.tree = new Tree();
+        // preseed with 0 so we don't end up with values < Number.EPSILON
+        this.round(0);
+      }
 
-    return PtRounder;
-  }();
-
-  var CoordRounder = /*#__PURE__*/function () {
-    function CoordRounder() {
-      _classCallCheck(this, CoordRounder);
-
-      this.tree = new Tree(); // preseed with 0 so we don't end up with values < Number.EPSILON
-
-      this.round(0);
-    } // Note: this can rounds input values backwards or forwards.
-    //       You might ask, why not restrict this to just rounding
-    //       forwards? Wouldn't that allow left endpoints to always
-    //       remain left endpoints during splitting (never change to
-    //       right). No - it wouldn't, because we snap intersections
-    //       to endpoints (to establish independence from the segment
-    //       angle for t-intersections).
-
-
-    _createClass(CoordRounder, [{
-      key: "round",
-      value: function round(coord) {
-        var node = this.tree.add(coord);
-        var prevNode = this.tree.prev(node);
-
+      // Note: this can rounds input values backwards or forwards.
+      //       You might ask, why not restrict this to just rounding
+      //       forwards? Wouldn't that allow left endpoints to always
+      //       remain left endpoints during splitting (never change to
+      //       right). No - it wouldn't, because we snap intersections
+      //       to endpoints (to establish independence from the segment
+      //       angle for t-intersections).
+      round(coord) {
+        const node = this.tree.add(coord);
+        const prevNode = this.tree.prev(node);
         if (prevNode !== null && cmp(node.key, prevNode.key) === 0) {
           this.tree.remove(coord);
           return prevNode.key;
         }
-
-        var nextNode = this.tree.next(node);
-
+        const nextNode = this.tree.next(node);
         if (nextNode !== null && cmp(node.key, nextNode.key) === 0) {
           this.tree.remove(coord);
           return nextNode.key;
         }
-
         return coord;
       }
-    }]);
+    }
 
-    return CoordRounder;
-  }(); // singleton available by import
+    // singleton available by import
+    const rounder = new PtRounder();
 
+    const epsilon = 1.1102230246251565e-16;
+    const splitter = 134217729;
+    const resulterrbound = (3 + 8 * epsilon) * epsilon;
 
-  var rounder = new PtRounder();
+    // fast_expansion_sum_zeroelim routine from oritinal code
+    function sum(elen, e, flen, f, h) {
+      let Q, Qnew, hh, bvirt;
+      let enow = e[0];
+      let fnow = f[0];
+      let eindex = 0;
+      let findex = 0;
+      if (fnow > enow === fnow > -enow) {
+        Q = enow;
+        enow = e[++eindex];
+      } else {
+        Q = fnow;
+        fnow = f[++findex];
+      }
+      let hindex = 0;
+      if (eindex < elen && findex < flen) {
+        if (fnow > enow === fnow > -enow) {
+          Qnew = enow + Q;
+          hh = Q - (Qnew - enow);
+          enow = e[++eindex];
+        } else {
+          Qnew = fnow + Q;
+          hh = Q - (Qnew - fnow);
+          fnow = f[++findex];
+        }
+        Q = Qnew;
+        if (hh !== 0) {
+          h[hindex++] = hh;
+        }
+        while (eindex < elen && findex < flen) {
+          if (fnow > enow === fnow > -enow) {
+            Qnew = Q + enow;
+            bvirt = Qnew - Q;
+            hh = Q - (Qnew - bvirt) + (enow - bvirt);
+            enow = e[++eindex];
+          } else {
+            Qnew = Q + fnow;
+            bvirt = Qnew - Q;
+            hh = Q - (Qnew - bvirt) + (fnow - bvirt);
+            fnow = f[++findex];
+          }
+          Q = Qnew;
+          if (hh !== 0) {
+            h[hindex++] = hh;
+          }
+        }
+      }
+      while (eindex < elen) {
+        Qnew = Q + enow;
+        bvirt = Qnew - Q;
+        hh = Q - (Qnew - bvirt) + (enow - bvirt);
+        enow = e[++eindex];
+        Q = Qnew;
+        if (hh !== 0) {
+          h[hindex++] = hh;
+        }
+      }
+      while (findex < flen) {
+        Qnew = Q + fnow;
+        bvirt = Qnew - Q;
+        hh = Q - (Qnew - bvirt) + (fnow - bvirt);
+        fnow = f[++findex];
+        Q = Qnew;
+        if (hh !== 0) {
+          h[hindex++] = hh;
+        }
+      }
+      if (Q !== 0 || hindex === 0) {
+        h[hindex++] = Q;
+      }
+      return hindex;
+    }
+    function estimate(elen, e) {
+      let Q = e[0];
+      for (let i = 1; i < elen; i++) Q += e[i];
+      return Q;
+    }
+    function vec(n) {
+      return new Float64Array(n);
+    }
 
-  /* Cross Product of two vectors with first point at origin */
+    const ccwerrboundA = (3 + 16 * epsilon) * epsilon;
+    const ccwerrboundB = (2 + 12 * epsilon) * epsilon;
+    const ccwerrboundC = (9 + 64 * epsilon) * epsilon * epsilon;
+    const B = vec(4);
+    const C1 = vec(8);
+    const C2 = vec(12);
+    const D = vec(16);
+    const u = vec(4);
+    function orient2dadapt(ax, ay, bx, by, cx, cy, detsum) {
+      let acxtail, acytail, bcxtail, bcytail;
+      let bvirt, c, ahi, alo, bhi, blo, _i, _j, _0, s1, s0, t1, t0, u3;
+      const acx = ax - cx;
+      const bcx = bx - cx;
+      const acy = ay - cy;
+      const bcy = by - cy;
+      s1 = acx * bcy;
+      c = splitter * acx;
+      ahi = c - (c - acx);
+      alo = acx - ahi;
+      c = splitter * bcy;
+      bhi = c - (c - bcy);
+      blo = bcy - bhi;
+      s0 = alo * blo - (s1 - ahi * bhi - alo * bhi - ahi * blo);
+      t1 = acy * bcx;
+      c = splitter * acy;
+      ahi = c - (c - acy);
+      alo = acy - ahi;
+      c = splitter * bcx;
+      bhi = c - (c - bcx);
+      blo = bcx - bhi;
+      t0 = alo * blo - (t1 - ahi * bhi - alo * bhi - ahi * blo);
+      _i = s0 - t0;
+      bvirt = s0 - _i;
+      B[0] = s0 - (_i + bvirt) + (bvirt - t0);
+      _j = s1 + _i;
+      bvirt = _j - s1;
+      _0 = s1 - (_j - bvirt) + (_i - bvirt);
+      _i = _0 - t1;
+      bvirt = _0 - _i;
+      B[1] = _0 - (_i + bvirt) + (bvirt - t1);
+      u3 = _j + _i;
+      bvirt = u3 - _j;
+      B[2] = _j - (u3 - bvirt) + (_i - bvirt);
+      B[3] = u3;
+      let det = estimate(4, B);
+      let errbound = ccwerrboundB * detsum;
+      if (det >= errbound || -det >= errbound) {
+        return det;
+      }
+      bvirt = ax - acx;
+      acxtail = ax - (acx + bvirt) + (bvirt - cx);
+      bvirt = bx - bcx;
+      bcxtail = bx - (bcx + bvirt) + (bvirt - cx);
+      bvirt = ay - acy;
+      acytail = ay - (acy + bvirt) + (bvirt - cy);
+      bvirt = by - bcy;
+      bcytail = by - (bcy + bvirt) + (bvirt - cy);
+      if (acxtail === 0 && acytail === 0 && bcxtail === 0 && bcytail === 0) {
+        return det;
+      }
+      errbound = ccwerrboundC * detsum + resulterrbound * Math.abs(det);
+      det += acx * bcytail + bcy * acxtail - (acy * bcxtail + bcx * acytail);
+      if (det >= errbound || -det >= errbound) return det;
+      s1 = acxtail * bcy;
+      c = splitter * acxtail;
+      ahi = c - (c - acxtail);
+      alo = acxtail - ahi;
+      c = splitter * bcy;
+      bhi = c - (c - bcy);
+      blo = bcy - bhi;
+      s0 = alo * blo - (s1 - ahi * bhi - alo * bhi - ahi * blo);
+      t1 = acytail * bcx;
+      c = splitter * acytail;
+      ahi = c - (c - acytail);
+      alo = acytail - ahi;
+      c = splitter * bcx;
+      bhi = c - (c - bcx);
+      blo = bcx - bhi;
+      t0 = alo * blo - (t1 - ahi * bhi - alo * bhi - ahi * blo);
+      _i = s0 - t0;
+      bvirt = s0 - _i;
+      u[0] = s0 - (_i + bvirt) + (bvirt - t0);
+      _j = s1 + _i;
+      bvirt = _j - s1;
+      _0 = s1 - (_j - bvirt) + (_i - bvirt);
+      _i = _0 - t1;
+      bvirt = _0 - _i;
+      u[1] = _0 - (_i + bvirt) + (bvirt - t1);
+      u3 = _j + _i;
+      bvirt = u3 - _j;
+      u[2] = _j - (u3 - bvirt) + (_i - bvirt);
+      u[3] = u3;
+      const C1len = sum(4, B, 4, u, C1);
+      s1 = acx * bcytail;
+      c = splitter * acx;
+      ahi = c - (c - acx);
+      alo = acx - ahi;
+      c = splitter * bcytail;
+      bhi = c - (c - bcytail);
+      blo = bcytail - bhi;
+      s0 = alo * blo - (s1 - ahi * bhi - alo * bhi - ahi * blo);
+      t1 = acy * bcxtail;
+      c = splitter * acy;
+      ahi = c - (c - acy);
+      alo = acy - ahi;
+      c = splitter * bcxtail;
+      bhi = c - (c - bcxtail);
+      blo = bcxtail - bhi;
+      t0 = alo * blo - (t1 - ahi * bhi - alo * bhi - ahi * blo);
+      _i = s0 - t0;
+      bvirt = s0 - _i;
+      u[0] = s0 - (_i + bvirt) + (bvirt - t0);
+      _j = s1 + _i;
+      bvirt = _j - s1;
+      _0 = s1 - (_j - bvirt) + (_i - bvirt);
+      _i = _0 - t1;
+      bvirt = _0 - _i;
+      u[1] = _0 - (_i + bvirt) + (bvirt - t1);
+      u3 = _j + _i;
+      bvirt = u3 - _j;
+      u[2] = _j - (u3 - bvirt) + (_i - bvirt);
+      u[3] = u3;
+      const C2len = sum(C1len, C1, 4, u, C2);
+      s1 = acxtail * bcytail;
+      c = splitter * acxtail;
+      ahi = c - (c - acxtail);
+      alo = acxtail - ahi;
+      c = splitter * bcytail;
+      bhi = c - (c - bcytail);
+      blo = bcytail - bhi;
+      s0 = alo * blo - (s1 - ahi * bhi - alo * bhi - ahi * blo);
+      t1 = acytail * bcxtail;
+      c = splitter * acytail;
+      ahi = c - (c - acytail);
+      alo = acytail - ahi;
+      c = splitter * bcxtail;
+      bhi = c - (c - bcxtail);
+      blo = bcxtail - bhi;
+      t0 = alo * blo - (t1 - ahi * bhi - alo * bhi - ahi * blo);
+      _i = s0 - t0;
+      bvirt = s0 - _i;
+      u[0] = s0 - (_i + bvirt) + (bvirt - t0);
+      _j = s1 + _i;
+      bvirt = _j - s1;
+      _0 = s1 - (_j - bvirt) + (_i - bvirt);
+      _i = _0 - t1;
+      bvirt = _0 - _i;
+      u[1] = _0 - (_i + bvirt) + (bvirt - t1);
+      u3 = _j + _i;
+      bvirt = u3 - _j;
+      u[2] = _j - (u3 - bvirt) + (_i - bvirt);
+      u[3] = u3;
+      const Dlen = sum(C2len, C2, 4, u, D);
+      return D[Dlen - 1];
+    }
+    function orient2d(ax, ay, bx, by, cx, cy) {
+      const detleft = (ay - cy) * (bx - cx);
+      const detright = (ax - cx) * (by - cy);
+      const det = detleft - detright;
+      const detsum = Math.abs(detleft + detright);
+      if (Math.abs(det) >= ccwerrboundA * detsum) return det;
+      return -orient2dadapt(ax, ay, bx, by, cx, cy, detsum);
+    }
 
-  var crossProduct = function crossProduct(a, b) {
-    return a.x * b.y - a.y * b.x;
-  };
-  /* Dot Product of two vectors with first point at origin */
+    /* Cross Product of two vectors with first point at origin */
+    const crossProduct = (a, b) => a.x * b.y - a.y * b.x;
 
-  var dotProduct = function dotProduct(a, b) {
-    return a.x * b.x + a.y * b.y;
-  };
-  /* Comparator for two vectors with same starting point */
+    /* Dot Product of two vectors with first point at origin */
+    const dotProduct = (a, b) => a.x * b.x + a.y * b.y;
 
-  var compareVectorAngles = function compareVectorAngles(basePt, endPt1, endPt2) {
-    var v1 = {
-      x: endPt1.x - basePt.x,
-      y: endPt1.y - basePt.y
+    /* Comparator for two vectors with same starting point */
+    const compareVectorAngles = (basePt, endPt1, endPt2) => {
+      const res = orient2d(basePt.x, basePt.y, endPt1.x, endPt1.y, endPt2.x, endPt2.y);
+      if (res > 0) return -1;
+      if (res < 0) return 1;
+      return 0;
     };
-    var v2 = {
-      x: endPt2.x - basePt.x,
-      y: endPt2.y - basePt.y
-    };
-    var kross = crossProduct(v1, v2);
-    return cmp(kross, 0);
-  };
-  var length = function length(v) {
-    return Math.sqrt(dotProduct(v, v));
-  };
-  /* Get the sine of the angle from pShared -> pAngle to pShaed -> pBase */
+    const length = v => Math.sqrt(dotProduct(v, v));
 
-  var sineOfAngle = function sineOfAngle(pShared, pBase, pAngle) {
-    var vBase = {
-      x: pBase.x - pShared.x,
-      y: pBase.y - pShared.y
+    /* Get the sine of the angle from pShared -> pAngle to pShaed -> pBase */
+    const sineOfAngle = (pShared, pBase, pAngle) => {
+      const vBase = {
+        x: pBase.x - pShared.x,
+        y: pBase.y - pShared.y
+      };
+      const vAngle = {
+        x: pAngle.x - pShared.x,
+        y: pAngle.y - pShared.y
+      };
+      return crossProduct(vAngle, vBase) / length(vAngle) / length(vBase);
     };
-    var vAngle = {
-      x: pAngle.x - pShared.x,
-      y: pAngle.y - pShared.y
-    };
-    return crossProduct(vAngle, vBase) / length(vAngle) / length(vBase);
-  };
-  /* Get the cosine of the angle from pShared -> pAngle to pShaed -> pBase */
 
-  var cosineOfAngle = function cosineOfAngle(pShared, pBase, pAngle) {
-    var vBase = {
-      x: pBase.x - pShared.x,
-      y: pBase.y - pShared.y
+    /* Get the cosine of the angle from pShared -> pAngle to pShaed -> pBase */
+    const cosineOfAngle = (pShared, pBase, pAngle) => {
+      const vBase = {
+        x: pBase.x - pShared.x,
+        y: pBase.y - pShared.y
+      };
+      const vAngle = {
+        x: pAngle.x - pShared.x,
+        y: pAngle.y - pShared.y
+      };
+      return dotProduct(vAngle, vBase) / length(vAngle) / length(vBase);
     };
-    var vAngle = {
-      x: pAngle.x - pShared.x,
-      y: pAngle.y - pShared.y
+
+    /* Get the x coordinate where the given line (defined by a point and vector)
+     * crosses the horizontal line with the given y coordiante.
+     * In the case of parrallel lines (including overlapping ones) returns null. */
+    const horizontalIntersection = (pt, v, y) => {
+      if (v.y === 0) return null;
+      return {
+        x: pt.x + v.x / v.y * (y - pt.y),
+        y: y
+      };
     };
-    return dotProduct(vAngle, vBase) / length(vAngle) / length(vBase);
-  };
-  /* Get the x coordinate where the given line (defined by a point and vector)
-   * crosses the horizontal line with the given y coordiante.
-   * In the case of parrallel lines (including overlapping ones) returns null. */
 
-  var horizontalIntersection = function horizontalIntersection(pt, v, y) {
-    if (v.y === 0) return null;
-    return {
-      x: pt.x + v.x / v.y * (y - pt.y),
-      y: y
+    /* Get the y coordinate where the given line (defined by a point and vector)
+     * crosses the vertical line with the given x coordiante.
+     * In the case of parrallel lines (including overlapping ones) returns null. */
+    const verticalIntersection = (pt, v, x) => {
+      if (v.x === 0) return null;
+      return {
+        x: x,
+        y: pt.y + v.y / v.x * (x - pt.x)
+      };
     };
-  };
-  /* Get the y coordinate where the given line (defined by a point and vector)
-   * crosses the vertical line with the given x coordiante.
-   * In the case of parrallel lines (including overlapping ones) returns null. */
 
-  var verticalIntersection = function verticalIntersection(pt, v, x) {
-    if (v.x === 0) return null;
-    return {
-      x: x,
-      y: pt.y + v.y / v.x * (x - pt.x)
-    };
-  };
-  /* Get the intersection of two lines, each defined by a base point and a vector.
-   * In the case of parrallel lines (including overlapping ones) returns null. */
+    /* Get the intersection of two lines, each defined by a base point and a vector.
+     * In the case of parrallel lines (including overlapping ones) returns null. */
+    const intersection$1 = (pt1, v1, pt2, v2) => {
+      // take some shortcuts for vertical and horizontal lines
+      // this also ensures we don't calculate an intersection and then discover
+      // it's actually outside the bounding box of the line
+      if (v1.x === 0) return verticalIntersection(pt2, v2, pt1.x);
+      if (v2.x === 0) return verticalIntersection(pt1, v1, pt2.x);
+      if (v1.y === 0) return horizontalIntersection(pt2, v2, pt1.y);
+      if (v2.y === 0) return horizontalIntersection(pt1, v1, pt2.y);
 
-  var intersection = function intersection(pt1, v1, pt2, v2) {
-    // take some shortcuts for vertical and horizontal lines
-    // this also ensures we don't calculate an intersection and then discover
-    // it's actually outside the bounding box of the line
-    if (v1.x === 0) return verticalIntersection(pt2, v2, pt1.x);
-    if (v2.x === 0) return verticalIntersection(pt1, v1, pt2.x);
-    if (v1.y === 0) return horizontalIntersection(pt2, v2, pt1.y);
-    if (v2.y === 0) return horizontalIntersection(pt1, v1, pt2.y); // General case for non-overlapping segments.
-    // This algorithm is based on Schneider and Eberly.
-    // http://www.cimec.org.ar/~ncalvo/Schneider_Eberly.pdf - pg 244
+      // General case for non-overlapping segments.
+      // This algorithm is based on Schneider and Eberly.
+      // http://www.cimec.org.ar/~ncalvo/Schneider_Eberly.pdf - pg 244
 
-    var kross = crossProduct(v1, v2);
-    if (kross == 0) return null;
-    var ve = {
-      x: pt2.x - pt1.x,
-      y: pt2.y - pt1.y
-    };
-    var d1 = crossProduct(ve, v1) / kross;
-    var d2 = crossProduct(ve, v2) / kross; // take the average of the two calculations to minimize rounding error
+      const kross = crossProduct(v1, v2);
+      if (kross == 0) return null;
+      const ve = {
+        x: pt2.x - pt1.x,
+        y: pt2.y - pt1.y
+      };
+      const d1 = crossProduct(ve, v1) / kross;
+      const d2 = crossProduct(ve, v2) / kross;
 
-    var x1 = pt1.x + d2 * v1.x,
+      // take the average of the two calculations to minimize rounding error
+      const x1 = pt1.x + d2 * v1.x,
         x2 = pt2.x + d1 * v2.x;
-    var y1 = pt1.y + d2 * v1.y,
+      const y1 = pt1.y + d2 * v1.y,
         y2 = pt2.y + d1 * v2.y;
-    var x = (x1 + x2) / 2;
-    var y = (y1 + y2) / 2;
-    return {
-      x: x,
-      y: y
+      const x = (x1 + x2) / 2;
+      const y = (y1 + y2) / 2;
+      return {
+        x: x,
+        y: y
+      };
     };
-  };
 
-  var SweepEvent = /*#__PURE__*/function () {
-    _createClass(SweepEvent, null, [{
-      key: "compare",
+    class SweepEvent {
       // for ordering sweep events in the sweep event queue
-      value: function compare(a, b) {
+      static compare(a, b) {
         // favor event with a point that the sweep line hits first
-        var ptCmp = SweepEvent.comparePoints(a.point, b.point);
-        if (ptCmp !== 0) return ptCmp; // the points are the same, so link them if needed
+        const ptCmp = SweepEvent.comparePoints(a.point, b.point);
+        if (ptCmp !== 0) return ptCmp;
 
-        if (a.point !== b.point) a.link(b); // favor right events over left
+        // the points are the same, so link them if needed
+        if (a.point !== b.point) a.link(b);
 
-        if (a.isLeft !== b.isLeft) return a.isLeft ? 1 : -1; // we have two matching left or right endpoints
+        // favor right events over left
+        if (a.isLeft !== b.isLeft) return a.isLeft ? 1 : -1;
+
+        // we have two matching left or right endpoints
         // ordering of this case is the same as for their segments
-
         return Segment.compare(a.segment, b.segment);
-      } // for ordering points in sweep line order
+      }
 
-    }, {
-      key: "comparePoints",
-      value: function comparePoints(aPt, bPt) {
+      // for ordering points in sweep line order
+      static comparePoints(aPt, bPt) {
         if (aPt.x < bPt.x) return -1;
         if (aPt.x > bPt.x) return 1;
         if (aPt.y < bPt.y) return -1;
         if (aPt.y > bPt.y) return 1;
         return 0;
-      } // Warning: 'point' input will be modified and re-used (for performance)
+      }
 
-    }]);
-
-    function SweepEvent(point, isLeft) {
-      _classCallCheck(this, SweepEvent);
-
-      if (point.events === undefined) point.events = [this];else point.events.push(this);
-      this.point = point;
-      this.isLeft = isLeft; // this.segment, this.otherSE set by factory
-    }
-
-    _createClass(SweepEvent, [{
-      key: "link",
-      value: function link(other) {
+      // Warning: 'point' input will be modified and re-used (for performance)
+      constructor(point, isLeft) {
+        if (point.events === undefined) point.events = [this];else point.events.push(this);
+        this.point = point;
+        this.isLeft = isLeft;
+        // this.segment, this.otherSE set by factory
+      }
+      link(other) {
         if (other.point === this.point) {
-          throw new Error('Tried to link already linked events');
+          throw new Error("Tried to link already linked events");
         }
-
-        var otherEvents = other.point.events;
-
-        for (var i = 0, iMax = otherEvents.length; i < iMax; i++) {
-          var evt = otherEvents[i];
+        const otherEvents = other.point.events;
+        for (let i = 0, iMax = otherEvents.length; i < iMax; i++) {
+          const evt = otherEvents[i];
           this.point.events.push(evt);
           evt.point = this.point;
         }
-
         this.checkForConsuming();
       }
+
       /* Do a pass over our linked events and check to see if any pair
        * of segments match, and should be consumed. */
-
-    }, {
-      key: "checkForConsuming",
-      value: function checkForConsuming() {
+      checkForConsuming() {
         // FIXME: The loops in this method run O(n^2) => no good.
         //        Maintain little ordered sweep event trees?
         //        Can we maintaining an ordering that avoids the need
         //        for the re-sorting with getLeftmostComparator in geom-out?
+
         // Compare each pair of events to see if other events also match
-        var numEvents = this.point.events.length;
-
-        for (var i = 0; i < numEvents; i++) {
-          var evt1 = this.point.events[i];
+        const numEvents = this.point.events.length;
+        for (let i = 0; i < numEvents; i++) {
+          const evt1 = this.point.events[i];
           if (evt1.segment.consumedBy !== undefined) continue;
-
-          for (var j = i + 1; j < numEvents; j++) {
-            var evt2 = this.point.events[j];
+          for (let j = i + 1; j < numEvents; j++) {
+            const evt2 = this.point.events[j];
             if (evt2.consumedBy !== undefined) continue;
             if (evt1.otherSE.point.events !== evt2.otherSE.point.events) continue;
             evt1.segment.consume(evt2.segment);
           }
         }
       }
-    }, {
-      key: "getAvailableLinkedEvents",
-      value: function getAvailableLinkedEvents() {
+      getAvailableLinkedEvents() {
         // point.events is always of length 2 or greater
-        var events = [];
-
-        for (var i = 0, iMax = this.point.events.length; i < iMax; i++) {
-          var evt = this.point.events[i];
-
+        const events = [];
+        for (let i = 0, iMax = this.point.events.length; i < iMax; i++) {
+          const evt = this.point.events[i];
           if (evt !== this && !evt.segment.ringOut && evt.segment.isInResult()) {
             events.push(evt);
           }
         }
-
         return events;
       }
+
       /**
        * Returns a comparator function for sorting linked events that will
        * favor the event that will give us the smallest left-side angle.
@@ -49173,67 +53977,53 @@ module.exports = posix;
        * The comparator function has a compute cache such that it avoids
        * re-computing already-computed values.
        */
-
-    }, {
-      key: "getLeftmostComparator",
-      value: function getLeftmostComparator(baseEvent) {
-        var _this = this;
-
-        var cache = new Map();
-
-        var fillCache = function fillCache(linkedEvent) {
-          var nextEvent = linkedEvent.otherSE;
+      getLeftmostComparator(baseEvent) {
+        const cache = new Map();
+        const fillCache = linkedEvent => {
+          const nextEvent = linkedEvent.otherSE;
           cache.set(linkedEvent, {
-            sine: sineOfAngle(_this.point, baseEvent.point, nextEvent.point),
-            cosine: cosineOfAngle(_this.point, baseEvent.point, nextEvent.point)
+            sine: sineOfAngle(this.point, baseEvent.point, nextEvent.point),
+            cosine: cosineOfAngle(this.point, baseEvent.point, nextEvent.point)
           });
         };
-
-        return function (a, b) {
+        return (a, b) => {
           if (!cache.has(a)) fillCache(a);
           if (!cache.has(b)) fillCache(b);
+          const {
+            sine: asine,
+            cosine: acosine
+          } = cache.get(a);
+          const {
+            sine: bsine,
+            cosine: bcosine
+          } = cache.get(b);
 
-          var _cache$get = cache.get(a),
-              asine = _cache$get.sine,
-              acosine = _cache$get.cosine;
-
-          var _cache$get2 = cache.get(b),
-              bsine = _cache$get2.sine,
-              bcosine = _cache$get2.cosine; // both on or above x-axis
-
-
+          // both on or above x-axis
           if (asine >= 0 && bsine >= 0) {
             if (acosine < bcosine) return 1;
             if (acosine > bcosine) return -1;
             return 0;
-          } // both below x-axis
+          }
 
-
+          // both below x-axis
           if (asine < 0 && bsine < 0) {
             if (acosine < bcosine) return -1;
             if (acosine > bcosine) return 1;
             return 0;
-          } // one above x-axis, one below
+          }
 
-
+          // one above x-axis, one below
           if (bsine < asine) return -1;
           if (bsine > asine) return 1;
           return 0;
         };
       }
-    }]);
+    }
 
-    return SweepEvent;
-  }();
-
-  // segments and sweep events when all else is identical
-
-  var segmentId = 0;
-
-  var Segment = /*#__PURE__*/function () {
-    _createClass(Segment, null, [{
-      key: "compare",
-
+    // Give segments unique ID's to get consistent sorting of
+    // segments and sweep events when all else is identical
+    let segmentId = 0;
+    class Segment {
       /* This compare() function is for ordering segments in the sweep
        * line tree, and does so according to the following criteria:
        *
@@ -49247,135 +54037,157 @@ module.exports = posix;
        * or more of the segments are vertical) then the line to be considered
        * is directly on the right-more of the two left inputs.
        */
-      value: function compare(a, b) {
-        var alx = a.leftSE.point.x;
-        var blx = b.leftSE.point.x;
-        var arx = a.rightSE.point.x;
-        var brx = b.rightSE.point.x; // check if they're even in the same vertical plane
+      static compare(a, b) {
+        const alx = a.leftSE.point.x;
+        const blx = b.leftSE.point.x;
+        const arx = a.rightSE.point.x;
+        const brx = b.rightSE.point.x;
 
+        // check if they're even in the same vertical plane
         if (brx < alx) return 1;
         if (arx < blx) return -1;
-        var aly = a.leftSE.point.y;
-        var bly = b.leftSE.point.y;
-        var ary = a.rightSE.point.y;
-        var bry = b.rightSE.point.y; // is left endpoint of segment B the right-more?
+        const aly = a.leftSE.point.y;
+        const bly = b.leftSE.point.y;
+        const ary = a.rightSE.point.y;
+        const bry = b.rightSE.point.y;
 
+        // is left endpoint of segment B the right-more?
         if (alx < blx) {
           // are the two segments in the same horizontal plane?
           if (bly < aly && bly < ary) return 1;
-          if (bly > aly && bly > ary) return -1; // is the B left endpoint colinear to segment A?
+          if (bly > aly && bly > ary) return -1;
 
-          var aCmpBLeft = a.comparePoint(b.leftSE.point);
+          // is the B left endpoint colinear to segment A?
+          const aCmpBLeft = a.comparePoint(b.leftSE.point);
           if (aCmpBLeft < 0) return 1;
-          if (aCmpBLeft > 0) return -1; // is the A right endpoint colinear to segment B ?
+          if (aCmpBLeft > 0) return -1;
 
-          var bCmpARight = b.comparePoint(a.rightSE.point);
-          if (bCmpARight !== 0) return bCmpARight; // colinear segments, consider the one with left-more
+          // is the A right endpoint colinear to segment B ?
+          const bCmpARight = b.comparePoint(a.rightSE.point);
+          if (bCmpARight !== 0) return bCmpARight;
+
+          // colinear segments, consider the one with left-more
           // left endpoint to be first (arbitrary?)
-
           return -1;
-        } // is left endpoint of segment A the right-more?
-
-
-        if (alx > blx) {
-          if (aly < bly && aly < bry) return -1;
-          if (aly > bly && aly > bry) return 1; // is the A left endpoint colinear to segment B?
-
-          var bCmpALeft = b.comparePoint(a.leftSE.point);
-          if (bCmpALeft !== 0) return bCmpALeft; // is the B right endpoint colinear to segment A?
-
-          var aCmpBRight = a.comparePoint(b.rightSE.point);
-          if (aCmpBRight < 0) return 1;
-          if (aCmpBRight > 0) return -1; // colinear segments, consider the one with left-more
-          // left endpoint to be first (arbitrary?)
-
-          return 1;
-        } // if we get here, the two left endpoints are in the same
-        // vertical plane, ie alx === blx
-        // consider the lower left-endpoint to come first
-
-
-        if (aly < bly) return -1;
-        if (aly > bly) return 1; // left endpoints are identical
-        // check for colinearity by using the left-more right endpoint
-        // is the A right endpoint more left-more?
-
-        if (arx < brx) {
-          var _bCmpARight = b.comparePoint(a.rightSE.point);
-
-          if (_bCmpARight !== 0) return _bCmpARight;
-        } // is the B right endpoint more left-more?
-
-
-        if (arx > brx) {
-          var _aCmpBRight = a.comparePoint(b.rightSE.point);
-
-          if (_aCmpBRight < 0) return 1;
-          if (_aCmpBRight > 0) return -1;
         }
 
+        // is left endpoint of segment A the right-more?
+        if (alx > blx) {
+          if (aly < bly && aly < bry) return -1;
+          if (aly > bly && aly > bry) return 1;
+
+          // is the A left endpoint colinear to segment B?
+          const bCmpALeft = b.comparePoint(a.leftSE.point);
+          if (bCmpALeft !== 0) return bCmpALeft;
+
+          // is the B right endpoint colinear to segment A?
+          const aCmpBRight = a.comparePoint(b.rightSE.point);
+          if (aCmpBRight < 0) return 1;
+          if (aCmpBRight > 0) return -1;
+
+          // colinear segments, consider the one with left-more
+          // left endpoint to be first (arbitrary?)
+          return 1;
+        }
+
+        // if we get here, the two left endpoints are in the same
+        // vertical plane, ie alx === blx
+
+        // consider the lower left-endpoint to come first
+        if (aly < bly) return -1;
+        if (aly > bly) return 1;
+
+        // left endpoints are identical
+        // check for colinearity by using the left-more right endpoint
+
+        // is the A right endpoint more left-more?
+        if (arx < brx) {
+          const bCmpARight = b.comparePoint(a.rightSE.point);
+          if (bCmpARight !== 0) return bCmpARight;
+        }
+
+        // is the B right endpoint more left-more?
+        if (arx > brx) {
+          const aCmpBRight = a.comparePoint(b.rightSE.point);
+          if (aCmpBRight < 0) return 1;
+          if (aCmpBRight > 0) return -1;
+        }
         if (arx !== brx) {
           // are these two [almost] vertical segments with opposite orientation?
           // if so, the one with the lower right endpoint comes first
-          var ay = ary - aly;
-          var ax = arx - alx;
-          var by = bry - bly;
-          var bx = brx - blx;
+          const ay = ary - aly;
+          const ax = arx - alx;
+          const by = bry - bly;
+          const bx = brx - blx;
           if (ay > ax && by < bx) return 1;
           if (ay < ax && by > bx) return -1;
-        } // we have colinear segments with matching orientation
+        }
+
+        // we have colinear segments with matching orientation
         // consider the one with more left-more right endpoint to be first
-
-
         if (arx > brx) return 1;
-        if (arx < brx) return -1; // if we get here, two two right endpoints are in the same
+        if (arx < brx) return -1;
+
+        // if we get here, two two right endpoints are in the same
         // vertical plane, ie arx === brx
+
         // consider the lower right-endpoint to come first
-
         if (ary < bry) return -1;
-        if (ary > bry) return 1; // right endpoints identical as well, so the segments are idential
+        if (ary > bry) return 1;
+
+        // right endpoints identical as well, so the segments are idential
         // fall back on creation order as consistent tie-breaker
-
         if (a.id < b.id) return -1;
-        if (a.id > b.id) return 1; // identical segment, ie a === b
+        if (a.id > b.id) return 1;
 
+        // identical segment, ie a === b
         return 0;
       }
+
       /* Warning: a reference to ringWindings input will be stored,
        *  and possibly will be later modified */
+      constructor(leftSE, rightSE, rings, windings) {
+        this.id = ++segmentId;
+        this.leftSE = leftSE;
+        leftSE.segment = this;
+        leftSE.otherSE = rightSE;
+        this.rightSE = rightSE;
+        rightSE.segment = this;
+        rightSE.otherSE = leftSE;
+        this.rings = rings;
+        this.windings = windings;
+        // left unset for performance, set later in algorithm
+        // this.ringOut, this.consumedBy, this.prev
+      }
+      static fromRing(pt1, pt2, ring) {
+        let leftPt, rightPt, winding;
 
-    }]);
-
-    function Segment(leftSE, rightSE, rings, windings) {
-      _classCallCheck(this, Segment);
-
-      this.id = ++segmentId;
-      this.leftSE = leftSE;
-      leftSE.segment = this;
-      leftSE.otherSE = rightSE;
-      this.rightSE = rightSE;
-      rightSE.segment = this;
-      rightSE.otherSE = leftSE;
-      this.rings = rings;
-      this.windings = windings; // left unset for performance, set later in algorithm
-      // this.ringOut, this.consumedBy, this.prev
-    }
-
-    _createClass(Segment, [{
-      key: "replaceRightSE",
+        // ordering the two points according to sweep line ordering
+        const cmpPts = SweepEvent.comparePoints(pt1, pt2);
+        if (cmpPts < 0) {
+          leftPt = pt1;
+          rightPt = pt2;
+          winding = 1;
+        } else if (cmpPts > 0) {
+          leftPt = pt2;
+          rightPt = pt1;
+          winding = -1;
+        } else throw new Error(`Tried to create degenerate segment at [${pt1.x}, ${pt1.y}]`);
+        const leftSE = new SweepEvent(leftPt, true);
+        const rightSE = new SweepEvent(rightPt, false);
+        return new Segment(leftSE, rightSE, [ring], [winding]);
+      }
 
       /* When a segment is split, the rightSE is replaced with a new sweep event */
-      value: function replaceRightSE(newRightSE) {
+      replaceRightSE(newRightSE) {
         this.rightSE = newRightSE;
         this.rightSE.segment = this;
         this.rightSE.otherSE = this.leftSE;
         this.leftSE.otherSE = this.rightSE;
       }
-    }, {
-      key: "bbox",
-      value: function bbox() {
-        var y1 = this.leftSE.point.y;
-        var y2 = this.rightSE.point.y;
+      bbox() {
+        const y1 = this.leftSE.point.y;
+        const y2 = this.rightSE.point.y;
         return {
           ll: {
             x: this.leftSE.point.x,
@@ -49387,21 +54199,18 @@ module.exports = posix;
           }
         };
       }
-      /* A vector from the left point to the right */
 
-    }, {
-      key: "vector",
-      value: function vector() {
+      /* A vector from the left point to the right */
+      vector() {
         return {
           x: this.rightSE.point.x - this.leftSE.point.x,
           y: this.rightSE.point.y - this.leftSE.point.y
         };
       }
-    }, {
-      key: "isAnEndpoint",
-      value: function isAnEndpoint(pt) {
+      isAnEndpoint(pt) {
         return pt.x === this.leftSE.point.x && pt.y === this.leftSE.point.y || pt.x === this.rightSE.point.x && pt.y === this.rightSE.point.y;
       }
+
       /* Compare this segment with a point.
        *
        * A point P is considered to be colinear to a segment if there
@@ -49415,32 +54224,32 @@ module.exports = posix;
        *   0: point is colinear to segment
        *  -1: point lies below the segment (to the right of vertical)
        */
-
-    }, {
-      key: "comparePoint",
-      value: function comparePoint(point) {
+      comparePoint(point) {
         if (this.isAnEndpoint(point)) return 0;
-        var lPt = this.leftSE.point;
-        var rPt = this.rightSE.point;
-        var v = this.vector(); // Exactly vertical segments.
+        const lPt = this.leftSE.point;
+        const rPt = this.rightSE.point;
+        const v = this.vector();
 
+        // Exactly vertical segments.
         if (lPt.x === rPt.x) {
           if (point.x === lPt.x) return 0;
           return point.x < lPt.x ? 1 : -1;
-        } // Nearly vertical segments with an intersection.
+        }
+
+        // Nearly vertical segments with an intersection.
         // Check to see where a point on the line with matching Y coordinate is.
+        const yDist = (point.y - lPt.y) / v.y;
+        const xFromYDist = lPt.x + yDist * v.x;
+        if (point.x === xFromYDist) return 0;
 
-
-        var yDist = (point.y - lPt.y) / v.y;
-        var xFromYDist = lPt.x + yDist * v.x;
-        if (point.x === xFromYDist) return 0; // General case.
+        // General case.
         // Check to see where a point on the line with matching X coordinate is.
-
-        var xDist = (point.x - lPt.x) / v.x;
-        var yFromXDist = lPt.y + xDist * v.y;
+        const xDist = (point.x - lPt.x) / v.x;
+        const yFromXDist = lPt.y + xDist * v.y;
         if (point.y === yFromXDist) return 0;
         return point.y < yFromXDist ? -1 : 1;
       }
+
       /**
        * Given another segment, returns the first non-trivial intersection
        * between the two segments (in terms of sweep line ordering), if it exists.
@@ -49456,78 +54265,83 @@ module.exports = posix;
        * If no non-trivial intersection exists, return null
        * Else, return null.
        */
-
-    }, {
-      key: "getIntersection",
-      value: function getIntersection(other) {
+      getIntersection(other) {
         // If bboxes don't overlap, there can't be any intersections
-        var tBbox = this.bbox();
-        var oBbox = other.bbox();
-        var bboxOverlap = getBboxOverlap(tBbox, oBbox);
-        if (bboxOverlap === null) return null; // We first check to see if the endpoints can be considered intersections.
+        const tBbox = this.bbox();
+        const oBbox = other.bbox();
+        const bboxOverlap = getBboxOverlap(tBbox, oBbox);
+        if (bboxOverlap === null) return null;
+
+        // We first check to see if the endpoints can be considered intersections.
         // This will 'snap' intersections to endpoints if possible, and will
         // handle cases of colinearity.
 
-        var tlp = this.leftSE.point;
-        var trp = this.rightSE.point;
-        var olp = other.leftSE.point;
-        var orp = other.rightSE.point; // does each endpoint touch the other segment?
+        const tlp = this.leftSE.point;
+        const trp = this.rightSE.point;
+        const olp = other.leftSE.point;
+        const orp = other.rightSE.point;
+
+        // does each endpoint touch the other segment?
         // note that we restrict the 'touching' definition to only allow segments
         // to touch endpoints that lie forward from where we are in the sweep line pass
+        const touchesOtherLSE = isInBbox(tBbox, olp) && this.comparePoint(olp) === 0;
+        const touchesThisLSE = isInBbox(oBbox, tlp) && other.comparePoint(tlp) === 0;
+        const touchesOtherRSE = isInBbox(tBbox, orp) && this.comparePoint(orp) === 0;
+        const touchesThisRSE = isInBbox(oBbox, trp) && other.comparePoint(trp) === 0;
 
-        var touchesOtherLSE = isInBbox(tBbox, olp) && this.comparePoint(olp) === 0;
-        var touchesThisLSE = isInBbox(oBbox, tlp) && other.comparePoint(tlp) === 0;
-        var touchesOtherRSE = isInBbox(tBbox, orp) && this.comparePoint(orp) === 0;
-        var touchesThisRSE = isInBbox(oBbox, trp) && other.comparePoint(trp) === 0; // do left endpoints match?
-
+        // do left endpoints match?
         if (touchesThisLSE && touchesOtherLSE) {
           // these two cases are for colinear segments with matching left
           // endpoints, and one segment being longer than the other
           if (touchesThisRSE && !touchesOtherRSE) return trp;
-          if (!touchesThisRSE && touchesOtherRSE) return orp; // either the two segments match exactly (two trival intersections)
+          if (!touchesThisRSE && touchesOtherRSE) return orp;
+          // either the two segments match exactly (two trival intersections)
           // or just on their left endpoint (one trivial intersection
-
           return null;
-        } // does this left endpoint matches (other doesn't)
+        }
 
-
+        // does this left endpoint matches (other doesn't)
         if (touchesThisLSE) {
           // check for segments that just intersect on opposing endpoints
           if (touchesOtherRSE) {
             if (tlp.x === orp.x && tlp.y === orp.y) return null;
-          } // t-intersection on left endpoint
-
-
+          }
+          // t-intersection on left endpoint
           return tlp;
-        } // does other left endpoint matches (this doesn't)
+        }
 
-
+        // does other left endpoint matches (this doesn't)
         if (touchesOtherLSE) {
           // check for segments that just intersect on opposing endpoints
           if (touchesThisRSE) {
             if (trp.x === olp.x && trp.y === olp.y) return null;
-          } // t-intersection on left endpoint
-
-
+          }
+          // t-intersection on left endpoint
           return olp;
-        } // trivial intersection on right endpoints
+        }
 
+        // trivial intersection on right endpoints
+        if (touchesThisRSE && touchesOtherRSE) return null;
 
-        if (touchesThisRSE && touchesOtherRSE) return null; // t-intersections on just one right endpoint
-
+        // t-intersections on just one right endpoint
         if (touchesThisRSE) return trp;
-        if (touchesOtherRSE) return orp; // None of our endpoints intersect. Look for a general intersection between
+        if (touchesOtherRSE) return orp;
+
+        // None of our endpoints intersect. Look for a general intersection between
         // infinite lines laid over the segments
+        const pt = intersection$1(tlp, this.vector(), olp, other.vector());
 
-        var pt = intersection(tlp, this.vector(), olp, other.vector()); // are the segments parrallel? Note that if they were colinear with overlap,
+        // are the segments parrallel? Note that if they were colinear with overlap,
         // they would have an endpoint intersection and that case was already handled above
+        if (pt === null) return null;
 
-        if (pt === null) return null; // is the intersection found between the lines not on the segments?
+        // is the intersection found between the lines not on the segments?
+        if (!isInBbox(bboxOverlap, pt)) return null;
 
-        if (!isInBbox(bboxOverlap, pt)) return null; // round the the computed point if needed
-
+        // round the the computed point if needed
         return rounder.round(pt.x, pt.y);
       }
+
       /**
        * Split the given segment into multiple segments on the given points.
        *  * Each existing segment will retain its leftSE and a new rightSE will be
@@ -49540,215 +54354,180 @@ module.exports = posix;
        *
        * Warning: input array of points is modified
        */
-
-    }, {
-      key: "split",
-      value: function split(point) {
-        var newEvents = [];
-        var alreadyLinked = point.events !== undefined;
-        var newLeftSE = new SweepEvent(point, true);
-        var newRightSE = new SweepEvent(point, false);
-        var oldRightSE = this.rightSE;
+      split(point) {
+        const newEvents = [];
+        const alreadyLinked = point.events !== undefined;
+        const newLeftSE = new SweepEvent(point, true);
+        const newRightSE = new SweepEvent(point, false);
+        const oldRightSE = this.rightSE;
         this.replaceRightSE(newRightSE);
         newEvents.push(newRightSE);
         newEvents.push(newLeftSE);
-        var newSeg = new Segment(newLeftSE, oldRightSE, this.rings.slice(), this.windings.slice()); // when splitting a nearly vertical downward-facing segment,
+        const newSeg = new Segment(newLeftSE, oldRightSE, this.rings.slice(), this.windings.slice());
+
+        // when splitting a nearly vertical downward-facing segment,
         // sometimes one of the resulting new segments is vertical, in which
         // case its left and right events may need to be swapped
-
         if (SweepEvent.comparePoints(newSeg.leftSE.point, newSeg.rightSE.point) > 0) {
           newSeg.swapEvents();
         }
-
         if (SweepEvent.comparePoints(this.leftSE.point, this.rightSE.point) > 0) {
           this.swapEvents();
-        } // in the point we just used to create new sweep events with was already
+        }
+
+        // in the point we just used to create new sweep events with was already
         // linked to other events, we need to check if either of the affected
         // segments should be consumed
-
-
         if (alreadyLinked) {
           newLeftSE.checkForConsuming();
           newRightSE.checkForConsuming();
         }
-
         return newEvents;
       }
-      /* Swap which event is left and right */
 
-    }, {
-      key: "swapEvents",
-      value: function swapEvents() {
-        var tmpEvt = this.rightSE;
+      /* Swap which event is left and right */
+      swapEvents() {
+        const tmpEvt = this.rightSE;
         this.rightSE = this.leftSE;
         this.leftSE = tmpEvt;
         this.leftSE.isLeft = true;
         this.rightSE.isLeft = false;
-
-        for (var i = 0, iMax = this.windings.length; i < iMax; i++) {
+        for (let i = 0, iMax = this.windings.length; i < iMax; i++) {
           this.windings[i] *= -1;
         }
       }
+
       /* Consume another segment. We take their rings under our wing
        * and mark them as consumed. Use for perfectly overlapping segments */
-
-    }, {
-      key: "consume",
-      value: function consume(other) {
-        var consumer = this;
-        var consumee = other;
-
-        while (consumer.consumedBy) {
-          consumer = consumer.consumedBy;
-        }
-
-        while (consumee.consumedBy) {
-          consumee = consumee.consumedBy;
-        }
-
-        var cmp = Segment.compare(consumer, consumee);
+      consume(other) {
+        let consumer = this;
+        let consumee = other;
+        while (consumer.consumedBy) consumer = consumer.consumedBy;
+        while (consumee.consumedBy) consumee = consumee.consumedBy;
+        const cmp = Segment.compare(consumer, consumee);
         if (cmp === 0) return; // already consumed
         // the winner of the consumption is the earlier segment
         // according to sweep line ordering
-
         if (cmp > 0) {
-          var tmp = consumer;
+          const tmp = consumer;
           consumer = consumee;
           consumee = tmp;
-        } // make sure a segment doesn't consume it's prev
-
-
-        if (consumer.prev === consumee) {
-          var _tmp = consumer;
-          consumer = consumee;
-          consumee = _tmp;
         }
 
-        for (var i = 0, iMax = consumee.rings.length; i < iMax; i++) {
-          var ring = consumee.rings[i];
-          var winding = consumee.windings[i];
-          var index = consumer.rings.indexOf(ring);
-
+        // make sure a segment doesn't consume it's prev
+        if (consumer.prev === consumee) {
+          const tmp = consumer;
+          consumer = consumee;
+          consumee = tmp;
+        }
+        for (let i = 0, iMax = consumee.rings.length; i < iMax; i++) {
+          const ring = consumee.rings[i];
+          const winding = consumee.windings[i];
+          const index = consumer.rings.indexOf(ring);
           if (index === -1) {
             consumer.rings.push(ring);
             consumer.windings.push(winding);
           } else consumer.windings[index] += winding;
         }
-
         consumee.rings = null;
         consumee.windings = null;
-        consumee.consumedBy = consumer; // mark sweep events consumed as to maintain ordering in sweep event queue
+        consumee.consumedBy = consumer;
 
+        // mark sweep events consumed as to maintain ordering in sweep event queue
         consumee.leftSE.consumedBy = consumer.leftSE;
         consumee.rightSE.consumedBy = consumer.rightSE;
       }
-      /* The first segment previous segment chain that is in the result */
 
-    }, {
-      key: "prevInResult",
-      value: function prevInResult() {
+      /* The first segment previous segment chain that is in the result */
+      prevInResult() {
         if (this._prevInResult !== undefined) return this._prevInResult;
         if (!this.prev) this._prevInResult = null;else if (this.prev.isInResult()) this._prevInResult = this.prev;else this._prevInResult = this.prev.prevInResult();
         return this._prevInResult;
       }
-    }, {
-      key: "beforeState",
-      value: function beforeState() {
+      beforeState() {
         if (this._beforeState !== undefined) return this._beforeState;
         if (!this.prev) this._beforeState = {
           rings: [],
           windings: [],
           multiPolys: []
         };else {
-          var seg = this.prev.consumedBy || this.prev;
+          const seg = this.prev.consumedBy || this.prev;
           this._beforeState = seg.afterState();
         }
         return this._beforeState;
       }
-    }, {
-      key: "afterState",
-      value: function afterState() {
+      afterState() {
         if (this._afterState !== undefined) return this._afterState;
-        var beforeState = this.beforeState();
+        const beforeState = this.beforeState();
         this._afterState = {
           rings: beforeState.rings.slice(0),
           windings: beforeState.windings.slice(0),
           multiPolys: []
         };
-        var ringsAfter = this._afterState.rings;
-        var windingsAfter = this._afterState.windings;
-        var mpsAfter = this._afterState.multiPolys; // calculate ringsAfter, windingsAfter
+        const ringsAfter = this._afterState.rings;
+        const windingsAfter = this._afterState.windings;
+        const mpsAfter = this._afterState.multiPolys;
 
-        for (var i = 0, iMax = this.rings.length; i < iMax; i++) {
-          var ring = this.rings[i];
-          var winding = this.windings[i];
-          var index = ringsAfter.indexOf(ring);
-
+        // calculate ringsAfter, windingsAfter
+        for (let i = 0, iMax = this.rings.length; i < iMax; i++) {
+          const ring = this.rings[i];
+          const winding = this.windings[i];
+          const index = ringsAfter.indexOf(ring);
           if (index === -1) {
             ringsAfter.push(ring);
             windingsAfter.push(winding);
           } else windingsAfter[index] += winding;
-        } // calcualte polysAfter
-
-
-        var polysAfter = [];
-        var polysExclude = [];
-
-        for (var _i = 0, _iMax = ringsAfter.length; _i < _iMax; _i++) {
-          if (windingsAfter[_i] === 0) continue; // non-zero rule
-
-          var _ring = ringsAfter[_i];
-          var poly = _ring.poly;
-          if (polysExclude.indexOf(poly) !== -1) continue;
-          if (_ring.isExterior) polysAfter.push(poly);else {
-            if (polysExclude.indexOf(poly) === -1) polysExclude.push(poly);
-
-            var _index = polysAfter.indexOf(_ring.poly);
-
-            if (_index !== -1) polysAfter.splice(_index, 1);
-          }
-        } // calculate multiPolysAfter
-
-
-        for (var _i2 = 0, _iMax2 = polysAfter.length; _i2 < _iMax2; _i2++) {
-          var mp = polysAfter[_i2].multiPoly;
-          if (mpsAfter.indexOf(mp) === -1) mpsAfter.push(mp);
         }
 
+        // calcualte polysAfter
+        const polysAfter = [];
+        const polysExclude = [];
+        for (let i = 0, iMax = ringsAfter.length; i < iMax; i++) {
+          if (windingsAfter[i] === 0) continue; // non-zero rule
+          const ring = ringsAfter[i];
+          const poly = ring.poly;
+          if (polysExclude.indexOf(poly) !== -1) continue;
+          if (ring.isExterior) polysAfter.push(poly);else {
+            if (polysExclude.indexOf(poly) === -1) polysExclude.push(poly);
+            const index = polysAfter.indexOf(ring.poly);
+            if (index !== -1) polysAfter.splice(index, 1);
+          }
+        }
+
+        // calculate multiPolysAfter
+        for (let i = 0, iMax = polysAfter.length; i < iMax; i++) {
+          const mp = polysAfter[i].multiPoly;
+          if (mpsAfter.indexOf(mp) === -1) mpsAfter.push(mp);
+        }
         return this._afterState;
       }
-      /* Is this segment part of the final result? */
 
-    }, {
-      key: "isInResult",
-      value: function isInResult() {
+      /* Is this segment part of the final result? */
+      isInResult() {
         // if we've been consumed, we're not in the result
         if (this.consumedBy) return false;
         if (this._isInResult !== undefined) return this._isInResult;
-        var mpsBefore = this.beforeState().multiPolys;
-        var mpsAfter = this.afterState().multiPolys;
-
+        const mpsBefore = this.beforeState().multiPolys;
+        const mpsAfter = this.afterState().multiPolys;
         switch (operation.type) {
-          case 'union':
+          case "union":
             {
               // UNION - included iff:
               //  * On one side of us there is 0 poly interiors AND
               //  * On the other side there is 1 or more.
-              var noBefores = mpsBefore.length === 0;
-              var noAfters = mpsAfter.length === 0;
+              const noBefores = mpsBefore.length === 0;
+              const noAfters = mpsAfter.length === 0;
               this._isInResult = noBefores !== noAfters;
               break;
             }
-
-          case 'intersection':
+          case "intersection":
             {
               // INTERSECTION - included iff:
               //  * on one side of us all multipolys are rep. with poly interiors AND
               //  * on the other side of us, not all multipolys are repsented
               //    with poly interiors
-              var least;
-              var most;
-
+              let least;
+              let most;
               if (mpsBefore.length < mpsAfter.length) {
                 least = mpsBefore.length;
                 most = mpsAfter.length;
@@ -49756,630 +54535,472 @@ module.exports = posix;
                 least = mpsAfter.length;
                 most = mpsBefore.length;
               }
-
               this._isInResult = most === operation.numMultiPolys && least < most;
               break;
             }
-
-          case 'xor':
+          case "xor":
             {
               // XOR - included iff:
               //  * the difference between the number of multipolys represented
               //    with poly interiors on our two sides is an odd number
-              var diff = Math.abs(mpsBefore.length - mpsAfter.length);
+              const diff = Math.abs(mpsBefore.length - mpsAfter.length);
               this._isInResult = diff % 2 === 1;
               break;
             }
-
-          case 'difference':
+          case "difference":
             {
               // DIFFERENCE included iff:
               //  * on exactly one side, we have just the subject
-              var isJustSubject = function isJustSubject(mps) {
-                return mps.length === 1 && mps[0].isSubject;
-              };
-
+              const isJustSubject = mps => mps.length === 1 && mps[0].isSubject;
               this._isInResult = isJustSubject(mpsBefore) !== isJustSubject(mpsAfter);
               break;
             }
-
           default:
-            throw new Error("Unrecognized operation type found ".concat(operation.type));
+            throw new Error(`Unrecognized operation type found ${operation.type}`);
         }
-
         return this._isInResult;
-      }
-    }], [{
-      key: "fromRing",
-      value: function fromRing(pt1, pt2, ring) {
-        var leftPt, rightPt, winding; // ordering the two points according to sweep line ordering
-
-        var cmpPts = SweepEvent.comparePoints(pt1, pt2);
-
-        if (cmpPts < 0) {
-          leftPt = pt1;
-          rightPt = pt2;
-          winding = 1;
-        } else if (cmpPts > 0) {
-          leftPt = pt2;
-          rightPt = pt1;
-          winding = -1;
-        } else throw new Error("Tried to create degenerate segment at [".concat(pt1.x, ", ").concat(pt1.y, "]"));
-
-        var leftSE = new SweepEvent(leftPt, true);
-        var rightSE = new SweepEvent(rightPt, false);
-        return new Segment(leftSE, rightSE, [ring], [winding]);
-      }
-    }]);
-
-    return Segment;
-  }();
-
-  var RingIn = /*#__PURE__*/function () {
-    function RingIn(geomRing, poly, isExterior) {
-      _classCallCheck(this, RingIn);
-
-      if (!Array.isArray(geomRing) || geomRing.length === 0) {
-        throw new Error('Input geometry is not a valid Polygon or MultiPolygon');
-      }
-
-      this.poly = poly;
-      this.isExterior = isExterior;
-      this.segments = [];
-
-      if (typeof geomRing[0][0] !== 'number' || typeof geomRing[0][1] !== 'number') {
-        throw new Error('Input geometry is not a valid Polygon or MultiPolygon');
-      }
-
-      var firstPoint = rounder.round(geomRing[0][0], geomRing[0][1]);
-      this.bbox = {
-        ll: {
-          x: firstPoint.x,
-          y: firstPoint.y
-        },
-        ur: {
-          x: firstPoint.x,
-          y: firstPoint.y
-        }
-      };
-      var prevPoint = firstPoint;
-
-      for (var i = 1, iMax = geomRing.length; i < iMax; i++) {
-        if (typeof geomRing[i][0] !== 'number' || typeof geomRing[i][1] !== 'number') {
-          throw new Error('Input geometry is not a valid Polygon or MultiPolygon');
-        }
-
-        var point = rounder.round(geomRing[i][0], geomRing[i][1]); // skip repeated points
-
-        if (point.x === prevPoint.x && point.y === prevPoint.y) continue;
-        this.segments.push(Segment.fromRing(prevPoint, point, this));
-        if (point.x < this.bbox.ll.x) this.bbox.ll.x = point.x;
-        if (point.y < this.bbox.ll.y) this.bbox.ll.y = point.y;
-        if (point.x > this.bbox.ur.x) this.bbox.ur.x = point.x;
-        if (point.y > this.bbox.ur.y) this.bbox.ur.y = point.y;
-        prevPoint = point;
-      } // add segment from last to first if last is not the same as first
-
-
-      if (firstPoint.x !== prevPoint.x || firstPoint.y !== prevPoint.y) {
-        this.segments.push(Segment.fromRing(prevPoint, firstPoint, this));
       }
     }
 
-    _createClass(RingIn, [{
-      key: "getSweepEvents",
-      value: function getSweepEvents() {
-        var sweepEvents = [];
-
-        for (var i = 0, iMax = this.segments.length; i < iMax; i++) {
-          var segment = this.segments[i];
+    class RingIn {
+      constructor(geomRing, poly, isExterior) {
+        if (!Array.isArray(geomRing) || geomRing.length === 0) {
+          throw new Error("Input geometry is not a valid Polygon or MultiPolygon");
+        }
+        this.poly = poly;
+        this.isExterior = isExterior;
+        this.segments = [];
+        if (typeof geomRing[0][0] !== "number" || typeof geomRing[0][1] !== "number") {
+          throw new Error("Input geometry is not a valid Polygon or MultiPolygon");
+        }
+        const firstPoint = rounder.round(geomRing[0][0], geomRing[0][1]);
+        this.bbox = {
+          ll: {
+            x: firstPoint.x,
+            y: firstPoint.y
+          },
+          ur: {
+            x: firstPoint.x,
+            y: firstPoint.y
+          }
+        };
+        let prevPoint = firstPoint;
+        for (let i = 1, iMax = geomRing.length; i < iMax; i++) {
+          if (typeof geomRing[i][0] !== "number" || typeof geomRing[i][1] !== "number") {
+            throw new Error("Input geometry is not a valid Polygon or MultiPolygon");
+          }
+          let point = rounder.round(geomRing[i][0], geomRing[i][1]);
+          // skip repeated points
+          if (point.x === prevPoint.x && point.y === prevPoint.y) continue;
+          this.segments.push(Segment.fromRing(prevPoint, point, this));
+          if (point.x < this.bbox.ll.x) this.bbox.ll.x = point.x;
+          if (point.y < this.bbox.ll.y) this.bbox.ll.y = point.y;
+          if (point.x > this.bbox.ur.x) this.bbox.ur.x = point.x;
+          if (point.y > this.bbox.ur.y) this.bbox.ur.y = point.y;
+          prevPoint = point;
+        }
+        // add segment from last to first if last is not the same as first
+        if (firstPoint.x !== prevPoint.x || firstPoint.y !== prevPoint.y) {
+          this.segments.push(Segment.fromRing(prevPoint, firstPoint, this));
+        }
+      }
+      getSweepEvents() {
+        const sweepEvents = [];
+        for (let i = 0, iMax = this.segments.length; i < iMax; i++) {
+          const segment = this.segments[i];
           sweepEvents.push(segment.leftSE);
           sweepEvents.push(segment.rightSE);
         }
-
         return sweepEvents;
       }
-    }]);
-
-    return RingIn;
-  }();
-  var PolyIn = /*#__PURE__*/function () {
-    function PolyIn(geomPoly, multiPoly) {
-      _classCallCheck(this, PolyIn);
-
-      if (!Array.isArray(geomPoly)) {
-        throw new Error('Input geometry is not a valid Polygon or MultiPolygon');
-      }
-
-      this.exteriorRing = new RingIn(geomPoly[0], this, true); // copy by value
-
-      this.bbox = {
-        ll: {
-          x: this.exteriorRing.bbox.ll.x,
-          y: this.exteriorRing.bbox.ll.y
-        },
-        ur: {
-          x: this.exteriorRing.bbox.ur.x,
-          y: this.exteriorRing.bbox.ur.y
-        }
-      };
-      this.interiorRings = [];
-
-      for (var i = 1, iMax = geomPoly.length; i < iMax; i++) {
-        var ring = new RingIn(geomPoly[i], this, false);
-        if (ring.bbox.ll.x < this.bbox.ll.x) this.bbox.ll.x = ring.bbox.ll.x;
-        if (ring.bbox.ll.y < this.bbox.ll.y) this.bbox.ll.y = ring.bbox.ll.y;
-        if (ring.bbox.ur.x > this.bbox.ur.x) this.bbox.ur.x = ring.bbox.ur.x;
-        if (ring.bbox.ur.y > this.bbox.ur.y) this.bbox.ur.y = ring.bbox.ur.y;
-        this.interiorRings.push(ring);
-      }
-
-      this.multiPoly = multiPoly;
     }
-
-    _createClass(PolyIn, [{
-      key: "getSweepEvents",
-      value: function getSweepEvents() {
-        var sweepEvents = this.exteriorRing.getSweepEvents();
-
-        for (var i = 0, iMax = this.interiorRings.length; i < iMax; i++) {
-          var ringSweepEvents = this.interiorRings[i].getSweepEvents();
-
-          for (var j = 0, jMax = ringSweepEvents.length; j < jMax; j++) {
+    class PolyIn {
+      constructor(geomPoly, multiPoly) {
+        if (!Array.isArray(geomPoly)) {
+          throw new Error("Input geometry is not a valid Polygon or MultiPolygon");
+        }
+        this.exteriorRing = new RingIn(geomPoly[0], this, true);
+        // copy by value
+        this.bbox = {
+          ll: {
+            x: this.exteriorRing.bbox.ll.x,
+            y: this.exteriorRing.bbox.ll.y
+          },
+          ur: {
+            x: this.exteriorRing.bbox.ur.x,
+            y: this.exteriorRing.bbox.ur.y
+          }
+        };
+        this.interiorRings = [];
+        for (let i = 1, iMax = geomPoly.length; i < iMax; i++) {
+          const ring = new RingIn(geomPoly[i], this, false);
+          if (ring.bbox.ll.x < this.bbox.ll.x) this.bbox.ll.x = ring.bbox.ll.x;
+          if (ring.bbox.ll.y < this.bbox.ll.y) this.bbox.ll.y = ring.bbox.ll.y;
+          if (ring.bbox.ur.x > this.bbox.ur.x) this.bbox.ur.x = ring.bbox.ur.x;
+          if (ring.bbox.ur.y > this.bbox.ur.y) this.bbox.ur.y = ring.bbox.ur.y;
+          this.interiorRings.push(ring);
+        }
+        this.multiPoly = multiPoly;
+      }
+      getSweepEvents() {
+        const sweepEvents = this.exteriorRing.getSweepEvents();
+        for (let i = 0, iMax = this.interiorRings.length; i < iMax; i++) {
+          const ringSweepEvents = this.interiorRings[i].getSweepEvents();
+          for (let j = 0, jMax = ringSweepEvents.length; j < jMax; j++) {
             sweepEvents.push(ringSweepEvents[j]);
           }
         }
-
         return sweepEvents;
       }
-    }]);
-
-    return PolyIn;
-  }();
-  var MultiPolyIn = /*#__PURE__*/function () {
-    function MultiPolyIn(geom, isSubject) {
-      _classCallCheck(this, MultiPolyIn);
-
-      if (!Array.isArray(geom)) {
-        throw new Error('Input geometry is not a valid Polygon or MultiPolygon');
-      }
-
-      try {
-        // if the input looks like a polygon, convert it to a multipolygon
-        if (typeof geom[0][0][0] === 'number') geom = [geom];
-      } catch (ex) {// The input is either malformed or has empty arrays.
-        // In either case, it will be handled later on.
-      }
-
-      this.polys = [];
-      this.bbox = {
-        ll: {
-          x: Number.POSITIVE_INFINITY,
-          y: Number.POSITIVE_INFINITY
-        },
-        ur: {
-          x: Number.NEGATIVE_INFINITY,
-          y: Number.NEGATIVE_INFINITY
-        }
-      };
-
-      for (var i = 0, iMax = geom.length; i < iMax; i++) {
-        var poly = new PolyIn(geom[i], this);
-        if (poly.bbox.ll.x < this.bbox.ll.x) this.bbox.ll.x = poly.bbox.ll.x;
-        if (poly.bbox.ll.y < this.bbox.ll.y) this.bbox.ll.y = poly.bbox.ll.y;
-        if (poly.bbox.ur.x > this.bbox.ur.x) this.bbox.ur.x = poly.bbox.ur.x;
-        if (poly.bbox.ur.y > this.bbox.ur.y) this.bbox.ur.y = poly.bbox.ur.y;
-        this.polys.push(poly);
-      }
-
-      this.isSubject = isSubject;
     }
-
-    _createClass(MultiPolyIn, [{
-      key: "getSweepEvents",
-      value: function getSweepEvents() {
-        var sweepEvents = [];
-
-        for (var i = 0, iMax = this.polys.length; i < iMax; i++) {
-          var polySweepEvents = this.polys[i].getSweepEvents();
-
-          for (var j = 0, jMax = polySweepEvents.length; j < jMax; j++) {
+    class MultiPolyIn {
+      constructor(geom, isSubject) {
+        if (!Array.isArray(geom)) {
+          throw new Error("Input geometry is not a valid Polygon or MultiPolygon");
+        }
+        try {
+          // if the input looks like a polygon, convert it to a multipolygon
+          if (typeof geom[0][0][0] === "number") geom = [geom];
+        } catch (ex) {
+          // The input is either malformed or has empty arrays.
+          // In either case, it will be handled later on.
+        }
+        this.polys = [];
+        this.bbox = {
+          ll: {
+            x: Number.POSITIVE_INFINITY,
+            y: Number.POSITIVE_INFINITY
+          },
+          ur: {
+            x: Number.NEGATIVE_INFINITY,
+            y: Number.NEGATIVE_INFINITY
+          }
+        };
+        for (let i = 0, iMax = geom.length; i < iMax; i++) {
+          const poly = new PolyIn(geom[i], this);
+          if (poly.bbox.ll.x < this.bbox.ll.x) this.bbox.ll.x = poly.bbox.ll.x;
+          if (poly.bbox.ll.y < this.bbox.ll.y) this.bbox.ll.y = poly.bbox.ll.y;
+          if (poly.bbox.ur.x > this.bbox.ur.x) this.bbox.ur.x = poly.bbox.ur.x;
+          if (poly.bbox.ur.y > this.bbox.ur.y) this.bbox.ur.y = poly.bbox.ur.y;
+          this.polys.push(poly);
+        }
+        this.isSubject = isSubject;
+      }
+      getSweepEvents() {
+        const sweepEvents = [];
+        for (let i = 0, iMax = this.polys.length; i < iMax; i++) {
+          const polySweepEvents = this.polys[i].getSweepEvents();
+          for (let j = 0, jMax = polySweepEvents.length; j < jMax; j++) {
             sweepEvents.push(polySweepEvents[j]);
           }
         }
-
         return sweepEvents;
       }
-    }]);
+    }
 
-    return MultiPolyIn;
-  }();
-
-  var RingOut = /*#__PURE__*/function () {
-    _createClass(RingOut, null, [{
-      key: "factory",
-
+    class RingOut {
       /* Given the segments from the sweep line pass, compute & return a series
        * of closed rings from all the segments marked to be part of the result */
-      value: function factory(allSegments) {
-        var ringsOut = [];
-
-        for (var i = 0, iMax = allSegments.length; i < iMax; i++) {
-          var segment = allSegments[i];
+      static factory(allSegments) {
+        const ringsOut = [];
+        for (let i = 0, iMax = allSegments.length; i < iMax; i++) {
+          const segment = allSegments[i];
           if (!segment.isInResult() || segment.ringOut) continue;
-          var prevEvent = null;
-          var event = segment.leftSE;
-          var nextEvent = segment.rightSE;
-          var events = [event];
-          var startingPoint = event.point;
-          var intersectionLEs = [];
-          /* Walk the chain of linked events to form a closed ring */
+          let prevEvent = null;
+          let event = segment.leftSE;
+          let nextEvent = segment.rightSE;
+          const events = [event];
+          const startingPoint = event.point;
+          const intersectionLEs = [];
 
+          /* Walk the chain of linked events to form a closed ring */
           while (true) {
             prevEvent = event;
             event = nextEvent;
             events.push(event);
+
             /* Is the ring complete? */
-
             if (event.point === startingPoint) break;
-
             while (true) {
-              var availableLEs = event.getAvailableLinkedEvents();
-              /* Did we hit a dead end? This shouldn't happen. Indicates some earlier
-               * part of the algorithm malfunctioned... please file a bug report. */
+              const availableLEs = event.getAvailableLinkedEvents();
 
+              /* Did we hit a dead end? This shouldn't happen.
+               * Indicates some earlier part of the algorithm malfunctioned. */
               if (availableLEs.length === 0) {
-                var firstPt = events[0].point;
-                var lastPt = events[events.length - 1].point;
-                throw new Error("Unable to complete output ring starting at [".concat(firstPt.x, ",") + " ".concat(firstPt.y, "]. Last matching segment found ends at") + " [".concat(lastPt.x, ", ").concat(lastPt.y, "]."));
+                const firstPt = events[0].point;
+                const lastPt = events[events.length - 1].point;
+                throw new Error(`Unable to complete output ring starting at [${firstPt.x},` + ` ${firstPt.y}]. Last matching segment found ends at` + ` [${lastPt.x}, ${lastPt.y}].`);
               }
+
               /* Only one way to go, so cotinue on the path */
-
-
               if (availableLEs.length === 1) {
                 nextEvent = availableLEs[0].otherSE;
                 break;
               }
+
               /* We must have an intersection. Check for a completed loop */
-
-
-              var indexLE = null;
-
-              for (var j = 0, jMax = intersectionLEs.length; j < jMax; j++) {
+              let indexLE = null;
+              for (let j = 0, jMax = intersectionLEs.length; j < jMax; j++) {
                 if (intersectionLEs[j].point === event.point) {
                   indexLE = j;
                   break;
                 }
               }
               /* Found a completed loop. Cut that off and make a ring */
-
-
               if (indexLE !== null) {
-                var intersectionLE = intersectionLEs.splice(indexLE)[0];
-                var ringEvents = events.splice(intersectionLE.index);
+                const intersectionLE = intersectionLEs.splice(indexLE)[0];
+                const ringEvents = events.splice(intersectionLE.index);
                 ringEvents.unshift(ringEvents[0].otherSE);
                 ringsOut.push(new RingOut(ringEvents.reverse()));
                 continue;
               }
               /* register the intersection */
-
-
               intersectionLEs.push({
                 index: events.length,
                 point: event.point
               });
               /* Choose the left-most option to continue the walk */
-
-              var comparator = event.getLeftmostComparator(prevEvent);
+              const comparator = event.getLeftmostComparator(prevEvent);
               nextEvent = availableLEs.sort(comparator)[0].otherSE;
               break;
             }
           }
-
           ringsOut.push(new RingOut(events));
         }
-
         return ringsOut;
       }
-    }]);
-
-    function RingOut(events) {
-      _classCallCheck(this, RingOut);
-
-      this.events = events;
-
-      for (var i = 0, iMax = events.length; i < iMax; i++) {
-        events[i].segment.ringOut = this;
+      constructor(events) {
+        this.events = events;
+        for (let i = 0, iMax = events.length; i < iMax; i++) {
+          events[i].segment.ringOut = this;
+        }
+        this.poly = null;
       }
-
-      this.poly = null;
-    }
-
-    _createClass(RingOut, [{
-      key: "getGeom",
-      value: function getGeom() {
+      getGeom() {
         // Remove superfluous points (ie extra points along a straight line),
-        var prevPt = this.events[0].point;
-        var points = [prevPt];
+        let prevPt = this.events[0].point;
+        const points = [prevPt];
+        for (let i = 1, iMax = this.events.length - 1; i < iMax; i++) {
+          const pt = this.events[i].point;
+          const nextPt = this.events[i + 1].point;
+          if (compareVectorAngles(pt, prevPt, nextPt) === 0) continue;
+          points.push(pt);
+          prevPt = pt;
+        }
 
-        for (var i = 1, iMax = this.events.length - 1; i < iMax; i++) {
-          var _pt = this.events[i].point;
-          var _nextPt = this.events[i + 1].point;
-          if (compareVectorAngles(_pt, prevPt, _nextPt) === 0) continue;
-          points.push(_pt);
-          prevPt = _pt;
-        } // ring was all (within rounding error of angle calc) colinear points
+        // ring was all (within rounding error of angle calc) colinear points
+        if (points.length === 1) return null;
 
-
-        if (points.length === 1) return null; // check if the starting point is necessary
-
-        var pt = points[0];
-        var nextPt = points[1];
+        // check if the starting point is necessary
+        const pt = points[0];
+        const nextPt = points[1];
         if (compareVectorAngles(pt, prevPt, nextPt) === 0) points.shift();
         points.push(points[0]);
-        var step = this.isExteriorRing() ? 1 : -1;
-        var iStart = this.isExteriorRing() ? 0 : points.length - 1;
-        var iEnd = this.isExteriorRing() ? points.length : -1;
-        var orderedPoints = [];
-
-        for (var _i = iStart; _i != iEnd; _i += step) {
-          orderedPoints.push([points[_i].x, points[_i].y]);
-        }
-
+        const step = this.isExteriorRing() ? 1 : -1;
+        const iStart = this.isExteriorRing() ? 0 : points.length - 1;
+        const iEnd = this.isExteriorRing() ? points.length : -1;
+        const orderedPoints = [];
+        for (let i = iStart; i != iEnd; i += step) orderedPoints.push([points[i].x, points[i].y]);
         return orderedPoints;
       }
-    }, {
-      key: "isExteriorRing",
-      value: function isExteriorRing() {
+      isExteriorRing() {
         if (this._isExteriorRing === undefined) {
-          var enclosing = this.enclosingRing();
+          const enclosing = this.enclosingRing();
           this._isExteriorRing = enclosing ? !enclosing.isExteriorRing() : true;
         }
-
         return this._isExteriorRing;
       }
-    }, {
-      key: "enclosingRing",
-      value: function enclosingRing() {
+      enclosingRing() {
         if (this._enclosingRing === undefined) {
           this._enclosingRing = this._calcEnclosingRing();
         }
-
         return this._enclosingRing;
       }
-      /* Returns the ring that encloses this one, if any */
 
-    }, {
-      key: "_calcEnclosingRing",
-      value: function _calcEnclosingRing() {
+      /* Returns the ring that encloses this one, if any */
+      _calcEnclosingRing() {
         // start with the ealier sweep line event so that the prevSeg
         // chain doesn't lead us inside of a loop of ours
-        var leftMostEvt = this.events[0];
-
-        for (var i = 1, iMax = this.events.length; i < iMax; i++) {
-          var evt = this.events[i];
+        let leftMostEvt = this.events[0];
+        for (let i = 1, iMax = this.events.length; i < iMax; i++) {
+          const evt = this.events[i];
           if (SweepEvent.compare(leftMostEvt, evt) > 0) leftMostEvt = evt;
         }
-
-        var prevSeg = leftMostEvt.segment.prevInResult();
-        var prevPrevSeg = prevSeg ? prevSeg.prevInResult() : null;
-
+        let prevSeg = leftMostEvt.segment.prevInResult();
+        let prevPrevSeg = prevSeg ? prevSeg.prevInResult() : null;
         while (true) {
           // no segment found, thus no ring can enclose us
-          if (!prevSeg) return null; // no segments below prev segment found, thus the ring of the prev
-          // segment must loop back around and enclose us
+          if (!prevSeg) return null;
 
-          if (!prevPrevSeg) return prevSeg.ringOut; // if the two segments are of different rings, the ring of the prev
+          // no segments below prev segment found, thus the ring of the prev
+          // segment must loop back around and enclose us
+          if (!prevPrevSeg) return prevSeg.ringOut;
+
+          // if the two segments are of different rings, the ring of the prev
           // segment must either loop around us or the ring of the prev prev
           // seg, which would make us and the ring of the prev peers
-
           if (prevPrevSeg.ringOut !== prevSeg.ringOut) {
             if (prevPrevSeg.ringOut.enclosingRing() !== prevSeg.ringOut) {
               return prevSeg.ringOut;
             } else return prevSeg.ringOut.enclosingRing();
-          } // two segments are from the same ring, so this was a penisula
+          }
+
+          // two segments are from the same ring, so this was a penisula
           // of that ring. iterate downward, keep searching
-
-
           prevSeg = prevPrevSeg.prevInResult();
           prevPrevSeg = prevSeg ? prevSeg.prevInResult() : null;
         }
       }
-    }]);
-
-    return RingOut;
-  }();
-  var PolyOut = /*#__PURE__*/function () {
-    function PolyOut(exteriorRing) {
-      _classCallCheck(this, PolyOut);
-
-      this.exteriorRing = exteriorRing;
-      exteriorRing.poly = this;
-      this.interiorRings = [];
     }
-
-    _createClass(PolyOut, [{
-      key: "addInterior",
-      value: function addInterior(ring) {
+    class PolyOut {
+      constructor(exteriorRing) {
+        this.exteriorRing = exteriorRing;
+        exteriorRing.poly = this;
+        this.interiorRings = [];
+      }
+      addInterior(ring) {
         this.interiorRings.push(ring);
         ring.poly = this;
       }
-    }, {
-      key: "getGeom",
-      value: function getGeom() {
-        var geom = [this.exteriorRing.getGeom()]; // exterior ring was all (within rounding error of angle calc) colinear points
-
+      getGeom() {
+        const geom = [this.exteriorRing.getGeom()];
+        // exterior ring was all (within rounding error of angle calc) colinear points
         if (geom[0] === null) return null;
-
-        for (var i = 0, iMax = this.interiorRings.length; i < iMax; i++) {
-          var ringGeom = this.interiorRings[i].getGeom(); // interior ring was all (within rounding error of angle calc) colinear points
-
+        for (let i = 0, iMax = this.interiorRings.length; i < iMax; i++) {
+          const ringGeom = this.interiorRings[i].getGeom();
+          // interior ring was all (within rounding error of angle calc) colinear points
           if (ringGeom === null) continue;
           geom.push(ringGeom);
         }
-
         return geom;
       }
-    }]);
-
-    return PolyOut;
-  }();
-  var MultiPolyOut = /*#__PURE__*/function () {
-    function MultiPolyOut(rings) {
-      _classCallCheck(this, MultiPolyOut);
-
-      this.rings = rings;
-      this.polys = this._composePolys(rings);
     }
-
-    _createClass(MultiPolyOut, [{
-      key: "getGeom",
-      value: function getGeom() {
-        var geom = [];
-
-        for (var i = 0, iMax = this.polys.length; i < iMax; i++) {
-          var polyGeom = this.polys[i].getGeom(); // exterior ring was all (within rounding error of angle calc) colinear points
-
+    class MultiPolyOut {
+      constructor(rings) {
+        this.rings = rings;
+        this.polys = this._composePolys(rings);
+      }
+      getGeom() {
+        const geom = [];
+        for (let i = 0, iMax = this.polys.length; i < iMax; i++) {
+          const polyGeom = this.polys[i].getGeom();
+          // exterior ring was all (within rounding error of angle calc) colinear points
           if (polyGeom === null) continue;
           geom.push(polyGeom);
         }
-
         return geom;
       }
-    }, {
-      key: "_composePolys",
-      value: function _composePolys(rings) {
-        var polys = [];
-
-        for (var i = 0, iMax = rings.length; i < iMax; i++) {
-          var ring = rings[i];
+      _composePolys(rings) {
+        const polys = [];
+        for (let i = 0, iMax = rings.length; i < iMax; i++) {
+          const ring = rings[i];
           if (ring.poly) continue;
           if (ring.isExteriorRing()) polys.push(new PolyOut(ring));else {
-            var enclosingRing = ring.enclosingRing();
+            const enclosingRing = ring.enclosingRing();
             if (!enclosingRing.poly) polys.push(new PolyOut(enclosingRing));
             enclosingRing.poly.addInterior(ring);
           }
         }
-
         return polys;
       }
-    }]);
-
-    return MultiPolyOut;
-  }();
-
-  /**
-   * NOTE:  We must be careful not to change any segments while
-   *        they are in the SplayTree. AFAIK, there's no way to tell
-   *        the tree to rebalance itself - thus before splitting
-   *        a segment that's in the tree, we remove it from the tree,
-   *        do the split, then re-insert it. (Even though splitting a
-   *        segment *shouldn't* change its correct position in the
-   *        sweep line tree, the reality is because of rounding errors,
-   *        it sometimes does.)
-   */
-
-  var SweepLine = /*#__PURE__*/function () {
-    function SweepLine(queue) {
-      var comparator = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : Segment.compare;
-
-      _classCallCheck(this, SweepLine);
-
-      this.queue = queue;
-      this.tree = new Tree(comparator);
-      this.segments = [];
     }
 
-    _createClass(SweepLine, [{
-      key: "process",
-      value: function process(event) {
-        var segment = event.segment;
-        var newEvents = []; // if we've already been consumed by another segment,
-        // clean up our body parts and get out
+    /**
+     * NOTE:  We must be careful not to change any segments while
+     *        they are in the SplayTree. AFAIK, there's no way to tell
+     *        the tree to rebalance itself - thus before splitting
+     *        a segment that's in the tree, we remove it from the tree,
+     *        do the split, then re-insert it. (Even though splitting a
+     *        segment *shouldn't* change its correct position in the
+     *        sweep line tree, the reality is because of rounding errors,
+     *        it sometimes does.)
+     */
 
+    class SweepLine {
+      constructor(queue) {
+        let comparator = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : Segment.compare;
+        this.queue = queue;
+        this.tree = new Tree(comparator);
+        this.segments = [];
+      }
+      process(event) {
+        const segment = event.segment;
+        const newEvents = [];
+
+        // if we've already been consumed by another segment,
+        // clean up our body parts and get out
         if (event.consumedBy) {
           if (event.isLeft) this.queue.remove(event.otherSE);else this.tree.remove(segment);
           return newEvents;
         }
+        const node = event.isLeft ? this.tree.add(segment) : this.tree.find(segment);
+        if (!node) throw new Error(`Unable to find segment #${segment.id} ` + `[${segment.leftSE.point.x}, ${segment.leftSE.point.y}] -> ` + `[${segment.rightSE.point.x}, ${segment.rightSE.point.y}] ` + "in SweepLine tree.");
+        let prevNode = node;
+        let nextNode = node;
+        let prevSeg = undefined;
+        let nextSeg = undefined;
 
-        var node = event.isLeft ? this.tree.insert(segment) : this.tree.find(segment);
-        if (!node) throw new Error("Unable to find segment #".concat(segment.id, " ") + "[".concat(segment.leftSE.point.x, ", ").concat(segment.leftSE.point.y, "] -> ") + "[".concat(segment.rightSE.point.x, ", ").concat(segment.rightSE.point.y, "] ") + 'in SweepLine tree. Please submit a bug report.');
-        var prevNode = node;
-        var nextNode = node;
-        var prevSeg = undefined;
-        var nextSeg = undefined; // skip consumed segments still in tree
-
+        // skip consumed segments still in tree
         while (prevSeg === undefined) {
           prevNode = this.tree.prev(prevNode);
           if (prevNode === null) prevSeg = null;else if (prevNode.key.consumedBy === undefined) prevSeg = prevNode.key;
-        } // skip consumed segments still in tree
+        }
 
-
+        // skip consumed segments still in tree
         while (nextSeg === undefined) {
           nextNode = this.tree.next(nextNode);
           if (nextNode === null) nextSeg = null;else if (nextNode.key.consumedBy === undefined) nextSeg = nextNode.key;
         }
-
         if (event.isLeft) {
           // Check for intersections against the previous segment in the sweep line
-          var prevMySplitter = null;
-
+          let prevMySplitter = null;
           if (prevSeg) {
-            var prevInter = prevSeg.getIntersection(segment);
-
+            const prevInter = prevSeg.getIntersection(segment);
             if (prevInter !== null) {
               if (!segment.isAnEndpoint(prevInter)) prevMySplitter = prevInter;
-
               if (!prevSeg.isAnEndpoint(prevInter)) {
-                var newEventsFromSplit = this._splitSafely(prevSeg, prevInter);
-
-                for (var i = 0, iMax = newEventsFromSplit.length; i < iMax; i++) {
+                const newEventsFromSplit = this._splitSafely(prevSeg, prevInter);
+                for (let i = 0, iMax = newEventsFromSplit.length; i < iMax; i++) {
                   newEvents.push(newEventsFromSplit[i]);
                 }
               }
             }
-          } // Check for intersections against the next segment in the sweep line
+          }
 
-
-          var nextMySplitter = null;
-
+          // Check for intersections against the next segment in the sweep line
+          let nextMySplitter = null;
           if (nextSeg) {
-            var nextInter = nextSeg.getIntersection(segment);
-
+            const nextInter = nextSeg.getIntersection(segment);
             if (nextInter !== null) {
               if (!segment.isAnEndpoint(nextInter)) nextMySplitter = nextInter;
-
               if (!nextSeg.isAnEndpoint(nextInter)) {
-                var _newEventsFromSplit = this._splitSafely(nextSeg, nextInter);
-
-                for (var _i = 0, _iMax = _newEventsFromSplit.length; _i < _iMax; _i++) {
-                  newEvents.push(_newEventsFromSplit[_i]);
+                const newEventsFromSplit = this._splitSafely(nextSeg, nextInter);
+                for (let i = 0, iMax = newEventsFromSplit.length; i < iMax; i++) {
+                  newEvents.push(newEventsFromSplit[i]);
                 }
               }
             }
-          } // For simplicity, even if we find more than one intersection we only
-          // spilt on the 'earliest' (sweep-line style) of the intersections.
-          // The other intersection will be handled in a future process().
-
-
-          if (prevMySplitter !== null || nextMySplitter !== null) {
-            var mySplitter = null;
-            if (prevMySplitter === null) mySplitter = nextMySplitter;else if (nextMySplitter === null) mySplitter = prevMySplitter;else {
-              var cmpSplitters = SweepEvent.comparePoints(prevMySplitter, nextMySplitter);
-              mySplitter = cmpSplitters <= 0 ? prevMySplitter : nextMySplitter;
-            } // Rounding errors can cause changes in ordering,
-            // so remove afected segments and right sweep events before splitting
-
-            this.queue.remove(segment.rightSE);
-            newEvents.push(segment.rightSE);
-
-            var _newEventsFromSplit2 = segment.split(mySplitter);
-
-            for (var _i2 = 0, _iMax2 = _newEventsFromSplit2.length; _i2 < _iMax2; _i2++) {
-              newEvents.push(_newEventsFromSplit2[_i2]);
-            }
           }
 
+          // For simplicity, even if we find more than one intersection we only
+          // spilt on the 'earliest' (sweep-line style) of the intersections.
+          // The other intersection will be handled in a future process().
+          if (prevMySplitter !== null || nextMySplitter !== null) {
+            let mySplitter = null;
+            if (prevMySplitter === null) mySplitter = nextMySplitter;else if (nextMySplitter === null) mySplitter = prevMySplitter;else {
+              const cmpSplitters = SweepEvent.comparePoints(prevMySplitter, nextMySplitter);
+              mySplitter = cmpSplitters <= 0 ? prevMySplitter : nextMySplitter;
+            }
+
+            // Rounding errors can cause changes in ordering,
+            // so remove afected segments and right sweep events before splitting
+            this.queue.remove(segment.rightSE);
+            newEvents.push(segment.rightSE);
+            const newEventsFromSplit = segment.split(mySplitter);
+            for (let i = 0, iMax = newEventsFromSplit.length; i < iMax; i++) {
+              newEvents.push(newEventsFromSplit[i]);
+            }
+          }
           if (newEvents.length > 0) {
             // We found some intersections, so re-do the current event to
             // make sure sweep line ordering is totally consistent for later
@@ -50393,224 +55014,182 @@ module.exports = posix;
           }
         } else {
           // event.isRight
+
           // since we're about to be removed from the sweep line, check for
           // intersections between our previous and next segments
           if (prevSeg && nextSeg) {
-            var inter = prevSeg.getIntersection(nextSeg);
-
+            const inter = prevSeg.getIntersection(nextSeg);
             if (inter !== null) {
               if (!prevSeg.isAnEndpoint(inter)) {
-                var _newEventsFromSplit3 = this._splitSafely(prevSeg, inter);
-
-                for (var _i3 = 0, _iMax3 = _newEventsFromSplit3.length; _i3 < _iMax3; _i3++) {
-                  newEvents.push(_newEventsFromSplit3[_i3]);
+                const newEventsFromSplit = this._splitSafely(prevSeg, inter);
+                for (let i = 0, iMax = newEventsFromSplit.length; i < iMax; i++) {
+                  newEvents.push(newEventsFromSplit[i]);
                 }
               }
-
               if (!nextSeg.isAnEndpoint(inter)) {
-                var _newEventsFromSplit4 = this._splitSafely(nextSeg, inter);
-
-                for (var _i4 = 0, _iMax4 = _newEventsFromSplit4.length; _i4 < _iMax4; _i4++) {
-                  newEvents.push(_newEventsFromSplit4[_i4]);
+                const newEventsFromSplit = this._splitSafely(nextSeg, inter);
+                for (let i = 0, iMax = newEventsFromSplit.length; i < iMax; i++) {
+                  newEvents.push(newEventsFromSplit[i]);
                 }
               }
             }
           }
-
           this.tree.remove(segment);
         }
-
         return newEvents;
       }
+
       /* Safely split a segment that is currently in the datastructures
        * IE - a segment other than the one that is currently being processed. */
-
-    }, {
-      key: "_splitSafely",
-      value: function _splitSafely(seg, pt) {
+      _splitSafely(seg, pt) {
         // Rounding errors can cause changes in ordering,
         // so remove afected segments and right sweep events before splitting
         // removeNode() doesn't work, so have re-find the seg
         // https://github.com/w8r/splay-tree/pull/5
         this.tree.remove(seg);
-        var rightSE = seg.rightSE;
+        const rightSE = seg.rightSE;
         this.queue.remove(rightSE);
-        var newEvents = seg.split(pt);
-        newEvents.push(rightSE); // splitting can trigger consumption
-
-        if (seg.consumedBy === undefined) this.tree.insert(seg);
+        const newEvents = seg.split(pt);
+        newEvents.push(rightSE);
+        // splitting can trigger consumption
+        if (seg.consumedBy === undefined) this.tree.add(seg);
         return newEvents;
       }
-    }]);
-
-    return SweepLine;
-  }();
-
-  var POLYGON_CLIPPING_MAX_QUEUE_SIZE = typeof process !== 'undefined' && process.env.POLYGON_CLIPPING_MAX_QUEUE_SIZE || 1000000;
-  var POLYGON_CLIPPING_MAX_SWEEPLINE_SEGMENTS = typeof process !== 'undefined' && process.env.POLYGON_CLIPPING_MAX_SWEEPLINE_SEGMENTS || 1000000;
-  var Operation = /*#__PURE__*/function () {
-    function Operation() {
-      _classCallCheck(this, Operation);
     }
 
-    _createClass(Operation, [{
-      key: "run",
-      value: function run(type, geom, moreGeoms) {
+    // Limits on iterative processes to prevent infinite loops - usually caused by floating-point math round-off errors.
+    const POLYGON_CLIPPING_MAX_QUEUE_SIZE = typeof process !== "undefined" && process.env.POLYGON_CLIPPING_MAX_QUEUE_SIZE || 1000000;
+    const POLYGON_CLIPPING_MAX_SWEEPLINE_SEGMENTS = typeof process !== "undefined" && process.env.POLYGON_CLIPPING_MAX_SWEEPLINE_SEGMENTS || 1000000;
+    class Operation {
+      run(type, geom, moreGeoms) {
         operation.type = type;
         rounder.reset();
+
         /* Convert inputs to MultiPoly objects */
-
-        var multipolys = [new MultiPolyIn(geom, true)];
-
-        for (var i = 0, iMax = moreGeoms.length; i < iMax; i++) {
+        const multipolys = [new MultiPolyIn(geom, true)];
+        for (let i = 0, iMax = moreGeoms.length; i < iMax; i++) {
           multipolys.push(new MultiPolyIn(moreGeoms[i], false));
         }
-
         operation.numMultiPolys = multipolys.length;
+
         /* BBox optimization for difference operation
          * If the bbox of a multipolygon that's part of the clipping doesn't
          * intersect the bbox of the subject at all, we can just drop that
          * multiploygon. */
-
-        if (operation.type === 'difference') {
+        if (operation.type === "difference") {
           // in place removal
-          var subject = multipolys[0];
-          var _i = 1;
-
-          while (_i < multipolys.length) {
-            if (getBboxOverlap(multipolys[_i].bbox, subject.bbox) !== null) _i++;else multipolys.splice(_i, 1);
+          const subject = multipolys[0];
+          let i = 1;
+          while (i < multipolys.length) {
+            if (getBboxOverlap(multipolys[i].bbox, subject.bbox) !== null) i++;else multipolys.splice(i, 1);
           }
         }
+
         /* BBox optimization for intersection operation
          * If we can find any pair of multipolygons whose bbox does not overlap,
          * then the result will be empty. */
-
-
-        if (operation.type === 'intersection') {
+        if (operation.type === "intersection") {
           // TODO: this is O(n^2) in number of polygons. By sorting the bboxes,
           //       it could be optimized to O(n * ln(n))
-          for (var _i2 = 0, _iMax = multipolys.length; _i2 < _iMax; _i2++) {
-            var mpA = multipolys[_i2];
-
-            for (var j = _i2 + 1, jMax = multipolys.length; j < jMax; j++) {
+          for (let i = 0, iMax = multipolys.length; i < iMax; i++) {
+            const mpA = multipolys[i];
+            for (let j = i + 1, jMax = multipolys.length; j < jMax; j++) {
               if (getBboxOverlap(mpA.bbox, multipolys[j].bbox) === null) return [];
             }
           }
         }
+
         /* Put segment endpoints in a priority queue */
-
-
-        var queue = new Tree(SweepEvent.compare);
-
-        for (var _i3 = 0, _iMax2 = multipolys.length; _i3 < _iMax2; _i3++) {
-          var sweepEvents = multipolys[_i3].getSweepEvents();
-
-          for (var _j = 0, _jMax = sweepEvents.length; _j < _jMax; _j++) {
-            queue.insert(sweepEvents[_j]);
-
+        const queue = new Tree(SweepEvent.compare);
+        for (let i = 0, iMax = multipolys.length; i < iMax; i++) {
+          const sweepEvents = multipolys[i].getSweepEvents();
+          for (let j = 0, jMax = sweepEvents.length; j < jMax; j++) {
+            queue.insert(sweepEvents[j]);
             if (queue.size > POLYGON_CLIPPING_MAX_QUEUE_SIZE) {
               // prevents an infinite loop, an otherwise common manifestation of bugs
-              throw new Error('Infinite loop when putting segment endpoints in a priority queue ' + '(queue size too big). Please file a bug report.');
+              throw new Error("Infinite loop when putting segment endpoints in a priority queue " + "(queue size too big).");
             }
           }
         }
+
         /* Pass the sweep line over those endpoints */
-
-
-        var sweepLine = new SweepLine(queue);
-        var prevQueueSize = queue.size;
-        var node = queue.pop();
-
+        const sweepLine = new SweepLine(queue);
+        let prevQueueSize = queue.size;
+        let node = queue.pop();
         while (node) {
-          var evt = node.key;
-
+          const evt = node.key;
           if (queue.size === prevQueueSize) {
             // prevents an infinite loop, an otherwise common manifestation of bugs
-            var seg = evt.segment;
-            throw new Error("Unable to pop() ".concat(evt.isLeft ? 'left' : 'right', " SweepEvent ") + "[".concat(evt.point.x, ", ").concat(evt.point.y, "] from segment #").concat(seg.id, " ") + "[".concat(seg.leftSE.point.x, ", ").concat(seg.leftSE.point.y, "] -> ") + "[".concat(seg.rightSE.point.x, ", ").concat(seg.rightSE.point.y, "] from queue. ") + 'Please file a bug report.');
+            const seg = evt.segment;
+            throw new Error(`Unable to pop() ${evt.isLeft ? "left" : "right"} SweepEvent ` + `[${evt.point.x}, ${evt.point.y}] from segment #${seg.id} ` + `[${seg.leftSE.point.x}, ${seg.leftSE.point.y}] -> ` + `[${seg.rightSE.point.x}, ${seg.rightSE.point.y}] from queue.`);
           }
-
           if (queue.size > POLYGON_CLIPPING_MAX_QUEUE_SIZE) {
             // prevents an infinite loop, an otherwise common manifestation of bugs
-            throw new Error('Infinite loop when passing sweep line over endpoints ' + '(queue size too big). Please file a bug report.');
+            throw new Error("Infinite loop when passing sweep line over endpoints " + "(queue size too big).");
           }
-
           if (sweepLine.segments.length > POLYGON_CLIPPING_MAX_SWEEPLINE_SEGMENTS) {
             // prevents an infinite loop, an otherwise common manifestation of bugs
-            throw new Error('Infinite loop when passing sweep line over endpoints ' + '(too many sweep line segments). Please file a bug report.');
+            throw new Error("Infinite loop when passing sweep line over endpoints " + "(too many sweep line segments).");
           }
-
-          var newEvents = sweepLine.process(evt);
-
-          for (var _i4 = 0, _iMax3 = newEvents.length; _i4 < _iMax3; _i4++) {
-            var _evt = newEvents[_i4];
-            if (_evt.consumedBy === undefined) queue.insert(_evt);
+          const newEvents = sweepLine.process(evt);
+          for (let i = 0, iMax = newEvents.length; i < iMax; i++) {
+            const evt = newEvents[i];
+            if (evt.consumedBy === undefined) queue.insert(evt);
           }
-
           prevQueueSize = queue.size;
           node = queue.pop();
-        } // free some memory we don't need anymore
+        }
 
-
+        // free some memory we don't need anymore
         rounder.reset();
-        /* Collect and compile segments we're keeping into a multipolygon */
 
-        var ringsOut = RingOut.factory(sweepLine.segments);
-        var result = new MultiPolyOut(ringsOut);
+        /* Collect and compile segments we're keeping into a multipolygon */
+        const ringsOut = RingOut.factory(sweepLine.segments);
+        const result = new MultiPolyOut(ringsOut);
         return result.getGeom();
       }
-    }]);
-
-    return Operation;
-  }(); // singleton available by import
-
-  var operation = new Operation();
-
-  var union = function union(geom) {
-    for (var _len = arguments.length, moreGeoms = new Array(_len > 1 ? _len - 1 : 0), _key = 1; _key < _len; _key++) {
-      moreGeoms[_key - 1] = arguments[_key];
     }
 
-    return operation.run('union', geom, moreGeoms);
-  };
+    // singleton available by import
+    const operation = new Operation();
 
-  var intersection$1 = function intersection(geom) {
-    for (var _len2 = arguments.length, moreGeoms = new Array(_len2 > 1 ? _len2 - 1 : 0), _key2 = 1; _key2 < _len2; _key2++) {
-      moreGeoms[_key2 - 1] = arguments[_key2];
-    }
+    const union = function (geom) {
+      for (var _len = arguments.length, moreGeoms = new Array(_len > 1 ? _len - 1 : 0), _key = 1; _key < _len; _key++) {
+        moreGeoms[_key - 1] = arguments[_key];
+      }
+      return operation.run("union", geom, moreGeoms);
+    };
+    const intersection = function (geom) {
+      for (var _len2 = arguments.length, moreGeoms = new Array(_len2 > 1 ? _len2 - 1 : 0), _key2 = 1; _key2 < _len2; _key2++) {
+        moreGeoms[_key2 - 1] = arguments[_key2];
+      }
+      return operation.run("intersection", geom, moreGeoms);
+    };
+    const xor = function (geom) {
+      for (var _len3 = arguments.length, moreGeoms = new Array(_len3 > 1 ? _len3 - 1 : 0), _key3 = 1; _key3 < _len3; _key3++) {
+        moreGeoms[_key3 - 1] = arguments[_key3];
+      }
+      return operation.run("xor", geom, moreGeoms);
+    };
+    const difference = function (subjectGeom) {
+      for (var _len4 = arguments.length, clippingGeoms = new Array(_len4 > 1 ? _len4 - 1 : 0), _key4 = 1; _key4 < _len4; _key4++) {
+        clippingGeoms[_key4 - 1] = arguments[_key4];
+      }
+      return operation.run("difference", subjectGeom, clippingGeoms);
+    };
+    var index = {
+      union: union,
+      intersection: intersection,
+      xor: xor,
+      difference: difference
+    };
 
-    return operation.run('intersection', geom, moreGeoms);
-  };
+    return index;
 
-  var xor = function xor(geom) {
-    for (var _len3 = arguments.length, moreGeoms = new Array(_len3 > 1 ? _len3 - 1 : 0), _key3 = 1; _key3 < _len3; _key3++) {
-      moreGeoms[_key3 - 1] = arguments[_key3];
-    }
-
-    return operation.run('xor', geom, moreGeoms);
-  };
-
-  var difference = function difference(subjectGeom) {
-    for (var _len4 = arguments.length, clippingGeoms = new Array(_len4 > 1 ? _len4 - 1 : 0), _key4 = 1; _key4 < _len4; _key4++) {
-      clippingGeoms[_key4 - 1] = arguments[_key4];
-    }
-
-    return operation.run('difference', subjectGeom, clippingGeoms);
-  };
-
-  var index = {
-    union: union,
-    intersection: intersection$1,
-    xor: xor,
-    difference: difference
-  };
-
-  return index;
-
-})));
+}));
 
 }).call(this)}).call(this,require('_process'))
-},{"_process":295}],295:[function(require,module,exports){
+},{"_process":303}],303:[function(require,module,exports){
 // shim for using process in browser
 var process = module.exports = {};
 
@@ -50796,10 +55375,10 @@ process.chdir = function (dir) {
 };
 process.umask = function() { return 0; };
 
-},{}],296:[function(require,module,exports){
+},{}],304:[function(require,module,exports){
 !function(t,i){"object"==typeof exports&&"undefined"!=typeof module?module.exports=i():"function"==typeof define&&define.amd?define(i):(t=t||self).RBush=i()}(this,function(){"use strict";function t(t,r,e,a,h){!function t(n,r,e,a,h){for(;a>e;){if(a-e>600){var o=a-e+1,s=r-e+1,l=Math.log(o),f=.5*Math.exp(2*l/3),u=.5*Math.sqrt(l*f*(o-f)/o)*(s-o/2<0?-1:1),m=Math.max(e,Math.floor(r-s*f/o+u)),c=Math.min(a,Math.floor(r+(o-s)*f/o+u));t(n,r,m,c,h)}var p=n[r],d=e,x=a;for(i(n,e,r),h(n[a],p)>0&&i(n,e,a);d<x;){for(i(n,d,x),d++,x--;h(n[d],p)<0;)d++;for(;h(n[x],p)>0;)x--}0===h(n[e],p)?i(n,e,x):i(n,++x,a),x<=r&&(e=x+1),r<=x&&(a=x-1)}}(t,r,e||0,a||t.length-1,h||n)}function i(t,i,n){var r=t[i];t[i]=t[n],t[n]=r}function n(t,i){return t<i?-1:t>i?1:0}var r=function(t){void 0===t&&(t=9),this._maxEntries=Math.max(4,t),this._minEntries=Math.max(2,Math.ceil(.4*this._maxEntries)),this.clear()};function e(t,i,n){if(!n)return i.indexOf(t);for(var r=0;r<i.length;r++)if(n(t,i[r]))return r;return-1}function a(t,i){h(t,0,t.children.length,i,t)}function h(t,i,n,r,e){e||(e=p(null)),e.minX=1/0,e.minY=1/0,e.maxX=-1/0,e.maxY=-1/0;for(var a=i;a<n;a++){var h=t.children[a];o(e,t.leaf?r(h):h)}return e}function o(t,i){return t.minX=Math.min(t.minX,i.minX),t.minY=Math.min(t.minY,i.minY),t.maxX=Math.max(t.maxX,i.maxX),t.maxY=Math.max(t.maxY,i.maxY),t}function s(t,i){return t.minX-i.minX}function l(t,i){return t.minY-i.minY}function f(t){return(t.maxX-t.minX)*(t.maxY-t.minY)}function u(t){return t.maxX-t.minX+(t.maxY-t.minY)}function m(t,i){return t.minX<=i.minX&&t.minY<=i.minY&&i.maxX<=t.maxX&&i.maxY<=t.maxY}function c(t,i){return i.minX<=t.maxX&&i.minY<=t.maxY&&i.maxX>=t.minX&&i.maxY>=t.minY}function p(t){return{children:t,height:1,leaf:!0,minX:1/0,minY:1/0,maxX:-1/0,maxY:-1/0}}function d(i,n,r,e,a){for(var h=[n,r];h.length;)if(!((r=h.pop())-(n=h.pop())<=e)){var o=n+Math.ceil((r-n)/e/2)*e;t(i,o,n,r,a),h.push(n,o,o,r)}}return r.prototype.all=function(){return this._all(this.data,[])},r.prototype.search=function(t){var i=this.data,n=[];if(!c(t,i))return n;for(var r=this.toBBox,e=[];i;){for(var a=0;a<i.children.length;a++){var h=i.children[a],o=i.leaf?r(h):h;c(t,o)&&(i.leaf?n.push(h):m(t,o)?this._all(h,n):e.push(h))}i=e.pop()}return n},r.prototype.collides=function(t){var i=this.data;if(!c(t,i))return!1;for(var n=[];i;){for(var r=0;r<i.children.length;r++){var e=i.children[r],a=i.leaf?this.toBBox(e):e;if(c(t,a)){if(i.leaf||m(t,a))return!0;n.push(e)}}i=n.pop()}return!1},r.prototype.load=function(t){if(!t||!t.length)return this;if(t.length<this._minEntries){for(var i=0;i<t.length;i++)this.insert(t[i]);return this}var n=this._build(t.slice(),0,t.length-1,0);if(this.data.children.length)if(this.data.height===n.height)this._splitRoot(this.data,n);else{if(this.data.height<n.height){var r=this.data;this.data=n,n=r}this._insert(n,this.data.height-n.height-1,!0)}else this.data=n;return this},r.prototype.insert=function(t){return t&&this._insert(t,this.data.height-1),this},r.prototype.clear=function(){return this.data=p([]),this},r.prototype.remove=function(t,i){if(!t)return this;for(var n,r,a,h=this.data,o=this.toBBox(t),s=[],l=[];h||s.length;){if(h||(h=s.pop(),r=s[s.length-1],n=l.pop(),a=!0),h.leaf){var f=e(t,h.children,i);if(-1!==f)return h.children.splice(f,1),s.push(h),this._condense(s),this}a||h.leaf||!m(h,o)?r?(n++,h=r.children[n],a=!1):h=null:(s.push(h),l.push(n),n=0,r=h,h=h.children[0])}return this},r.prototype.toBBox=function(t){return t},r.prototype.compareMinX=function(t,i){return t.minX-i.minX},r.prototype.compareMinY=function(t,i){return t.minY-i.minY},r.prototype.toJSON=function(){return this.data},r.prototype.fromJSON=function(t){return this.data=t,this},r.prototype._all=function(t,i){for(var n=[];t;)t.leaf?i.push.apply(i,t.children):n.push.apply(n,t.children),t=n.pop();return i},r.prototype._build=function(t,i,n,r){var e,h=n-i+1,o=this._maxEntries;if(h<=o)return a(e=p(t.slice(i,n+1)),this.toBBox),e;r||(r=Math.ceil(Math.log(h)/Math.log(o)),o=Math.ceil(h/Math.pow(o,r-1))),(e=p([])).leaf=!1,e.height=r;var s=Math.ceil(h/o),l=s*Math.ceil(Math.sqrt(o));d(t,i,n,l,this.compareMinX);for(var f=i;f<=n;f+=l){var u=Math.min(f+l-1,n);d(t,f,u,s,this.compareMinY);for(var m=f;m<=u;m+=s){var c=Math.min(m+s-1,u);e.children.push(this._build(t,m,c,r-1))}}return a(e,this.toBBox),e},r.prototype._chooseSubtree=function(t,i,n,r){for(;r.push(i),!i.leaf&&r.length-1!==n;){for(var e=1/0,a=1/0,h=void 0,o=0;o<i.children.length;o++){var s=i.children[o],l=f(s),u=(m=t,c=s,(Math.max(c.maxX,m.maxX)-Math.min(c.minX,m.minX))*(Math.max(c.maxY,m.maxY)-Math.min(c.minY,m.minY))-l);u<a?(a=u,e=l<e?l:e,h=s):u===a&&l<e&&(e=l,h=s)}i=h||i.children[0]}var m,c;return i},r.prototype._insert=function(t,i,n){var r=n?t:this.toBBox(t),e=[],a=this._chooseSubtree(r,this.data,i,e);for(a.children.push(t),o(a,r);i>=0&&e[i].children.length>this._maxEntries;)this._split(e,i),i--;this._adjustParentBBoxes(r,e,i)},r.prototype._split=function(t,i){var n=t[i],r=n.children.length,e=this._minEntries;this._chooseSplitAxis(n,e,r);var h=this._chooseSplitIndex(n,e,r),o=p(n.children.splice(h,n.children.length-h));o.height=n.height,o.leaf=n.leaf,a(n,this.toBBox),a(o,this.toBBox),i?t[i-1].children.push(o):this._splitRoot(n,o)},r.prototype._splitRoot=function(t,i){this.data=p([t,i]),this.data.height=t.height+1,this.data.leaf=!1,a(this.data,this.toBBox)},r.prototype._chooseSplitIndex=function(t,i,n){for(var r,e,a,o,s,l,u,m=1/0,c=1/0,p=i;p<=n-i;p++){var d=h(t,0,p,this.toBBox),x=h(t,p,n,this.toBBox),v=(e=d,a=x,o=void 0,s=void 0,l=void 0,u=void 0,o=Math.max(e.minX,a.minX),s=Math.max(e.minY,a.minY),l=Math.min(e.maxX,a.maxX),u=Math.min(e.maxY,a.maxY),Math.max(0,l-o)*Math.max(0,u-s)),M=f(d)+f(x);v<m?(m=v,r=p,c=M<c?M:c):v===m&&M<c&&(c=M,r=p)}return r||n-i},r.prototype._chooseSplitAxis=function(t,i,n){var r=t.leaf?this.compareMinX:s,e=t.leaf?this.compareMinY:l;this._allDistMargin(t,i,n,r)<this._allDistMargin(t,i,n,e)&&t.children.sort(r)},r.prototype._allDistMargin=function(t,i,n,r){t.children.sort(r);for(var e=this.toBBox,a=h(t,0,i,e),s=h(t,n-i,n,e),l=u(a)+u(s),f=i;f<n-i;f++){var m=t.children[f];o(a,t.leaf?e(m):m),l+=u(a)}for(var c=n-i-1;c>=i;c--){var p=t.children[c];o(s,t.leaf?e(p):p),l+=u(s)}return l},r.prototype._adjustParentBBoxes=function(t,i,n){for(var r=n;r>=0;r--)o(i[r],t)},r.prototype._condense=function(t){for(var i=t.length-1,n=void 0;i>=0;i--)0===t[i].children.length?i>0?(n=t[i-1].children).splice(n.indexOf(t[i]),1):this.clear():a(t[i],this.toBBox)},r});
 
-},{}],297:[function(require,module,exports){
+},{}],305:[function(require,module,exports){
 module.exports = function strsearch2regexp (str) {
   return str
     .replace('.', '\\.')
@@ -50826,7 +55405,7 @@ module.exports = function strsearch2regexp (str) {
     .replace('y', '[yýÿ]')
 }
 
-},{}],298:[function(require,module,exports){
+},{}],306:[function(require,module,exports){
 (function (setImmediate,clearImmediate){(function (){
 var nextTick = require('process/browser.js').nextTick;
 var apply = Function.prototype.apply;
@@ -50905,10 +55484,10 @@ exports.clearImmediate = typeof clearImmediate === "function" ? clearImmediate :
   delete immediateIds[id];
 };
 }).call(this)}).call(this,require("timers").setImmediate,require("timers").clearImmediate)
-},{"process/browser.js":295,"timers":298}],299:[function(require,module,exports){
+},{"process/browser.js":303,"timers":306}],307:[function(require,module,exports){
 !function(t,e){"object"==typeof exports&&"undefined"!=typeof module?e(exports):"function"==typeof define&&define.amd?define(["exports"],e):e(t.jsts={})}(this,function(t){"use strict";function e(){}function n(t){this.message=t||""}function i(t){this.message=t||""}function r(t){this.message=t||""}function o(){}function s(t){return null===t?Mt:t.color}function a(t){return null===t?null:t.parent}function u(t,e){null!==t&&(t.color=e)}function l(t){return null===t?null:t.left}function c(t){return null===t?null:t.right}function p(){this.root_=null,this.size_=0}function h(){}function f(){this.array_=[],arguments[0]instanceof It&&this.addAll(arguments[0])}function g(){}function d(t){this.message=t||""}function y(){this.array_=[]}"fill"in Array.prototype||Object.defineProperty(Array.prototype,"fill",{configurable:!0,value:function(t){if(void 0===this||null===this)throw new TypeError(this+" is not an object");var e=Object(this),n=Math.max(Math.min(e.length,9007199254740991),0)||0,i=1 in arguments?parseInt(Number(arguments[1]),10)||0:0;i=i<0?Math.max(n+i,0):Math.min(i,n);var r=2 in arguments&&void 0!==arguments[2]?parseInt(Number(arguments[2]),10)||0:n;for(r=r<0?Math.max(n+arguments[2],0):Math.min(r,n);i<r;)e[i]=t,++i;return e},writable:!0}),Number.isFinite=Number.isFinite||function(t){return"number"==typeof t&&isFinite(t)},Number.isInteger=Number.isInteger||function(t){return"number"==typeof t&&isFinite(t)&&Math.floor(t)===t},Number.parseFloat=Number.parseFloat||parseFloat,Number.isNaN=Number.isNaN||function(t){return t!=t},Math.trunc=Math.trunc||function(t){return t<0?Math.ceil(t):Math.floor(t)};var _=function(){};_.prototype.interfaces_=function(){return[]},_.prototype.getClass=function(){return _},_.prototype.equalsWithTolerance=function(t,e,n){return Math.abs(t-e)<=n};var m=function(t){function e(e){t.call(this,e),this.name="IllegalArgumentException",this.message=e,this.stack=(new t).stack}return t&&(e.__proto__=t),e.prototype=Object.create(t&&t.prototype),e.prototype.constructor=e,e}(Error),v=function(){},I={MAX_VALUE:{configurable:!0}};v.isNaN=function(t){return Number.isNaN(t)},v.doubleToLongBits=function(t){return t},v.longBitsToDouble=function(t){return t},v.isInfinite=function(t){return!Number.isFinite(t)},I.MAX_VALUE.get=function(){return Number.MAX_VALUE},Object.defineProperties(v,I);var E=function(){},x=function(){},N=function(){},C=function t(){if(this.x=null,this.y=null,this.z=null,0===arguments.length)this.x=0,this.y=0,this.z=t.NULL_ORDINATE;else if(1===arguments.length){var e=arguments[0];this.x=e.x,this.y=e.y,this.z=e.z}else 2===arguments.length?(this.x=arguments[0],this.y=arguments[1],this.z=t.NULL_ORDINATE):3===arguments.length&&(this.x=arguments[0],this.y=arguments[1],this.z=arguments[2])},S={DimensionalComparator:{configurable:!0},serialVersionUID:{configurable:!0},NULL_ORDINATE:{configurable:!0},X:{configurable:!0},Y:{configurable:!0},Z:{configurable:!0}};C.prototype.setOrdinate=function(t,e){switch(t){case C.X:this.x=e;break;case C.Y:this.y=e;break;case C.Z:this.z=e;break;default:throw new m("Invalid ordinate index: "+t)}},C.prototype.equals2D=function(){if(1===arguments.length){var t=arguments[0];return this.x===t.x&&this.y===t.y}if(2===arguments.length){var e=arguments[0],n=arguments[1];return!!_.equalsWithTolerance(this.x,e.x,n)&&!!_.equalsWithTolerance(this.y,e.y,n)}},C.prototype.getOrdinate=function(t){switch(t){case C.X:return this.x;case C.Y:return this.y;case C.Z:return this.z}throw new m("Invalid ordinate index: "+t)},C.prototype.equals3D=function(t){return this.x===t.x&&this.y===t.y&&(this.z===t.z||v.isNaN(this.z))&&v.isNaN(t.z)},C.prototype.equals=function(t){return t instanceof C&&this.equals2D(t)},C.prototype.equalInZ=function(t,e){return _.equalsWithTolerance(this.z,t.z,e)},C.prototype.compareTo=function(t){var e=t;return this.x<e.x?-1:this.x>e.x?1:this.y<e.y?-1:this.y>e.y?1:0},C.prototype.clone=function(){},C.prototype.copy=function(){return new C(this)},C.prototype.toString=function(){return"("+this.x+", "+this.y+", "+this.z+")"},C.prototype.distance3D=function(t){var e=this.x-t.x,n=this.y-t.y,i=this.z-t.z;return Math.sqrt(e*e+n*n+i*i)},C.prototype.distance=function(t){var e=this.x-t.x,n=this.y-t.y;return Math.sqrt(e*e+n*n)},C.prototype.hashCode=function(){var t=17;return t=37*t+C.hashCode(this.x),t=37*t+C.hashCode(this.y)},C.prototype.setCoordinate=function(t){this.x=t.x,this.y=t.y,this.z=t.z},C.prototype.interfaces_=function(){return[E,x,e]},C.prototype.getClass=function(){return C},C.hashCode=function(){if(1===arguments.length){var t=arguments[0],e=v.doubleToLongBits(t);return Math.trunc((e^e)>>>32)}},S.DimensionalComparator.get=function(){return L},S.serialVersionUID.get=function(){return 0x5cbf2c235c7e5800},S.NULL_ORDINATE.get=function(){return v.NaN},S.X.get=function(){return 0},S.Y.get=function(){return 1},S.Z.get=function(){return 2},Object.defineProperties(C,S);var L=function(t){if(this._dimensionsToTest=2,0===arguments.length);else if(1===arguments.length){var e=arguments[0];if(2!==e&&3!==e)throw new m("only 2 or 3 dimensions may be specified");this._dimensionsToTest=e}};L.prototype.compare=function(t,e){var n=t,i=e,r=L.compare(n.x,i.x);if(0!==r)return r;var o=L.compare(n.y,i.y);if(0!==o)return o;if(this._dimensionsToTest<=2)return 0;return L.compare(n.z,i.z)},L.prototype.interfaces_=function(){return[N]},L.prototype.getClass=function(){return L},L.compare=function(t,e){return t<e?-1:t>e?1:v.isNaN(t)?v.isNaN(e)?0:-1:v.isNaN(e)?1:0};var b=function(){};b.prototype.create=function(){},b.prototype.interfaces_=function(){return[]},b.prototype.getClass=function(){return b};var w=function(){},O={INTERIOR:{configurable:!0},BOUNDARY:{configurable:!0},EXTERIOR:{configurable:!0},NONE:{configurable:!0}};w.prototype.interfaces_=function(){return[]},w.prototype.getClass=function(){return w},w.toLocationSymbol=function(t){switch(t){case w.EXTERIOR:return"e";case w.BOUNDARY:return"b";case w.INTERIOR:return"i";case w.NONE:return"-"}throw new m("Unknown location value: "+t)},O.INTERIOR.get=function(){return 0},O.BOUNDARY.get=function(){return 1},O.EXTERIOR.get=function(){return 2},O.NONE.get=function(){return-1},Object.defineProperties(w,O);var T=function(t,e){return t.interfaces_&&t.interfaces_().indexOf(e)>-1},R=function(){},P={LOG_10:{configurable:!0}};R.prototype.interfaces_=function(){return[]},R.prototype.getClass=function(){return R},R.log10=function(t){var e=Math.log(t);return v.isInfinite(e)?e:v.isNaN(e)?e:e/R.LOG_10},R.min=function(t,e,n,i){var r=t;return e<r&&(r=e),n<r&&(r=n),i<r&&(r=i),r},R.clamp=function(){if("number"==typeof arguments[2]&&"number"==typeof arguments[0]&&"number"==typeof arguments[1]){var t=arguments[0],e=arguments[1],n=arguments[2];return t<e?e:t>n?n:t}if(Number.isInteger(arguments[2])&&Number.isInteger(arguments[0])&&Number.isInteger(arguments[1])){var i=arguments[0],r=arguments[1],o=arguments[2];return i<r?r:i>o?o:i}},R.wrap=function(t,e){return t<0?e- -t%e:t%e},R.max=function(){if(3===arguments.length){var t=arguments[0],e=arguments[1],n=arguments[2],i=t;return e>i&&(i=e),n>i&&(i=n),i}if(4===arguments.length){var r=arguments[0],o=arguments[1],s=arguments[2],a=arguments[3],u=r;return o>u&&(u=o),s>u&&(u=s),a>u&&(u=a),u}},R.average=function(t,e){return(t+e)/2},P.LOG_10.get=function(){return Math.log(10)},Object.defineProperties(R,P);var D=function(t){this.str=t};D.prototype.append=function(t){this.str+=t},D.prototype.setCharAt=function(t,e){this.str=this.str.substr(0,t)+e+this.str.substr(t+1)},D.prototype.toString=function(t){return this.str};var M=function(t){this.value=t};M.prototype.intValue=function(){return this.value},M.prototype.compareTo=function(t){return this.value<t?-1:this.value>t?1:0},M.isNaN=function(t){return Number.isNaN(t)};var A=function(){};A.isWhitespace=function(t){return t<=32&&t>=0||127===t},A.toUpperCase=function(t){return t.toUpperCase()};var F=function t(){if(this._hi=0,this._lo=0,0===arguments.length)this.init(0);else if(1===arguments.length){if("number"==typeof arguments[0]){var e=arguments[0];this.init(e)}else if(arguments[0]instanceof t){var n=arguments[0];this.init(n)}else if("string"==typeof arguments[0]){var i=arguments[0];t.call(this,t.parse(i))}}else if(2===arguments.length){var r=arguments[0],o=arguments[1];this.init(r,o)}},G={PI:{configurable:!0},TWO_PI:{configurable:!0},PI_2:{configurable:!0},E:{configurable:!0},NaN:{configurable:!0},EPS:{configurable:!0},SPLIT:{configurable:!0},MAX_PRINT_DIGITS:{configurable:!0},TEN:{configurable:!0},ONE:{configurable:!0},SCI_NOT_EXPONENT_CHAR:{configurable:!0},SCI_NOT_ZERO:{configurable:!0}};F.prototype.le=function(t){return(this._hi<t._hi||this._hi===t._hi)&&this._lo<=t._lo},F.prototype.extractSignificantDigits=function(t,e){var n=this.abs(),i=F.magnitude(n._hi),r=F.TEN.pow(i);(n=n.divide(r)).gt(F.TEN)?(n=n.divide(F.TEN),i+=1):n.lt(F.ONE)&&(n=n.multiply(F.TEN),i-=1);for(var o=i+1,s=new D,a=F.MAX_PRINT_DIGITS-1,u=0;u<=a;u++){t&&u===o&&s.append(".");var l=Math.trunc(n._hi);if(l<0)break;var c=!1,p=0;l>9?(c=!0,p="9"):p="0"+l,s.append(p),n=n.subtract(F.valueOf(l)).multiply(F.TEN),c&&n.selfAdd(F.TEN);var h=!0,f=F.magnitude(n._hi);if(f<0&&Math.abs(f)>=a-u&&(h=!1),!h)break}return e[0]=i,s.toString()},F.prototype.sqr=function(){return this.multiply(this)},F.prototype.doubleValue=function(){return this._hi+this._lo},F.prototype.subtract=function(){if(arguments[0]instanceof F){var t=arguments[0];return this.add(t.negate())}if("number"==typeof arguments[0]){var e=arguments[0];return this.add(-e)}},F.prototype.equals=function(){if(1===arguments.length){var t=arguments[0];return this._hi===t._hi&&this._lo===t._lo}},F.prototype.isZero=function(){return 0===this._hi&&0===this._lo},F.prototype.selfSubtract=function(){if(arguments[0]instanceof F){var t=arguments[0];return this.isNaN()?this:this.selfAdd(-t._hi,-t._lo)}if("number"==typeof arguments[0]){var e=arguments[0];return this.isNaN()?this:this.selfAdd(-e,0)}},F.prototype.getSpecialNumberString=function(){return this.isZero()?"0.0":this.isNaN()?"NaN ":null},F.prototype.min=function(t){return this.le(t)?this:t},F.prototype.selfDivide=function(){if(1===arguments.length){if(arguments[0]instanceof F){var t=arguments[0];return this.selfDivide(t._hi,t._lo)}if("number"==typeof arguments[0]){var e=arguments[0];return this.selfDivide(e,0)}}else if(2===arguments.length){var n=arguments[0],i=arguments[1],r=null,o=null,s=null,a=null,u=null,l=null,c=null,p=null;return u=this._hi/n,l=F.SPLIT*u,r=l-u,p=F.SPLIT*n,r=l-r,o=u-r,s=p-n,c=u*n,s=p-s,a=n-s,p=r*s-c+r*a+o*s+o*a,l=(this._hi-c-p+this._lo-u*i)/n,p=u+l,this._hi=p,this._lo=u-p+l,this}},F.prototype.dump=function(){return"DD<"+this._hi+", "+this._lo+">"},F.prototype.divide=function(){if(arguments[0]instanceof F){var t=arguments[0],e=null,n=null,i=null,r=null,o=null,s=null,a=null,u=null;n=(o=this._hi/t._hi)-(e=(s=F.SPLIT*o)-(e=s-o)),u=e*(i=(u=F.SPLIT*t._hi)-(i=u-t._hi))-(a=o*t._hi)+e*(r=t._hi-i)+n*i+n*r,s=(this._hi-a-u+this._lo-o*t._lo)/t._hi;return new F(u=o+s,o-u+s)}if("number"==typeof arguments[0]){var l=arguments[0];return v.isNaN(l)?F.createNaN():F.copy(this).selfDivide(l,0)}},F.prototype.ge=function(t){return(this._hi>t._hi||this._hi===t._hi)&&this._lo>=t._lo},F.prototype.pow=function(t){if(0===t)return F.valueOf(1);var e=new F(this),n=F.valueOf(1),i=Math.abs(t);if(i>1)for(;i>0;)i%2==1&&n.selfMultiply(e),(i/=2)>0&&(e=e.sqr());else n=e;return t<0?n.reciprocal():n},F.prototype.ceil=function(){if(this.isNaN())return F.NaN;var t=Math.ceil(this._hi),e=0;return t===this._hi&&(e=Math.ceil(this._lo)),new F(t,e)},F.prototype.compareTo=function(t){var e=t;return this._hi<e._hi?-1:this._hi>e._hi?1:this._lo<e._lo?-1:this._lo>e._lo?1:0},F.prototype.rint=function(){if(this.isNaN())return this;return this.add(.5).floor()},F.prototype.setValue=function(){if(arguments[0]instanceof F){var t=arguments[0];return this.init(t),this}if("number"==typeof arguments[0]){var e=arguments[0];return this.init(e),this}},F.prototype.max=function(t){return this.ge(t)?this:t},F.prototype.sqrt=function(){if(this.isZero())return F.valueOf(0);if(this.isNegative())return F.NaN;var t=1/Math.sqrt(this._hi),e=this._hi*t,n=F.valueOf(e),i=this.subtract(n.sqr())._hi*(.5*t);return n.add(i)},F.prototype.selfAdd=function(){if(1===arguments.length){if(arguments[0]instanceof F){var t=arguments[0];return this.selfAdd(t._hi,t._lo)}if("number"==typeof arguments[0]){var e=arguments[0],n=null,i=null,r=null,o=null,s=null,a=null;return r=this._hi+e,s=r-this._hi,o=r-s,o=e-s+(this._hi-o),a=o+this._lo,n=r+a,i=a+(r-n),this._hi=n+i,this._lo=i+(n-this._hi),this}}else if(2===arguments.length){var u=arguments[0],l=arguments[1],c=null,p=null,h=null,f=null,g=null,d=null,y=null;f=this._hi+u,p=this._lo+l,g=f-(d=f-this._hi),h=p-(y=p-this._lo);var _=(c=f+(d=(g=u-d+(this._hi-g))+p))+(d=(h=l-y+(this._lo-h))+(d+(f-c))),m=d+(c-_);return this._hi=_,this._lo=m,this}},F.prototype.selfMultiply=function(){if(1===arguments.length){if(arguments[0]instanceof F){var t=arguments[0];return this.selfMultiply(t._hi,t._lo)}if("number"==typeof arguments[0]){var e=arguments[0];return this.selfMultiply(e,0)}}else if(2===arguments.length){var n=arguments[0],i=arguments[1],r=null,o=null,s=null,a=null,u=null,l=null;r=(u=F.SPLIT*this._hi)-this._hi,l=F.SPLIT*n,r=u-r,o=this._hi-r,s=l-n;var c=(u=this._hi*n)+(l=r*(s=l-s)-u+r*(a=n-s)+o*s+o*a+(this._hi*i+this._lo*n)),p=l+(r=u-c);return this._hi=c,this._lo=p,this}},F.prototype.selfSqr=function(){return this.selfMultiply(this)},F.prototype.floor=function(){if(this.isNaN())return F.NaN;var t=Math.floor(this._hi),e=0;return t===this._hi&&(e=Math.floor(this._lo)),new F(t,e)},F.prototype.negate=function(){return this.isNaN()?this:new F(-this._hi,-this._lo)},F.prototype.clone=function(){},F.prototype.multiply=function(){if(arguments[0]instanceof F){var t=arguments[0];return t.isNaN()?F.createNaN():F.copy(this).selfMultiply(t)}if("number"==typeof arguments[0]){var e=arguments[0];return v.isNaN(e)?F.createNaN():F.copy(this).selfMultiply(e,0)}},F.prototype.isNaN=function(){return v.isNaN(this._hi)},F.prototype.intValue=function(){return Math.trunc(this._hi)},F.prototype.toString=function(){var t=F.magnitude(this._hi);return t>=-3&&t<=20?this.toStandardNotation():this.toSciNotation()},F.prototype.toStandardNotation=function(){var t=this.getSpecialNumberString();if(null!==t)return t;var e=new Array(1).fill(null),n=this.extractSignificantDigits(!0,e),i=e[0]+1,r=n;if("."===n.charAt(0))r="0"+n;else if(i<0)r="0."+F.stringOfChar("0",-i)+n;else if(-1===n.indexOf(".")){var o=i-n.length;r=n+F.stringOfChar("0",o)+".0"}return this.isNegative()?"-"+r:r},F.prototype.reciprocal=function(){var t=null,e=null,n=null,i=null,r=null,o=null,s=null,a=null;e=(r=1/this._hi)-(t=(o=F.SPLIT*r)-(t=o-r)),n=(a=F.SPLIT*this._hi)-this._hi;var u=r+(o=(1-(s=r*this._hi)-(a=t*(n=a-n)-s+t*(i=this._hi-n)+e*n+e*i)-r*this._lo)/this._hi);return new F(u,r-u+o)},F.prototype.toSciNotation=function(){if(this.isZero())return F.SCI_NOT_ZERO;var t=this.getSpecialNumberString();if(null!==t)return t;var e=new Array(1).fill(null),n=this.extractSignificantDigits(!1,e),i=F.SCI_NOT_EXPONENT_CHAR+e[0];if("0"===n.charAt(0))throw new Error("Found leading zero: "+n);var r="";n.length>1&&(r=n.substring(1));var o=n.charAt(0)+"."+r;return this.isNegative()?"-"+o+i:o+i},F.prototype.abs=function(){return this.isNaN()?F.NaN:this.isNegative()?this.negate():new F(this)},F.prototype.isPositive=function(){return(this._hi>0||0===this._hi)&&this._lo>0},F.prototype.lt=function(t){return(this._hi<t._hi||this._hi===t._hi)&&this._lo<t._lo},F.prototype.add=function(){if(arguments[0]instanceof F){var t=arguments[0];return F.copy(this).selfAdd(t)}if("number"==typeof arguments[0]){var e=arguments[0];return F.copy(this).selfAdd(e)}},F.prototype.init=function(){if(1===arguments.length){if("number"==typeof arguments[0]){var t=arguments[0];this._hi=t,this._lo=0}else if(arguments[0]instanceof F){var e=arguments[0];this._hi=e._hi,this._lo=e._lo}}else if(2===arguments.length){var n=arguments[0],i=arguments[1];this._hi=n,this._lo=i}},F.prototype.gt=function(t){return(this._hi>t._hi||this._hi===t._hi)&&this._lo>t._lo},F.prototype.isNegative=function(){return(this._hi<0||0===this._hi)&&this._lo<0},F.prototype.trunc=function(){return this.isNaN()?F.NaN:this.isPositive()?this.floor():this.ceil()},F.prototype.signum=function(){return this._hi>0?1:this._hi<0?-1:this._lo>0?1:this._lo<0?-1:0},F.prototype.interfaces_=function(){return[e,E,x]},F.prototype.getClass=function(){return F},F.sqr=function(t){return F.valueOf(t).selfMultiply(t)},F.valueOf=function(){if("string"==typeof arguments[0]){var t=arguments[0];return F.parse(t)}if("number"==typeof arguments[0]){var e=arguments[0];return new F(e)}},F.sqrt=function(t){return F.valueOf(t).sqrt()},F.parse=function(t){for(var e=0,n=t.length;A.isWhitespace(t.charAt(e));)e++;var i=!1;if(e<n){var r=t.charAt(e);"-"!==r&&"+"!==r||(e++,"-"===r&&(i=!0))}for(var o=new F,s=0,a=0,u=0;!(e>=n);){var l=t.charAt(e);if(e++,A.isDigit(l)){var c=l-"0";o.selfMultiply(F.TEN),o.selfAdd(c),s++}else{if("."!==l){if("e"===l||"E"===l){var p=t.substring(e);try{u=M.parseInt(p)}catch(e){throw e instanceof Error?new Error("Invalid exponent "+p+" in string "+t):e}break}throw new Error("Unexpected character '"+l+"' at position "+e+" in string "+t)}a=s}}var h=o,f=s-a-u;if(0===f)h=o;else if(f>0){var g=F.TEN.pow(f);h=o.divide(g)}else if(f<0){var d=F.TEN.pow(-f);h=o.multiply(d)}return i?h.negate():h},F.createNaN=function(){return new F(v.NaN,v.NaN)},F.copy=function(t){return new F(t)},F.magnitude=function(t){var e=Math.abs(t),n=Math.log(e)/Math.log(10),i=Math.trunc(Math.floor(n));return 10*Math.pow(10,i)<=e&&(i+=1),i},F.stringOfChar=function(t,e){for(var n=new D,i=0;i<e;i++)n.append(t);return n.toString()},G.PI.get=function(){return new F(3.141592653589793,1.2246467991473532e-16)},G.TWO_PI.get=function(){return new F(6.283185307179586,2.4492935982947064e-16)},G.PI_2.get=function(){return new F(1.5707963267948966,6.123233995736766e-17)},G.E.get=function(){return new F(2.718281828459045,1.4456468917292502e-16)},G.NaN.get=function(){return new F(v.NaN,v.NaN)},G.EPS.get=function(){return 1.23259516440783e-32},G.SPLIT.get=function(){return 134217729},G.MAX_PRINT_DIGITS.get=function(){return 32},G.TEN.get=function(){return F.valueOf(10)},G.ONE.get=function(){return F.valueOf(1)},G.SCI_NOT_EXPONENT_CHAR.get=function(){return"E"},G.SCI_NOT_ZERO.get=function(){return"0.0E0"},Object.defineProperties(F,G);var q=function(){},B={DP_SAFE_EPSILON:{configurable:!0}};q.prototype.interfaces_=function(){return[]},q.prototype.getClass=function(){return q},q.orientationIndex=function(t,e,n){var i=q.orientationIndexFilter(t,e,n);if(i<=1)return i;var r=F.valueOf(e.x).selfAdd(-t.x),o=F.valueOf(e.y).selfAdd(-t.y),s=F.valueOf(n.x).selfAdd(-e.x),a=F.valueOf(n.y).selfAdd(-e.y);return r.selfMultiply(a).selfSubtract(o.selfMultiply(s)).signum()},q.signOfDet2x2=function(t,e,n,i){return t.multiply(i).selfSubtract(e.multiply(n)).signum()},q.intersection=function(t,e,n,i){var r=F.valueOf(i.y).selfSubtract(n.y).selfMultiply(F.valueOf(e.x).selfSubtract(t.x)),o=F.valueOf(i.x).selfSubtract(n.x).selfMultiply(F.valueOf(e.y).selfSubtract(t.y)),s=r.subtract(o),a=F.valueOf(i.x).selfSubtract(n.x).selfMultiply(F.valueOf(t.y).selfSubtract(n.y)),u=F.valueOf(i.y).selfSubtract(n.y).selfMultiply(F.valueOf(t.x).selfSubtract(n.x)),l=a.subtract(u).selfDivide(s).doubleValue(),c=F.valueOf(t.x).selfAdd(F.valueOf(e.x).selfSubtract(t.x).selfMultiply(l)).doubleValue(),p=F.valueOf(e.x).selfSubtract(t.x).selfMultiply(F.valueOf(t.y).selfSubtract(n.y)),h=F.valueOf(e.y).selfSubtract(t.y).selfMultiply(F.valueOf(t.x).selfSubtract(n.x)),f=p.subtract(h).selfDivide(s).doubleValue(),g=F.valueOf(n.y).selfAdd(F.valueOf(i.y).selfSubtract(n.y).selfMultiply(f)).doubleValue();return new C(c,g)},q.orientationIndexFilter=function(t,e,n){var i=null,r=(t.x-n.x)*(e.y-n.y),o=(t.y-n.y)*(e.x-n.x),s=r-o;if(r>0){if(o<=0)return q.signum(s);i=r+o}else{if(!(r<0))return q.signum(s);if(o>=0)return q.signum(s);i=-r-o}var a=q.DP_SAFE_EPSILON*i;return s>=a||-s>=a?q.signum(s):2},q.signum=function(t){return t>0?1:t<0?-1:0},B.DP_SAFE_EPSILON.get=function(){return 1e-15},Object.defineProperties(q,B);var V=function(){},U={X:{configurable:!0},Y:{configurable:!0},Z:{configurable:!0},M:{configurable:!0}};U.X.get=function(){return 0},U.Y.get=function(){return 1},U.Z.get=function(){return 2},U.M.get=function(){return 3},V.prototype.setOrdinate=function(t,e,n){},V.prototype.size=function(){},V.prototype.getOrdinate=function(t,e){},V.prototype.getCoordinate=function(){},V.prototype.getCoordinateCopy=function(t){},V.prototype.getDimension=function(){},V.prototype.getX=function(t){},V.prototype.clone=function(){},V.prototype.expandEnvelope=function(t){},V.prototype.copy=function(){},V.prototype.getY=function(t){},V.prototype.toCoordinateArray=function(){},V.prototype.interfaces_=function(){return[x]},V.prototype.getClass=function(){return V},Object.defineProperties(V,U);var z=function(){},X=function(t){function e(){t.call(this,"Projective point not representable on the Cartesian plane.")}return t&&(e.__proto__=t),e.prototype=Object.create(t&&t.prototype),e.prototype.constructor=e,e.prototype.interfaces_=function(){return[]},e.prototype.getClass=function(){return e},e}(z),Y=function(){};Y.arraycopy=function(t,e,n,i,r){for(var o=0,s=e;s<e+r;s++)n[i+o]=t[s],o++},Y.getProperty=function(t){return{"line.separator":"\n"}[t]};var k=function t(){if(this.x=null,this.y=null,this.w=null,0===arguments.length)this.x=0,this.y=0,this.w=1;else if(1===arguments.length){var e=arguments[0];this.x=e.x,this.y=e.y,this.w=1}else if(2===arguments.length){if("number"==typeof arguments[0]&&"number"==typeof arguments[1]){var n=arguments[0],i=arguments[1];this.x=n,this.y=i,this.w=1}else if(arguments[0]instanceof t&&arguments[1]instanceof t){var r=arguments[0],o=arguments[1];this.x=r.y*o.w-o.y*r.w,this.y=o.x*r.w-r.x*o.w,this.w=r.x*o.y-o.x*r.y}else if(arguments[0]instanceof C&&arguments[1]instanceof C){var s=arguments[0],a=arguments[1];this.x=s.y-a.y,this.y=a.x-s.x,this.w=s.x*a.y-a.x*s.y}}else if(3===arguments.length){var u=arguments[0],l=arguments[1],c=arguments[2];this.x=u,this.y=l,this.w=c}else if(4===arguments.length){var p=arguments[0],h=arguments[1],f=arguments[2],g=arguments[3],d=p.y-h.y,y=h.x-p.x,_=p.x*h.y-h.x*p.y,m=f.y-g.y,v=g.x-f.x,I=f.x*g.y-g.x*f.y;this.x=y*I-v*_,this.y=m*_-d*I,this.w=d*v-m*y}};k.prototype.getY=function(){var t=this.y/this.w;if(v.isNaN(t)||v.isInfinite(t))throw new X;return t},k.prototype.getX=function(){var t=this.x/this.w;if(v.isNaN(t)||v.isInfinite(t))throw new X;return t},k.prototype.getCoordinate=function(){var t=new C;return t.x=this.getX(),t.y=this.getY(),t},k.prototype.interfaces_=function(){return[]},k.prototype.getClass=function(){return k},k.intersection=function(t,e,n,i){var r=t.y-e.y,o=e.x-t.x,s=t.x*e.y-e.x*t.y,a=n.y-i.y,u=i.x-n.x,l=n.x*i.y-i.x*n.y,c=r*u-a*o,p=(o*l-u*s)/c,h=(a*s-r*l)/c;if(v.isNaN(p)||v.isInfinite(p)||v.isNaN(h)||v.isInfinite(h))throw new X;return new C(p,h)};var j=function t(){if(this._minx=null,this._maxx=null,this._miny=null,this._maxy=null,0===arguments.length)this.init();else if(1===arguments.length){if(arguments[0]instanceof C){var e=arguments[0];this.init(e.x,e.x,e.y,e.y)}else if(arguments[0]instanceof t){var n=arguments[0];this.init(n)}}else if(2===arguments.length){var i=arguments[0],r=arguments[1];this.init(i.x,r.x,i.y,r.y)}else if(4===arguments.length){var o=arguments[0],s=arguments[1],a=arguments[2],u=arguments[3];this.init(o,s,a,u)}},H={serialVersionUID:{configurable:!0}};j.prototype.getArea=function(){return this.getWidth()*this.getHeight()},j.prototype.equals=function(t){if(!(t instanceof j))return!1;var e=t;return this.isNull()?e.isNull():this._maxx===e.getMaxX()&&this._maxy===e.getMaxY()&&this._minx===e.getMinX()&&this._miny===e.getMinY()},j.prototype.intersection=function(t){if(this.isNull()||t.isNull()||!this.intersects(t))return new j;var e=this._minx>t._minx?this._minx:t._minx,n=this._miny>t._miny?this._miny:t._miny,i=this._maxx<t._maxx?this._maxx:t._maxx,r=this._maxy<t._maxy?this._maxy:t._maxy;return new j(e,i,n,r)},j.prototype.isNull=function(){return this._maxx<this._minx},j.prototype.getMaxX=function(){return this._maxx},j.prototype.covers=function(){if(1===arguments.length){if(arguments[0]instanceof C){var t=arguments[0];return this.covers(t.x,t.y)}if(arguments[0]instanceof j){var e=arguments[0];return!this.isNull()&&!e.isNull()&&(e.getMinX()>=this._minx&&e.getMaxX()<=this._maxx&&e.getMinY()>=this._miny&&e.getMaxY()<=this._maxy)}}else if(2===arguments.length){var n=arguments[0],i=arguments[1];return!this.isNull()&&(n>=this._minx&&n<=this._maxx&&i>=this._miny&&i<=this._maxy)}},j.prototype.intersects=function(){if(1===arguments.length){if(arguments[0]instanceof j){var t=arguments[0];return!this.isNull()&&!t.isNull()&&!(t._minx>this._maxx||t._maxx<this._minx||t._miny>this._maxy||t._maxy<this._miny)}if(arguments[0]instanceof C){var e=arguments[0];return this.intersects(e.x,e.y)}}else if(2===arguments.length){var n=arguments[0],i=arguments[1];return!this.isNull()&&!(n>this._maxx||n<this._minx||i>this._maxy||i<this._miny)}},j.prototype.getMinY=function(){return this._miny},j.prototype.getMinX=function(){return this._minx},j.prototype.expandToInclude=function(){if(1===arguments.length){if(arguments[0]instanceof C){var t=arguments[0];this.expandToInclude(t.x,t.y)}else if(arguments[0]instanceof j){var e=arguments[0];if(e.isNull())return null;this.isNull()?(this._minx=e.getMinX(),this._maxx=e.getMaxX(),this._miny=e.getMinY(),this._maxy=e.getMaxY()):(e._minx<this._minx&&(this._minx=e._minx),e._maxx>this._maxx&&(this._maxx=e._maxx),e._miny<this._miny&&(this._miny=e._miny),e._maxy>this._maxy&&(this._maxy=e._maxy))}}else if(2===arguments.length){var n=arguments[0],i=arguments[1];this.isNull()?(this._minx=n,this._maxx=n,this._miny=i,this._maxy=i):(n<this._minx&&(this._minx=n),n>this._maxx&&(this._maxx=n),i<this._miny&&(this._miny=i),i>this._maxy&&(this._maxy=i))}},j.prototype.minExtent=function(){if(this.isNull())return 0;var t=this.getWidth(),e=this.getHeight();return t<e?t:e},j.prototype.getWidth=function(){return this.isNull()?0:this._maxx-this._minx},j.prototype.compareTo=function(t){var e=t;return this.isNull()?e.isNull()?0:-1:e.isNull()?1:this._minx<e._minx?-1:this._minx>e._minx?1:this._miny<e._miny?-1:this._miny>e._miny?1:this._maxx<e._maxx?-1:this._maxx>e._maxx?1:this._maxy<e._maxy?-1:this._maxy>e._maxy?1:0},j.prototype.translate=function(t,e){if(this.isNull())return null;this.init(this.getMinX()+t,this.getMaxX()+t,this.getMinY()+e,this.getMaxY()+e)},j.prototype.toString=function(){return"Env["+this._minx+" : "+this._maxx+", "+this._miny+" : "+this._maxy+"]"},j.prototype.setToNull=function(){this._minx=0,this._maxx=-1,this._miny=0,this._maxy=-1},j.prototype.getHeight=function(){return this.isNull()?0:this._maxy-this._miny},j.prototype.maxExtent=function(){if(this.isNull())return 0;var t=this.getWidth(),e=this.getHeight();return t>e?t:e},j.prototype.expandBy=function(){if(1===arguments.length){var t=arguments[0];this.expandBy(t,t)}else if(2===arguments.length){var e=arguments[0],n=arguments[1];if(this.isNull())return null;this._minx-=e,this._maxx+=e,this._miny-=n,this._maxy+=n,(this._minx>this._maxx||this._miny>this._maxy)&&this.setToNull()}},j.prototype.contains=function(){if(1===arguments.length){if(arguments[0]instanceof j){var t=arguments[0];return this.covers(t)}if(arguments[0]instanceof C){var e=arguments[0];return this.covers(e)}}else if(2===arguments.length){var n=arguments[0],i=arguments[1];return this.covers(n,i)}},j.prototype.centre=function(){return this.isNull()?null:new C((this.getMinX()+this.getMaxX())/2,(this.getMinY()+this.getMaxY())/2)},j.prototype.init=function(){if(0===arguments.length)this.setToNull();else if(1===arguments.length){if(arguments[0]instanceof C){var t=arguments[0];this.init(t.x,t.x,t.y,t.y)}else if(arguments[0]instanceof j){var e=arguments[0];this._minx=e._minx,this._maxx=e._maxx,this._miny=e._miny,this._maxy=e._maxy}}else if(2===arguments.length){var n=arguments[0],i=arguments[1];this.init(n.x,i.x,n.y,i.y)}else if(4===arguments.length){var r=arguments[0],o=arguments[1],s=arguments[2],a=arguments[3];r<o?(this._minx=r,this._maxx=o):(this._minx=o,this._maxx=r),s<a?(this._miny=s,this._maxy=a):(this._miny=a,this._maxy=s)}},j.prototype.getMaxY=function(){return this._maxy},j.prototype.distance=function(t){if(this.intersects(t))return 0;var e=0;this._maxx<t._minx?e=t._minx-this._maxx:this._minx>t._maxx&&(e=this._minx-t._maxx);var n=0;return this._maxy<t._miny?n=t._miny-this._maxy:this._miny>t._maxy&&(n=this._miny-t._maxy),0===e?n:0===n?e:Math.sqrt(e*e+n*n)},j.prototype.hashCode=function(){var t=17;return t=37*t+C.hashCode(this._minx),t=37*t+C.hashCode(this._maxx),t=37*t+C.hashCode(this._miny),t=37*t+C.hashCode(this._maxy)},j.prototype.interfaces_=function(){return[E,e]},j.prototype.getClass=function(){return j},j.intersects=function(){if(3===arguments.length){var t=arguments[0],e=arguments[1],n=arguments[2];return n.x>=(t.x<e.x?t.x:e.x)&&n.x<=(t.x>e.x?t.x:e.x)&&n.y>=(t.y<e.y?t.y:e.y)&&n.y<=(t.y>e.y?t.y:e.y)}if(4===arguments.length){var i=arguments[0],r=arguments[1],o=arguments[2],s=arguments[3],a=Math.min(o.x,s.x),u=Math.max(o.x,s.x),l=Math.min(i.x,r.x),c=Math.max(i.x,r.x);return!(l>u)&&(!(c<a)&&(a=Math.min(o.y,s.y),u=Math.max(o.y,s.y),l=Math.min(i.y,r.y),c=Math.max(i.y,r.y),!(l>u)&&!(c<a)))}},H.serialVersionUID.get=function(){return 0x51845cd552189800},Object.defineProperties(j,H);var W={typeStr:/^\s*(\w+)\s*\(\s*(.*)\s*\)\s*$/,emptyTypeStr:/^\s*(\w+)\s*EMPTY\s*$/,spaces:/\s+/,parenComma:/\)\s*,\s*\(/,doubleParenComma:/\)\s*\)\s*,\s*\(\s*\(/,trimParens:/^\s*\(?(.*?)\)?\s*$/},K=function(t){this.geometryFactory=t||new _e};K.prototype.read=function(t){var e,n,i;t=t.replace(/[\n\r]/g," ");var r=W.typeStr.exec(t);if(-1!==t.search("EMPTY")&&((r=W.emptyTypeStr.exec(t))[2]=void 0),r&&(n=r[1].toLowerCase(),i=r[2],Q[n]&&(e=Q[n].apply(this,[i]))),void 0===e)throw new Error("Could not parse WKT "+t);return e},K.prototype.write=function(t){return this.extractGeometry(t)},K.prototype.extractGeometry=function(t){var e=t.getGeometryType().toLowerCase();if(!J[e])return null;var n=e.toUpperCase();return t.isEmpty()?n+" EMPTY":n+"("+J[e].apply(this,[t])+")"};var J={coordinate:function(t){return t.x+" "+t.y},point:function(t){return J.coordinate.call(this,t._coordinates._coordinates[0])},multipoint:function(t){for(var e=[],n=0,i=t._geometries.length;n<i;++n)e.push("("+J.point.apply(this,[t._geometries[n]])+")");return e.join(",")},linestring:function(t){for(var e=[],n=0,i=t._points._coordinates.length;n<i;++n)e.push(J.coordinate.apply(this,[t._points._coordinates[n]]));return e.join(",")},linearring:function(t){for(var e=[],n=0,i=t._points._coordinates.length;n<i;++n)e.push(J.coordinate.apply(this,[t._points._coordinates[n]]));return e.join(",")},multilinestring:function(t){for(var e=[],n=0,i=t._geometries.length;n<i;++n)e.push("("+J.linestring.apply(this,[t._geometries[n]])+")");return e.join(",")},polygon:function(t){var e=[];e.push("("+J.linestring.apply(this,[t._shell])+")");for(var n=0,i=t._holes.length;n<i;++n)e.push("("+J.linestring.apply(this,[t._holes[n]])+")");return e.join(",")},multipolygon:function(t){for(var e=[],n=0,i=t._geometries.length;n<i;++n)e.push("("+J.polygon.apply(this,[t._geometries[n]])+")");return e.join(",")},geometrycollection:function(t){for(var e=[],n=0,i=t._geometries.length;n<i;++n)e.push(this.extractGeometry(t._geometries[n]));return e.join(",")}},Q={point:function(t){if(void 0===t)return this.geometryFactory.createPoint();var e=t.trim().split(W.spaces);return this.geometryFactory.createPoint(new C(Number.parseFloat(e[0]),Number.parseFloat(e[1])))},multipoint:function(t){if(void 0===t)return this.geometryFactory.createMultiPoint();for(var e,n=t.trim().split(","),i=[],r=0,o=n.length;r<o;++r)e=n[r].replace(W.trimParens,"$1"),i.push(Q.point.apply(this,[e]));return this.geometryFactory.createMultiPoint(i)},linestring:function(t){if(void 0===t)return this.geometryFactory.createLineString();for(var e,n=t.trim().split(","),i=[],r=0,o=n.length;r<o;++r)e=n[r].trim().split(W.spaces),i.push(new C(Number.parseFloat(e[0]),Number.parseFloat(e[1])));return this.geometryFactory.createLineString(i)},linearring:function(t){if(void 0===t)return this.geometryFactory.createLinearRing();for(var e,n=t.trim().split(","),i=[],r=0,o=n.length;r<o;++r)e=n[r].trim().split(W.spaces),i.push(new C(Number.parseFloat(e[0]),Number.parseFloat(e[1])));return this.geometryFactory.createLinearRing(i)},multilinestring:function(t){if(void 0===t)return this.geometryFactory.createMultiLineString();for(var e,n=t.trim().split(W.parenComma),i=[],r=0,o=n.length;r<o;++r)e=n[r].replace(W.trimParens,"$1"),i.push(Q.linestring.apply(this,[e]));return this.geometryFactory.createMultiLineString(i)},polygon:function(t){if(void 0===t)return this.geometryFactory.createPolygon();for(var e,n,i,r,o=t.trim().split(W.parenComma),s=[],a=0,u=o.length;a<u;++a)e=o[a].replace(W.trimParens,"$1"),n=Q.linestring.apply(this,[e]),i=this.geometryFactory.createLinearRing(n._points),0===a?r=i:s.push(i);return this.geometryFactory.createPolygon(r,s)},multipolygon:function(t){if(void 0===t)return this.geometryFactory.createMultiPolygon();for(var e,n=t.trim().split(W.doubleParenComma),i=[],r=0,o=n.length;r<o;++r)e=n[r].replace(W.trimParens,"$1"),i.push(Q.polygon.apply(this,[e]));return this.geometryFactory.createMultiPolygon(i)},geometrycollection:function(t){if(void 0===t)return this.geometryFactory.createGeometryCollection();for(var e=(t=t.replace(/,\s*([A-Za-z])/g,"|$1")).trim().split("|"),n=[],i=0,r=e.length;i<r;++i)n.push(this.read(e[i]));return this.geometryFactory.createGeometryCollection(n)}},Z=function(t){this.parser=new K(t)};Z.prototype.write=function(t){return this.parser.write(t)},Z.toLineString=function(t,e){if(2!==arguments.length)throw new Error("Not implemented");return"LINESTRING ( "+t.x+" "+t.y+", "+e.x+" "+e.y+" )"};var $=function(t){function e(e){t.call(this,e),this.name="RuntimeException",this.message=e,this.stack=(new t).stack}return t&&(e.__proto__=t),e.prototype=Object.create(t&&t.prototype),e.prototype.constructor=e,e}(Error),tt=function(t){function e(){if(t.call(this),0===arguments.length)t.call(this);else if(1===arguments.length){var e=arguments[0];t.call(this,e)}}return t&&(e.__proto__=t),e.prototype=Object.create(t&&t.prototype),e.prototype.constructor=e,e.prototype.interfaces_=function(){return[]},e.prototype.getClass=function(){return e},e}($),et=function(){};et.prototype.interfaces_=function(){return[]},et.prototype.getClass=function(){return et},et.shouldNeverReachHere=function(){if(0===arguments.length)et.shouldNeverReachHere(null);else if(1===arguments.length){var t=arguments[0];throw new tt("Should never reach here"+(null!==t?": "+t:""))}},et.isTrue=function(){var t,e;if(1===arguments.length)t=arguments[0],et.isTrue(t,null);else if(2===arguments.length&&(t=arguments[0],e=arguments[1],!t))throw null===e?new tt:new tt(e)},et.equals=function(){var t,e,n;if(2===arguments.length)t=arguments[0],e=arguments[1],et.equals(t,e,null);else if(3===arguments.length&&(t=arguments[0],e=arguments[1],n=arguments[2],!e.equals(t)))throw new tt("Expected "+t+" but encountered "+e+(null!==n?": "+n:""))};var nt=function(){this._result=null,this._inputLines=Array(2).fill().map(function(){return Array(2)}),this._intPt=new Array(2).fill(null),this._intLineIndex=null,this._isProper=null,this._pa=null,this._pb=null,this._precisionModel=null,this._intPt[0]=new C,this._intPt[1]=new C,this._pa=this._intPt[0],this._pb=this._intPt[1],this._result=0},it={DONT_INTERSECT:{configurable:!0},DO_INTERSECT:{configurable:!0},COLLINEAR:{configurable:!0},NO_INTERSECTION:{configurable:!0},POINT_INTERSECTION:{configurable:!0},COLLINEAR_INTERSECTION:{configurable:!0}};nt.prototype.getIndexAlongSegment=function(t,e){return this.computeIntLineIndex(),this._intLineIndex[t][e]},nt.prototype.getTopologySummary=function(){var t=new D;return this.isEndPoint()&&t.append(" endpoint"),this._isProper&&t.append(" proper"),this.isCollinear()&&t.append(" collinear"),t.toString()},nt.prototype.computeIntersection=function(t,e,n,i){this._inputLines[0][0]=t,this._inputLines[0][1]=e,this._inputLines[1][0]=n,this._inputLines[1][1]=i,this._result=this.computeIntersect(t,e,n,i)},nt.prototype.getIntersectionNum=function(){return this._result},nt.prototype.computeIntLineIndex=function(){if(0===arguments.length)null===this._intLineIndex&&(this._intLineIndex=Array(2).fill().map(function(){return Array(2)}),this.computeIntLineIndex(0),this.computeIntLineIndex(1));else if(1===arguments.length){var t=arguments[0];this.getEdgeDistance(t,0)>this.getEdgeDistance(t,1)?(this._intLineIndex[t][0]=0,this._intLineIndex[t][1]=1):(this._intLineIndex[t][0]=1,this._intLineIndex[t][1]=0)}},nt.prototype.isProper=function(){return this.hasIntersection()&&this._isProper},nt.prototype.setPrecisionModel=function(t){this._precisionModel=t},nt.prototype.isInteriorIntersection=function(){if(0===arguments.length)return!!this.isInteriorIntersection(0)||!!this.isInteriorIntersection(1);if(1===arguments.length){for(var t=arguments[0],e=0;e<this._result;e++)if(!this._intPt[e].equals2D(this._inputLines[t][0])&&!this._intPt[e].equals2D(this._inputLines[t][1]))return!0;return!1}},nt.prototype.getIntersection=function(t){return this._intPt[t]},nt.prototype.isEndPoint=function(){return this.hasIntersection()&&!this._isProper},nt.prototype.hasIntersection=function(){return this._result!==nt.NO_INTERSECTION},nt.prototype.getEdgeDistance=function(t,e){return nt.computeEdgeDistance(this._intPt[e],this._inputLines[t][0],this._inputLines[t][1])},nt.prototype.isCollinear=function(){return this._result===nt.COLLINEAR_INTERSECTION},nt.prototype.toString=function(){return Z.toLineString(this._inputLines[0][0],this._inputLines[0][1])+" - "+Z.toLineString(this._inputLines[1][0],this._inputLines[1][1])+this.getTopologySummary()},nt.prototype.getEndpoint=function(t,e){return this._inputLines[t][e]},nt.prototype.isIntersection=function(t){for(var e=0;e<this._result;e++)if(this._intPt[e].equals2D(t))return!0;return!1},nt.prototype.getIntersectionAlongSegment=function(t,e){return this.computeIntLineIndex(),this._intPt[this._intLineIndex[t][e]]},nt.prototype.interfaces_=function(){return[]},nt.prototype.getClass=function(){return nt},nt.computeEdgeDistance=function(t,e,n){var i=Math.abs(n.x-e.x),r=Math.abs(n.y-e.y),o=-1;if(t.equals(e))o=0;else if(t.equals(n))o=i>r?i:r;else{var s=Math.abs(t.x-e.x),a=Math.abs(t.y-e.y);0!==(o=i>r?s:a)||t.equals(e)||(o=Math.max(s,a))}return et.isTrue(!(0===o&&!t.equals(e)),"Bad distance calculation"),o},nt.nonRobustComputeEdgeDistance=function(t,e,n){var i=t.x-e.x,r=t.y-e.y,o=Math.sqrt(i*i+r*r);return et.isTrue(!(0===o&&!t.equals(e)),"Invalid distance calculation"),o},it.DONT_INTERSECT.get=function(){return 0},it.DO_INTERSECT.get=function(){return 1},it.COLLINEAR.get=function(){return 2},it.NO_INTERSECTION.get=function(){return 0},it.POINT_INTERSECTION.get=function(){return 1},it.COLLINEAR_INTERSECTION.get=function(){return 2},Object.defineProperties(nt,it);var rt=function(t){function e(){t.apply(this,arguments)}return t&&(e.__proto__=t),e.prototype=Object.create(t&&t.prototype),e.prototype.constructor=e,e.prototype.isInSegmentEnvelopes=function(t){var e=new j(this._inputLines[0][0],this._inputLines[0][1]),n=new j(this._inputLines[1][0],this._inputLines[1][1]);return e.contains(t)&&n.contains(t)},e.prototype.computeIntersection=function(){if(3!==arguments.length)return t.prototype.computeIntersection.apply(this,arguments);var e=arguments[0],n=arguments[1],i=arguments[2];if(this._isProper=!1,j.intersects(n,i,e)&&0===at.orientationIndex(n,i,e)&&0===at.orientationIndex(i,n,e))return this._isProper=!0,(e.equals(n)||e.equals(i))&&(this._isProper=!1),this._result=t.POINT_INTERSECTION,null;this._result=t.NO_INTERSECTION},e.prototype.normalizeToMinimum=function(t,e,n,i,r){r.x=this.smallestInAbsValue(t.x,e.x,n.x,i.x),r.y=this.smallestInAbsValue(t.y,e.y,n.y,i.y),t.x-=r.x,t.y-=r.y,e.x-=r.x,e.y-=r.y,n.x-=r.x,n.y-=r.y,i.x-=r.x,i.y-=r.y},e.prototype.safeHCoordinateIntersection=function(t,n,i,r){var o=null;try{o=k.intersection(t,n,i,r)}catch(s){if(!(s instanceof X))throw s;o=e.nearestEndpoint(t,n,i,r)}return o},e.prototype.intersection=function(t,n,i,r){var o=this.intersectionWithNormalization(t,n,i,r);return this.isInSegmentEnvelopes(o)||(o=new C(e.nearestEndpoint(t,n,i,r))),null!==this._precisionModel&&this._precisionModel.makePrecise(o),o},e.prototype.smallestInAbsValue=function(t,e,n,i){var r=t,o=Math.abs(r);return Math.abs(e)<o&&(r=e,o=Math.abs(e)),Math.abs(n)<o&&(r=n,o=Math.abs(n)),Math.abs(i)<o&&(r=i),r},e.prototype.checkDD=function(t,e,n,i,r){var o=q.intersection(t,e,n,i),s=this.isInSegmentEnvelopes(o);Y.out.println("DD in env = "+s+"  --------------------- "+o),r.distance(o)>1e-4&&Y.out.println("Distance = "+r.distance(o))},e.prototype.intersectionWithNormalization=function(t,e,n,i){var r=new C(t),o=new C(e),s=new C(n),a=new C(i),u=new C;this.normalizeToEnvCentre(r,o,s,a,u);var l=this.safeHCoordinateIntersection(r,o,s,a);return l.x+=u.x,l.y+=u.y,l},e.prototype.computeCollinearIntersection=function(e,n,i,r){var o=j.intersects(e,n,i),s=j.intersects(e,n,r),a=j.intersects(i,r,e),u=j.intersects(i,r,n);return o&&s?(this._intPt[0]=i,this._intPt[1]=r,t.COLLINEAR_INTERSECTION):a&&u?(this._intPt[0]=e,this._intPt[1]=n,t.COLLINEAR_INTERSECTION):o&&a?(this._intPt[0]=i,this._intPt[1]=e,!i.equals(e)||s||u?t.COLLINEAR_INTERSECTION:t.POINT_INTERSECTION):o&&u?(this._intPt[0]=i,this._intPt[1]=n,!i.equals(n)||s||a?t.COLLINEAR_INTERSECTION:t.POINT_INTERSECTION):s&&a?(this._intPt[0]=r,this._intPt[1]=e,!r.equals(e)||o||u?t.COLLINEAR_INTERSECTION:t.POINT_INTERSECTION):s&&u?(this._intPt[0]=r,this._intPt[1]=n,!r.equals(n)||o||a?t.COLLINEAR_INTERSECTION:t.POINT_INTERSECTION):t.NO_INTERSECTION},e.prototype.normalizeToEnvCentre=function(t,e,n,i,r){var o=t.x<e.x?t.x:e.x,s=t.y<e.y?t.y:e.y,a=t.x>e.x?t.x:e.x,u=t.y>e.y?t.y:e.y,l=n.x<i.x?n.x:i.x,c=n.y<i.y?n.y:i.y,p=n.x>i.x?n.x:i.x,h=n.y>i.y?n.y:i.y,f=((o>l?o:l)+(a<p?a:p))/2,g=((s>c?s:c)+(u<h?u:h))/2;r.x=f,r.y=g,t.x-=r.x,t.y-=r.y,e.x-=r.x,e.y-=r.y,n.x-=r.x,n.y-=r.y,i.x-=r.x,i.y-=r.y},e.prototype.computeIntersect=function(e,n,i,r){if(this._isProper=!1,!j.intersects(e,n,i,r))return t.NO_INTERSECTION;var o=at.orientationIndex(e,n,i),s=at.orientationIndex(e,n,r);if(o>0&&s>0||o<0&&s<0)return t.NO_INTERSECTION;var a=at.orientationIndex(i,r,e),u=at.orientationIndex(i,r,n);if(a>0&&u>0||a<0&&u<0)return t.NO_INTERSECTION;return 0===o&&0===s&&0===a&&0===u?this.computeCollinearIntersection(e,n,i,r):(0===o||0===s||0===a||0===u?(this._isProper=!1,e.equals2D(i)||e.equals2D(r)?this._intPt[0]=e:n.equals2D(i)||n.equals2D(r)?this._intPt[0]=n:0===o?this._intPt[0]=new C(i):0===s?this._intPt[0]=new C(r):0===a?this._intPt[0]=new C(e):0===u&&(this._intPt[0]=new C(n))):(this._isProper=!0,this._intPt[0]=this.intersection(e,n,i,r)),t.POINT_INTERSECTION)},e.prototype.interfaces_=function(){return[]},e.prototype.getClass=function(){return e},e.nearestEndpoint=function(t,e,n,i){var r=t,o=at.distancePointLine(t,n,i),s=at.distancePointLine(e,n,i);return s<o&&(o=s,r=e),(s=at.distancePointLine(n,t,e))<o&&(o=s,r=n),(s=at.distancePointLine(i,t,e))<o&&(o=s,r=i),r},e}(nt),ot=function(){};ot.prototype.interfaces_=function(){return[]},ot.prototype.getClass=function(){return ot},ot.orientationIndex=function(t,e,n){var i=e.x-t.x,r=e.y-t.y,o=n.x-e.x,s=n.y-e.y;return ot.signOfDet2x2(i,r,o,s)},ot.signOfDet2x2=function(t,e,n,i){var r=null,o=null,s=null;if(r=1,0===t||0===i)return 0===e||0===n?0:e>0?n>0?-r:r:n>0?r:-r;if(0===e||0===n)return i>0?t>0?r:-r:t>0?-r:r;if(e>0?i>0?e<=i||(r=-r,o=t,t=n,n=o,o=e,e=i,i=o):e<=-i?(r=-r,n=-n,i=-i):(o=t,t=-n,n=o,o=e,e=-i,i=o):i>0?-e<=i?(r=-r,t=-t,e=-e):(o=-t,t=n,n=o,o=-e,e=i,i=o):e>=i?(t=-t,e=-e,n=-n,i=-i):(r=-r,o=-t,t=-n,n=o,o=-e,e=-i,i=o),t>0){if(!(n>0))return r;if(!(t<=n))return r}else{if(n>0)return-r;if(!(t>=n))return-r;r=-r,t=-t,n=-n}for(;;){if(s=Math.floor(n/t),n-=s*t,(i-=s*e)<0)return-r;if(i>e)return r;if(t>n+n){if(e<i+i)return r}else{if(e>i+i)return-r;n=t-n,i=e-i,r=-r}if(0===i)return 0===n?0:-r;if(0===n)return r;if(s=Math.floor(t/n),t-=s*n,(e-=s*i)<0)return r;if(e>i)return-r;if(n>t+t){if(i<e+e)return-r}else{if(i>e+e)return r;t=n-t,e=i-e,r=-r}if(0===e)return 0===t?0:r;if(0===t)return-r}};var st=function(){this._p=null,this._crossingCount=0,this._isPointOnSegment=!1;var t=arguments[0];this._p=t};st.prototype.countSegment=function(t,e){if(t.x<this._p.x&&e.x<this._p.x)return null;if(this._p.x===e.x&&this._p.y===e.y)return this._isPointOnSegment=!0,null;if(t.y===this._p.y&&e.y===this._p.y){var n=t.x,i=e.x;return n>i&&(n=e.x,i=t.x),this._p.x>=n&&this._p.x<=i&&(this._isPointOnSegment=!0),null}if(t.y>this._p.y&&e.y<=this._p.y||e.y>this._p.y&&t.y<=this._p.y){var r=t.x-this._p.x,o=t.y-this._p.y,s=e.x-this._p.x,a=e.y-this._p.y,u=ot.signOfDet2x2(r,o,s,a);if(0===u)return this._isPointOnSegment=!0,null;a<o&&(u=-u),u>0&&this._crossingCount++}},st.prototype.isPointInPolygon=function(){return this.getLocation()!==w.EXTERIOR},st.prototype.getLocation=function(){return this._isPointOnSegment?w.BOUNDARY:this._crossingCount%2==1?w.INTERIOR:w.EXTERIOR},st.prototype.isOnSegment=function(){return this._isPointOnSegment},st.prototype.interfaces_=function(){return[]},st.prototype.getClass=function(){return st},st.locatePointInRing=function(){if(arguments[0]instanceof C&&T(arguments[1],V)){for(var t=arguments[0],e=arguments[1],n=new st(t),i=new C,r=new C,o=1;o<e.size();o++)if(e.getCoordinate(o,i),e.getCoordinate(o-1,r),n.countSegment(i,r),n.isOnSegment())return n.getLocation();return n.getLocation()}if(arguments[0]instanceof C&&arguments[1]instanceof Array){for(var s=arguments[0],a=arguments[1],u=new st(s),l=1;l<a.length;l++){var c=a[l],p=a[l-1];if(u.countSegment(c,p),u.isOnSegment())return u.getLocation()}return u.getLocation()}};var at=function(){},ut={CLOCKWISE:{configurable:!0},RIGHT:{configurable:!0},COUNTERCLOCKWISE:{configurable:!0},LEFT:{configurable:!0},COLLINEAR:{configurable:!0},STRAIGHT:{configurable:!0}};at.prototype.interfaces_=function(){return[]},at.prototype.getClass=function(){return at},at.orientationIndex=function(t,e,n){return q.orientationIndex(t,e,n)},at.signedArea=function(){if(arguments[0]instanceof Array){var t=arguments[0];if(t.length<3)return 0;for(var e=0,n=t[0].x,i=1;i<t.length-1;i++){var r=t[i].x-n,o=t[i+1].y;e+=r*(t[i-1].y-o)}return e/2}if(T(arguments[0],V)){var s=arguments[0],a=s.size();if(a<3)return 0;var u=new C,l=new C,c=new C;s.getCoordinate(0,l),s.getCoordinate(1,c);var p=l.x;c.x-=p;for(var h=0,f=1;f<a-1;f++)u.y=l.y,l.x=c.x,l.y=c.y,s.getCoordinate(f+1,c),c.x-=p,h+=l.x*(u.y-c.y);return h/2}},at.distanceLineLine=function(t,e,n,i){if(t.equals(e))return at.distancePointLine(t,n,i);if(n.equals(i))return at.distancePointLine(i,t,e);var r=!1;if(j.intersects(t,e,n,i)){var o=(e.x-t.x)*(i.y-n.y)-(e.y-t.y)*(i.x-n.x);if(0===o)r=!0;else{var s=(t.y-n.y)*(i.x-n.x)-(t.x-n.x)*(i.y-n.y),a=((t.y-n.y)*(e.x-t.x)-(t.x-n.x)*(e.y-t.y))/o,u=s/o;(u<0||u>1||a<0||a>1)&&(r=!0)}}else r=!0;return r?R.min(at.distancePointLine(t,n,i),at.distancePointLine(e,n,i),at.distancePointLine(n,t,e),at.distancePointLine(i,t,e)):0},at.isPointInRing=function(t,e){return at.locatePointInRing(t,e)!==w.EXTERIOR},at.computeLength=function(t){var e=t.size();if(e<=1)return 0;var n=0,i=new C;t.getCoordinate(0,i);for(var r=i.x,o=i.y,s=1;s<e;s++){t.getCoordinate(s,i);var a=i.x,u=i.y,l=a-r,c=u-o;n+=Math.sqrt(l*l+c*c),r=a,o=u}return n},at.isCCW=function(t){var e=t.length-1;if(e<3)throw new m("Ring has fewer than 4 points, so orientation cannot be determined");for(var n=t[0],i=0,r=1;r<=e;r++){var o=t[r];o.y>n.y&&(n=o,i=r)}var s=i;do{(s-=1)<0&&(s=e)}while(t[s].equals2D(n)&&s!==i);var a=i;do{a=(a+1)%e}while(t[a].equals2D(n)&&a!==i);var u=t[s],l=t[a];if(u.equals2D(n)||l.equals2D(n)||u.equals2D(l))return!1;var c=at.computeOrientation(u,n,l),p=!1;return p=0===c?u.x>l.x:c>0,p},at.locatePointInRing=function(t,e){return st.locatePointInRing(t,e)},at.distancePointLinePerpendicular=function(t,e,n){var i=(n.x-e.x)*(n.x-e.x)+(n.y-e.y)*(n.y-e.y),r=((e.y-t.y)*(n.x-e.x)-(e.x-t.x)*(n.y-e.y))/i;return Math.abs(r)*Math.sqrt(i)},at.computeOrientation=function(t,e,n){return at.orientationIndex(t,e,n)},at.distancePointLine=function(){if(2===arguments.length){var t=arguments[0],e=arguments[1];if(0===e.length)throw new m("Line array must contain at least one vertex");for(var n=t.distance(e[0]),i=0;i<e.length-1;i++){var r=at.distancePointLine(t,e[i],e[i+1]);r<n&&(n=r)}return n}if(3===arguments.length){var o=arguments[0],s=arguments[1],a=arguments[2];if(s.x===a.x&&s.y===a.y)return o.distance(s);var u=(a.x-s.x)*(a.x-s.x)+(a.y-s.y)*(a.y-s.y),l=((o.x-s.x)*(a.x-s.x)+(o.y-s.y)*(a.y-s.y))/u;if(l<=0)return o.distance(s);if(l>=1)return o.distance(a);var c=((s.y-o.y)*(a.x-s.x)-(s.x-o.x)*(a.y-s.y))/u;return Math.abs(c)*Math.sqrt(u)}},at.isOnLine=function(t,e){for(var n=new rt,i=1;i<e.length;i++){var r=e[i-1],o=e[i];if(n.computeIntersection(t,r,o),n.hasIntersection())return!0}return!1},ut.CLOCKWISE.get=function(){return-1},ut.RIGHT.get=function(){return at.CLOCKWISE},ut.COUNTERCLOCKWISE.get=function(){return 1},ut.LEFT.get=function(){return at.COUNTERCLOCKWISE},ut.COLLINEAR.get=function(){return 0},ut.STRAIGHT.get=function(){return at.COLLINEAR},Object.defineProperties(at,ut);var lt=function(){};lt.prototype.filter=function(t){},lt.prototype.interfaces_=function(){return[]},lt.prototype.getClass=function(){return lt};var ct=function(){var t=arguments[0];this._envelope=null,this._factory=null,this._SRID=null,this._userData=null,this._factory=t,this._SRID=t.getSRID()},pt={serialVersionUID:{configurable:!0},SORTINDEX_POINT:{configurable:!0},SORTINDEX_MULTIPOINT:{configurable:!0},SORTINDEX_LINESTRING:{configurable:!0},SORTINDEX_LINEARRING:{configurable:!0},SORTINDEX_MULTILINESTRING:{configurable:!0},SORTINDEX_POLYGON:{configurable:!0},SORTINDEX_MULTIPOLYGON:{configurable:!0},SORTINDEX_GEOMETRYCOLLECTION:{configurable:!0},geometryChangedFilter:{configurable:!0}};ct.prototype.isGeometryCollection=function(){return this.getSortIndex()===ct.SORTINDEX_GEOMETRYCOLLECTION},ct.prototype.getFactory=function(){return this._factory},ct.prototype.getGeometryN=function(t){return this},ct.prototype.getArea=function(){return 0},ct.prototype.isRectangle=function(){return!1},ct.prototype.equals=function(){if(arguments[0]instanceof ct){var t=arguments[0];return null!==t&&this.equalsTopo(t)}if(arguments[0]instanceof Object){var e=arguments[0];if(!(e instanceof ct))return!1;var n=e;return this.equalsExact(n)}},ct.prototype.equalsExact=function(t){return this===t||this.equalsExact(t,0)},ct.prototype.geometryChanged=function(){this.apply(ct.geometryChangedFilter)},ct.prototype.geometryChangedAction=function(){this._envelope=null},ct.prototype.equalsNorm=function(t){return null!==t&&this.norm().equalsExact(t.norm())},ct.prototype.getLength=function(){return 0},ct.prototype.getNumGeometries=function(){return 1},ct.prototype.compareTo=function(){if(1===arguments.length){var t=arguments[0],e=t;return this.getSortIndex()!==e.getSortIndex()?this.getSortIndex()-e.getSortIndex():this.isEmpty()&&e.isEmpty()?0:this.isEmpty()?-1:e.isEmpty()?1:this.compareToSameClass(t)}if(2===arguments.length){var n=arguments[0],i=arguments[1];return this.getSortIndex()!==n.getSortIndex()?this.getSortIndex()-n.getSortIndex():this.isEmpty()&&n.isEmpty()?0:this.isEmpty()?-1:n.isEmpty()?1:this.compareToSameClass(n,i)}},ct.prototype.getUserData=function(){return this._userData},ct.prototype.getSRID=function(){return this._SRID},ct.prototype.getEnvelope=function(){return this.getFactory().toGeometry(this.getEnvelopeInternal())},ct.prototype.checkNotGeometryCollection=function(t){if(t.getSortIndex()===ct.SORTINDEX_GEOMETRYCOLLECTION)throw new m("This method does not support GeometryCollection arguments")},ct.prototype.equal=function(t,e,n){return 0===n?t.equals(e):t.distance(e)<=n},ct.prototype.norm=function(){var t=this.copy();return t.normalize(),t},ct.prototype.getPrecisionModel=function(){return this._factory.getPrecisionModel()},ct.prototype.getEnvelopeInternal=function(){return null===this._envelope&&(this._envelope=this.computeEnvelopeInternal()),new j(this._envelope)},ct.prototype.setSRID=function(t){this._SRID=t},ct.prototype.setUserData=function(t){this._userData=t},ct.prototype.compare=function(t,e){for(var n=t.iterator(),i=e.iterator();n.hasNext()&&i.hasNext();){var r=n.next(),o=i.next(),s=r.compareTo(o);if(0!==s)return s}return n.hasNext()?1:i.hasNext()?-1:0},ct.prototype.hashCode=function(){return this.getEnvelopeInternal().hashCode()},ct.prototype.isGeometryCollectionOrDerived=function(){return this.getSortIndex()===ct.SORTINDEX_GEOMETRYCOLLECTION||this.getSortIndex()===ct.SORTINDEX_MULTIPOINT||this.getSortIndex()===ct.SORTINDEX_MULTILINESTRING||this.getSortIndex()===ct.SORTINDEX_MULTIPOLYGON},ct.prototype.interfaces_=function(){return[x,E,e]},ct.prototype.getClass=function(){return ct},ct.hasNonEmptyElements=function(t){for(var e=0;e<t.length;e++)if(!t[e].isEmpty())return!0;return!1},ct.hasNullElements=function(t){for(var e=0;e<t.length;e++)if(null===t[e])return!0;return!1},pt.serialVersionUID.get=function(){return 0x799ea46522854c00},pt.SORTINDEX_POINT.get=function(){return 0},pt.SORTINDEX_MULTIPOINT.get=function(){return 1},pt.SORTINDEX_LINESTRING.get=function(){return 2},pt.SORTINDEX_LINEARRING.get=function(){return 3},pt.SORTINDEX_MULTILINESTRING.get=function(){return 4},pt.SORTINDEX_POLYGON.get=function(){return 5},pt.SORTINDEX_MULTIPOLYGON.get=function(){return 6},pt.SORTINDEX_GEOMETRYCOLLECTION.get=function(){return 7},pt.geometryChangedFilter.get=function(){return ht},Object.defineProperties(ct,pt);var ht=function(){};ht.interfaces_=function(){return[lt]},ht.filter=function(t){t.geometryChangedAction()};var ft=function(){};ft.prototype.filter=function(t){},ft.prototype.interfaces_=function(){return[]},ft.prototype.getClass=function(){return ft};var gt=function(){},dt={Mod2BoundaryNodeRule:{configurable:!0},EndPointBoundaryNodeRule:{configurable:!0},MultiValentEndPointBoundaryNodeRule:{configurable:!0},MonoValentEndPointBoundaryNodeRule:{configurable:!0},MOD2_BOUNDARY_RULE:{configurable:!0},ENDPOINT_BOUNDARY_RULE:{configurable:!0},MULTIVALENT_ENDPOINT_BOUNDARY_RULE:{configurable:!0},MONOVALENT_ENDPOINT_BOUNDARY_RULE:{configurable:!0},OGC_SFS_BOUNDARY_RULE:{configurable:!0}};gt.prototype.isInBoundary=function(t){},gt.prototype.interfaces_=function(){return[]},gt.prototype.getClass=function(){return gt},dt.Mod2BoundaryNodeRule.get=function(){return yt},dt.EndPointBoundaryNodeRule.get=function(){return _t},dt.MultiValentEndPointBoundaryNodeRule.get=function(){return mt},dt.MonoValentEndPointBoundaryNodeRule.get=function(){return vt},dt.MOD2_BOUNDARY_RULE.get=function(){return new yt},dt.ENDPOINT_BOUNDARY_RULE.get=function(){return new _t},dt.MULTIVALENT_ENDPOINT_BOUNDARY_RULE.get=function(){return new mt},dt.MONOVALENT_ENDPOINT_BOUNDARY_RULE.get=function(){return new vt},dt.OGC_SFS_BOUNDARY_RULE.get=function(){return gt.MOD2_BOUNDARY_RULE},Object.defineProperties(gt,dt);var yt=function(){};yt.prototype.isInBoundary=function(t){return t%2==1},yt.prototype.interfaces_=function(){return[gt]},yt.prototype.getClass=function(){return yt};var _t=function(){};_t.prototype.isInBoundary=function(t){return t>0},_t.prototype.interfaces_=function(){return[gt]},_t.prototype.getClass=function(){return _t};var mt=function(){};mt.prototype.isInBoundary=function(t){return t>1},mt.prototype.interfaces_=function(){return[gt]},mt.prototype.getClass=function(){return mt};var vt=function(){};vt.prototype.isInBoundary=function(t){return 1===t},vt.prototype.interfaces_=function(){return[gt]},vt.prototype.getClass=function(){return vt};var It=function(){};It.prototype.add=function(){},It.prototype.addAll=function(){},It.prototype.isEmpty=function(){},It.prototype.iterator=function(){},It.prototype.size=function(){},It.prototype.toArray=function(){},It.prototype.remove=function(){},(n.prototype=new Error).name="IndexOutOfBoundsException";var Et=function(){};Et.prototype.hasNext=function(){},Et.prototype.next=function(){},Et.prototype.remove=function(){};var xt=function(t){function e(){t.apply(this,arguments)}return t&&(e.__proto__=t),e.prototype=Object.create(t&&t.prototype),e.prototype.constructor=e,e.prototype.get=function(){},e.prototype.set=function(){},e.prototype.isEmpty=function(){},e}(It);(i.prototype=new Error).name="NoSuchElementException";var Nt=function(t){function e(){t.call(this),this.array_=[],arguments[0]instanceof It&&this.addAll(arguments[0])}return t&&(e.__proto__=t),e.prototype=Object.create(t&&t.prototype),e.prototype.constructor=e,e.prototype.ensureCapacity=function(){},e.prototype.interfaces_=function(){return[t,It]},e.prototype.add=function(t){return 1===arguments.length?this.array_.push(t):this.array_.splice(arguments[0],arguments[1]),!0},e.prototype.clear=function(){this.array_=[]},e.prototype.addAll=function(t){for(var e=t.iterator();e.hasNext();)this.add(e.next());return!0},e.prototype.set=function(t,e){var n=this.array_[t];return this.array_[t]=e,n},e.prototype.iterator=function(){return new Ct(this)},e.prototype.get=function(t){if(t<0||t>=this.size())throw new n;return this.array_[t]},e.prototype.isEmpty=function(){return 0===this.array_.length},e.prototype.size=function(){return this.array_.length},e.prototype.toArray=function(){for(var t=[],e=0,n=this.array_.length;e<n;e++)t.push(this.array_[e]);return t},e.prototype.remove=function(t){for(var e=!1,n=0,i=this.array_.length;n<i;n++)if(this.array_[n]===t){this.array_.splice(n,1),e=!0;break}return e},e}(xt),Ct=function(t){function e(e){t.call(this),this.arrayList_=e,this.position_=0}return t&&(e.__proto__=t),e.prototype=Object.create(t&&t.prototype),e.prototype.constructor=e,e.prototype.next=function(){if(this.position_===this.arrayList_.size())throw new i;return this.arrayList_.get(this.position_++)},e.prototype.hasNext=function(){return this.position_<this.arrayList_.size()},e.prototype.set=function(t){return this.arrayList_.set(this.position_-1,t)},e.prototype.remove=function(){this.arrayList_.remove(this.arrayList_.get(this.position_))},e}(Et),St=function(t){function e(){if(t.call(this),0===arguments.length);else if(1===arguments.length){var e=arguments[0];this.ensureCapacity(e.length),this.add(e,!0)}else if(2===arguments.length){var n=arguments[0],i=arguments[1];this.ensureCapacity(n.length),this.add(n,i)}}t&&(e.__proto__=t),(e.prototype=Object.create(t&&t.prototype)).constructor=e;var n={coordArrayType:{configurable:!0}};return n.coordArrayType.get=function(){return new Array(0).fill(null)},e.prototype.getCoordinate=function(t){return this.get(t)},e.prototype.addAll=function(){if(2===arguments.length){for(var e=arguments[0],n=arguments[1],i=!1,r=e.iterator();r.hasNext();)this.add(r.next(),n),i=!0;return i}return t.prototype.addAll.apply(this,arguments)},e.prototype.clone=function(){for(var e=t.prototype.clone.call(this),n=0;n<this.size();n++)e.add(n,this.get(n).copy());return e},e.prototype.toCoordinateArray=function(){return this.toArray(e.coordArrayType)},e.prototype.add=function(){if(1===arguments.length){var e=arguments[0];t.prototype.add.call(this,e)}else if(2===arguments.length){if(arguments[0]instanceof Array&&"boolean"==typeof arguments[1]){var n=arguments[0],i=arguments[1];return this.add(n,i,!0),!0}if(arguments[0]instanceof C&&"boolean"==typeof arguments[1]){var r=arguments[0];if(!arguments[1]&&this.size()>=1){if(this.get(this.size()-1).equals2D(r))return null}t.prototype.add.call(this,r)}else if(arguments[0]instanceof Object&&"boolean"==typeof arguments[1]){var o=arguments[0],s=arguments[1];return this.add(o,s),!0}}else if(3===arguments.length){if("boolean"==typeof arguments[2]&&arguments[0]instanceof Array&&"boolean"==typeof arguments[1]){var a=arguments[0],u=arguments[1];if(arguments[2])for(var l=0;l<a.length;l++)this.add(a[l],u);else for(var c=a.length-1;c>=0;c--)this.add(a[c],u);return!0}if("boolean"==typeof arguments[2]&&Number.isInteger(arguments[0])&&arguments[1]instanceof C){var p=arguments[0],h=arguments[1];if(!arguments[2]){var f=this.size();if(f>0){if(p>0){if(this.get(p-1).equals2D(h))return null}if(p<f){if(this.get(p).equals2D(h))return null}}}t.prototype.add.call(this,p,h)}}else if(4===arguments.length){var g=arguments[0],d=arguments[1],y=arguments[2],_=arguments[3],m=1;y>_&&(m=-1);for(var v=y;v!==_;v+=m)this.add(g[v],d);return!0}},e.prototype.closeRing=function(){this.size()>0&&this.add(new C(this.get(0)),!1)},e.prototype.interfaces_=function(){return[]},e.prototype.getClass=function(){return e},Object.defineProperties(e,n),e}(Nt),Lt=function(){},bt={ForwardComparator:{configurable:!0},BidirectionalComparator:{configurable:!0},coordArrayType:{configurable:!0}};bt.ForwardComparator.get=function(){return wt},bt.BidirectionalComparator.get=function(){return Ot},bt.coordArrayType.get=function(){return new Array(0).fill(null)},Lt.prototype.interfaces_=function(){return[]},Lt.prototype.getClass=function(){return Lt},Lt.isRing=function(t){return!(t.length<4)&&!!t[0].equals2D(t[t.length-1])},Lt.ptNotInList=function(t,e){for(var n=0;n<t.length;n++){var i=t[n];if(Lt.indexOf(i,e)<0)return i}return null},Lt.scroll=function(t,e){var n=Lt.indexOf(e,t);if(n<0)return null;var i=new Array(t.length).fill(null);Y.arraycopy(t,n,i,0,t.length-n),Y.arraycopy(t,0,i,t.length-n,n),Y.arraycopy(i,0,t,0,t.length)},Lt.equals=function(){if(2===arguments.length){var t=arguments[0],e=arguments[1];if(t===e)return!0;if(null===t||null===e)return!1;if(t.length!==e.length)return!1;for(var n=0;n<t.length;n++)if(!t[n].equals(e[n]))return!1;return!0}if(3===arguments.length){var i=arguments[0],r=arguments[1],o=arguments[2];if(i===r)return!0;if(null===i||null===r)return!1;if(i.length!==r.length)return!1;for(var s=0;s<i.length;s++)if(0!==o.compare(i[s],r[s]))return!1;return!0}},Lt.intersection=function(t,e){for(var n=new St,i=0;i<t.length;i++)e.intersects(t[i])&&n.add(t[i],!0);return n.toCoordinateArray()},Lt.hasRepeatedPoints=function(t){for(var e=1;e<t.length;e++)if(t[e-1].equals(t[e]))return!0;return!1},Lt.removeRepeatedPoints=function(t){if(!Lt.hasRepeatedPoints(t))return t;return new St(t,!1).toCoordinateArray()},Lt.reverse=function(t){for(var e=t.length-1,n=Math.trunc(e/2),i=0;i<=n;i++){var r=t[i];t[i]=t[e-i],t[e-i]=r}},Lt.removeNull=function(t){for(var e=0,n=0;n<t.length;n++)null!==t[n]&&e++;var i=new Array(e).fill(null);if(0===e)return i;for(var r=0,o=0;o<t.length;o++)null!==t[o]&&(i[r++]=t[o]);return i},Lt.copyDeep=function(){if(1===arguments.length){for(var t=arguments[0],e=new Array(t.length).fill(null),n=0;n<t.length;n++)e[n]=new C(t[n]);return e}if(5===arguments.length)for(var i=arguments[0],r=arguments[1],o=arguments[2],s=arguments[3],a=arguments[4],u=0;u<a;u++)o[s+u]=new C(i[r+u])},Lt.isEqualReversed=function(t,e){for(var n=0;n<t.length;n++){var i=t[n],r=e[t.length-n-1];if(0!==i.compareTo(r))return!1}return!0},Lt.envelope=function(t){for(var e=new j,n=0;n<t.length;n++)e.expandToInclude(t[n]);return e},Lt.toCoordinateArray=function(t){return t.toArray(Lt.coordArrayType)},Lt.atLeastNCoordinatesOrNothing=function(t,e){return e.length>=t?e:[]},Lt.indexOf=function(t,e){for(var n=0;n<e.length;n++)if(t.equals(e[n]))return n;return-1},Lt.increasingDirection=function(t){for(var e=0;e<Math.trunc(t.length/2);e++){var n=t.length-1-e,i=t[e].compareTo(t[n]);if(0!==i)return i}return 1},Lt.compare=function(t,e){for(var n=0;n<t.length&&n<e.length;){var i=t[n].compareTo(e[n]);if(0!==i)return i;n++}return n<e.length?-1:n<t.length?1:0},Lt.minCoordinate=function(t){for(var e=null,n=0;n<t.length;n++)(null===e||e.compareTo(t[n])>0)&&(e=t[n]);return e},Lt.extract=function(t,e,n){e=R.clamp(e,0,t.length);var i=(n=R.clamp(n,-1,t.length))-e+1;n<0&&(i=0),e>=t.length&&(i=0),n<e&&(i=0);var r=new Array(i).fill(null);if(0===i)return r;for(var o=0,s=e;s<=n;s++)r[o++]=t[s];return r},Object.defineProperties(Lt,bt);var wt=function(){};wt.prototype.compare=function(t,e){return Lt.compare(t,e)},wt.prototype.interfaces_=function(){return[N]},wt.prototype.getClass=function(){return wt};var Ot=function(){};Ot.prototype.compare=function(t,e){var n=t,i=e;if(n.length<i.length)return-1;if(n.length>i.length)return 1;if(0===n.length)return 0;var r=Lt.compare(n,i);return Lt.isEqualReversed(n,i)?0:r},Ot.prototype.OLDcompare=function(t,e){var n=t,i=e;if(n.length<i.length)return-1;if(n.length>i.length)return 1;if(0===n.length)return 0;for(var r=Lt.increasingDirection(n),o=Lt.increasingDirection(i),s=r>0?0:n.length-1,a=o>0?0:n.length-1,u=0;u<n.length;u++){var l=n[s].compareTo(i[a]);if(0!==l)return l;s+=r,a+=o}return 0},Ot.prototype.interfaces_=function(){return[N]},Ot.prototype.getClass=function(){return Ot};var Tt=function(){};Tt.prototype.get=function(){},Tt.prototype.put=function(){},Tt.prototype.size=function(){},Tt.prototype.values=function(){},Tt.prototype.entrySet=function(){};var Rt=function(t){function e(){t.apply(this,arguments)}return t&&(e.__proto__=t),e.prototype=Object.create(t&&t.prototype),e.prototype.constructor=e,e}(Tt);(r.prototype=new Error).name="OperationNotSupported",(o.prototype=new It).contains=function(){};var Pt=function(t){function e(){t.call(this),this.array_=[],arguments[0]instanceof It&&this.addAll(arguments[0])}return t&&(e.__proto__=t),e.prototype=Object.create(t&&t.prototype),e.prototype.constructor=e,e.prototype.contains=function(t){for(var e=0,n=this.array_.length;e<n;e++){if(this.array_[e]===t)return!0}return!1},e.prototype.add=function(t){return!this.contains(t)&&(this.array_.push(t),!0)},e.prototype.addAll=function(t){for(var e=t.iterator();e.hasNext();)this.add(e.next());return!0},e.prototype.remove=function(t){throw new Error},e.prototype.size=function(){return this.array_.length},e.prototype.isEmpty=function(){return 0===this.array_.length},e.prototype.toArray=function(){for(var t=[],e=0,n=this.array_.length;e<n;e++)t.push(this.array_[e]);return t},e.prototype.iterator=function(){return new Dt(this)},e}(o),Dt=function(t){function e(e){t.call(this),this.hashSet_=e,this.position_=0}return t&&(e.__proto__=t),e.prototype=Object.create(t&&t.prototype),e.prototype.constructor=e,e.prototype.next=function(){if(this.position_===this.hashSet_.size())throw new i;return this.hashSet_.array_[this.position_++]},e.prototype.hasNext=function(){return this.position_<this.hashSet_.size()},e.prototype.remove=function(){throw new r},e}(Et),Mt=0;(p.prototype=new Rt).get=function(t){for(var e=this.root_;null!==e;){var n=t.compareTo(e.key);if(n<0)e=e.left;else{if(!(n>0))return e.value;e=e.right}}return null},p.prototype.put=function(t,e){if(null===this.root_)return this.root_={key:t,value:e,left:null,right:null,parent:null,color:Mt,getValue:function(){return this.value},getKey:function(){return this.key}},this.size_=1,null;var n,i,r=this.root_;do{if(n=r,(i=t.compareTo(r.key))<0)r=r.left;else{if(!(i>0)){var o=r.value;return r.value=e,o}r=r.right}}while(null!==r);var s={key:t,left:null,right:null,value:e,parent:n,color:Mt,getValue:function(){return this.value},getKey:function(){return this.key}};return i<0?n.left=s:n.right=s,this.fixAfterInsertion(s),this.size_++,null},p.prototype.fixAfterInsertion=function(t){for(t.color=1;null!=t&&t!==this.root_&&1===t.parent.color;)if(a(t)===l(a(a(t)))){var e=c(a(a(t)));1===s(e)?(u(a(t),Mt),u(e,Mt),u(a(a(t)),1),t=a(a(t))):(t===c(a(t))&&(t=a(t),this.rotateLeft(t)),u(a(t),Mt),u(a(a(t)),1),this.rotateRight(a(a(t))))}else{var n=l(a(a(t)));1===s(n)?(u(a(t),Mt),u(n,Mt),u(a(a(t)),1),t=a(a(t))):(t===l(a(t))&&(t=a(t),this.rotateRight(t)),u(a(t),Mt),u(a(a(t)),1),this.rotateLeft(a(a(t))))}this.root_.color=Mt},p.prototype.values=function(){var t=new Nt,e=this.getFirstEntry();if(null!==e)for(t.add(e.value);null!==(e=p.successor(e));)t.add(e.value);return t},p.prototype.entrySet=function(){var t=new Pt,e=this.getFirstEntry();if(null!==e)for(t.add(e);null!==(e=p.successor(e));)t.add(e);return t},p.prototype.rotateLeft=function(t){if(null!=t){var e=t.right;t.right=e.left,null!=e.left&&(e.left.parent=t),e.parent=t.parent,null===t.parent?this.root_=e:t.parent.left===t?t.parent.left=e:t.parent.right=e,e.left=t,t.parent=e}},p.prototype.rotateRight=function(t){if(null!=t){var e=t.left;t.left=e.right,null!=e.right&&(e.right.parent=t),e.parent=t.parent,null===t.parent?this.root_=e:t.parent.right===t?t.parent.right=e:t.parent.left=e,e.right=t,t.parent=e}},p.prototype.getFirstEntry=function(){var t=this.root_;if(null!=t)for(;null!=t.left;)t=t.left;return t},p.successor=function(t){if(null===t)return null;if(null!==t.right){for(var e=t.right;null!==e.left;)e=e.left;return e}for(var n=t.parent,i=t;null!==n&&i===n.right;)i=n,n=n.parent;return n},p.prototype.size=function(){return this.size_};var At=function(){};At.prototype.interfaces_=function(){return[]},At.prototype.getClass=function(){return At},h.prototype=new o,(f.prototype=new h).contains=function(t){for(var e=0,n=this.array_.length;e<n;e++){if(0===this.array_[e].compareTo(t))return!0}return!1},f.prototype.add=function(t){if(this.contains(t))return!1;for(var e=0,n=this.array_.length;e<n;e++){if(1===this.array_[e].compareTo(t))return this.array_.splice(e,0,t),!0}return this.array_.push(t),!0},f.prototype.addAll=function(t){for(var e=t.iterator();e.hasNext();)this.add(e.next());return!0},f.prototype.remove=function(t){throw new r},f.prototype.size=function(){return this.array_.length},f.prototype.isEmpty=function(){return 0===this.array_.length},f.prototype.toArray=function(){for(var t=[],e=0,n=this.array_.length;e<n;e++)t.push(this.array_[e]);return t},f.prototype.iterator=function(){return new Ft(this)};var Ft=function(t){this.treeSet_=t,this.position_=0};Ft.prototype.next=function(){if(this.position_===this.treeSet_.size())throw new i;return this.treeSet_.array_[this.position_++]},Ft.prototype.hasNext=function(){return this.position_<this.treeSet_.size()},Ft.prototype.remove=function(){throw new r};var Gt=function(){};Gt.sort=function(){var t,e,n,i,r=arguments[0];if(1===arguments.length)i=function(t,e){return t.compareTo(e)},r.sort(i);else if(2===arguments.length)n=arguments[1],i=function(t,e){return n.compare(t,e)},r.sort(i);else if(3===arguments.length){(e=r.slice(arguments[1],arguments[2])).sort();var o=r.slice(0,arguments[1]).concat(e,r.slice(arguments[2],r.length));for(r.splice(0,r.length),t=0;t<o.length;t++)r.push(o[t])}else if(4===arguments.length)for(e=r.slice(arguments[1],arguments[2]),n=arguments[3],i=function(t,e){return n.compare(t,e)},e.sort(i),o=r.slice(0,arguments[1]).concat(e,r.slice(arguments[2],r.length)),r.splice(0,r.length),t=0;t<o.length;t++)r.push(o[t])},Gt.asList=function(t){for(var e=new Nt,n=0,i=t.length;n<i;n++)e.add(t[n]);return e};var qt=function(){},Bt={P:{configurable:!0},L:{configurable:!0},A:{configurable:!0},FALSE:{configurable:!0},TRUE:{configurable:!0},DONTCARE:{configurable:!0},SYM_FALSE:{configurable:!0},SYM_TRUE:{configurable:!0},SYM_DONTCARE:{configurable:!0},SYM_P:{configurable:!0},SYM_L:{configurable:!0},SYM_A:{configurable:!0}};Bt.P.get=function(){return 0},Bt.L.get=function(){return 1},Bt.A.get=function(){return 2},Bt.FALSE.get=function(){return-1},Bt.TRUE.get=function(){return-2},Bt.DONTCARE.get=function(){return-3},Bt.SYM_FALSE.get=function(){return"F"},Bt.SYM_TRUE.get=function(){return"T"},Bt.SYM_DONTCARE.get=function(){return"*"},Bt.SYM_P.get=function(){return"0"},Bt.SYM_L.get=function(){return"1"},Bt.SYM_A.get=function(){return"2"},qt.prototype.interfaces_=function(){return[]},qt.prototype.getClass=function(){return qt},qt.toDimensionSymbol=function(t){switch(t){case qt.FALSE:return qt.SYM_FALSE;case qt.TRUE:return qt.SYM_TRUE;case qt.DONTCARE:return qt.SYM_DONTCARE;case qt.P:return qt.SYM_P;case qt.L:return qt.SYM_L;case qt.A:return qt.SYM_A}throw new m("Unknown dimension value: "+t)},qt.toDimensionValue=function(t){switch(A.toUpperCase(t)){case qt.SYM_FALSE:return qt.FALSE;case qt.SYM_TRUE:return qt.TRUE;case qt.SYM_DONTCARE:return qt.DONTCARE;case qt.SYM_P:return qt.P;case qt.SYM_L:return qt.L;case qt.SYM_A:return qt.A}throw new m("Unknown dimension symbol: "+t)},Object.defineProperties(qt,Bt);var Vt=function(){};Vt.prototype.filter=function(t){},Vt.prototype.interfaces_=function(){return[]},Vt.prototype.getClass=function(){return Vt};var Ut=function(){};Ut.prototype.filter=function(t,e){},Ut.prototype.isDone=function(){},Ut.prototype.isGeometryChanged=function(){},Ut.prototype.interfaces_=function(){return[]},Ut.prototype.getClass=function(){return Ut};var zt=function(t){function e(e,n){if(t.call(this,n),this._geometries=e||[],t.hasNullElements(this._geometries))throw new m("geometries must not contain null elements")}t&&(e.__proto__=t),(e.prototype=Object.create(t&&t.prototype)).constructor=e;var n={serialVersionUID:{configurable:!0}};return e.prototype.computeEnvelopeInternal=function(){for(var t=new j,e=0;e<this._geometries.length;e++)t.expandToInclude(this._geometries[e].getEnvelopeInternal());return t},e.prototype.getGeometryN=function(t){return this._geometries[t]},e.prototype.getSortIndex=function(){return t.SORTINDEX_GEOMETRYCOLLECTION},e.prototype.getCoordinates=function(){for(var t=new Array(this.getNumPoints()).fill(null),e=-1,n=0;n<this._geometries.length;n++)for(var i=this._geometries[n].getCoordinates(),r=0;r<i.length;r++)t[++e]=i[r];return t},e.prototype.getArea=function(){for(var t=0,e=0;e<this._geometries.length;e++)t+=this._geometries[e].getArea();return t},e.prototype.equalsExact=function(){if(2===arguments.length){var e=arguments[0],n=arguments[1];if(!this.isEquivalentClass(e))return!1;var i=e;if(this._geometries.length!==i._geometries.length)return!1;for(var r=0;r<this._geometries.length;r++)if(!this._geometries[r].equalsExact(i._geometries[r],n))return!1;return!0}return t.prototype.equalsExact.apply(this,arguments)},e.prototype.normalize=function(){for(var t=0;t<this._geometries.length;t++)this._geometries[t].normalize();Gt.sort(this._geometries)},e.prototype.getCoordinate=function(){return this.isEmpty()?null:this._geometries[0].getCoordinate()},e.prototype.getBoundaryDimension=function(){for(var t=qt.FALSE,e=0;e<this._geometries.length;e++)t=Math.max(t,this._geometries[e].getBoundaryDimension());return t},e.prototype.getDimension=function(){for(var t=qt.FALSE,e=0;e<this._geometries.length;e++)t=Math.max(t,this._geometries[e].getDimension());return t},e.prototype.getLength=function(){for(var t=0,e=0;e<this._geometries.length;e++)t+=this._geometries[e].getLength();return t},e.prototype.getNumPoints=function(){for(var t=0,e=0;e<this._geometries.length;e++)t+=this._geometries[e].getNumPoints();return t},e.prototype.getNumGeometries=function(){return this._geometries.length},e.prototype.reverse=function(){for(var t=this._geometries.length,e=new Array(t).fill(null),n=0;n<this._geometries.length;n++)e[n]=this._geometries[n].reverse();return this.getFactory().createGeometryCollection(e)},e.prototype.compareToSameClass=function(){if(1===arguments.length){var t=arguments[0],e=new f(Gt.asList(this._geometries)),n=new f(Gt.asList(t._geometries));return this.compare(e,n)}if(2===arguments.length){for(var i=arguments[0],r=arguments[1],o=i,s=this.getNumGeometries(),a=o.getNumGeometries(),u=0;u<s&&u<a;){var l=this.getGeometryN(u),c=o.getGeometryN(u),p=l.compareToSameClass(c,r);if(0!==p)return p;u++}return u<s?1:u<a?-1:0}},e.prototype.apply=function(){if(T(arguments[0],ft))for(var t=arguments[0],e=0;e<this._geometries.length;e++)this._geometries[e].apply(t);else if(T(arguments[0],Ut)){var n=arguments[0];if(0===this._geometries.length)return null;for(var i=0;i<this._geometries.length&&(this._geometries[i].apply(n),!n.isDone());i++);n.isGeometryChanged()&&this.geometryChanged()}else if(T(arguments[0],Vt)){var r=arguments[0];r.filter(this);for(var o=0;o<this._geometries.length;o++)this._geometries[o].apply(r)}else if(T(arguments[0],lt)){var s=arguments[0];s.filter(this);for(var a=0;a<this._geometries.length;a++)this._geometries[a].apply(s)}},e.prototype.getBoundary=function(){return this.checkNotGeometryCollection(this),et.shouldNeverReachHere(),null},e.prototype.clone=function(){var e=t.prototype.clone.call(this);e._geometries=new Array(this._geometries.length).fill(null);for(var n=0;n<this._geometries.length;n++)e._geometries[n]=this._geometries[n].clone();return e},e.prototype.getGeometryType=function(){return"GeometryCollection"},e.prototype.copy=function(){for(var t=new Array(this._geometries.length).fill(null),n=0;n<t.length;n++)t[n]=this._geometries[n].copy();return new e(t,this._factory)},e.prototype.isEmpty=function(){for(var t=0;t<this._geometries.length;t++)if(!this._geometries[t].isEmpty())return!1;return!0},e.prototype.interfaces_=function(){return[]},e.prototype.getClass=function(){return e},n.serialVersionUID.get=function(){return-0x4f07bcb1f857d800},Object.defineProperties(e,n),e}(ct),Xt=function(t){function e(){t.apply(this,arguments)}t&&(e.__proto__=t),(e.prototype=Object.create(t&&t.prototype)).constructor=e;var n={serialVersionUID:{configurable:!0}};return e.prototype.getSortIndex=function(){return ct.SORTINDEX_MULTILINESTRING},e.prototype.equalsExact=function(){if(2===arguments.length){var e=arguments[0],n=arguments[1];return!!this.isEquivalentClass(e)&&t.prototype.equalsExact.call(this,e,n)}return t.prototype.equalsExact.apply(this,arguments)},e.prototype.getBoundaryDimension=function(){return this.isClosed()?qt.FALSE:0},e.prototype.isClosed=function(){if(this.isEmpty())return!1;for(var t=0;t<this._geometries.length;t++)if(!this._geometries[t].isClosed())return!1;return!0},e.prototype.getDimension=function(){return 1},e.prototype.reverse=function(){for(var t=this._geometries.length,e=new Array(t).fill(null),n=0;n<this._geometries.length;n++)e[t-1-n]=this._geometries[n].reverse();return this.getFactory().createMultiLineString(e)},e.prototype.getBoundary=function(){return new Yt(this).getBoundary()},e.prototype.getGeometryType=function(){return"MultiLineString"},e.prototype.copy=function(){for(var t=new Array(this._geometries.length).fill(null),n=0;n<t.length;n++)t[n]=this._geometries[n].copy();return new e(t,this._factory)},e.prototype.interfaces_=function(){return[At]},e.prototype.getClass=function(){return e},n.serialVersionUID.get=function(){return 0x7155d2ab4afa8000},Object.defineProperties(e,n),e}(zt),Yt=function(){if(this._geom=null,this._geomFact=null,this._bnRule=null,this._endpointMap=null,1===arguments.length){var t=arguments[0],e=gt.MOD2_BOUNDARY_RULE;this._geom=t,this._geomFact=t.getFactory(),this._bnRule=e}else if(2===arguments.length){var n=arguments[0],i=arguments[1];this._geom=n,this._geomFact=n.getFactory(),this._bnRule=i}};Yt.prototype.boundaryMultiLineString=function(t){if(this._geom.isEmpty())return this.getEmptyMultiPoint();var e=this.computeBoundaryCoordinates(t);return 1===e.length?this._geomFact.createPoint(e[0]):this._geomFact.createMultiPointFromCoords(e)},Yt.prototype.getBoundary=function(){return this._geom instanceof Kt?this.boundaryLineString(this._geom):this._geom instanceof Xt?this.boundaryMultiLineString(this._geom):this._geom.getBoundary()},Yt.prototype.boundaryLineString=function(t){if(this._geom.isEmpty())return this.getEmptyMultiPoint();if(t.isClosed()){return this._bnRule.isInBoundary(2)?t.getStartPoint():this._geomFact.createMultiPoint()}return this._geomFact.createMultiPoint([t.getStartPoint(),t.getEndPoint()])},Yt.prototype.getEmptyMultiPoint=function(){return this._geomFact.createMultiPoint()},Yt.prototype.computeBoundaryCoordinates=function(t){var e=new Nt;this._endpointMap=new p;for(var n=0;n<t.getNumGeometries();n++){var i=t.getGeometryN(n);0!==i.getNumPoints()&&(this.addEndpoint(i.getCoordinateN(0)),this.addEndpoint(i.getCoordinateN(i.getNumPoints()-1)))}for(var r=this._endpointMap.entrySet().iterator();r.hasNext();){var o=r.next(),s=o.getValue().count;this._bnRule.isInBoundary(s)&&e.add(o.getKey())}return Lt.toCoordinateArray(e)},Yt.prototype.addEndpoint=function(t){var e=this._endpointMap.get(t);null===e&&(e=new kt,this._endpointMap.put(t,e)),e.count++},Yt.prototype.interfaces_=function(){return[]},Yt.prototype.getClass=function(){return Yt},Yt.getBoundary=function(){if(1===arguments.length){var t=arguments[0];return new Yt(t).getBoundary()}if(2===arguments.length){var e=arguments[0],n=arguments[1];return new Yt(e,n).getBoundary()}};var kt=function(){this.count=null};kt.prototype.interfaces_=function(){return[]},kt.prototype.getClass=function(){return kt};var jt=function(){},Ht={NEWLINE:{configurable:!0},SIMPLE_ORDINATE_FORMAT:{configurable:!0}};jt.prototype.interfaces_=function(){return[]},jt.prototype.getClass=function(){return jt},jt.chars=function(t,e){for(var n=new Array(e).fill(null),i=0;i<e;i++)n[i]=t;return String(n)},jt.getStackTrace=function(){if(1===arguments.length){var t=arguments[0],e=new function(){},n=new function(){}(e);return t.printStackTrace(n),e.toString()}if(2===arguments.length){for(var i=arguments[0],r=arguments[1],o="",s=new function(){}(new function(){}(jt.getStackTrace(i))),a=0;a<r;a++)try{o+=s.readLine()+jt.NEWLINE}catch(t){if(!(t instanceof g))throw t;et.shouldNeverReachHere()}return o}},jt.split=function(t,e){for(var n=e.length,i=new Nt,r=""+t,o=r.indexOf(e);o>=0;){var s=r.substring(0,o);i.add(s),o=(r=r.substring(o+n)).indexOf(e)}r.length>0&&i.add(r);for(var a=new Array(i.size()).fill(null),u=0;u<a.length;u++)a[u]=i.get(u);return a},jt.toString=function(){if(1===arguments.length){var t=arguments[0];return jt.SIMPLE_ORDINATE_FORMAT.format(t)}},jt.spaces=function(t){return jt.chars(" ",t)},Ht.NEWLINE.get=function(){return Y.getProperty("line.separator")},Ht.SIMPLE_ORDINATE_FORMAT.get=function(){return new function(){}("0.#")},Object.defineProperties(jt,Ht);var Wt=function(){};Wt.prototype.interfaces_=function(){return[]},Wt.prototype.getClass=function(){return Wt},Wt.copyCoord=function(t,e,n,i){for(var r=Math.min(t.getDimension(),n.getDimension()),o=0;o<r;o++)n.setOrdinate(i,o,t.getOrdinate(e,o))},Wt.isRing=function(t){var e=t.size();return 0===e||!(e<=3)&&(t.getOrdinate(0,V.X)===t.getOrdinate(e-1,V.X)&&t.getOrdinate(0,V.Y)===t.getOrdinate(e-1,V.Y))},Wt.isEqual=function(t,e){var n=t.size();if(n!==e.size())return!1;for(var i=Math.min(t.getDimension(),e.getDimension()),r=0;r<n;r++)for(var o=0;o<i;o++){var s=t.getOrdinate(r,o),a=e.getOrdinate(r,o);if(t.getOrdinate(r,o)!==e.getOrdinate(r,o)&&(!v.isNaN(s)||!v.isNaN(a)))return!1}return!0},Wt.extend=function(t,e,n){var i=t.create(n,e.getDimension()),r=e.size();if(Wt.copy(e,0,i,0,r),r>0)for(var o=r;o<n;o++)Wt.copy(e,r-1,i,o,1);return i},Wt.reverse=function(t){for(var e=t.size()-1,n=Math.trunc(e/2),i=0;i<=n;i++)Wt.swap(t,i,e-i)},Wt.swap=function(t,e,n){if(e===n)return null;for(var i=0;i<t.getDimension();i++){var r=t.getOrdinate(e,i);t.setOrdinate(e,i,t.getOrdinate(n,i)),t.setOrdinate(n,i,r)}},Wt.copy=function(t,e,n,i,r){for(var o=0;o<r;o++)Wt.copyCoord(t,e+o,n,i+o)},Wt.toString=function(){if(1===arguments.length){var t=arguments[0],e=t.size();if(0===e)return"()";var n=t.getDimension(),i=new D;i.append("(");for(var r=0;r<e;r++){r>0&&i.append(" ");for(var o=0;o<n;o++)o>0&&i.append(","),i.append(jt.toString(t.getOrdinate(r,o)))}return i.append(")"),i.toString()}},Wt.ensureValidRing=function(t,e){var n=e.size();if(0===n)return e;if(n<=3)return Wt.createClosedRing(t,e,4);return e.getOrdinate(0,V.X)===e.getOrdinate(n-1,V.X)&&e.getOrdinate(0,V.Y)===e.getOrdinate(n-1,V.Y)?e:Wt.createClosedRing(t,e,n+1)},Wt.createClosedRing=function(t,e,n){var i=t.create(n,e.getDimension()),r=e.size();Wt.copy(e,0,i,0,r);for(var o=r;o<n;o++)Wt.copy(e,0,i,o,1);return i};var Kt=function(t){function e(e,n){t.call(this,n),this._points=null,this.init(e)}t&&(e.__proto__=t),(e.prototype=Object.create(t&&t.prototype)).constructor=e;var n={serialVersionUID:{configurable:!0}};return e.prototype.computeEnvelopeInternal=function(){return this.isEmpty()?new j:this._points.expandEnvelope(new j)},e.prototype.isRing=function(){return this.isClosed()&&this.isSimple()},e.prototype.getSortIndex=function(){return t.SORTINDEX_LINESTRING},e.prototype.getCoordinates=function(){return this._points.toCoordinateArray()},e.prototype.equalsExact=function(){if(2===arguments.length){var e=arguments[0],n=arguments[1];if(!this.isEquivalentClass(e))return!1;var i=e;if(this._points.size()!==i._points.size())return!1;for(var r=0;r<this._points.size();r++)if(!this.equal(this._points.getCoordinate(r),i._points.getCoordinate(r),n))return!1;return!0}return t.prototype.equalsExact.apply(this,arguments)},e.prototype.normalize=function(){for(var t=0;t<Math.trunc(this._points.size()/2);t++){var e=this._points.size()-1-t;if(!this._points.getCoordinate(t).equals(this._points.getCoordinate(e)))return this._points.getCoordinate(t).compareTo(this._points.getCoordinate(e))>0&&Wt.reverse(this._points),null}},e.prototype.getCoordinate=function(){return this.isEmpty()?null:this._points.getCoordinate(0)},e.prototype.getBoundaryDimension=function(){return this.isClosed()?qt.FALSE:0},e.prototype.isClosed=function(){return!this.isEmpty()&&this.getCoordinateN(0).equals2D(this.getCoordinateN(this.getNumPoints()-1))},e.prototype.getEndPoint=function(){return this.isEmpty()?null:this.getPointN(this.getNumPoints()-1)},e.prototype.getDimension=function(){return 1},e.prototype.getLength=function(){return at.computeLength(this._points)},e.prototype.getNumPoints=function(){return this._points.size()},e.prototype.reverse=function(){var t=this._points.copy();Wt.reverse(t);return this.getFactory().createLineString(t)},e.prototype.compareToSameClass=function(){if(1===arguments.length){for(var t=arguments[0],e=0,n=0;e<this._points.size()&&n<t._points.size();){var i=this._points.getCoordinate(e).compareTo(t._points.getCoordinate(n));if(0!==i)return i;e++,n++}return e<this._points.size()?1:n<t._points.size()?-1:0}if(2===arguments.length){var r=arguments[0];return arguments[1].compare(this._points,r._points)}},e.prototype.apply=function(){if(T(arguments[0],ft))for(var t=arguments[0],e=0;e<this._points.size();e++)t.filter(this._points.getCoordinate(e));else if(T(arguments[0],Ut)){var n=arguments[0];if(0===this._points.size())return null;for(var i=0;i<this._points.size()&&(n.filter(this._points,i),!n.isDone());i++);n.isGeometryChanged()&&this.geometryChanged()}else if(T(arguments[0],Vt)){arguments[0].filter(this)}else if(T(arguments[0],lt)){arguments[0].filter(this)}},e.prototype.getBoundary=function(){return new Yt(this).getBoundary()},e.prototype.isEquivalentClass=function(t){return t instanceof e},e.prototype.clone=function(){var e=t.prototype.clone.call(this);return e._points=this._points.clone(),e},e.prototype.getCoordinateN=function(t){return this._points.getCoordinate(t)},e.prototype.getGeometryType=function(){return"LineString"},e.prototype.copy=function(){return new e(this._points.copy(),this._factory)},e.prototype.getCoordinateSequence=function(){return this._points},e.prototype.isEmpty=function(){return 0===this._points.size()},e.prototype.init=function(t){if(null===t&&(t=this.getFactory().getCoordinateSequenceFactory().create([])),1===t.size())throw new m("Invalid number of points in LineString (found "+t.size()+" - must be 0 or >= 2)");this._points=t},e.prototype.isCoordinate=function(t){for(var e=0;e<this._points.size();e++)if(this._points.getCoordinate(e).equals(t))return!0;return!1},e.prototype.getStartPoint=function(){return this.isEmpty()?null:this.getPointN(0)},e.prototype.getPointN=function(t){return this.getFactory().createPoint(this._points.getCoordinate(t))},e.prototype.interfaces_=function(){return[At]},e.prototype.getClass=function(){return e},n.serialVersionUID.get=function(){return 0x2b2b51ba435c8e00},Object.defineProperties(e,n),e}(ct),Jt=function(){};Jt.prototype.interfaces_=function(){return[]},Jt.prototype.getClass=function(){return Jt};var Qt=function(t){function e(e,n){t.call(this,n),this._coordinates=e||null,this.init(this._coordinates)}t&&(e.__proto__=t),(e.prototype=Object.create(t&&t.prototype)).constructor=e;var n={serialVersionUID:{configurable:!0}};return e.prototype.computeEnvelopeInternal=function(){if(this.isEmpty())return new j;var t=new j;return t.expandToInclude(this._coordinates.getX(0),this._coordinates.getY(0)),t},e.prototype.getSortIndex=function(){return t.SORTINDEX_POINT},e.prototype.getCoordinates=function(){return this.isEmpty()?[]:[this.getCoordinate()]},e.prototype.equalsExact=function(){if(2===arguments.length){var e=arguments[0],n=arguments[1];return!!this.isEquivalentClass(e)&&(!(!this.isEmpty()||!e.isEmpty())||this.isEmpty()===e.isEmpty()&&this.equal(e.getCoordinate(),this.getCoordinate(),n))}return t.prototype.equalsExact.apply(this,arguments)},e.prototype.normalize=function(){},e.prototype.getCoordinate=function(){return 0!==this._coordinates.size()?this._coordinates.getCoordinate(0):null},e.prototype.getBoundaryDimension=function(){return qt.FALSE},e.prototype.getDimension=function(){return 0},e.prototype.getNumPoints=function(){return this.isEmpty()?0:1},e.prototype.reverse=function(){return this.copy()},e.prototype.getX=function(){if(null===this.getCoordinate())throw new Error("getX called on empty Point");return this.getCoordinate().x},e.prototype.compareToSameClass=function(){if(1===arguments.length){var t=arguments[0];return this.getCoordinate().compareTo(t.getCoordinate())}if(2===arguments.length){var e=arguments[0];return arguments[1].compare(this._coordinates,e._coordinates)}},e.prototype.apply=function(){if(T(arguments[0],ft)){var t=arguments[0];if(this.isEmpty())return null;t.filter(this.getCoordinate())}else if(T(arguments[0],Ut)){var e=arguments[0];if(this.isEmpty())return null;e.filter(this._coordinates,0),e.isGeometryChanged()&&this.geometryChanged()}else if(T(arguments[0],Vt)){arguments[0].filter(this)}else if(T(arguments[0],lt)){arguments[0].filter(this)}},e.prototype.getBoundary=function(){return this.getFactory().createGeometryCollection(null)},e.prototype.clone=function(){var e=t.prototype.clone.call(this);return e._coordinates=this._coordinates.clone(),e},e.prototype.getGeometryType=function(){return"Point"},e.prototype.copy=function(){return new e(this._coordinates.copy(),this._factory)},e.prototype.getCoordinateSequence=function(){return this._coordinates},e.prototype.getY=function(){if(null===this.getCoordinate())throw new Error("getY called on empty Point");return this.getCoordinate().y},e.prototype.isEmpty=function(){return 0===this._coordinates.size()},e.prototype.init=function(t){null===t&&(t=this.getFactory().getCoordinateSequenceFactory().create([])),et.isTrue(t.size()<=1),this._coordinates=t},e.prototype.isSimple=function(){return!0},e.prototype.interfaces_=function(){return[Jt]},e.prototype.getClass=function(){return e},n.serialVersionUID.get=function(){return 0x44077bad161cbc00},Object.defineProperties(e,n),e}(ct),Zt=function(){};Zt.prototype.interfaces_=function(){return[]},Zt.prototype.getClass=function(){return Zt};var $t=function(t){function e(e,n,i){if(t.call(this,i),this._shell=null,this._holes=null,null===e&&(e=this.getFactory().createLinearRing()),null===n&&(n=[]),t.hasNullElements(n))throw new m("holes must not contain null elements");if(e.isEmpty()&&t.hasNonEmptyElements(n))throw new m("shell is empty but holes are not");this._shell=e,this._holes=n}t&&(e.__proto__=t),(e.prototype=Object.create(t&&t.prototype)).constructor=e;var n={serialVersionUID:{configurable:!0}};return e.prototype.computeEnvelopeInternal=function(){return this._shell.getEnvelopeInternal()},e.prototype.getSortIndex=function(){return t.SORTINDEX_POLYGON},e.prototype.getCoordinates=function(){if(this.isEmpty())return[];for(var t=new Array(this.getNumPoints()).fill(null),e=-1,n=this._shell.getCoordinates(),i=0;i<n.length;i++)t[++e]=n[i];for(var r=0;r<this._holes.length;r++)for(var o=this._holes[r].getCoordinates(),s=0;s<o.length;s++)t[++e]=o[s];return t},e.prototype.getArea=function(){var t=0;t+=Math.abs(at.signedArea(this._shell.getCoordinateSequence()));for(var e=0;e<this._holes.length;e++)t-=Math.abs(at.signedArea(this._holes[e].getCoordinateSequence()));return t},e.prototype.isRectangle=function(){if(0!==this.getNumInteriorRing())return!1;if(null===this._shell)return!1;if(5!==this._shell.getNumPoints())return!1;for(var t=this._shell.getCoordinateSequence(),e=this.getEnvelopeInternal(),n=0;n<5;n++){var i=t.getX(n);if(i!==e.getMinX()&&i!==e.getMaxX())return!1;var r=t.getY(n);if(r!==e.getMinY()&&r!==e.getMaxY())return!1}for(var o=t.getX(0),s=t.getY(0),a=1;a<=4;a++){var u=t.getX(a),l=t.getY(a);if(u!==o===(l!==s))return!1;o=u,s=l}return!0},e.prototype.equalsExact=function(){if(2===arguments.length){var e=arguments[0],n=arguments[1];if(!this.isEquivalentClass(e))return!1;var i=e,r=this._shell,o=i._shell;if(!r.equalsExact(o,n))return!1;if(this._holes.length!==i._holes.length)return!1;for(var s=0;s<this._holes.length;s++)if(!this._holes[s].equalsExact(i._holes[s],n))return!1;return!0}return t.prototype.equalsExact.apply(this,arguments)},e.prototype.normalize=function(){if(0===arguments.length){this.normalize(this._shell,!0);for(var t=0;t<this._holes.length;t++)this.normalize(this._holes[t],!1);Gt.sort(this._holes)}else if(2===arguments.length){var e=arguments[0],n=arguments[1];if(e.isEmpty())return null;var i=new Array(e.getCoordinates().length-1).fill(null);Y.arraycopy(e.getCoordinates(),0,i,0,i.length);var r=Lt.minCoordinate(e.getCoordinates());Lt.scroll(i,r),Y.arraycopy(i,0,e.getCoordinates(),0,i.length),e.getCoordinates()[i.length]=i[0],at.isCCW(e.getCoordinates())===n&&Lt.reverse(e.getCoordinates())}},e.prototype.getCoordinate=function(){return this._shell.getCoordinate()},e.prototype.getNumInteriorRing=function(){return this._holes.length},e.prototype.getBoundaryDimension=function(){return 1},e.prototype.getDimension=function(){return 2},e.prototype.getLength=function(){var t=0;t+=this._shell.getLength();for(var e=0;e<this._holes.length;e++)t+=this._holes[e].getLength();return t},e.prototype.getNumPoints=function(){for(var t=this._shell.getNumPoints(),e=0;e<this._holes.length;e++)t+=this._holes[e].getNumPoints();return t},e.prototype.reverse=function(){var t=this.copy();t._shell=this._shell.copy().reverse(),t._holes=new Array(this._holes.length).fill(null);for(var e=0;e<this._holes.length;e++)t._holes[e]=this._holes[e].copy().reverse();return t},e.prototype.convexHull=function(){return this.getExteriorRing().convexHull()},e.prototype.compareToSameClass=function(){if(1===arguments.length){var t=arguments[0],e=this._shell,n=t._shell;return e.compareToSameClass(n)}if(2===arguments.length){var i=arguments[0],r=arguments[1],o=i,s=this._shell,a=o._shell,u=s.compareToSameClass(a,r);if(0!==u)return u;for(var l=this.getNumInteriorRing(),c=o.getNumInteriorRing(),p=0;p<l&&p<c;){var h=this.getInteriorRingN(p),f=o.getInteriorRingN(p),g=h.compareToSameClass(f,r);if(0!==g)return g;p++}return p<l?1:p<c?-1:0}},e.prototype.apply=function(t){if(T(t,ft)){this._shell.apply(t);for(var e=0;e<this._holes.length;e++)this._holes[e].apply(t)}else if(T(t,Ut)){if(this._shell.apply(t),!t.isDone())for(var n=0;n<this._holes.length&&(this._holes[n].apply(t),!t.isDone());n++);t.isGeometryChanged()&&this.geometryChanged()}else if(T(t,Vt))t.filter(this);else if(T(t,lt)){t.filter(this),this._shell.apply(t);for(var i=0;i<this._holes.length;i++)this._holes[i].apply(t)}},e.prototype.getBoundary=function(){if(this.isEmpty())return this.getFactory().createMultiLineString();var t=new Array(this._holes.length+1).fill(null);t[0]=this._shell;for(var e=0;e<this._holes.length;e++)t[e+1]=this._holes[e];return t.length<=1?this.getFactory().createLinearRing(t[0].getCoordinateSequence()):this.getFactory().createMultiLineString(t)},e.prototype.clone=function(){var e=t.prototype.clone.call(this);e._shell=this._shell.clone(),e._holes=new Array(this._holes.length).fill(null);for(var n=0;n<this._holes.length;n++)e._holes[n]=this._holes[n].clone();return e},e.prototype.getGeometryType=function(){return"Polygon"},e.prototype.copy=function(){for(var t=this._shell.copy(),n=new Array(this._holes.length).fill(null),i=0;i<n.length;i++)n[i]=this._holes[i].copy();return new e(t,n,this._factory)},e.prototype.getExteriorRing=function(){return this._shell},e.prototype.isEmpty=function(){return this._shell.isEmpty()},e.prototype.getInteriorRingN=function(t){return this._holes[t]},e.prototype.interfaces_=function(){return[Zt]},e.prototype.getClass=function(){return e},n.serialVersionUID.get=function(){return-0x307ffefd8dc97200},Object.defineProperties(e,n),e}(ct),te=function(t){function e(){t.apply(this,arguments)}t&&(e.__proto__=t),(e.prototype=Object.create(t&&t.prototype)).constructor=e;var n={serialVersionUID:{configurable:!0}};return e.prototype.getSortIndex=function(){return ct.SORTINDEX_MULTIPOINT},e.prototype.isValid=function(){return!0},e.prototype.equalsExact=function(){if(2===arguments.length){var e=arguments[0],n=arguments[1];return!!this.isEquivalentClass(e)&&t.prototype.equalsExact.call(this,e,n)}return t.prototype.equalsExact.apply(this,arguments)},e.prototype.getCoordinate=function(){if(1===arguments.length){var e=arguments[0];return this._geometries[e].getCoordinate()}return t.prototype.getCoordinate.apply(this,arguments)},e.prototype.getBoundaryDimension=function(){return qt.FALSE},e.prototype.getDimension=function(){return 0},e.prototype.getBoundary=function(){return this.getFactory().createGeometryCollection(null)},e.prototype.getGeometryType=function(){return"MultiPoint"},e.prototype.copy=function(){for(var t=new Array(this._geometries.length).fill(null),n=0;n<t.length;n++)t[n]=this._geometries[n].copy();return new e(t,this._factory)},e.prototype.interfaces_=function(){return[Jt]},e.prototype.getClass=function(){return e},n.serialVersionUID.get=function(){return-0x6fb1ed4162e0fc00},Object.defineProperties(e,n),e}(zt),ee=function(t){function e(e,n){e instanceof C&&n instanceof _e&&(e=n.getCoordinateSequenceFactory().create(e)),t.call(this,e,n),this.validateConstruction()}t&&(e.__proto__=t),(e.prototype=Object.create(t&&t.prototype)).constructor=e;var n={MINIMUM_VALID_SIZE:{configurable:!0},serialVersionUID:{configurable:!0}};return e.prototype.getSortIndex=function(){return ct.SORTINDEX_LINEARRING},e.prototype.getBoundaryDimension=function(){return qt.FALSE},e.prototype.isClosed=function(){return!!this.isEmpty()||t.prototype.isClosed.call(this)},e.prototype.reverse=function(){var t=this._points.copy();Wt.reverse(t);return this.getFactory().createLinearRing(t)},e.prototype.validateConstruction=function(){if(!this.isEmpty()&&!t.prototype.isClosed.call(this))throw new m("Points of LinearRing do not form a closed linestring");if(this.getCoordinateSequence().size()>=1&&this.getCoordinateSequence().size()<e.MINIMUM_VALID_SIZE)throw new m("Invalid number of points in LinearRing (found "+this.getCoordinateSequence().size()+" - must be 0 or >= 4)")},e.prototype.getGeometryType=function(){return"LinearRing"},e.prototype.copy=function(){return new e(this._points.copy(),this._factory)},e.prototype.interfaces_=function(){return[]},e.prototype.getClass=function(){return e},n.MINIMUM_VALID_SIZE.get=function(){return 4},n.serialVersionUID.get=function(){return-0x3b229e262367a600},Object.defineProperties(e,n),e}(Kt),ne=function(t){function e(){t.apply(this,arguments)}t&&(e.__proto__=t),(e.prototype=Object.create(t&&t.prototype)).constructor=e;var n={serialVersionUID:{configurable:!0}};return e.prototype.getSortIndex=function(){return ct.SORTINDEX_MULTIPOLYGON},e.prototype.equalsExact=function(){if(2===arguments.length){var e=arguments[0],n=arguments[1];return!!this.isEquivalentClass(e)&&t.prototype.equalsExact.call(this,e,n)}return t.prototype.equalsExact.apply(this,arguments)},e.prototype.getBoundaryDimension=function(){return 1},e.prototype.getDimension=function(){return 2},e.prototype.reverse=function(){for(var t=this._geometries.length,e=new Array(t).fill(null),n=0;n<this._geometries.length;n++)e[n]=this._geometries[n].reverse();return this.getFactory().createMultiPolygon(e)},e.prototype.getBoundary=function(){if(this.isEmpty())return this.getFactory().createMultiLineString();for(var t=new Nt,e=0;e<this._geometries.length;e++)for(var n=this._geometries[e].getBoundary(),i=0;i<n.getNumGeometries();i++)t.add(n.getGeometryN(i));var r=new Array(t.size()).fill(null);return this.getFactory().createMultiLineString(t.toArray(r))},e.prototype.getGeometryType=function(){return"MultiPolygon"},e.prototype.copy=function(){for(var t=new Array(this._geometries.length).fill(null),n=0;n<t.length;n++)t[n]=this._geometries[n].copy();return new e(t,this._factory)},e.prototype.interfaces_=function(){return[Zt]},e.prototype.getClass=function(){return e},n.serialVersionUID.get=function(){return-0x7a5aa1369171980},Object.defineProperties(e,n),e}(zt),ie=function(t){this._factory=t||null,this._isUserDataCopied=!1},re={NoOpGeometryOperation:{configurable:!0},CoordinateOperation:{configurable:!0},CoordinateSequenceOperation:{configurable:!0}};ie.prototype.setCopyUserData=function(t){this._isUserDataCopied=t},ie.prototype.edit=function(t,e){if(null===t)return null;var n=this.editInternal(t,e);return this._isUserDataCopied&&n.setUserData(t.getUserData()),n},ie.prototype.editInternal=function(t,e){return null===this._factory&&(this._factory=t.getFactory()),t instanceof zt?this.editGeometryCollection(t,e):t instanceof $t?this.editPolygon(t,e):t instanceof Qt?e.edit(t,this._factory):t instanceof Kt?e.edit(t,this._factory):(et.shouldNeverReachHere("Unsupported Geometry class: "+t.getClass().getName()),null)},ie.prototype.editGeometryCollection=function(t,e){for(var n=e.edit(t,this._factory),i=new Nt,r=0;r<n.getNumGeometries();r++){var o=this.edit(n.getGeometryN(r),e);null===o||o.isEmpty()||i.add(o)}return n.getClass()===te?this._factory.createMultiPoint(i.toArray([])):n.getClass()===Xt?this._factory.createMultiLineString(i.toArray([])):n.getClass()===ne?this._factory.createMultiPolygon(i.toArray([])):this._factory.createGeometryCollection(i.toArray([]))},ie.prototype.editPolygon=function(t,e){var n=e.edit(t,this._factory);if(null===n&&(n=this._factory.createPolygon(null)),n.isEmpty())return n;var i=this.edit(n.getExteriorRing(),e);if(null===i||i.isEmpty())return this._factory.createPolygon();for(var r=new Nt,o=0;o<n.getNumInteriorRing();o++){var s=this.edit(n.getInteriorRingN(o),e);null===s||s.isEmpty()||r.add(s)}return this._factory.createPolygon(i,r.toArray([]))},ie.prototype.interfaces_=function(){return[]},ie.prototype.getClass=function(){return ie},ie.GeometryEditorOperation=function(){},re.NoOpGeometryOperation.get=function(){return oe},re.CoordinateOperation.get=function(){return se},re.CoordinateSequenceOperation.get=function(){return ae},Object.defineProperties(ie,re);var oe=function(){};oe.prototype.edit=function(t,e){return t},oe.prototype.interfaces_=function(){return[ie.GeometryEditorOperation]},oe.prototype.getClass=function(){return oe};var se=function(){};se.prototype.edit=function(t,e){var n=this.editCoordinates(t.getCoordinates(),t);return null===n?t:t instanceof ee?e.createLinearRing(n):t instanceof Kt?e.createLineString(n):t instanceof Qt?n.length>0?e.createPoint(n[0]):e.createPoint():t},se.prototype.interfaces_=function(){return[ie.GeometryEditorOperation]},se.prototype.getClass=function(){return se};var ae=function(){};ae.prototype.edit=function(t,e){return t instanceof ee?e.createLinearRing(this.edit(t.getCoordinateSequence(),t)):t instanceof Kt?e.createLineString(this.edit(t.getCoordinateSequence(),t)):t instanceof Qt?e.createPoint(this.edit(t.getCoordinateSequence(),t)):t},ae.prototype.interfaces_=function(){return[ie.GeometryEditorOperation]},ae.prototype.getClass=function(){return ae};var ue=function(){if(this._dimension=3,this._coordinates=null,1===arguments.length){if(arguments[0]instanceof Array)this._coordinates=arguments[0],this._dimension=3;else if(Number.isInteger(arguments[0])){var t=arguments[0];this._coordinates=new Array(t).fill(null);for(var e=0;e<t;e++)this._coordinates[e]=new C}else if(T(arguments[0],V)){var n=arguments[0];if(null===n)return this._coordinates=new Array(0).fill(null),null;this._dimension=n.getDimension(),this._coordinates=new Array(n.size()).fill(null);for(var i=0;i<this._coordinates.length;i++)this._coordinates[i]=n.getCoordinateCopy(i)}}else if(2===arguments.length)if(arguments[0]instanceof Array&&Number.isInteger(arguments[1])){var r=arguments[0],o=arguments[1];this._coordinates=r,this._dimension=o,null===r&&(this._coordinates=new Array(0).fill(null))}else if(Number.isInteger(arguments[0])&&Number.isInteger(arguments[1])){var s=arguments[0],a=arguments[1];this._coordinates=new Array(s).fill(null),this._dimension=a;for(var u=0;u<s;u++)this._coordinates[u]=new C}},le={serialVersionUID:{configurable:!0}};ue.prototype.setOrdinate=function(t,e,n){switch(e){case V.X:this._coordinates[t].x=n;break;case V.Y:this._coordinates[t].y=n;break;case V.Z:this._coordinates[t].z=n;break;default:throw new m("invalid ordinateIndex")}},ue.prototype.size=function(){return this._coordinates.length},ue.prototype.getOrdinate=function(t,e){switch(e){case V.X:return this._coordinates[t].x;case V.Y:return this._coordinates[t].y;case V.Z:return this._coordinates[t].z}return v.NaN},ue.prototype.getCoordinate=function(){if(1===arguments.length){var t=arguments[0];return this._coordinates[t]}if(2===arguments.length){var e=arguments[0],n=arguments[1];n.x=this._coordinates[e].x,n.y=this._coordinates[e].y,n.z=this._coordinates[e].z}},ue.prototype.getCoordinateCopy=function(t){return new C(this._coordinates[t])},ue.prototype.getDimension=function(){return this._dimension},ue.prototype.getX=function(t){return this._coordinates[t].x},ue.prototype.clone=function(){for(var t=new Array(this.size()).fill(null),e=0;e<this._coordinates.length;e++)t[e]=this._coordinates[e].clone();return new ue(t,this._dimension)},ue.prototype.expandEnvelope=function(t){for(var e=0;e<this._coordinates.length;e++)t.expandToInclude(this._coordinates[e]);return t},ue.prototype.copy=function(){for(var t=new Array(this.size()).fill(null),e=0;e<this._coordinates.length;e++)t[e]=this._coordinates[e].copy();return new ue(t,this._dimension)},ue.prototype.toString=function(){if(this._coordinates.length>0){var t=new D(17*this._coordinates.length);t.append("("),t.append(this._coordinates[0]);for(var e=1;e<this._coordinates.length;e++)t.append(", "),t.append(this._coordinates[e]);return t.append(")"),t.toString()}return"()"},ue.prototype.getY=function(t){return this._coordinates[t].y},ue.prototype.toCoordinateArray=function(){return this._coordinates},ue.prototype.interfaces_=function(){return[V,e]},ue.prototype.getClass=function(){return ue},le.serialVersionUID.get=function(){return-0xcb44a778db18e00},Object.defineProperties(ue,le);var ce=function(){},pe={serialVersionUID:{configurable:!0},instanceObject:{configurable:!0}};ce.prototype.readResolve=function(){return ce.instance()},ce.prototype.create=function(){if(1===arguments.length){if(arguments[0]instanceof Array){var t=arguments[0];return new ue(t)}if(T(arguments[0],V)){var e=arguments[0];return new ue(e)}}else if(2===arguments.length){var n=arguments[0],i=arguments[1];return i>3&&(i=3),i<2?new ue(n):new ue(n,i)}},ce.prototype.interfaces_=function(){return[b,e]},ce.prototype.getClass=function(){return ce},ce.instance=function(){return ce.instanceObject},pe.serialVersionUID.get=function(){return-0x38e49fa6cf6f2e00},pe.instanceObject.get=function(){return new ce},Object.defineProperties(ce,pe);var he=function(t){function e(){t.call(this),this.map_=new Map}return t&&(e.__proto__=t),e.prototype=Object.create(t&&t.prototype),e.prototype.constructor=e,e.prototype.get=function(t){return this.map_.get(t)||null},e.prototype.put=function(t,e){return this.map_.set(t,e),e},e.prototype.values=function(){for(var t=new Nt,e=this.map_.values(),n=e.next();!n.done;)t.add(n.value),n=e.next();return t},e.prototype.entrySet=function(){var t=new Pt;return this.map_.entries().forEach(function(e){return t.add(e)}),t},e.prototype.size=function(){return this.map_.size()},e}(Tt),fe=function t(){if(this._modelType=null,this._scale=null,0===arguments.length)this._modelType=t.FLOATING;else if(1===arguments.length)if(arguments[0]instanceof de){var e=arguments[0];this._modelType=e,e===t.FIXED&&this.setScale(1)}else if("number"==typeof arguments[0]){var n=arguments[0];this._modelType=t.FIXED,this.setScale(n)}else if(arguments[0]instanceof t){var i=arguments[0];this._modelType=i._modelType,this._scale=i._scale}},ge={serialVersionUID:{configurable:!0},maximumPreciseValue:{configurable:!0}};fe.prototype.equals=function(t){if(!(t instanceof fe))return!1;var e=t;return this._modelType===e._modelType&&this._scale===e._scale},fe.prototype.compareTo=function(t){var e=t,n=this.getMaximumSignificantDigits(),i=e.getMaximumSignificantDigits();return new M(n).compareTo(new M(i))},fe.prototype.getScale=function(){return this._scale},fe.prototype.isFloating=function(){return this._modelType===fe.FLOATING||this._modelType===fe.FLOATING_SINGLE},fe.prototype.getType=function(){return this._modelType},fe.prototype.toString=function(){var t="UNKNOWN";return this._modelType===fe.FLOATING?t="Floating":this._modelType===fe.FLOATING_SINGLE?t="Floating-Single":this._modelType===fe.FIXED&&(t="Fixed (Scale="+this.getScale()+")"),t},fe.prototype.makePrecise=function(){if("number"==typeof arguments[0]){var t=arguments[0];if(v.isNaN(t))return t;if(this._modelType===fe.FLOATING_SINGLE){return t}return this._modelType===fe.FIXED?Math.round(t*this._scale)/this._scale:t}if(arguments[0]instanceof C){var e=arguments[0];if(this._modelType===fe.FLOATING)return null;e.x=this.makePrecise(e.x),e.y=this.makePrecise(e.y)}},fe.prototype.getMaximumSignificantDigits=function(){var t=16;return this._modelType===fe.FLOATING?t=16:this._modelType===fe.FLOATING_SINGLE?t=6:this._modelType===fe.FIXED&&(t=1+Math.trunc(Math.ceil(Math.log(this.getScale())/Math.log(10)))),t},fe.prototype.setScale=function(t){this._scale=Math.abs(t)},fe.prototype.interfaces_=function(){return[e,E]},fe.prototype.getClass=function(){return fe},fe.mostPrecise=function(t,e){return t.compareTo(e)>=0?t:e},ge.serialVersionUID.get=function(){return 0x6bee6404e9a25c00},ge.maximumPreciseValue.get=function(){return 9007199254740992},Object.defineProperties(fe,ge);var de=function t(e){this._name=e||null,t.nameToTypeMap.put(e,this)},ye={serialVersionUID:{configurable:!0},nameToTypeMap:{configurable:!0}};de.prototype.readResolve=function(){return de.nameToTypeMap.get(this._name)},de.prototype.toString=function(){return this._name},de.prototype.interfaces_=function(){return[e]},de.prototype.getClass=function(){return de},ye.serialVersionUID.get=function(){return-552860263173159e4},ye.nameToTypeMap.get=function(){return new he},Object.defineProperties(de,ye),fe.Type=de,fe.FIXED=new de("FIXED"),fe.FLOATING=new de("FLOATING"),fe.FLOATING_SINGLE=new de("FLOATING SINGLE");var _e=function t(){this._precisionModel=new fe,this._SRID=0,this._coordinateSequenceFactory=t.getDefaultCoordinateSequenceFactory(),0===arguments.length||(1===arguments.length?T(arguments[0],b)?this._coordinateSequenceFactory=arguments[0]:arguments[0]instanceof fe&&(this._precisionModel=arguments[0]):2===arguments.length?(this._precisionModel=arguments[0],this._SRID=arguments[1]):3===arguments.length&&(this._precisionModel=arguments[0],this._SRID=arguments[1],this._coordinateSequenceFactory=arguments[2]))},me={serialVersionUID:{configurable:!0}};_e.prototype.toGeometry=function(t){return t.isNull()?this.createPoint(null):t.getMinX()===t.getMaxX()&&t.getMinY()===t.getMaxY()?this.createPoint(new C(t.getMinX(),t.getMinY())):t.getMinX()===t.getMaxX()||t.getMinY()===t.getMaxY()?this.createLineString([new C(t.getMinX(),t.getMinY()),new C(t.getMaxX(),t.getMaxY())]):this.createPolygon(this.createLinearRing([new C(t.getMinX(),t.getMinY()),new C(t.getMinX(),t.getMaxY()),new C(t.getMaxX(),t.getMaxY()),new C(t.getMaxX(),t.getMinY()),new C(t.getMinX(),t.getMinY())]),null)},_e.prototype.createLineString=function(t){return t?t instanceof Array?new Kt(this.getCoordinateSequenceFactory().create(t),this):T(t,V)?new Kt(t,this):void 0:new Kt(this.getCoordinateSequenceFactory().create([]),this)},_e.prototype.createMultiLineString=function(){if(0===arguments.length)return new Xt(null,this);if(1===arguments.length){var t=arguments[0];return new Xt(t,this)}},_e.prototype.buildGeometry=function(t){for(var e=null,n=!1,i=!1,r=t.iterator();r.hasNext();){var o=r.next(),s=o.getClass();null===e&&(e=s),s!==e&&(n=!0),o.isGeometryCollectionOrDerived()&&(i=!0)}if(null===e)return this.createGeometryCollection();if(n||i)return this.createGeometryCollection(_e.toGeometryArray(t));var a=t.iterator().next();if(t.size()>1){if(a instanceof $t)return this.createMultiPolygon(_e.toPolygonArray(t));if(a instanceof Kt)return this.createMultiLineString(_e.toLineStringArray(t));if(a instanceof Qt)return this.createMultiPoint(_e.toPointArray(t));et.shouldNeverReachHere("Unhandled class: "+a.getClass().getName())}return a},_e.prototype.createMultiPointFromCoords=function(t){return this.createMultiPoint(null!==t?this.getCoordinateSequenceFactory().create(t):null)},_e.prototype.createPoint=function(){if(0===arguments.length)return this.createPoint(this.getCoordinateSequenceFactory().create([]));if(1===arguments.length){if(arguments[0]instanceof C){var t=arguments[0];return this.createPoint(null!==t?this.getCoordinateSequenceFactory().create([t]):null)}if(T(arguments[0],V)){var e=arguments[0];return new Qt(e,this)}}},_e.prototype.getCoordinateSequenceFactory=function(){return this._coordinateSequenceFactory},_e.prototype.createPolygon=function(){if(0===arguments.length)return new $t(null,null,this);if(1===arguments.length){if(T(arguments[0],V)){var t=arguments[0];return this.createPolygon(this.createLinearRing(t))}if(arguments[0]instanceof Array){var e=arguments[0];return this.createPolygon(this.createLinearRing(e))}if(arguments[0]instanceof ee){var n=arguments[0];return this.createPolygon(n,null)}}else if(2===arguments.length){var i=arguments[0],r=arguments[1];return new $t(i,r,this)}},_e.prototype.getSRID=function(){return this._SRID},_e.prototype.createGeometryCollection=function(){if(0===arguments.length)return new zt(null,this);if(1===arguments.length){var t=arguments[0];return new zt(t,this)}},_e.prototype.createGeometry=function(t){return new ie(this).edit(t,{edit:function(){if(2===arguments.length){var t=arguments[0];return this._coordinateSequenceFactory.create(t)}}})},_e.prototype.getPrecisionModel=function(){return this._precisionModel},_e.prototype.createLinearRing=function(){if(0===arguments.length)return this.createLinearRing(this.getCoordinateSequenceFactory().create([]));if(1===arguments.length){if(arguments[0]instanceof Array){var t=arguments[0];return this.createLinearRing(null!==t?this.getCoordinateSequenceFactory().create(t):null)}if(T(arguments[0],V)){var e=arguments[0];return new ee(e,this)}}},_e.prototype.createMultiPolygon=function(){if(0===arguments.length)return new ne(null,this);if(1===arguments.length){var t=arguments[0];return new ne(t,this)}},_e.prototype.createMultiPoint=function(){if(0===arguments.length)return new te(null,this);if(1===arguments.length){if(arguments[0]instanceof Array){var t=arguments[0];return new te(t,this)}if(arguments[0]instanceof Array){var e=arguments[0];return this.createMultiPoint(null!==e?this.getCoordinateSequenceFactory().create(e):null)}if(T(arguments[0],V)){var n=arguments[0];if(null===n)return this.createMultiPoint(new Array(0).fill(null));for(var i=new Array(n.size()).fill(null),r=0;r<n.size();r++){var o=this.getCoordinateSequenceFactory().create(1,n.getDimension());Wt.copy(n,r,o,0,1),i[r]=this.createPoint(o)}return this.createMultiPoint(i)}}},_e.prototype.interfaces_=function(){return[e]},_e.prototype.getClass=function(){return _e},_e.toMultiPolygonArray=function(t){var e=new Array(t.size()).fill(null);return t.toArray(e)},_e.toGeometryArray=function(t){if(null===t)return null;var e=new Array(t.size()).fill(null);return t.toArray(e)},_e.getDefaultCoordinateSequenceFactory=function(){return ce.instance()},_e.toMultiLineStringArray=function(t){var e=new Array(t.size()).fill(null);return t.toArray(e)},_e.toLineStringArray=function(t){var e=new Array(t.size()).fill(null);return t.toArray(e)},_e.toMultiPointArray=function(t){var e=new Array(t.size()).fill(null);return t.toArray(e)},_e.toLinearRingArray=function(t){var e=new Array(t.size()).fill(null);return t.toArray(e)},_e.toPointArray=function(t){var e=new Array(t.size()).fill(null);return t.toArray(e)},_e.toPolygonArray=function(t){var e=new Array(t.size()).fill(null);return t.toArray(e)},_e.createPointFromInternalCoord=function(t,e){return e.getPrecisionModel().makePrecise(t),e.getFactory().createPoint(t)},me.serialVersionUID.get=function(){return-0x5ea75f2051eeb400},Object.defineProperties(_e,me);var ve=["Point","MultiPoint","LineString","MultiLineString","Polygon","MultiPolygon"],Ie=function(t){this.geometryFactory=t||new _e};Ie.prototype.read=function(t){var e,n=(e="string"==typeof t?JSON.parse(t):t).type;if(!Ee[n])throw new Error("Unknown GeoJSON type: "+e.type);return-1!==ve.indexOf(n)?Ee[n].apply(this,[e.coordinates]):"GeometryCollection"===n?Ee[n].apply(this,[e.geometries]):Ee[n].apply(this,[e])},Ie.prototype.write=function(t){var e=t.getGeometryType();if(!xe[e])throw new Error("Geometry is not supported");return xe[e].apply(this,[t])};var Ee={Feature:function(t){var e={};for(var n in t)e[n]=t[n];if(t.geometry){var i=t.geometry.type;if(!Ee[i])throw new Error("Unknown GeoJSON type: "+t.type);e.geometry=this.read(t.geometry)}return t.bbox&&(e.bbox=Ee.bbox.apply(this,[t.bbox])),e},FeatureCollection:function(t){var e={};if(t.features){e.features=[];for(var n=0;n<t.features.length;++n)e.features.push(this.read(t.features[n]))}return t.bbox&&(e.bbox=this.parse.bbox.apply(this,[t.bbox])),e},coordinates:function(t){for(var e=[],n=0;n<t.length;++n){var i=t[n];e.push(new C(i[0],i[1]))}return e},bbox:function(t){return this.geometryFactory.createLinearRing([new C(t[0],t[1]),new C(t[2],t[1]),new C(t[2],t[3]),new C(t[0],t[3]),new C(t[0],t[1])])},Point:function(t){var e=new C(t[0],t[1]);return this.geometryFactory.createPoint(e)},MultiPoint:function(t){for(var e=[],n=0;n<t.length;++n)e.push(Ee.Point.apply(this,[t[n]]));return this.geometryFactory.createMultiPoint(e)},LineString:function(t){var e=Ee.coordinates.apply(this,[t]);return this.geometryFactory.createLineString(e)},MultiLineString:function(t){for(var e=[],n=0;n<t.length;++n)e.push(Ee.LineString.apply(this,[t[n]]));return this.geometryFactory.createMultiLineString(e)},Polygon:function(t){for(var e=Ee.coordinates.apply(this,[t[0]]),n=this.geometryFactory.createLinearRing(e),i=[],r=1;r<t.length;++r){var o=t[r],s=Ee.coordinates.apply(this,[o]),a=this.geometryFactory.createLinearRing(s);i.push(a)}return this.geometryFactory.createPolygon(n,i)},MultiPolygon:function(t){for(var e=[],n=0;n<t.length;++n){var i=t[n];e.push(Ee.Polygon.apply(this,[i]))}return this.geometryFactory.createMultiPolygon(e)},GeometryCollection:function(t){for(var e=[],n=0;n<t.length;++n){var i=t[n];e.push(this.read(i))}return this.geometryFactory.createGeometryCollection(e)}},xe={coordinate:function(t){return[t.x,t.y]},Point:function(t){return{type:"Point",coordinates:xe.coordinate.apply(this,[t.getCoordinate()])}},MultiPoint:function(t){for(var e=[],n=0;n<t._geometries.length;++n){var i=t._geometries[n],r=xe.Point.apply(this,[i]);e.push(r.coordinates)}return{type:"MultiPoint",coordinates:e}},LineString:function(t){for(var e=[],n=t.getCoordinates(),i=0;i<n.length;++i){var r=n[i];e.push(xe.coordinate.apply(this,[r]))}return{type:"LineString",coordinates:e}},MultiLineString:function(t){for(var e=[],n=0;n<t._geometries.length;++n){var i=t._geometries[n],r=xe.LineString.apply(this,[i]);e.push(r.coordinates)}return{type:"MultiLineString",coordinates:e}},Polygon:function(t){var e=[],n=xe.LineString.apply(this,[t._shell]);e.push(n.coordinates);for(var i=0;i<t._holes.length;++i){var r=t._holes[i],o=xe.LineString.apply(this,[r]);e.push(o.coordinates)}return{type:"Polygon",coordinates:e}},MultiPolygon:function(t){for(var e=[],n=0;n<t._geometries.length;++n){var i=t._geometries[n],r=xe.Polygon.apply(this,[i]);e.push(r.coordinates)}return{type:"MultiPolygon",coordinates:e}},GeometryCollection:function(t){for(var e=[],n=0;n<t._geometries.length;++n){var i=t._geometries[n],r=i.getGeometryType();e.push(xe[r].apply(this,[i]))}return{type:"GeometryCollection",geometries:e}}},Ne=function(t){this.geometryFactory=t||new _e,this.precisionModel=this.geometryFactory.getPrecisionModel(),this.parser=new Ie(this.geometryFactory)};Ne.prototype.read=function(t){var e=this.parser.read(t);return this.precisionModel.getType()===fe.FIXED&&this.reducePrecision(e),e},Ne.prototype.reducePrecision=function(t){var e,n;if(t.coordinate)this.precisionModel.makePrecise(t.coordinate);else if(t.points)for(e=0,n=t.points.length;e<n;e++)this.precisionModel.makePrecise(t.points[e]);else if(t.geometries)for(e=0,n=t.geometries.length;e<n;e++)this.reducePrecision(t.geometries[e])};var Ce=function(){this.parser=new Ie(this.geometryFactory)};Ce.prototype.write=function(t){return this.parser.write(t)};var Se=function(){},Le={ON:{configurable:!0},LEFT:{configurable:!0},RIGHT:{configurable:!0}};Se.prototype.interfaces_=function(){return[]},Se.prototype.getClass=function(){return Se},Se.opposite=function(t){return t===Se.LEFT?Se.RIGHT:t===Se.RIGHT?Se.LEFT:t},Le.ON.get=function(){return 0},Le.LEFT.get=function(){return 1},Le.RIGHT.get=function(){return 2},Object.defineProperties(Se,Le),(d.prototype=new Error).name="EmptyStackException",(y.prototype=new xt).add=function(t){return this.array_.push(t),!0},y.prototype.get=function(t){if(t<0||t>=this.size())throw new Error;return this.array_[t]},y.prototype.push=function(t){return this.array_.push(t),t},y.prototype.pop=function(t){if(0===this.array_.length)throw new d;return this.array_.pop()},y.prototype.peek=function(){if(0===this.array_.length)throw new d;return this.array_[this.array_.length-1]},y.prototype.empty=function(){return 0===this.array_.length},y.prototype.isEmpty=function(){return this.empty()},y.prototype.search=function(t){return this.array_.indexOf(t)},y.prototype.size=function(){return this.array_.length},y.prototype.toArray=function(){for(var t=[],e=0,n=this.array_.length;e<n;e++)t.push(this.array_[e]);return t};var be=function(){this._minIndex=-1,this._minCoord=null,this._minDe=null,this._orientedDe=null};be.prototype.getCoordinate=function(){return this._minCoord},be.prototype.getRightmostSide=function(t,e){var n=this.getRightmostSideOfSegment(t,e);return n<0&&(n=this.getRightmostSideOfSegment(t,e-1)),n<0&&(this._minCoord=null,this.checkForRightmostCoordinate(t)),n},be.prototype.findRightmostEdgeAtVertex=function(){var t=this._minDe.getEdge().getCoordinates();et.isTrue(this._minIndex>0&&this._minIndex<t.length,"rightmost point expected to be interior vertex of edge");var e=t[this._minIndex-1],n=t[this._minIndex+1],i=at.computeOrientation(this._minCoord,n,e),r=!1;e.y<this._minCoord.y&&n.y<this._minCoord.y&&i===at.COUNTERCLOCKWISE?r=!0:e.y>this._minCoord.y&&n.y>this._minCoord.y&&i===at.CLOCKWISE&&(r=!0),r&&(this._minIndex=this._minIndex-1)},be.prototype.getRightmostSideOfSegment=function(t,e){var n=t.getEdge().getCoordinates();if(e<0||e+1>=n.length)return-1;if(n[e].y===n[e+1].y)return-1;var i=Se.LEFT;return n[e].y<n[e+1].y&&(i=Se.RIGHT),i},be.prototype.getEdge=function(){return this._orientedDe},be.prototype.checkForRightmostCoordinate=function(t){for(var e=t.getEdge().getCoordinates(),n=0;n<e.length-1;n++)(null===this._minCoord||e[n].x>this._minCoord.x)&&(this._minDe=t,this._minIndex=n,this._minCoord=e[n])},be.prototype.findRightmostEdgeAtNode=function(){var t=this._minDe.getNode().getEdges();this._minDe=t.getRightmostEdge(),this._minDe.isForward()||(this._minDe=this._minDe.getSym(),this._minIndex=this._minDe.getEdge().getCoordinates().length-1)},be.prototype.findEdge=function(t){for(var e=t.iterator();e.hasNext();){var n=e.next();n.isForward()&&this.checkForRightmostCoordinate(n)}et.isTrue(0!==this._minIndex||this._minCoord.equals(this._minDe.getCoordinate()),"inconsistency in rightmost processing"),0===this._minIndex?this.findRightmostEdgeAtNode():this.findRightmostEdgeAtVertex(),this._orientedDe=this._minDe;this.getRightmostSide(this._minDe,this._minIndex)===Se.LEFT&&(this._orientedDe=this._minDe.getSym())},be.prototype.interfaces_=function(){return[]},be.prototype.getClass=function(){return be};var we=function(t){function e(n,i){t.call(this,e.msgWithCoord(n,i)),this.pt=i?new C(i):null,this.name="TopologyException"}return t&&(e.__proto__=t),e.prototype=Object.create(t&&t.prototype),e.prototype.constructor=e,e.prototype.getCoordinate=function(){return this.pt},e.prototype.interfaces_=function(){return[]},e.prototype.getClass=function(){return e},e.msgWithCoord=function(t,e){return e?t:t+" [ "+e+" ]"},e}($),Oe=function(){this.array_=[]};Oe.prototype.addLast=function(t){this.array_.push(t)},Oe.prototype.removeFirst=function(){return this.array_.shift()},Oe.prototype.isEmpty=function(){return 0===this.array_.length};var Te=function(){this._finder=null,this._dirEdgeList=new Nt,this._nodes=new Nt,this._rightMostCoord=null,this._env=null,this._finder=new be};Te.prototype.clearVisitedEdges=function(){for(var t=this._dirEdgeList.iterator();t.hasNext();){t.next().setVisited(!1)}},Te.prototype.getRightmostCoordinate=function(){return this._rightMostCoord},Te.prototype.computeNodeDepth=function(t){for(var e=null,n=t.getEdges().iterator();n.hasNext();){var i=n.next();if(i.isVisited()||i.getSym().isVisited()){e=i;break}}if(null===e)throw new we("unable to find edge to compute depths at "+t.getCoordinate());t.getEdges().computeDepths(e);for(var r=t.getEdges().iterator();r.hasNext();){var o=r.next();o.setVisited(!0),this.copySymDepths(o)}},Te.prototype.computeDepth=function(t){this.clearVisitedEdges();var e=this._finder.getEdge();e.setEdgeDepths(Se.RIGHT,t),this.copySymDepths(e),this.computeDepths(e)},Te.prototype.create=function(t){this.addReachable(t),this._finder.findEdge(this._dirEdgeList),this._rightMostCoord=this._finder.getCoordinate()},Te.prototype.findResultEdges=function(){for(var t=this._dirEdgeList.iterator();t.hasNext();){var e=t.next();e.getDepth(Se.RIGHT)>=1&&e.getDepth(Se.LEFT)<=0&&!e.isInteriorAreaEdge()&&e.setInResult(!0)}},Te.prototype.computeDepths=function(t){var e=new Pt,n=new Oe,i=t.getNode();for(n.addLast(i),e.add(i),t.setVisited(!0);!n.isEmpty();){var r=n.removeFirst();e.add(r),this.computeNodeDepth(r);for(var o=r.getEdges().iterator();o.hasNext();){var s=o.next().getSym();if(!s.isVisited()){var a=s.getNode();e.contains(a)||(n.addLast(a),e.add(a))}}}},Te.prototype.compareTo=function(t){var e=t;return this._rightMostCoord.x<e._rightMostCoord.x?-1:this._rightMostCoord.x>e._rightMostCoord.x?1:0},Te.prototype.getEnvelope=function(){if(null===this._env){for(var t=new j,e=this._dirEdgeList.iterator();e.hasNext();)for(var n=e.next().getEdge().getCoordinates(),i=0;i<n.length-1;i++)t.expandToInclude(n[i]);this._env=t}return this._env},Te.prototype.addReachable=function(t){var e=new y;for(e.add(t);!e.empty();){var n=e.pop();this.add(n,e)}},Te.prototype.copySymDepths=function(t){var e=t.getSym();e.setDepth(Se.LEFT,t.getDepth(Se.RIGHT)),e.setDepth(Se.RIGHT,t.getDepth(Se.LEFT))},Te.prototype.add=function(t,e){t.setVisited(!0),this._nodes.add(t);for(var n=t.getEdges().iterator();n.hasNext();){var i=n.next();this._dirEdgeList.add(i);var r=i.getSym().getNode();r.isVisited()||e.push(r)}},Te.prototype.getNodes=function(){return this._nodes},Te.prototype.getDirectedEdges=function(){return this._dirEdgeList},Te.prototype.interfaces_=function(){return[E]},Te.prototype.getClass=function(){return Te};var Re=function t(){if(this.location=null,1===arguments.length){if(arguments[0]instanceof Array){var e=arguments[0];this.init(e.length)}else if(Number.isInteger(arguments[0])){var n=arguments[0];this.init(1),this.location[Se.ON]=n}else if(arguments[0]instanceof t){var i=arguments[0];if(this.init(i.location.length),null!==i)for(var r=0;r<this.location.length;r++)this.location[r]=i.location[r]}}else if(3===arguments.length){var o=arguments[0],s=arguments[1],a=arguments[2];this.init(3),this.location[Se.ON]=o,this.location[Se.LEFT]=s,this.location[Se.RIGHT]=a}};Re.prototype.setAllLocations=function(t){for(var e=0;e<this.location.length;e++)this.location[e]=t},Re.prototype.isNull=function(){for(var t=0;t<this.location.length;t++)if(this.location[t]!==w.NONE)return!1;return!0},Re.prototype.setAllLocationsIfNull=function(t){for(var e=0;e<this.location.length;e++)this.location[e]===w.NONE&&(this.location[e]=t)},Re.prototype.isLine=function(){return 1===this.location.length},Re.prototype.merge=function(t){if(t.location.length>this.location.length){var e=new Array(3).fill(null);e[Se.ON]=this.location[Se.ON],e[Se.LEFT]=w.NONE,e[Se.RIGHT]=w.NONE,this.location=e}for(var n=0;n<this.location.length;n++)this.location[n]===w.NONE&&n<t.location.length&&(this.location[n]=t.location[n])},Re.prototype.getLocations=function(){return this.location},Re.prototype.flip=function(){if(this.location.length<=1)return null;var t=this.location[Se.LEFT];this.location[Se.LEFT]=this.location[Se.RIGHT],this.location[Se.RIGHT]=t},Re.prototype.toString=function(){var t=new D;return this.location.length>1&&t.append(w.toLocationSymbol(this.location[Se.LEFT])),t.append(w.toLocationSymbol(this.location[Se.ON])),this.location.length>1&&t.append(w.toLocationSymbol(this.location[Se.RIGHT])),t.toString()},Re.prototype.setLocations=function(t,e,n){this.location[Se.ON]=t,this.location[Se.LEFT]=e,this.location[Se.RIGHT]=n},Re.prototype.get=function(t){return t<this.location.length?this.location[t]:w.NONE},Re.prototype.isArea=function(){return this.location.length>1},Re.prototype.isAnyNull=function(){for(var t=0;t<this.location.length;t++)if(this.location[t]===w.NONE)return!0;return!1},Re.prototype.setLocation=function(){if(1===arguments.length){var t=arguments[0];this.setLocation(Se.ON,t)}else if(2===arguments.length){var e=arguments[0],n=arguments[1];this.location[e]=n}},Re.prototype.init=function(t){this.location=new Array(t).fill(null),this.setAllLocations(w.NONE)},Re.prototype.isEqualOnSide=function(t,e){return this.location[e]===t.location[e]},Re.prototype.allPositionsEqual=function(t){for(var e=0;e<this.location.length;e++)if(this.location[e]!==t)return!1;return!0},Re.prototype.interfaces_=function(){return[]},Re.prototype.getClass=function(){return Re};var Pe=function t(){if(this.elt=new Array(2).fill(null),1===arguments.length){if(Number.isInteger(arguments[0])){var e=arguments[0];this.elt[0]=new Re(e),this.elt[1]=new Re(e)}else if(arguments[0]instanceof t){var n=arguments[0];this.elt[0]=new Re(n.elt[0]),this.elt[1]=new Re(n.elt[1])}}else if(2===arguments.length){var i=arguments[0],r=arguments[1];this.elt[0]=new Re(w.NONE),this.elt[1]=new Re(w.NONE),this.elt[i].setLocation(r)}else if(3===arguments.length){var o=arguments[0],s=arguments[1],a=arguments[2];this.elt[0]=new Re(o,s,a),this.elt[1]=new Re(o,s,a)}else if(4===arguments.length){var u=arguments[0],l=arguments[1],c=arguments[2],p=arguments[3];this.elt[0]=new Re(w.NONE,w.NONE,w.NONE),this.elt[1]=new Re(w.NONE,w.NONE,w.NONE),this.elt[u].setLocations(l,c,p)}};Pe.prototype.getGeometryCount=function(){var t=0;return this.elt[0].isNull()||t++,this.elt[1].isNull()||t++,t},Pe.prototype.setAllLocations=function(t,e){this.elt[t].setAllLocations(e)},Pe.prototype.isNull=function(t){return this.elt[t].isNull()},Pe.prototype.setAllLocationsIfNull=function(){if(1===arguments.length){var t=arguments[0];this.setAllLocationsIfNull(0,t),this.setAllLocationsIfNull(1,t)}else if(2===arguments.length){var e=arguments[0],n=arguments[1];this.elt[e].setAllLocationsIfNull(n)}},Pe.prototype.isLine=function(t){return this.elt[t].isLine()},Pe.prototype.merge=function(t){for(var e=0;e<2;e++)null===this.elt[e]&&null!==t.elt[e]?this.elt[e]=new Re(t.elt[e]):this.elt[e].merge(t.elt[e])},Pe.prototype.flip=function(){this.elt[0].flip(),this.elt[1].flip()},Pe.prototype.getLocation=function(){if(1===arguments.length){var t=arguments[0];return this.elt[t].get(Se.ON)}if(2===arguments.length){var e=arguments[0],n=arguments[1];return this.elt[e].get(n)}},Pe.prototype.toString=function(){var t=new D;return null!==this.elt[0]&&(t.append("A:"),t.append(this.elt[0].toString())),null!==this.elt[1]&&(t.append(" B:"),t.append(this.elt[1].toString())),t.toString()},Pe.prototype.isArea=function(){if(0===arguments.length)return this.elt[0].isArea()||this.elt[1].isArea();if(1===arguments.length){var t=arguments[0];return this.elt[t].isArea()}},Pe.prototype.isAnyNull=function(t){return this.elt[t].isAnyNull()},Pe.prototype.setLocation=function(){if(2===arguments.length){var t=arguments[0],e=arguments[1];this.elt[t].setLocation(Se.ON,e)}else if(3===arguments.length){var n=arguments[0],i=arguments[1],r=arguments[2];this.elt[n].setLocation(i,r)}},Pe.prototype.isEqualOnSide=function(t,e){return this.elt[0].isEqualOnSide(t.elt[0],e)&&this.elt[1].isEqualOnSide(t.elt[1],e)},Pe.prototype.allPositionsEqual=function(t,e){return this.elt[t].allPositionsEqual(e)},Pe.prototype.toLine=function(t){this.elt[t].isArea()&&(this.elt[t]=new Re(this.elt[t].location[0]))},Pe.prototype.interfaces_=function(){return[]},Pe.prototype.getClass=function(){return Pe},Pe.toLineLabel=function(t){for(var e=new Pe(w.NONE),n=0;n<2;n++)e.setLocation(n,t.getLocation(n));return e};var De=function(){this._startDe=null,this._maxNodeDegree=-1,this._edges=new Nt,this._pts=new Nt,this._label=new Pe(w.NONE),this._ring=null,this._isHole=null,this._shell=null,this._holes=new Nt,this._geometryFactory=null;var t=arguments[0],e=arguments[1];this._geometryFactory=e,this.computePoints(t),this.computeRing()};De.prototype.computeRing=function(){if(null!==this._ring)return null;for(var t=new Array(this._pts.size()).fill(null),e=0;e<this._pts.size();e++)t[e]=this._pts.get(e);this._ring=this._geometryFactory.createLinearRing(t),this._isHole=at.isCCW(this._ring.getCoordinates())},De.prototype.isIsolated=function(){return 1===this._label.getGeometryCount()},De.prototype.computePoints=function(t){this._startDe=t;var e=t,n=!0;do{if(null===e)throw new we("Found null DirectedEdge");if(e.getEdgeRing()===this)throw new we("Directed Edge visited twice during ring-building at "+e.getCoordinate());this._edges.add(e);var i=e.getLabel();et.isTrue(i.isArea()),this.mergeLabel(i),this.addPoints(e.getEdge(),e.isForward(),n),n=!1,this.setEdgeRing(e,this),e=this.getNext(e)}while(e!==this._startDe)},De.prototype.getLinearRing=function(){return this._ring},De.prototype.getCoordinate=function(t){return this._pts.get(t)},De.prototype.computeMaxNodeDegree=function(){this._maxNodeDegree=0;var t=this._startDe;do{var e=t.getNode().getEdges().getOutgoingDegree(this);e>this._maxNodeDegree&&(this._maxNodeDegree=e),t=this.getNext(t)}while(t!==this._startDe);this._maxNodeDegree*=2},De.prototype.addPoints=function(t,e,n){var i=t.getCoordinates();if(e){var r=1;n&&(r=0);for(var o=r;o<i.length;o++)this._pts.add(i[o])}else{var s=i.length-2;n&&(s=i.length-1);for(var a=s;a>=0;a--)this._pts.add(i[a])}},De.prototype.isHole=function(){return this._isHole},De.prototype.setInResult=function(){var t=this._startDe;do{t.getEdge().setInResult(!0),t=t.getNext()}while(t!==this._startDe)},De.prototype.containsPoint=function(t){var e=this.getLinearRing();if(!e.getEnvelopeInternal().contains(t))return!1;if(!at.isPointInRing(t,e.getCoordinates()))return!1;for(var n=this._holes.iterator();n.hasNext();){if(n.next().containsPoint(t))return!1}return!0},De.prototype.addHole=function(t){this._holes.add(t)},De.prototype.isShell=function(){return null===this._shell},De.prototype.getLabel=function(){return this._label},De.prototype.getEdges=function(){return this._edges},De.prototype.getMaxNodeDegree=function(){return this._maxNodeDegree<0&&this.computeMaxNodeDegree(),this._maxNodeDegree},De.prototype.getShell=function(){return this._shell},De.prototype.mergeLabel=function(){if(1===arguments.length){var t=arguments[0];this.mergeLabel(t,0),this.mergeLabel(t,1)}else if(2===arguments.length){var e=arguments[0],n=arguments[1],i=e.getLocation(n,Se.RIGHT);if(i===w.NONE)return null;if(this._label.getLocation(n)===w.NONE)return this._label.setLocation(n,i),null}},De.prototype.setShell=function(t){this._shell=t,null!==t&&t.addHole(this)},De.prototype.toPolygon=function(t){for(var e=new Array(this._holes.size()).fill(null),n=0;n<this._holes.size();n++)e[n]=this._holes.get(n).getLinearRing();return t.createPolygon(this.getLinearRing(),e)},De.prototype.interfaces_=function(){return[]},De.prototype.getClass=function(){return De};var Me=function(t){function e(){var e=arguments[0],n=arguments[1];t.call(this,e,n)}return t&&(e.__proto__=t),e.prototype=Object.create(t&&t.prototype),e.prototype.constructor=e,e.prototype.setEdgeRing=function(t,e){t.setMinEdgeRing(e)},e.prototype.getNext=function(t){return t.getNextMin()},e.prototype.interfaces_=function(){return[]},e.prototype.getClass=function(){return e},e}(De),Ae=function(t){function e(){var e=arguments[0],n=arguments[1];t.call(this,e,n)}return t&&(e.__proto__=t),e.prototype=Object.create(t&&t.prototype),e.prototype.constructor=e,e.prototype.buildMinimalRings=function(){var t=new Nt,e=this._startDe;do{if(null===e.getMinEdgeRing()){var n=new Me(e,this._geometryFactory);t.add(n)}e=e.getNext()}while(e!==this._startDe);return t},e.prototype.setEdgeRing=function(t,e){t.setEdgeRing(e)},e.prototype.linkDirectedEdgesForMinimalEdgeRings=function(){var t=this._startDe;do{t.getNode().getEdges().linkMinimalDirectedEdges(this),t=t.getNext()}while(t!==this._startDe)},e.prototype.getNext=function(t){return t.getNext()},e.prototype.interfaces_=function(){return[]},e.prototype.getClass=function(){return e},e}(De),Fe=function(){if(this._label=null,this._isInResult=!1,this._isCovered=!1,this._isCoveredSet=!1,this._isVisited=!1,0===arguments.length);else if(1===arguments.length){var t=arguments[0];this._label=t}};Fe.prototype.setVisited=function(t){this._isVisited=t},Fe.prototype.setInResult=function(t){this._isInResult=t},Fe.prototype.isCovered=function(){return this._isCovered},Fe.prototype.isCoveredSet=function(){return this._isCoveredSet},Fe.prototype.setLabel=function(t){this._label=t},Fe.prototype.getLabel=function(){return this._label},Fe.prototype.setCovered=function(t){this._isCovered=t,this._isCoveredSet=!0},Fe.prototype.updateIM=function(t){et.isTrue(this._label.getGeometryCount()>=2,"found partial label"),this.computeIM(t)},Fe.prototype.isInResult=function(){return this._isInResult},Fe.prototype.isVisited=function(){return this._isVisited},Fe.prototype.interfaces_=function(){return[]},Fe.prototype.getClass=function(){return Fe};var Ge=function(t){function e(){t.call(this),this._coord=null,this._edges=null;var e=arguments[0],n=arguments[1];this._coord=e,this._edges=n,this._label=new Pe(0,w.NONE)}return t&&(e.__proto__=t),e.prototype=Object.create(t&&t.prototype),e.prototype.constructor=e,e.prototype.isIncidentEdgeInResult=function(){for(var t=this.getEdges().getEdges().iterator();t.hasNext();){if(t.next().getEdge().isInResult())return!0}return!1},e.prototype.isIsolated=function(){return 1===this._label.getGeometryCount()},e.prototype.getCoordinate=function(){return this._coord},e.prototype.print=function(t){t.println("node "+this._coord+" lbl: "+this._label)},e.prototype.computeIM=function(t){},e.prototype.computeMergedLocation=function(t,e){var n=w.NONE;if(n=this._label.getLocation(e),!t.isNull(e)){var i=t.getLocation(e);n!==w.BOUNDARY&&(n=i)}return n},e.prototype.setLabel=function(){if(2!==arguments.length)return t.prototype.setLabel.apply(this,arguments);var e=arguments[0],n=arguments[1];null===this._label?this._label=new Pe(e,n):this._label.setLocation(e,n)},e.prototype.getEdges=function(){return this._edges},e.prototype.mergeLabel=function(){if(arguments[0]instanceof e){var t=arguments[0];this.mergeLabel(t._label)}else if(arguments[0]instanceof Pe)for(var n=arguments[0],i=0;i<2;i++){var r=this.computeMergedLocation(n,i);this._label.getLocation(i)===w.NONE&&this._label.setLocation(i,r)}},e.prototype.add=function(t){this._edges.insert(t),t.setNode(this)},e.prototype.setLabelBoundary=function(t){if(null===this._label)return null;var e=w.NONE;null!==this._label&&(e=this._label.getLocation(t));var n=null;switch(e){case w.BOUNDARY:n=w.INTERIOR;break;case w.INTERIOR:default:n=w.BOUNDARY}this._label.setLocation(t,n)},e.prototype.interfaces_=function(){return[]},e.prototype.getClass=function(){return e},e}(Fe),qe=function(){this.nodeMap=new p,this.nodeFact=null;var t=arguments[0];this.nodeFact=t};qe.prototype.find=function(t){return this.nodeMap.get(t)},qe.prototype.addNode=function(){if(arguments[0]instanceof C){var t=arguments[0],e=this.nodeMap.get(t);return null===e&&(e=this.nodeFact.createNode(t),this.nodeMap.put(t,e)),e}if(arguments[0]instanceof Ge){var n=arguments[0],i=this.nodeMap.get(n.getCoordinate());return null===i?(this.nodeMap.put(n.getCoordinate(),n),n):(i.mergeLabel(n),i)}},qe.prototype.print=function(t){for(var e=this.iterator();e.hasNext();){e.next().print(t)}},qe.prototype.iterator=function(){return this.nodeMap.values().iterator()},qe.prototype.values=function(){return this.nodeMap.values()},qe.prototype.getBoundaryNodes=function(t){for(var e=new Nt,n=this.iterator();n.hasNext();){var i=n.next();i.getLabel().getLocation(t)===w.BOUNDARY&&e.add(i)}return e},qe.prototype.add=function(t){var e=t.getCoordinate();this.addNode(e).add(t)},qe.prototype.interfaces_=function(){return[]},qe.prototype.getClass=function(){return qe};var Be=function(){},Ve={NE:{configurable:!0},NW:{configurable:!0},SW:{configurable:!0},SE:{configurable:!0}};Be.prototype.interfaces_=function(){return[]},Be.prototype.getClass=function(){return Be},Be.isNorthern=function(t){return t===Be.NE||t===Be.NW},Be.isOpposite=function(t,e){if(t===e)return!1;return 2===(t-e+4)%4},Be.commonHalfPlane=function(t,e){if(t===e)return t;if(2===(t-e+4)%4)return-1;var n=t<e?t:e;return 0===n&&3===(t>e?t:e)?3:n},Be.isInHalfPlane=function(t,e){return e===Be.SE?t===Be.SE||t===Be.SW:t===e||t===e+1},Be.quadrant=function(){if("number"==typeof arguments[0]&&"number"==typeof arguments[1]){var t=arguments[0],e=arguments[1];if(0===t&&0===e)throw new m("Cannot compute the quadrant for point ( "+t+", "+e+" )");return t>=0?e>=0?Be.NE:Be.SE:e>=0?Be.NW:Be.SW}if(arguments[0]instanceof C&&arguments[1]instanceof C){var n=arguments[0],i=arguments[1];if(i.x===n.x&&i.y===n.y)throw new m("Cannot compute the quadrant for two identical points "+n);return i.x>=n.x?i.y>=n.y?Be.NE:Be.SE:i.y>=n.y?Be.NW:Be.SW}},Ve.NE.get=function(){return 0},Ve.NW.get=function(){return 1},Ve.SW.get=function(){return 2},Ve.SE.get=function(){return 3},Object.defineProperties(Be,Ve);var Ue=function(){if(this._edge=null,this._label=null,this._node=null,this._p0=null,this._p1=null,this._dx=null,this._dy=null,this._quadrant=null,1===arguments.length){var t=arguments[0];this._edge=t}else if(3===arguments.length){var e=arguments[0],n=arguments[1],i=arguments[2];this._edge=e,this.init(n,i),this._label=null}else if(4===arguments.length){var r=arguments[0],o=arguments[1],s=arguments[2],a=arguments[3];this._edge=r,this.init(o,s),this._label=a}};Ue.prototype.compareDirection=function(t){return this._dx===t._dx&&this._dy===t._dy?0:this._quadrant>t._quadrant?1:this._quadrant<t._quadrant?-1:at.computeOrientation(t._p0,t._p1,this._p1)},Ue.prototype.getDy=function(){return this._dy},Ue.prototype.getCoordinate=function(){return this._p0},Ue.prototype.setNode=function(t){this._node=t},Ue.prototype.print=function(t){var e=Math.atan2(this._dy,this._dx),n=this.getClass().getName(),i=n.lastIndexOf("."),r=n.substring(i+1);t.print("  "+r+": "+this._p0+" - "+this._p1+" "+this._quadrant+":"+e+"   "+this._label)},Ue.prototype.compareTo=function(t){var e=t;return this.compareDirection(e)},Ue.prototype.getDirectedCoordinate=function(){return this._p1},Ue.prototype.getDx=function(){return this._dx},Ue.prototype.getLabel=function(){return this._label},Ue.prototype.getEdge=function(){return this._edge},Ue.prototype.getQuadrant=function(){return this._quadrant},Ue.prototype.getNode=function(){return this._node},Ue.prototype.toString=function(){var t=Math.atan2(this._dy,this._dx),e=this.getClass().getName(),n=e.lastIndexOf(".");return"  "+e.substring(n+1)+": "+this._p0+" - "+this._p1+" "+this._quadrant+":"+t+"   "+this._label},Ue.prototype.computeLabel=function(t){},Ue.prototype.init=function(t,e){this._p0=t,this._p1=e,this._dx=e.x-t.x,this._dy=e.y-t.y,this._quadrant=Be.quadrant(this._dx,this._dy),et.isTrue(!(0===this._dx&&0===this._dy),"EdgeEnd with identical endpoints found")},Ue.prototype.interfaces_=function(){return[E]},Ue.prototype.getClass=function(){return Ue};var ze=function(t){function e(){var e=arguments[0],n=arguments[1];if(t.call(this,e),this._isForward=null,this._isInResult=!1,this._isVisited=!1,this._sym=null,this._next=null,this._nextMin=null,this._edgeRing=null,this._minEdgeRing=null,this._depth=[0,-999,-999],this._isForward=n,n)this.init(e.getCoordinate(0),e.getCoordinate(1));else{var i=e.getNumPoints()-1;this.init(e.getCoordinate(i),e.getCoordinate(i-1))}this.computeDirectedLabel()}return t&&(e.__proto__=t),e.prototype=Object.create(t&&t.prototype),e.prototype.constructor=e,e.prototype.getNextMin=function(){return this._nextMin},e.prototype.getDepth=function(t){return this._depth[t]},e.prototype.setVisited=function(t){this._isVisited=t},e.prototype.computeDirectedLabel=function(){this._label=new Pe(this._edge.getLabel()),this._isForward||this._label.flip()},e.prototype.getNext=function(){return this._next},e.prototype.setDepth=function(t,e){if(-999!==this._depth[t]&&this._depth[t]!==e)throw new we("assigned depths do not match",this.getCoordinate());this._depth[t]=e},e.prototype.isInteriorAreaEdge=function(){for(var t=!0,e=0;e<2;e++)this._label.isArea(e)&&this._label.getLocation(e,Se.LEFT)===w.INTERIOR&&this._label.getLocation(e,Se.RIGHT)===w.INTERIOR||(t=!1);return t},e.prototype.setNextMin=function(t){this._nextMin=t},e.prototype.print=function(e){t.prototype.print.call(this,e),e.print(" "+this._depth[Se.LEFT]+"/"+this._depth[Se.RIGHT]),e.print(" ("+this.getDepthDelta()+")"),this._isInResult&&e.print(" inResult")},e.prototype.setMinEdgeRing=function(t){this._minEdgeRing=t},e.prototype.isLineEdge=function(){var t=this._label.isLine(0)||this._label.isLine(1),e=!this._label.isArea(0)||this._label.allPositionsEqual(0,w.EXTERIOR),n=!this._label.isArea(1)||this._label.allPositionsEqual(1,w.EXTERIOR);return t&&e&&n},e.prototype.setEdgeRing=function(t){this._edgeRing=t},e.prototype.getMinEdgeRing=function(){return this._minEdgeRing},e.prototype.getDepthDelta=function(){var t=this._edge.getDepthDelta();return this._isForward||(t=-t),t},e.prototype.setInResult=function(t){this._isInResult=t},e.prototype.getSym=function(){return this._sym},e.prototype.isForward=function(){return this._isForward},e.prototype.getEdge=function(){return this._edge},e.prototype.printEdge=function(t){this.print(t),t.print(" "),this._isForward?this._edge.print(t):this._edge.printReverse(t)},e.prototype.setSym=function(t){this._sym=t},e.prototype.setVisitedEdge=function(t){this.setVisited(t),this._sym.setVisited(t)},e.prototype.setEdgeDepths=function(t,e){var n=this.getEdge().getDepthDelta();this._isForward||(n=-n);var i=1;t===Se.LEFT&&(i=-1);var r=Se.opposite(t),o=e+n*i;this.setDepth(t,e),this.setDepth(r,o)},e.prototype.getEdgeRing=function(){return this._edgeRing},e.prototype.isInResult=function(){return this._isInResult},e.prototype.setNext=function(t){this._next=t},e.prototype.isVisited=function(){return this._isVisited},e.prototype.interfaces_=function(){return[]},e.prototype.getClass=function(){return e},e.depthFactor=function(t,e){return t===w.EXTERIOR&&e===w.INTERIOR?1:t===w.INTERIOR&&e===w.EXTERIOR?-1:0},e}(Ue),Xe=function(){};Xe.prototype.createNode=function(t){return new Ge(t,null)},Xe.prototype.interfaces_=function(){return[]},Xe.prototype.getClass=function(){return Xe};var Ye=function(){if(this._edges=new Nt,this._nodes=null,this._edgeEndList=new Nt,0===arguments.length)this._nodes=new qe(new Xe);else if(1===arguments.length){var t=arguments[0];this._nodes=new qe(t)}};Ye.prototype.printEdges=function(t){t.println("Edges:");for(var e=0;e<this._edges.size();e++){t.println("edge "+e+":");var n=this._edges.get(e);n.print(t),n.eiList.print(t)}},Ye.prototype.find=function(t){return this._nodes.find(t)},Ye.prototype.addNode=function(){if(arguments[0]instanceof Ge){var t=arguments[0];return this._nodes.addNode(t)}if(arguments[0]instanceof C){var e=arguments[0];return this._nodes.addNode(e)}},Ye.prototype.getNodeIterator=function(){return this._nodes.iterator()},Ye.prototype.linkResultDirectedEdges=function(){for(var t=this._nodes.iterator();t.hasNext();){t.next().getEdges().linkResultDirectedEdges()}},Ye.prototype.debugPrintln=function(t){Y.out.println(t)},Ye.prototype.isBoundaryNode=function(t,e){var n=this._nodes.find(e);if(null===n)return!1;var i=n.getLabel();return null!==i&&i.getLocation(t)===w.BOUNDARY},Ye.prototype.linkAllDirectedEdges=function(){for(var t=this._nodes.iterator();t.hasNext();){t.next().getEdges().linkAllDirectedEdges()}},Ye.prototype.matchInSameDirection=function(t,e,n,i){return!!t.equals(n)&&(at.computeOrientation(t,e,i)===at.COLLINEAR&&Be.quadrant(t,e)===Be.quadrant(n,i))},Ye.prototype.getEdgeEnds=function(){return this._edgeEndList},Ye.prototype.debugPrint=function(t){Y.out.print(t)},Ye.prototype.getEdgeIterator=function(){return this._edges.iterator()},Ye.prototype.findEdgeInSameDirection=function(t,e){for(var n=0;n<this._edges.size();n++){var i=this._edges.get(n),r=i.getCoordinates();if(this.matchInSameDirection(t,e,r[0],r[1]))return i;if(this.matchInSameDirection(t,e,r[r.length-1],r[r.length-2]))return i}return null},Ye.prototype.insertEdge=function(t){this._edges.add(t)},Ye.prototype.findEdgeEnd=function(t){for(var e=this.getEdgeEnds().iterator();e.hasNext();){var n=e.next();if(n.getEdge()===t)return n}return null},Ye.prototype.addEdges=function(t){for(var e=t.iterator();e.hasNext();){var n=e.next();this._edges.add(n);var i=new ze(n,!0),r=new ze(n,!1);i.setSym(r),r.setSym(i),this.add(i),this.add(r)}},Ye.prototype.add=function(t){this._nodes.add(t),this._edgeEndList.add(t)},Ye.prototype.getNodes=function(){return this._nodes.values()},Ye.prototype.findEdge=function(t,e){for(var n=0;n<this._edges.size();n++){var i=this._edges.get(n),r=i.getCoordinates();if(t.equals(r[0])&&e.equals(r[1]))return i}return null},Ye.prototype.interfaces_=function(){return[]},Ye.prototype.getClass=function(){return Ye},Ye.linkResultDirectedEdges=function(t){for(var e=t.iterator();e.hasNext();){e.next().getEdges().linkResultDirectedEdges()}};var ke=function(){this._geometryFactory=null,this._shellList=new Nt;var t=arguments[0];this._geometryFactory=t};ke.prototype.sortShellsAndHoles=function(t,e,n){for(var i=t.iterator();i.hasNext();){var r=i.next();r.isHole()?n.add(r):e.add(r)}},ke.prototype.computePolygons=function(t){for(var e=new Nt,n=t.iterator();n.hasNext();){var i=n.next().toPolygon(this._geometryFactory);e.add(i)}return e},ke.prototype.placeFreeHoles=function(t,e){for(var n=e.iterator();n.hasNext();){var i=n.next();if(null===i.getShell()){var r=this.findEdgeRingContaining(i,t);if(null===r)throw new we("unable to assign hole to a shell",i.getCoordinate(0));i.setShell(r)}}},ke.prototype.buildMinimalEdgeRings=function(t,e,n){for(var i=new Nt,r=t.iterator();r.hasNext();){var o=r.next();if(o.getMaxNodeDegree()>2){o.linkDirectedEdgesForMinimalEdgeRings();var s=o.buildMinimalRings(),a=this.findShell(s);null!==a?(this.placePolygonHoles(a,s),e.add(a)):n.addAll(s)}else i.add(o)}return i},ke.prototype.containsPoint=function(t){for(var e=this._shellList.iterator();e.hasNext();){if(e.next().containsPoint(t))return!0}return!1},ke.prototype.buildMaximalEdgeRings=function(t){for(var e=new Nt,n=t.iterator();n.hasNext();){var i=n.next();if(i.isInResult()&&i.getLabel().isArea()&&null===i.getEdgeRing()){var r=new Ae(i,this._geometryFactory);e.add(r),r.setInResult()}}return e},ke.prototype.placePolygonHoles=function(t,e){for(var n=e.iterator();n.hasNext();){var i=n.next();i.isHole()&&i.setShell(t)}},ke.prototype.getPolygons=function(){return this.computePolygons(this._shellList)},ke.prototype.findEdgeRingContaining=function(t,e){for(var n=t.getLinearRing(),i=n.getEnvelopeInternal(),r=n.getCoordinateN(0),o=null,s=null,a=e.iterator();a.hasNext();){var u=a.next(),l=u.getLinearRing(),c=l.getEnvelopeInternal();null!==o&&(s=o.getLinearRing().getEnvelopeInternal());var p=!1;c.contains(i)&&at.isPointInRing(r,l.getCoordinates())&&(p=!0),p&&(null===o||s.contains(c))&&(o=u)}return o},ke.prototype.findShell=function(t){for(var e=0,n=null,i=t.iterator();i.hasNext();){var r=i.next();r.isHole()||(n=r,e++)}return et.isTrue(e<=1,"found two shells in MinimalEdgeRing list"),n},ke.prototype.add=function(){if(1===arguments.length){var t=arguments[0];this.add(t.getEdgeEnds(),t.getNodes())}else if(2===arguments.length){var e=arguments[0],n=arguments[1];Ye.linkResultDirectedEdges(n);var i=this.buildMaximalEdgeRings(e),r=new Nt,o=this.buildMinimalEdgeRings(i,this._shellList,r);this.sortShellsAndHoles(o,this._shellList,r),this.placeFreeHoles(this._shellList,r)}},ke.prototype.interfaces_=function(){return[]},ke.prototype.getClass=function(){return ke};var je=function(){};je.prototype.getBounds=function(){},je.prototype.interfaces_=function(){return[]},je.prototype.getClass=function(){return je};var He=function(){this._bounds=null,this._item=null;var t=arguments[0],e=arguments[1];this._bounds=t,this._item=e};He.prototype.getItem=function(){return this._item},He.prototype.getBounds=function(){return this._bounds},He.prototype.interfaces_=function(){return[je,e]},He.prototype.getClass=function(){return He};var We=function(){this._size=null,this._items=null,this._size=0,this._items=new Nt,this._items.add(null)};We.prototype.poll=function(){if(this.isEmpty())return null;var t=this._items.get(1);return this._items.set(1,this._items.get(this._size)),this._size-=1,this.reorder(1),t},We.prototype.size=function(){return this._size},We.prototype.reorder=function(t){for(var e=null,n=this._items.get(t);2*t<=this._size&&((e=2*t)!==this._size&&this._items.get(e+1).compareTo(this._items.get(e))<0&&e++,this._items.get(e).compareTo(n)<0);t=e)this._items.set(t,this._items.get(e));this._items.set(t,n)},We.prototype.clear=function(){this._size=0,this._items.clear()},We.prototype.isEmpty=function(){return 0===this._size},We.prototype.add=function(t){this._items.add(null),this._size+=1;var e=this._size;for(this._items.set(0,t);t.compareTo(this._items.get(Math.trunc(e/2)))<0;e/=2)this._items.set(e,this._items.get(Math.trunc(e/2)));this._items.set(e,t)},We.prototype.interfaces_=function(){return[]},We.prototype.getClass=function(){return We};var Ke=function(){};Ke.prototype.visitItem=function(t){},Ke.prototype.interfaces_=function(){return[]},Ke.prototype.getClass=function(){return Ke};var Je=function(){};Je.prototype.insert=function(t,e){},Je.prototype.remove=function(t,e){},Je.prototype.query=function(){},Je.prototype.interfaces_=function(){return[]},Je.prototype.getClass=function(){return Je};var Qe=function(){if(this._childBoundables=new Nt,this._bounds=null,this._level=null,0===arguments.length);else if(1===arguments.length){var t=arguments[0];this._level=t}},Ze={serialVersionUID:{configurable:!0}};Qe.prototype.getLevel=function(){return this._level},Qe.prototype.size=function(){return this._childBoundables.size()},Qe.prototype.getChildBoundables=function(){return this._childBoundables},Qe.prototype.addChildBoundable=function(t){et.isTrue(null===this._bounds),this._childBoundables.add(t)},Qe.prototype.isEmpty=function(){return this._childBoundables.isEmpty()},Qe.prototype.getBounds=function(){return null===this._bounds&&(this._bounds=this.computeBounds()),this._bounds},Qe.prototype.interfaces_=function(){return[je,e]},Qe.prototype.getClass=function(){return Qe},Ze.serialVersionUID.get=function(){return 0x5a1e55ec41369800},Object.defineProperties(Qe,Ze);var $e=function(){};$e.reverseOrder=function(){return{compare:function(t,e){return e.compareTo(t)}}},$e.min=function(t){return $e.sort(t),t.get(0)},$e.sort=function(t,e){var n=t.toArray();e?Gt.sort(n,e):Gt.sort(n);for(var i=t.iterator(),r=0,o=n.length;r<o;r++)i.next(),i.set(n[r])},$e.singletonList=function(t){var e=new Nt;return e.add(t),e};var tn=function(){this._boundable1=null,this._boundable2=null,this._distance=null,this._itemDistance=null;var t=arguments[0],e=arguments[1],n=arguments[2];this._boundable1=t,this._boundable2=e,this._itemDistance=n,this._distance=this.distance()};tn.prototype.expandToQueue=function(t,e){var n=tn.isComposite(this._boundable1),i=tn.isComposite(this._boundable2);if(n&&i)return tn.area(this._boundable1)>tn.area(this._boundable2)?(this.expand(this._boundable1,this._boundable2,t,e),null):(this.expand(this._boundable2,this._boundable1,t,e),null);if(n)return this.expand(this._boundable1,this._boundable2,t,e),null;if(i)return this.expand(this._boundable2,this._boundable1,t,e),null;throw new m("neither boundable is composite")},tn.prototype.isLeaves=function(){return!(tn.isComposite(this._boundable1)||tn.isComposite(this._boundable2))},tn.prototype.compareTo=function(t){var e=t;return this._distance<e._distance?-1:this._distance>e._distance?1:0},tn.prototype.expand=function(t,e,n,i){for(var r=t.getChildBoundables().iterator();r.hasNext();){var o=r.next(),s=new tn(o,e,this._itemDistance);s.getDistance()<i&&n.add(s)}},tn.prototype.getBoundable=function(t){return 0===t?this._boundable1:this._boundable2},tn.prototype.getDistance=function(){return this._distance},tn.prototype.distance=function(){return this.isLeaves()?this._itemDistance.distance(this._boundable1,this._boundable2):this._boundable1.getBounds().distance(this._boundable2.getBounds())},tn.prototype.interfaces_=function(){return[E]},tn.prototype.getClass=function(){return tn},tn.area=function(t){return t.getBounds().getArea()},tn.isComposite=function(t){return t instanceof Qe};var en=function t(){if(this._root=null,this._built=!1,this._itemBoundables=new Nt,this._nodeCapacity=null,0===arguments.length){var e=t.DEFAULT_NODE_CAPACITY;this._nodeCapacity=e}else if(1===arguments.length){var n=arguments[0];et.isTrue(n>1,"Node capacity must be greater than 1"),this._nodeCapacity=n}},nn={IntersectsOp:{configurable:!0},serialVersionUID:{configurable:!0},DEFAULT_NODE_CAPACITY:{configurable:!0}};en.prototype.getNodeCapacity=function(){return this._nodeCapacity},en.prototype.lastNode=function(t){return t.get(t.size()-1)},en.prototype.size=function(){if(0===arguments.length)return this.isEmpty()?0:(this.build(),this.size(this._root));if(1===arguments.length){for(var t=0,e=arguments[0].getChildBoundables().iterator();e.hasNext();){var n=e.next();n instanceof Qe?t+=this.size(n):n instanceof He&&(t+=1)}return t}},en.prototype.removeItem=function(t,e){for(var n=null,i=t.getChildBoundables().iterator();i.hasNext();){var r=i.next();r instanceof He&&r.getItem()===e&&(n=r)}return null!==n&&(t.getChildBoundables().remove(n),!0)},en.prototype.itemsTree=function(){if(0===arguments.length){this.build();var t=this.itemsTree(this._root);return null===t?new Nt:t}if(1===arguments.length){for(var e=arguments[0],n=new Nt,i=e.getChildBoundables().iterator();i.hasNext();){var r=i.next();if(r instanceof Qe){var o=this.itemsTree(r);null!==o&&n.add(o)}else r instanceof He?n.add(r.getItem()):et.shouldNeverReachHere()}return n.size()<=0?null:n}},en.prototype.insert=function(t,e){et.isTrue(!this._built,"Cannot insert items into an STR packed R-tree after it has been built."),this._itemBoundables.add(new He(t,e))},en.prototype.boundablesAtLevel=function(){if(1===arguments.length){var t=arguments[0],e=new Nt;return this.boundablesAtLevel(t,this._root,e),e}if(3===arguments.length){var n=arguments[0],i=arguments[1],r=arguments[2];if(et.isTrue(n>-2),i.getLevel()===n)return r.add(i),null;for(var o=i.getChildBoundables().iterator();o.hasNext();){var s=o.next();s instanceof Qe?this.boundablesAtLevel(n,s,r):(et.isTrue(s instanceof He),-1===n&&r.add(s))}return null}},en.prototype.query=function(){if(1===arguments.length){var t=arguments[0];this.build();var e=new Nt;return this.isEmpty()?e:(this.getIntersectsOp().intersects(this._root.getBounds(),t)&&this.query(t,this._root,e),e)}if(2===arguments.length){var n=arguments[0],i=arguments[1];if(this.build(),this.isEmpty())return null;this.getIntersectsOp().intersects(this._root.getBounds(),n)&&this.query(n,this._root,i)}else if(3===arguments.length)if(T(arguments[2],Ke)&&arguments[0]instanceof Object&&arguments[1]instanceof Qe)for(var r=arguments[0],o=arguments[1],s=arguments[2],a=o.getChildBoundables(),u=0;u<a.size();u++){var l=a.get(u);this.getIntersectsOp().intersects(l.getBounds(),r)&&(l instanceof Qe?this.query(r,l,s):l instanceof He?s.visitItem(l.getItem()):et.shouldNeverReachHere())}else if(T(arguments[2],xt)&&arguments[0]instanceof Object&&arguments[1]instanceof Qe)for(var c=arguments[0],p=arguments[1],h=arguments[2],f=p.getChildBoundables(),g=0;g<f.size();g++){var d=f.get(g);this.getIntersectsOp().intersects(d.getBounds(),c)&&(d instanceof Qe?this.query(c,d,h):d instanceof He?h.add(d.getItem()):et.shouldNeverReachHere())}},en.prototype.build=function(){if(this._built)return null;this._root=this._itemBoundables.isEmpty()?this.createNode(0):this.createHigherLevels(this._itemBoundables,-1),this._itemBoundables=null,this._built=!0},en.prototype.getRoot=function(){return this.build(),this._root},en.prototype.remove=function(){if(2===arguments.length){var t=arguments[0],e=arguments[1];return this.build(),!!this.getIntersectsOp().intersects(this._root.getBounds(),t)&&this.remove(t,this._root,e)}if(3===arguments.length){var n=arguments[0],i=arguments[1],r=arguments[2],o=this.removeItem(i,r);if(o)return!0;for(var s=null,a=i.getChildBoundables().iterator();a.hasNext();){var u=a.next();if(this.getIntersectsOp().intersects(u.getBounds(),n)&&(u instanceof Qe&&(o=this.remove(n,u,r)))){s=u;break}}return null!==s&&s.getChildBoundables().isEmpty()&&i.getChildBoundables().remove(s),o}},en.prototype.createHigherLevels=function(t,e){et.isTrue(!t.isEmpty());var n=this.createParentBoundables(t,e+1);return 1===n.size()?n.get(0):this.createHigherLevels(n,e+1)},en.prototype.depth=function(){if(0===arguments.length)return this.isEmpty()?0:(this.build(),this.depth(this._root));if(1===arguments.length){for(var t=0,e=arguments[0].getChildBoundables().iterator();e.hasNext();){var n=e.next();if(n instanceof Qe){var i=this.depth(n);i>t&&(t=i)}}return t+1}},en.prototype.createParentBoundables=function(t,e){et.isTrue(!t.isEmpty());var n=new Nt;n.add(this.createNode(e));var i=new Nt(t);$e.sort(i,this.getComparator());for(var r=i.iterator();r.hasNext();){var o=r.next();this.lastNode(n).getChildBoundables().size()===this.getNodeCapacity()&&n.add(this.createNode(e)),this.lastNode(n).addChildBoundable(o)}return n},en.prototype.isEmpty=function(){return this._built?this._root.isEmpty():this._itemBoundables.isEmpty()},en.prototype.interfaces_=function(){return[e]},en.prototype.getClass=function(){return en},en.compareDoubles=function(t,e){return t>e?1:t<e?-1:0},nn.IntersectsOp.get=function(){return rn},nn.serialVersionUID.get=function(){return-0x35ef64c82d4c5400},nn.DEFAULT_NODE_CAPACITY.get=function(){return 10},Object.defineProperties(en,nn);var rn=function(){},on=function(){};on.prototype.distance=function(t,e){},on.prototype.interfaces_=function(){return[]},on.prototype.getClass=function(){return on};var sn=function(t){function n(e){e=e||n.DEFAULT_NODE_CAPACITY,t.call(this,e)}t&&(n.__proto__=t),(n.prototype=Object.create(t&&t.prototype)).constructor=n;var i={STRtreeNode:{configurable:!0},serialVersionUID:{configurable:!0},xComparator:{configurable:!0},yComparator:{configurable:!0},intersectsOp:{configurable:!0},DEFAULT_NODE_CAPACITY:{configurable:!0}};return n.prototype.createParentBoundablesFromVerticalSlices=function(t,e){et.isTrue(t.length>0);for(var n=new Nt,i=0;i<t.length;i++)n.addAll(this.createParentBoundablesFromVerticalSlice(t[i],e));return n},n.prototype.createNode=function(t){return new an(t)},n.prototype.size=function(){return 0===arguments.length?t.prototype.size.call(this):t.prototype.size.apply(this,arguments)},n.prototype.insert=function(){if(2!==arguments.length)return t.prototype.insert.apply(this,arguments);var e=arguments[0],n=arguments[1];if(e.isNull())return null;t.prototype.insert.call(this,e,n)},n.prototype.getIntersectsOp=function(){return n.intersectsOp},n.prototype.verticalSlices=function(t,e){for(var n=Math.trunc(Math.ceil(t.size()/e)),i=new Array(e).fill(null),r=t.iterator(),o=0;o<e;o++){i[o]=new Nt;for(var s=0;r.hasNext()&&s<n;){var a=r.next();i[o].add(a),s++}}return i},n.prototype.query=function(){if(1===arguments.length){var e=arguments[0];return t.prototype.query.call(this,e)}if(2===arguments.length){var n=arguments[0],i=arguments[1];t.prototype.query.call(this,n,i)}else if(3===arguments.length)if(T(arguments[2],Ke)&&arguments[0]instanceof Object&&arguments[1]instanceof Qe){var r=arguments[0],o=arguments[1],s=arguments[2];t.prototype.query.call(this,r,o,s)}else if(T(arguments[2],xt)&&arguments[0]instanceof Object&&arguments[1]instanceof Qe){var a=arguments[0],u=arguments[1],l=arguments[2];t.prototype.query.call(this,a,u,l)}},n.prototype.getComparator=function(){return n.yComparator},n.prototype.createParentBoundablesFromVerticalSlice=function(e,n){return t.prototype.createParentBoundables.call(this,e,n)},n.prototype.remove=function(){if(2===arguments.length){var e=arguments[0],n=arguments[1];return t.prototype.remove.call(this,e,n)}return t.prototype.remove.apply(this,arguments)},n.prototype.depth=function(){return 0===arguments.length?t.prototype.depth.call(this):t.prototype.depth.apply(this,arguments)},n.prototype.createParentBoundables=function(t,e){et.isTrue(!t.isEmpty());var i=Math.trunc(Math.ceil(t.size()/this.getNodeCapacity())),r=new Nt(t);$e.sort(r,n.xComparator);var o=this.verticalSlices(r,Math.trunc(Math.ceil(Math.sqrt(i))));return this.createParentBoundablesFromVerticalSlices(o,e)},n.prototype.nearestNeighbour=function(){if(1===arguments.length){if(T(arguments[0],on)){var t=arguments[0],e=new tn(this.getRoot(),this.getRoot(),t);return this.nearestNeighbour(e)}if(arguments[0]instanceof tn){var i=arguments[0];return this.nearestNeighbour(i,v.POSITIVE_INFINITY)}}else if(2===arguments.length){if(arguments[0]instanceof n&&T(arguments[1],on)){var r=arguments[0],o=arguments[1],s=new tn(this.getRoot(),r.getRoot(),o);return this.nearestNeighbour(s)}if(arguments[0]instanceof tn&&"number"==typeof arguments[1]){var a=arguments[0],u=arguments[1],l=null,c=new We;for(c.add(a);!c.isEmpty()&&u>0;){var p=c.poll(),h=p.getDistance();if(h>=u)break;p.isLeaves()?(u=h,l=p):p.expandToQueue(c,u)}return[l.getBoundable(0).getItem(),l.getBoundable(1).getItem()]}}else if(3===arguments.length){var f=arguments[0],g=arguments[1],d=arguments[2],y=new He(f,g),_=new tn(this.getRoot(),y,d);return this.nearestNeighbour(_)[0]}},n.prototype.interfaces_=function(){return[Je,e]},n.prototype.getClass=function(){return n},n.centreX=function(t){return n.avg(t.getMinX(),t.getMaxX())},n.avg=function(t,e){return(t+e)/2},n.centreY=function(t){return n.avg(t.getMinY(),t.getMaxY())},i.STRtreeNode.get=function(){return an},i.serialVersionUID.get=function(){return 0x39920f7d5f261e0},i.xComparator.get=function(){return{interfaces_:function(){return[N]},compare:function(e,i){return t.compareDoubles(n.centreX(e.getBounds()),n.centreX(i.getBounds()))}}},i.yComparator.get=function(){return{interfaces_:function(){return[N]},compare:function(e,i){return t.compareDoubles(n.centreY(e.getBounds()),n.centreY(i.getBounds()))}}},i.intersectsOp.get=function(){return{interfaces_:function(){return[t.IntersectsOp]},intersects:function(t,e){return t.intersects(e)}}},i.DEFAULT_NODE_CAPACITY.get=function(){return 10},Object.defineProperties(n,i),n}(en),an=function(t){function e(){var e=arguments[0];t.call(this,e)}return t&&(e.__proto__=t),e.prototype=Object.create(t&&t.prototype),e.prototype.constructor=e,e.prototype.computeBounds=function(){for(var t=null,e=this.getChildBoundables().iterator();e.hasNext();){var n=e.next();null===t?t=new j(n.getBounds()):t.expandToInclude(n.getBounds())}return t},e.prototype.interfaces_=function(){return[]},e.prototype.getClass=function(){return e},e}(Qe),un=function(){};un.prototype.interfaces_=function(){return[]},un.prototype.getClass=function(){return un},un.relativeSign=function(t,e){return t<e?-1:t>e?1:0},un.compare=function(t,e,n){if(e.equals2D(n))return 0;var i=un.relativeSign(e.x,n.x),r=un.relativeSign(e.y,n.y);switch(t){case 0:return un.compareValue(i,r);case 1:return un.compareValue(r,i);case 2:return un.compareValue(r,-i);case 3:return un.compareValue(-i,r);case 4:return un.compareValue(-i,-r);case 5:return un.compareValue(-r,-i);case 6:return un.compareValue(-r,i);case 7:return un.compareValue(i,-r)}return et.shouldNeverReachHere("invalid octant value"),0},un.compareValue=function(t,e){return t<0?-1:t>0?1:e<0?-1:e>0?1:0};var ln=function(){this._segString=null,this.coord=null,this.segmentIndex=null,this._segmentOctant=null,this._isInterior=null;var t=arguments[0],e=arguments[1],n=arguments[2],i=arguments[3];this._segString=t,this.coord=new C(e),this.segmentIndex=n,this._segmentOctant=i,this._isInterior=!e.equals2D(t.getCoordinate(n))};ln.prototype.getCoordinate=function(){return this.coord},ln.prototype.print=function(t){t.print(this.coord),t.print(" seg # = "+this.segmentIndex)},ln.prototype.compareTo=function(t){var e=t;return this.segmentIndex<e.segmentIndex?-1:this.segmentIndex>e.segmentIndex?1:this.coord.equals2D(e.coord)?0:un.compare(this._segmentOctant,this.coord,e.coord)},ln.prototype.isEndPoint=function(t){return 0===this.segmentIndex&&!this._isInterior||this.segmentIndex===t},ln.prototype.isInterior=function(){return this._isInterior},ln.prototype.interfaces_=function(){return[E]},ln.prototype.getClass=function(){return ln};var cn=function(){this._nodeMap=new p,this._edge=null;var t=arguments[0];this._edge=t};cn.prototype.getSplitCoordinates=function(){var t=new St;this.addEndpoints();for(var e=this.iterator(),n=e.next();e.hasNext();){var i=e.next();this.addEdgeCoordinates(n,i,t),n=i}return t.toCoordinateArray()},cn.prototype.addCollapsedNodes=function(){var t=new Nt;this.findCollapsesFromInsertedNodes(t),this.findCollapsesFromExistingVertices(t);for(var e=t.iterator();e.hasNext();){var n=e.next().intValue();this.add(this._edge.getCoordinate(n),n)}},cn.prototype.print=function(t){t.println("Intersections:");for(var e=this.iterator();e.hasNext();){e.next().print(t)}},cn.prototype.findCollapsesFromExistingVertices=function(t){for(var e=0;e<this._edge.size()-2;e++){var n=this._edge.getCoordinate(e),i=this._edge.getCoordinate(e+2);n.equals2D(i)&&t.add(new M(e+1))}},cn.prototype.addEdgeCoordinates=function(t,e,n){var i=this._edge.getCoordinate(e.segmentIndex),r=e.isInterior()||!e.coord.equals2D(i);n.add(new C(t.coord),!1);for(var o=t.segmentIndex+1;o<=e.segmentIndex;o++)n.add(this._edge.getCoordinate(o));r&&n.add(new C(e.coord))},cn.prototype.iterator=function(){return this._nodeMap.values().iterator()},cn.prototype.addSplitEdges=function(t){this.addEndpoints(),this.addCollapsedNodes();for(var e=this.iterator(),n=e.next();e.hasNext();){var i=e.next(),r=this.createSplitEdge(n,i);t.add(r),n=i}},cn.prototype.findCollapseIndex=function(t,e,n){if(!t.coord.equals2D(e.coord))return!1;var i=e.segmentIndex-t.segmentIndex;return e.isInterior()||i--,1===i&&(n[0]=t.segmentIndex+1,!0)},cn.prototype.findCollapsesFromInsertedNodes=function(t){for(var e=new Array(1).fill(null),n=this.iterator(),i=n.next();n.hasNext();){var r=n.next();this.findCollapseIndex(i,r,e)&&t.add(new M(e[0])),i=r}},cn.prototype.getEdge=function(){return this._edge},cn.prototype.addEndpoints=function(){var t=this._edge.size()-1;this.add(this._edge.getCoordinate(0),0),this.add(this._edge.getCoordinate(t),t)},cn.prototype.createSplitEdge=function(t,e){var n=e.segmentIndex-t.segmentIndex+2,i=this._edge.getCoordinate(e.segmentIndex),r=e.isInterior()||!e.coord.equals2D(i);r||n--;var o=new Array(n).fill(null),s=0;o[s++]=new C(t.coord);for(var a=t.segmentIndex+1;a<=e.segmentIndex;a++)o[s++]=this._edge.getCoordinate(a);return r&&(o[s]=new C(e.coord)),new gn(o,this._edge.getData())},cn.prototype.add=function(t,e){var n=new ln(this._edge,t,e,this._edge.getSegmentOctant(e)),i=this._nodeMap.get(n);return null!==i?(et.isTrue(i.coord.equals2D(t),"Found equal nodes with different coordinates"),i):(this._nodeMap.put(n,n),n)},cn.prototype.checkSplitEdgesCorrectness=function(t){var e=this._edge.getCoordinates(),n=t.get(0).getCoordinate(0);if(!n.equals2D(e[0]))throw new $("bad split edge start point at "+n);var i=t.get(t.size()-1).getCoordinates(),r=i[i.length-1];if(!r.equals2D(e[e.length-1]))throw new $("bad split edge end point at "+r)},cn.prototype.interfaces_=function(){return[]},cn.prototype.getClass=function(){return cn};var pn=function(){};pn.prototype.interfaces_=function(){return[]},pn.prototype.getClass=function(){return pn},pn.octant=function(){if("number"==typeof arguments[0]&&"number"==typeof arguments[1]){var t=arguments[0],e=arguments[1];if(0===t&&0===e)throw new m("Cannot compute the octant for point ( "+t+", "+e+" )");var n=Math.abs(t),i=Math.abs(e);return t>=0?e>=0?n>=i?0:1:n>=i?7:6:e>=0?n>=i?3:2:n>=i?4:5}if(arguments[0]instanceof C&&arguments[1]instanceof C){var r=arguments[0],o=arguments[1],s=o.x-r.x,a=o.y-r.y;if(0===s&&0===a)throw new m("Cannot compute the octant for two identical points "+r);return pn.octant(s,a)}};var hn=function(){};hn.prototype.getCoordinates=function(){},hn.prototype.size=function(){},hn.prototype.getCoordinate=function(t){},hn.prototype.isClosed=function(){},hn.prototype.setData=function(t){},hn.prototype.getData=function(){},hn.prototype.interfaces_=function(){return[]},hn.prototype.getClass=function(){return hn};var fn=function(){};fn.prototype.addIntersection=function(t,e){},fn.prototype.interfaces_=function(){return[hn]},fn.prototype.getClass=function(){return fn};var gn=function(){this._nodeList=new cn(this),this._pts=null,this._data=null;var t=arguments[0],e=arguments[1];this._pts=t,this._data=e};gn.prototype.getCoordinates=function(){return this._pts},gn.prototype.size=function(){return this._pts.length},gn.prototype.getCoordinate=function(t){return this._pts[t]},gn.prototype.isClosed=function(){return this._pts[0].equals(this._pts[this._pts.length-1])},gn.prototype.getSegmentOctant=function(t){return t===this._pts.length-1?-1:this.safeOctant(this.getCoordinate(t),this.getCoordinate(t+1))},gn.prototype.setData=function(t){this._data=t},gn.prototype.safeOctant=function(t,e){return t.equals2D(e)?0:pn.octant(t,e)},gn.prototype.getData=function(){return this._data},gn.prototype.addIntersection=function(){if(2===arguments.length){var t=arguments[0],e=arguments[1];this.addIntersectionNode(t,e)}else if(4===arguments.length){var n=arguments[0],i=arguments[1],r=arguments[3],o=new C(n.getIntersection(r));this.addIntersection(o,i)}},gn.prototype.toString=function(){return Z.toLineString(new ue(this._pts))},gn.prototype.getNodeList=function(){return this._nodeList},gn.prototype.addIntersectionNode=function(t,e){var n=e,i=n+1;if(i<this._pts.length){var r=this._pts[i];t.equals2D(r)&&(n=i)}return this._nodeList.add(t,n)},gn.prototype.addIntersections=function(t,e,n){for(var i=0;i<t.getIntersectionNum();i++)this.addIntersection(t,e,n,i)},gn.prototype.interfaces_=function(){return[fn]},gn.prototype.getClass=function(){return gn},gn.getNodedSubstrings=function(){if(1===arguments.length){var t=arguments[0],e=new Nt;return gn.getNodedSubstrings(t,e),e}if(2===arguments.length)for(var n=arguments[0],i=arguments[1],r=n.iterator();r.hasNext();){r.next().getNodeList().addSplitEdges(i)}};var dn=function(){if(this.p0=null,this.p1=null,0===arguments.length)this.p0=new C,this.p1=new C;else if(1===arguments.length){var t=arguments[0];this.p0=new C(t.p0),this.p1=new C(t.p1)}else if(2===arguments.length)this.p0=arguments[0],this.p1=arguments[1];else if(4===arguments.length){var e=arguments[0],n=arguments[1],i=arguments[2],r=arguments[3];this.p0=new C(e,n),this.p1=new C(i,r)}},yn={serialVersionUID:{configurable:!0}};dn.prototype.minX=function(){return Math.min(this.p0.x,this.p1.x)},dn.prototype.orientationIndex=function(){if(arguments[0]instanceof dn){var t=arguments[0],e=at.orientationIndex(this.p0,this.p1,t.p0),n=at.orientationIndex(this.p0,this.p1,t.p1);return e>=0&&n>=0?Math.max(e,n):e<=0&&n<=0?Math.max(e,n):0}if(arguments[0]instanceof C){var i=arguments[0];return at.orientationIndex(this.p0,this.p1,i)}},dn.prototype.toGeometry=function(t){return t.createLineString([this.p0,this.p1])},dn.prototype.isVertical=function(){return this.p0.x===this.p1.x},dn.prototype.equals=function(t){if(!(t instanceof dn))return!1;var e=t;return this.p0.equals(e.p0)&&this.p1.equals(e.p1)},dn.prototype.intersection=function(t){var e=new rt;return e.computeIntersection(this.p0,this.p1,t.p0,t.p1),e.hasIntersection()?e.getIntersection(0):null},dn.prototype.project=function(){if(arguments[0]instanceof C){var t=arguments[0];if(t.equals(this.p0)||t.equals(this.p1))return new C(t);var e=this.projectionFactor(t),n=new C;return n.x=this.p0.x+e*(this.p1.x-this.p0.x),n.y=this.p0.y+e*(this.p1.y-this.p0.y),n}if(arguments[0]instanceof dn){var i=arguments[0],r=this.projectionFactor(i.p0),o=this.projectionFactor(i.p1);if(r>=1&&o>=1)return null;if(r<=0&&o<=0)return null;var s=this.project(i.p0);r<0&&(s=this.p0),r>1&&(s=this.p1);var a=this.project(i.p1);return o<0&&(a=this.p0),o>1&&(a=this.p1),new dn(s,a)}},dn.prototype.normalize=function(){this.p1.compareTo(this.p0)<0&&this.reverse()},dn.prototype.angle=function(){return Math.atan2(this.p1.y-this.p0.y,this.p1.x-this.p0.x)},dn.prototype.getCoordinate=function(t){return 0===t?this.p0:this.p1},dn.prototype.distancePerpendicular=function(t){return at.distancePointLinePerpendicular(t,this.p0,this.p1)},dn.prototype.minY=function(){return Math.min(this.p0.y,this.p1.y)},dn.prototype.midPoint=function(){return dn.midPoint(this.p0,this.p1)},dn.prototype.projectionFactor=function(t){if(t.equals(this.p0))return 0;if(t.equals(this.p1))return 1;var e=this.p1.x-this.p0.x,n=this.p1.y-this.p0.y,i=e*e+n*n;if(i<=0)return v.NaN;return((t.x-this.p0.x)*e+(t.y-this.p0.y)*n)/i},dn.prototype.closestPoints=function(t){var e=this.intersection(t);if(null!==e)return[e,e];var n=new Array(2).fill(null),i=v.MAX_VALUE,r=null,o=this.closestPoint(t.p0);i=o.distance(t.p0),n[0]=o,n[1]=t.p0;var s=this.closestPoint(t.p1);(r=s.distance(t.p1))<i&&(i=r,n[0]=s,n[1]=t.p1);var a=t.closestPoint(this.p0);(r=a.distance(this.p0))<i&&(i=r,n[0]=this.p0,n[1]=a);var u=t.closestPoint(this.p1);return(r=u.distance(this.p1))<i&&(i=r,n[0]=this.p1,n[1]=u),n},dn.prototype.closestPoint=function(t){var e=this.projectionFactor(t);if(e>0&&e<1)return this.project(t);return this.p0.distance(t)<this.p1.distance(t)?this.p0:this.p1},dn.prototype.maxX=function(){return Math.max(this.p0.x,this.p1.x)},dn.prototype.getLength=function(){return this.p0.distance(this.p1)},dn.prototype.compareTo=function(t){var e=t,n=this.p0.compareTo(e.p0);return 0!==n?n:this.p1.compareTo(e.p1)},dn.prototype.reverse=function(){var t=this.p0;this.p0=this.p1,this.p1=t},dn.prototype.equalsTopo=function(t){return this.p0.equals(t.p0)&&(this.p1.equals(t.p1)||this.p0.equals(t.p1))&&this.p1.equals(t.p0)},dn.prototype.lineIntersection=function(t){try{return k.intersection(this.p0,this.p1,t.p0,t.p1)}catch(t){if(!(t instanceof X))throw t}return null},dn.prototype.maxY=function(){return Math.max(this.p0.y,this.p1.y)},dn.prototype.pointAlongOffset=function(t,e){var n=this.p0.x+t*(this.p1.x-this.p0.x),i=this.p0.y+t*(this.p1.y-this.p0.y),r=this.p1.x-this.p0.x,o=this.p1.y-this.p0.y,s=Math.sqrt(r*r+o*o),a=0,u=0;if(0!==e){if(s<=0)throw new Error("Cannot compute offset from zero-length line segment");a=e*r/s,u=e*o/s}return new C(n-u,i+a)},dn.prototype.setCoordinates=function(){if(1===arguments.length){var t=arguments[0];this.setCoordinates(t.p0,t.p1)}else if(2===arguments.length){var e=arguments[0],n=arguments[1];this.p0.x=e.x,this.p0.y=e.y,this.p1.x=n.x,this.p1.y=n.y}},dn.prototype.segmentFraction=function(t){var e=this.projectionFactor(t);return e<0?e=0:(e>1||v.isNaN(e))&&(e=1),e},dn.prototype.toString=function(){return"LINESTRING( "+this.p0.x+" "+this.p0.y+", "+this.p1.x+" "+this.p1.y+")"},dn.prototype.isHorizontal=function(){return this.p0.y===this.p1.y},dn.prototype.distance=function(){if(arguments[0]instanceof dn){var t=arguments[0];return at.distanceLineLine(this.p0,this.p1,t.p0,t.p1)}if(arguments[0]instanceof C){var e=arguments[0];return at.distancePointLine(e,this.p0,this.p1)}},dn.prototype.pointAlong=function(t){var e=new C;return e.x=this.p0.x+t*(this.p1.x-this.p0.x),e.y=this.p0.y+t*(this.p1.y-this.p0.y),e},dn.prototype.hashCode=function(){var t=v.doubleToLongBits(this.p0.x);t^=31*v.doubleToLongBits(this.p0.y);var e=Math.trunc(t)^Math.trunc(t>>32),n=v.doubleToLongBits(this.p1.x);n^=31*v.doubleToLongBits(this.p1.y);return e^(Math.trunc(n)^Math.trunc(n>>32))},dn.prototype.interfaces_=function(){return[E,e]},dn.prototype.getClass=function(){return dn},dn.midPoint=function(t,e){return new C((t.x+e.x)/2,(t.y+e.y)/2)},yn.serialVersionUID.get=function(){return 0x2d2172135f411c00},Object.defineProperties(dn,yn);var _n=function(){this.tempEnv1=new j,this.tempEnv2=new j,this._overlapSeg1=new dn,this._overlapSeg2=new dn};_n.prototype.overlap=function(){if(2===arguments.length);else if(4===arguments.length){var t=arguments[0],e=arguments[1],n=arguments[2],i=arguments[3];t.getLineSegment(e,this._overlapSeg1),n.getLineSegment(i,this._overlapSeg2),this.overlap(this._overlapSeg1,this._overlapSeg2)}},_n.prototype.interfaces_=function(){return[]},_n.prototype.getClass=function(){return _n};var mn=function(){this._pts=null,this._start=null,this._end=null,this._env=null,this._context=null,this._id=null;var t=arguments[0],e=arguments[1],n=arguments[2],i=arguments[3];this._pts=t,this._start=e,this._end=n,this._context=i};mn.prototype.getLineSegment=function(t,e){e.p0=this._pts[t],e.p1=this._pts[t+1]},mn.prototype.computeSelect=function(t,e,n,i){var r=this._pts[e],o=this._pts[n];if(i.tempEnv1.init(r,o),n-e==1)return i.select(this,e),null;if(!t.intersects(i.tempEnv1))return null;var s=Math.trunc((e+n)/2);e<s&&this.computeSelect(t,e,s,i),s<n&&this.computeSelect(t,s,n,i)},mn.prototype.getCoordinates=function(){for(var t=new Array(this._end-this._start+1).fill(null),e=0,n=this._start;n<=this._end;n++)t[e++]=this._pts[n];return t},mn.prototype.computeOverlaps=function(t,e){this.computeOverlapsInternal(this._start,this._end,t,t._start,t._end,e)},mn.prototype.setId=function(t){this._id=t},mn.prototype.select=function(t,e){this.computeSelect(t,this._start,this._end,e)},mn.prototype.getEnvelope=function(){if(null===this._env){var t=this._pts[this._start],e=this._pts[this._end];this._env=new j(t,e)}return this._env},mn.prototype.getEndIndex=function(){return this._end},mn.prototype.getStartIndex=function(){return this._start},mn.prototype.getContext=function(){return this._context},mn.prototype.getId=function(){return this._id},mn.prototype.computeOverlapsInternal=function(t,e,n,i,r,o){var s=this._pts[t],a=this._pts[e],u=n._pts[i],l=n._pts[r];if(e-t==1&&r-i==1)return o.overlap(this,t,n,i),null;if(o.tempEnv1.init(s,a),o.tempEnv2.init(u,l),!o.tempEnv1.intersects(o.tempEnv2))return null;var c=Math.trunc((t+e)/2),p=Math.trunc((i+r)/2);t<c&&(i<p&&this.computeOverlapsInternal(t,c,n,i,p,o),p<r&&this.computeOverlapsInternal(t,c,n,p,r,o)),c<e&&(i<p&&this.computeOverlapsInternal(c,e,n,i,p,o),p<r&&this.computeOverlapsInternal(c,e,n,p,r,o))},mn.prototype.interfaces_=function(){return[]},mn.prototype.getClass=function(){return mn};var vn=function(){};vn.prototype.interfaces_=function(){return[]},vn.prototype.getClass=function(){return vn},vn.getChainStartIndices=function(t){var e=0,n=new Nt;n.add(new M(e));do{var i=vn.findChainEnd(t,e);n.add(new M(i)),e=i}while(e<t.length-1);return vn.toIntArray(n)},vn.findChainEnd=function(t,e){for(var n=e;n<t.length-1&&t[n].equals2D(t[n+1]);)n++;if(n>=t.length-1)return t.length-1;for(var i=Be.quadrant(t[n],t[n+1]),r=e+1;r<t.length;){if(!t[r-1].equals2D(t[r])){if(Be.quadrant(t[r-1],t[r])!==i)break}r++}return r-1},vn.getChains=function(){if(1===arguments.length){var t=arguments[0];return vn.getChains(t,null)}if(2===arguments.length){for(var e=arguments[0],n=arguments[1],i=new Nt,r=vn.getChainStartIndices(e),o=0;o<r.length-1;o++){var s=new mn(e,r[o],r[o+1],n);i.add(s)}return i}},vn.toIntArray=function(t){for(var e=new Array(t.size()).fill(null),n=0;n<e.length;n++)e[n]=t.get(n).intValue();return e};var In=function(){};In.prototype.computeNodes=function(t){},In.prototype.getNodedSubstrings=function(){},In.prototype.interfaces_=function(){return[]},In.prototype.getClass=function(){return In};var En=function(){if(this._segInt=null,0===arguments.length);else if(1===arguments.length){var t=arguments[0];this.setSegmentIntersector(t)}};En.prototype.setSegmentIntersector=function(t){this._segInt=t},En.prototype.interfaces_=function(){return[In]},En.prototype.getClass=function(){return En};var xn=function(t){function e(e){e?t.call(this,e):t.call(this),this._monoChains=new Nt,this._index=new sn,this._idCounter=0,this._nodedSegStrings=null,this._nOverlaps=0}t&&(e.__proto__=t),(e.prototype=Object.create(t&&t.prototype)).constructor=e;var n={SegmentOverlapAction:{configurable:!0}};return e.prototype.getMonotoneChains=function(){return this._monoChains},e.prototype.getNodedSubstrings=function(){return gn.getNodedSubstrings(this._nodedSegStrings)},e.prototype.getIndex=function(){return this._index},e.prototype.add=function(t){for(var e=vn.getChains(t.getCoordinates(),t).iterator();e.hasNext();){var n=e.next();n.setId(this._idCounter++),this._index.insert(n.getEnvelope(),n),this._monoChains.add(n)}},e.prototype.computeNodes=function(t){this._nodedSegStrings=t;for(var e=t.iterator();e.hasNext();)this.add(e.next());this.intersectChains()},e.prototype.intersectChains=function(){for(var t=new Nn(this._segInt),e=this._monoChains.iterator();e.hasNext();)for(var n=e.next(),i=this._index.query(n.getEnvelope()).iterator();i.hasNext();){var r=i.next();if(r.getId()>n.getId()&&(n.computeOverlaps(r,t),this._nOverlaps++),this._segInt.isDone())return null}},e.prototype.interfaces_=function(){return[]},e.prototype.getClass=function(){return e},n.SegmentOverlapAction.get=function(){return Nn},Object.defineProperties(e,n),e}(En),Nn=function(t){function e(){t.call(this),this._si=null;var e=arguments[0];this._si=e}return t&&(e.__proto__=t),e.prototype=Object.create(t&&t.prototype),e.prototype.constructor=e,e.prototype.overlap=function(){if(4!==arguments.length)return t.prototype.overlap.apply(this,arguments);var e=arguments[0],n=arguments[1],i=arguments[2],r=arguments[3],o=e.getContext(),s=i.getContext();this._si.processIntersections(o,n,s,r)},e.prototype.interfaces_=function(){return[]},e.prototype.getClass=function(){return e},e}(_n),Cn=function t(){if(this._quadrantSegments=t.DEFAULT_QUADRANT_SEGMENTS,this._endCapStyle=t.CAP_ROUND,this._joinStyle=t.JOIN_ROUND,this._mitreLimit=t.DEFAULT_MITRE_LIMIT,this._isSingleSided=!1,this._simplifyFactor=t.DEFAULT_SIMPLIFY_FACTOR,0===arguments.length);else if(1===arguments.length){var e=arguments[0];this.setQuadrantSegments(e)}else if(2===arguments.length){var n=arguments[0],i=arguments[1];this.setQuadrantSegments(n),this.setEndCapStyle(i)}else if(4===arguments.length){var r=arguments[0],o=arguments[1],s=arguments[2],a=arguments[3];this.setQuadrantSegments(r),this.setEndCapStyle(o),this.setJoinStyle(s),this.setMitreLimit(a)}},Sn={CAP_ROUND:{configurable:!0},CAP_FLAT:{configurable:!0},CAP_SQUARE:{configurable:!0},JOIN_ROUND:{configurable:!0},JOIN_MITRE:{configurable:!0},JOIN_BEVEL:{configurable:!0},DEFAULT_QUADRANT_SEGMENTS:{configurable:!0},DEFAULT_MITRE_LIMIT:{configurable:!0},DEFAULT_SIMPLIFY_FACTOR:{configurable:!0}};Cn.prototype.getEndCapStyle=function(){return this._endCapStyle},Cn.prototype.isSingleSided=function(){return this._isSingleSided},Cn.prototype.setQuadrantSegments=function(t){this._quadrantSegments=t,0===this._quadrantSegments&&(this._joinStyle=Cn.JOIN_BEVEL),this._quadrantSegments<0&&(this._joinStyle=Cn.JOIN_MITRE,this._mitreLimit=Math.abs(this._quadrantSegments)),t<=0&&(this._quadrantSegments=1),this._joinStyle!==Cn.JOIN_ROUND&&(this._quadrantSegments=Cn.DEFAULT_QUADRANT_SEGMENTS)},Cn.prototype.getJoinStyle=function(){return this._joinStyle},Cn.prototype.setJoinStyle=function(t){this._joinStyle=t},Cn.prototype.setSimplifyFactor=function(t){this._simplifyFactor=t<0?0:t},Cn.prototype.getSimplifyFactor=function(){return this._simplifyFactor},Cn.prototype.getQuadrantSegments=function(){return this._quadrantSegments},Cn.prototype.setEndCapStyle=function(t){this._endCapStyle=t},Cn.prototype.getMitreLimit=function(){return this._mitreLimit},Cn.prototype.setMitreLimit=function(t){this._mitreLimit=t},Cn.prototype.setSingleSided=function(t){this._isSingleSided=t},Cn.prototype.interfaces_=function(){return[]},Cn.prototype.getClass=function(){return Cn},Cn.bufferDistanceError=function(t){var e=Math.PI/2/t;return 1-Math.cos(e/2)},Sn.CAP_ROUND.get=function(){return 1},Sn.CAP_FLAT.get=function(){return 2},Sn.CAP_SQUARE.get=function(){return 3},Sn.JOIN_ROUND.get=function(){return 1},Sn.JOIN_MITRE.get=function(){return 2},Sn.JOIN_BEVEL.get=function(){return 3},Sn.DEFAULT_QUADRANT_SEGMENTS.get=function(){return 8},Sn.DEFAULT_MITRE_LIMIT.get=function(){return 5},Sn.DEFAULT_SIMPLIFY_FACTOR.get=function(){return.01},Object.defineProperties(Cn,Sn);var Ln=function(t){this._distanceTol=null,this._isDeleted=null,this._angleOrientation=at.COUNTERCLOCKWISE,this._inputLine=t||null},bn={INIT:{configurable:!0},DELETE:{configurable:!0},KEEP:{configurable:!0},NUM_PTS_TO_CHECK:{configurable:!0}};Ln.prototype.isDeletable=function(t,e,n,i){var r=this._inputLine[t],o=this._inputLine[e],s=this._inputLine[n];return!!this.isConcave(r,o,s)&&(!!this.isShallow(r,o,s,i)&&this.isShallowSampled(r,o,t,n,i))},Ln.prototype.deleteShallowConcavities=function(){for(var t=1,e=this.findNextNonDeletedIndex(t),n=this.findNextNonDeletedIndex(e),i=!1;n<this._inputLine.length;){var r=!1;this.isDeletable(t,e,n,this._distanceTol)&&(this._isDeleted[e]=Ln.DELETE,r=!0,i=!0),t=r?n:e,e=this.findNextNonDeletedIndex(t),n=this.findNextNonDeletedIndex(e)}return i},Ln.prototype.isShallowConcavity=function(t,e,n,i){if(!(at.computeOrientation(t,e,n)===this._angleOrientation))return!1;return at.distancePointLine(e,t,n)<i},Ln.prototype.isShallowSampled=function(t,e,n,i,r){var o=Math.trunc((i-n)/Ln.NUM_PTS_TO_CHECK);o<=0&&(o=1);for(var s=n;s<i;s+=o)if(!this.isShallow(t,e,this._inputLine[s],r))return!1;return!0},Ln.prototype.isConcave=function(t,e,n){var i=at.computeOrientation(t,e,n)===this._angleOrientation;return i},Ln.prototype.simplify=function(t){this._distanceTol=Math.abs(t),t<0&&(this._angleOrientation=at.CLOCKWISE),this._isDeleted=new Array(this._inputLine.length).fill(null);var e=!1;do{e=this.deleteShallowConcavities()}while(e);return this.collapseLine()},Ln.prototype.findNextNonDeletedIndex=function(t){for(var e=t+1;e<this._inputLine.length&&this._isDeleted[e]===Ln.DELETE;)e++;return e},Ln.prototype.isShallow=function(t,e,n,i){return at.distancePointLine(e,t,n)<i},Ln.prototype.collapseLine=function(){for(var t=new St,e=0;e<this._inputLine.length;e++)this._isDeleted[e]!==Ln.DELETE&&t.add(this._inputLine[e]);return t.toCoordinateArray()},Ln.prototype.interfaces_=function(){return[]},Ln.prototype.getClass=function(){return Ln},Ln.simplify=function(t,e){return new Ln(t).simplify(e)},bn.INIT.get=function(){return 0},bn.DELETE.get=function(){return 1},bn.KEEP.get=function(){return 1},bn.NUM_PTS_TO_CHECK.get=function(){return 10},Object.defineProperties(Ln,bn);var wn=function(){this._ptList=null,this._precisionModel=null,this._minimimVertexDistance=0,this._ptList=new Nt},On={COORDINATE_ARRAY_TYPE:{configurable:!0}};wn.prototype.getCoordinates=function(){return this._ptList.toArray(wn.COORDINATE_ARRAY_TYPE)},wn.prototype.setPrecisionModel=function(t){this._precisionModel=t},wn.prototype.addPt=function(t){var e=new C(t);if(this._precisionModel.makePrecise(e),this.isRedundant(e))return null;this._ptList.add(e)},wn.prototype.revere=function(){},wn.prototype.addPts=function(t,e){if(e)for(var n=0;n<t.length;n++)this.addPt(t[n]);else for(var i=t.length-1;i>=0;i--)this.addPt(t[i])},wn.prototype.isRedundant=function(t){if(this._ptList.size()<1)return!1;var e=this._ptList.get(this._ptList.size()-1);return t.distance(e)<this._minimimVertexDistance},wn.prototype.toString=function(){return(new _e).createLineString(this.getCoordinates()).toString()},wn.prototype.closeRing=function(){if(this._ptList.size()<1)return null;var t=new C(this._ptList.get(0)),e=this._ptList.get(this._ptList.size()-1);if(t.equals(e))return null;this._ptList.add(t)},wn.prototype.setMinimumVertexDistance=function(t){this._minimimVertexDistance=t},wn.prototype.interfaces_=function(){return[]},wn.prototype.getClass=function(){return wn},On.COORDINATE_ARRAY_TYPE.get=function(){return new Array(0).fill(null)},Object.defineProperties(wn,On);var Tn=function(){},Rn={PI_TIMES_2:{configurable:!0},PI_OVER_2:{configurable:!0},PI_OVER_4:{configurable:!0},COUNTERCLOCKWISE:{configurable:!0},CLOCKWISE:{configurable:!0},NONE:{configurable:!0}};Tn.prototype.interfaces_=function(){return[]},Tn.prototype.getClass=function(){return Tn},Tn.toDegrees=function(t){return 180*t/Math.PI},Tn.normalize=function(t){for(;t>Math.PI;)t-=Tn.PI_TIMES_2;for(;t<=-Math.PI;)t+=Tn.PI_TIMES_2;return t},Tn.angle=function(){if(1===arguments.length){var t=arguments[0];return Math.atan2(t.y,t.x)}if(2===arguments.length){var e=arguments[0],n=arguments[1],i=n.x-e.x,r=n.y-e.y;return Math.atan2(r,i)}},Tn.isAcute=function(t,e,n){var i=t.x-e.x,r=t.y-e.y;return i*(n.x-e.x)+r*(n.y-e.y)>0},Tn.isObtuse=function(t,e,n){var i=t.x-e.x,r=t.y-e.y;return i*(n.x-e.x)+r*(n.y-e.y)<0},Tn.interiorAngle=function(t,e,n){var i=Tn.angle(e,t),r=Tn.angle(e,n);return Math.abs(r-i)},Tn.normalizePositive=function(t){if(t<0){for(;t<0;)t+=Tn.PI_TIMES_2;t>=Tn.PI_TIMES_2&&(t=0)}else{for(;t>=Tn.PI_TIMES_2;)t-=Tn.PI_TIMES_2;t<0&&(t=0)}return t},Tn.angleBetween=function(t,e,n){var i=Tn.angle(e,t),r=Tn.angle(e,n);return Tn.diff(i,r)},Tn.diff=function(t,e){var n=null;return(n=t<e?e-t:t-e)>Math.PI&&(n=2*Math.PI-n),n},Tn.toRadians=function(t){return t*Math.PI/180},Tn.getTurn=function(t,e){var n=Math.sin(e-t);return n>0?Tn.COUNTERCLOCKWISE:n<0?Tn.CLOCKWISE:Tn.NONE},Tn.angleBetweenOriented=function(t,e,n){var i=Tn.angle(e,t),r=Tn.angle(e,n)-i;return r<=-Math.PI?r+Tn.PI_TIMES_2:r>Math.PI?r-Tn.PI_TIMES_2:r},Rn.PI_TIMES_2.get=function(){return 2*Math.PI},Rn.PI_OVER_2.get=function(){return Math.PI/2},Rn.PI_OVER_4.get=function(){return Math.PI/4},Rn.COUNTERCLOCKWISE.get=function(){return at.COUNTERCLOCKWISE},Rn.CLOCKWISE.get=function(){return at.CLOCKWISE},Rn.NONE.get=function(){return at.COLLINEAR},Object.defineProperties(Tn,Rn);var Pn=function t(){this._maxCurveSegmentError=0,this._filletAngleQuantum=null,this._closingSegLengthFactor=1,this._segList=null,this._distance=0,this._precisionModel=null,this._bufParams=null,this._li=null,this._s0=null,this._s1=null,this._s2=null,this._seg0=new dn,this._seg1=new dn,this._offset0=new dn,this._offset1=new dn,this._side=0,this._hasNarrowConcaveAngle=!1;var e=arguments[0],n=arguments[1],i=arguments[2];this._precisionModel=e,this._bufParams=n,this._li=new rt,this._filletAngleQuantum=Math.PI/2/n.getQuadrantSegments(),n.getQuadrantSegments()>=8&&n.getJoinStyle()===Cn.JOIN_ROUND&&(this._closingSegLengthFactor=t.MAX_CLOSING_SEG_LEN_FACTOR),this.init(i)},Dn={OFFSET_SEGMENT_SEPARATION_FACTOR:{configurable:!0},INSIDE_TURN_VERTEX_SNAP_DISTANCE_FACTOR:{configurable:!0},CURVE_VERTEX_SNAP_DISTANCE_FACTOR:{configurable:!0},MAX_CLOSING_SEG_LEN_FACTOR:{configurable:!0}};Pn.prototype.addNextSegment=function(t,e){if(this._s0=this._s1,this._s1=this._s2,this._s2=t,this._seg0.setCoordinates(this._s0,this._s1),this.computeOffsetSegment(this._seg0,this._side,this._distance,this._offset0),this._seg1.setCoordinates(this._s1,this._s2),this.computeOffsetSegment(this._seg1,this._side,this._distance,this._offset1),this._s1.equals(this._s2))return null;var n=at.computeOrientation(this._s0,this._s1,this._s2),i=n===at.CLOCKWISE&&this._side===Se.LEFT||n===at.COUNTERCLOCKWISE&&this._side===Se.RIGHT;0===n?this.addCollinear(e):i?this.addOutsideTurn(n,e):this.addInsideTurn(n,e)},Pn.prototype.addLineEndCap=function(t,e){var n=new dn(t,e),i=new dn;this.computeOffsetSegment(n,Se.LEFT,this._distance,i);var r=new dn;this.computeOffsetSegment(n,Se.RIGHT,this._distance,r);var o=e.x-t.x,s=e.y-t.y,a=Math.atan2(s,o);switch(this._bufParams.getEndCapStyle()){case Cn.CAP_ROUND:this._segList.addPt(i.p1),this.addFilletArc(e,a+Math.PI/2,a-Math.PI/2,at.CLOCKWISE,this._distance),this._segList.addPt(r.p1);break;case Cn.CAP_FLAT:this._segList.addPt(i.p1),this._segList.addPt(r.p1);break;case Cn.CAP_SQUARE:var u=new C;u.x=Math.abs(this._distance)*Math.cos(a),u.y=Math.abs(this._distance)*Math.sin(a);var l=new C(i.p1.x+u.x,i.p1.y+u.y),c=new C(r.p1.x+u.x,r.p1.y+u.y);this._segList.addPt(l),this._segList.addPt(c)}},Pn.prototype.getCoordinates=function(){return this._segList.getCoordinates()},Pn.prototype.addMitreJoin=function(t,e,n,i){var r=!0,o=null;try{o=k.intersection(e.p0,e.p1,n.p0,n.p1);(i<=0?1:o.distance(t)/Math.abs(i))>this._bufParams.getMitreLimit()&&(r=!1)}catch(t){if(!(t instanceof X))throw t;o=new C(0,0),r=!1}r?this._segList.addPt(o):this.addLimitedMitreJoin(e,n,i,this._bufParams.getMitreLimit())},Pn.prototype.addFilletCorner=function(t,e,n,i,r){var o=e.x-t.x,s=e.y-t.y,a=Math.atan2(s,o),u=n.x-t.x,l=n.y-t.y,c=Math.atan2(l,u);i===at.CLOCKWISE?a<=c&&(a+=2*Math.PI):a>=c&&(a-=2*Math.PI),this._segList.addPt(e),this.addFilletArc(t,a,c,i,r),this._segList.addPt(n)},Pn.prototype.addOutsideTurn=function(t,e){if(this._offset0.p1.distance(this._offset1.p0)<this._distance*Pn.OFFSET_SEGMENT_SEPARATION_FACTOR)return this._segList.addPt(this._offset0.p1),null;this._bufParams.getJoinStyle()===Cn.JOIN_MITRE?this.addMitreJoin(this._s1,this._offset0,this._offset1,this._distance):this._bufParams.getJoinStyle()===Cn.JOIN_BEVEL?this.addBevelJoin(this._offset0,this._offset1):(e&&this._segList.addPt(this._offset0.p1),this.addFilletCorner(this._s1,this._offset0.p1,this._offset1.p0,t,this._distance),this._segList.addPt(this._offset1.p0))},Pn.prototype.createSquare=function(t){this._segList.addPt(new C(t.x+this._distance,t.y+this._distance)),this._segList.addPt(new C(t.x+this._distance,t.y-this._distance)),this._segList.addPt(new C(t.x-this._distance,t.y-this._distance)),this._segList.addPt(new C(t.x-this._distance,t.y+this._distance)),this._segList.closeRing()},Pn.prototype.addSegments=function(t,e){this._segList.addPts(t,e)},Pn.prototype.addFirstSegment=function(){this._segList.addPt(this._offset1.p0)},Pn.prototype.addLastSegment=function(){this._segList.addPt(this._offset1.p1)},Pn.prototype.initSideSegments=function(t,e,n){this._s1=t,this._s2=e,this._side=n,this._seg1.setCoordinates(t,e),this.computeOffsetSegment(this._seg1,n,this._distance,this._offset1)},Pn.prototype.addLimitedMitreJoin=function(t,e,n,i){var r=this._seg0.p1,o=Tn.angle(r,this._seg0.p0),s=Tn.angleBetweenOriented(this._seg0.p0,r,this._seg1.p1)/2,a=Tn.normalize(o+s),u=Tn.normalize(a+Math.PI),l=i*n,c=n-l*Math.abs(Math.sin(s)),p=r.x+l*Math.cos(u),h=r.y+l*Math.sin(u),f=new C(p,h),g=new dn(r,f),d=g.pointAlongOffset(1,c),y=g.pointAlongOffset(1,-c);this._side===Se.LEFT?(this._segList.addPt(d),this._segList.addPt(y)):(this._segList.addPt(y),this._segList.addPt(d))},Pn.prototype.computeOffsetSegment=function(t,e,n,i){var r=e===Se.LEFT?1:-1,o=t.p1.x-t.p0.x,s=t.p1.y-t.p0.y,a=Math.sqrt(o*o+s*s),u=r*n*o/a,l=r*n*s/a;i.p0.x=t.p0.x-l,i.p0.y=t.p0.y+u,i.p1.x=t.p1.x-l,i.p1.y=t.p1.y+u},Pn.prototype.addFilletArc=function(t,e,n,i,r){var o=i===at.CLOCKWISE?-1:1,s=Math.abs(e-n),a=Math.trunc(s/this._filletAngleQuantum+.5);if(a<1)return null;for(var u=s/a,l=0,c=new C;l<s;){var p=e+o*l;c.x=t.x+r*Math.cos(p),c.y=t.y+r*Math.sin(p),this._segList.addPt(c),l+=u}},Pn.prototype.addInsideTurn=function(t,e){if(this._li.computeIntersection(this._offset0.p0,this._offset0.p1,this._offset1.p0,this._offset1.p1),this._li.hasIntersection())this._segList.addPt(this._li.getIntersection(0));else if(this._hasNarrowConcaveAngle=!0,this._offset0.p1.distance(this._offset1.p0)<this._distance*Pn.INSIDE_TURN_VERTEX_SNAP_DISTANCE_FACTOR)this._segList.addPt(this._offset0.p1);else{if(this._segList.addPt(this._offset0.p1),this._closingSegLengthFactor>0){var n=new C((this._closingSegLengthFactor*this._offset0.p1.x+this._s1.x)/(this._closingSegLengthFactor+1),(this._closingSegLengthFactor*this._offset0.p1.y+this._s1.y)/(this._closingSegLengthFactor+1));this._segList.addPt(n);var i=new C((this._closingSegLengthFactor*this._offset1.p0.x+this._s1.x)/(this._closingSegLengthFactor+1),(this._closingSegLengthFactor*this._offset1.p0.y+this._s1.y)/(this._closingSegLengthFactor+1));this._segList.addPt(i)}else this._segList.addPt(this._s1);this._segList.addPt(this._offset1.p0)}},Pn.prototype.createCircle=function(t){var e=new C(t.x+this._distance,t.y);this._segList.addPt(e),this.addFilletArc(t,0,2*Math.PI,-1,this._distance),this._segList.closeRing()},Pn.prototype.addBevelJoin=function(t,e){this._segList.addPt(t.p1),this._segList.addPt(e.p0)},Pn.prototype.init=function(t){this._distance=t,this._maxCurveSegmentError=t*(1-Math.cos(this._filletAngleQuantum/2)),this._segList=new wn,this._segList.setPrecisionModel(this._precisionModel),this._segList.setMinimumVertexDistance(t*Pn.CURVE_VERTEX_SNAP_DISTANCE_FACTOR)},Pn.prototype.addCollinear=function(t){this._li.computeIntersection(this._s0,this._s1,this._s1,this._s2);this._li.getIntersectionNum()>=2&&(this._bufParams.getJoinStyle()===Cn.JOIN_BEVEL||this._bufParams.getJoinStyle()===Cn.JOIN_MITRE?(t&&this._segList.addPt(this._offset0.p1),this._segList.addPt(this._offset1.p0)):this.addFilletCorner(this._s1,this._offset0.p1,this._offset1.p0,at.CLOCKWISE,this._distance))},Pn.prototype.closeRing=function(){this._segList.closeRing()},Pn.prototype.hasNarrowConcaveAngle=function(){return this._hasNarrowConcaveAngle},Pn.prototype.interfaces_=function(){return[]},Pn.prototype.getClass=function(){return Pn},Dn.OFFSET_SEGMENT_SEPARATION_FACTOR.get=function(){return.001},Dn.INSIDE_TURN_VERTEX_SNAP_DISTANCE_FACTOR.get=function(){return.001},Dn.CURVE_VERTEX_SNAP_DISTANCE_FACTOR.get=function(){return 1e-6},Dn.MAX_CLOSING_SEG_LEN_FACTOR.get=function(){return 80},Object.defineProperties(Pn,Dn);var Mn=function(){this._distance=0,this._precisionModel=null,this._bufParams=null;var t=arguments[0],e=arguments[1];this._precisionModel=t,this._bufParams=e};Mn.prototype.getOffsetCurve=function(t,e){if(this._distance=e,0===e)return null;var n=e<0,i=Math.abs(e),r=this.getSegGen(i);t.length<=1?this.computePointCurve(t[0],r):this.computeOffsetCurve(t,n,r);var o=r.getCoordinates();return n&&Lt.reverse(o),o},Mn.prototype.computeSingleSidedBufferCurve=function(t,e,n){var i=this.simplifyTolerance(this._distance);if(e){n.addSegments(t,!0);var r=Ln.simplify(t,-i),o=r.length-1;n.initSideSegments(r[o],r[o-1],Se.LEFT),n.addFirstSegment();for(var s=o-2;s>=0;s--)n.addNextSegment(r[s],!0)}else{n.addSegments(t,!1);var a=Ln.simplify(t,i),u=a.length-1;n.initSideSegments(a[0],a[1],Se.LEFT),n.addFirstSegment();for(var l=2;l<=u;l++)n.addNextSegment(a[l],!0)}n.addLastSegment(),n.closeRing()},Mn.prototype.computeRingBufferCurve=function(t,e,n){var i=this.simplifyTolerance(this._distance);e===Se.RIGHT&&(i=-i);var r=Ln.simplify(t,i),o=r.length-1;n.initSideSegments(r[o-1],r[0],e);for(var s=1;s<=o;s++){var a=1!==s;n.addNextSegment(r[s],a)}n.closeRing()},Mn.prototype.computeLineBufferCurve=function(t,e){var n=this.simplifyTolerance(this._distance),i=Ln.simplify(t,n),r=i.length-1;e.initSideSegments(i[0],i[1],Se.LEFT);for(var o=2;o<=r;o++)e.addNextSegment(i[o],!0);e.addLastSegment(),e.addLineEndCap(i[r-1],i[r]);var s=Ln.simplify(t,-n),a=s.length-1;e.initSideSegments(s[a],s[a-1],Se.LEFT);for(var u=a-2;u>=0;u--)e.addNextSegment(s[u],!0);e.addLastSegment(),e.addLineEndCap(s[1],s[0]),e.closeRing()},Mn.prototype.computePointCurve=function(t,e){switch(this._bufParams.getEndCapStyle()){case Cn.CAP_ROUND:e.createCircle(t);break;case Cn.CAP_SQUARE:e.createSquare(t)}},Mn.prototype.getLineCurve=function(t,e){if(this._distance=e,e<0&&!this._bufParams.isSingleSided())return null;if(0===e)return null;var n=Math.abs(e),i=this.getSegGen(n);if(t.length<=1)this.computePointCurve(t[0],i);else if(this._bufParams.isSingleSided()){var r=e<0;this.computeSingleSidedBufferCurve(t,r,i)}else this.computeLineBufferCurve(t,i);return i.getCoordinates()},Mn.prototype.getBufferParameters=function(){return this._bufParams},Mn.prototype.simplifyTolerance=function(t){return t*this._bufParams.getSimplifyFactor()},Mn.prototype.getRingCurve=function(t,e,n){if(this._distance=n,t.length<=2)return this.getLineCurve(t,n);if(0===n)return Mn.copyCoordinates(t);var i=this.getSegGen(n);return this.computeRingBufferCurve(t,e,i),i.getCoordinates()},Mn.prototype.computeOffsetCurve=function(t,e,n){var i=this.simplifyTolerance(this._distance);if(e){var r=Ln.simplify(t,-i),o=r.length-1;n.initSideSegments(r[o],r[o-1],Se.LEFT),n.addFirstSegment();for(var s=o-2;s>=0;s--)n.addNextSegment(r[s],!0)}else{var a=Ln.simplify(t,i),u=a.length-1;n.initSideSegments(a[0],a[1],Se.LEFT),n.addFirstSegment();for(var l=2;l<=u;l++)n.addNextSegment(a[l],!0)}n.addLastSegment()},Mn.prototype.getSegGen=function(t){return new Pn(this._precisionModel,this._bufParams,t)},Mn.prototype.interfaces_=function(){return[]},Mn.prototype.getClass=function(){return Mn},Mn.copyCoordinates=function(t){for(var e=new Array(t.length).fill(null),n=0;n<e.length;n++)e[n]=new C(t[n]);return e};var An=function(){this._subgraphs=null,this._seg=new dn,this._cga=new at;var t=arguments[0];this._subgraphs=t},Fn={DepthSegment:{configurable:!0}};An.prototype.findStabbedSegments=function(){if(1===arguments.length){for(var t=arguments[0],e=new Nt,n=this._subgraphs.iterator();n.hasNext();){var i=n.next(),r=i.getEnvelope();t.y<r.getMinY()||t.y>r.getMaxY()||this.findStabbedSegments(t,i.getDirectedEdges(),e)}return e}if(3===arguments.length)if(T(arguments[2],xt)&&arguments[0]instanceof C&&arguments[1]instanceof ze)for(var o=arguments[0],s=arguments[1],a=arguments[2],u=s.getEdge().getCoordinates(),l=0;l<u.length-1;l++){this._seg.p0=u[l],this._seg.p1=u[l+1],this._seg.p0.y>this._seg.p1.y&&this._seg.reverse();if(!(Math.max(this._seg.p0.x,this._seg.p1.x)<o.x)&&!(this._seg.isHorizontal()||o.y<this._seg.p0.y||o.y>this._seg.p1.y||at.computeOrientation(this._seg.p0,this._seg.p1,o)===at.RIGHT)){var c=s.getDepth(Se.LEFT);this._seg.p0.equals(u[l])||(c=s.getDepth(Se.RIGHT));var p=new Gn(this._seg,c);a.add(p)}}else if(T(arguments[2],xt)&&arguments[0]instanceof C&&T(arguments[1],xt))for(var h=arguments[0],f=arguments[1],g=arguments[2],d=f.iterator();d.hasNext();){var y=d.next();y.isForward()&&this.findStabbedSegments(h,y,g)}},An.prototype.getDepth=function(t){var e=this.findStabbedSegments(t);if(0===e.size())return 0;return $e.min(e)._leftDepth},An.prototype.interfaces_=function(){return[]},An.prototype.getClass=function(){return An},Fn.DepthSegment.get=function(){return Gn},Object.defineProperties(An,Fn);var Gn=function(){this._upwardSeg=null,this._leftDepth=null;var t=arguments[0],e=arguments[1];this._upwardSeg=new dn(t),this._leftDepth=e};Gn.prototype.compareTo=function(t){var e=t;if(this._upwardSeg.minX()>=e._upwardSeg.maxX())return 1;if(this._upwardSeg.maxX()<=e._upwardSeg.minX())return-1;var n=this._upwardSeg.orientationIndex(e._upwardSeg);return 0!==n?n:0!=(n=-1*e._upwardSeg.orientationIndex(this._upwardSeg))?n:this._upwardSeg.compareTo(e._upwardSeg)},Gn.prototype.compareX=function(t,e){var n=t.p0.compareTo(e.p0);return 0!==n?n:t.p1.compareTo(e.p1)},Gn.prototype.toString=function(){return this._upwardSeg.toString()},Gn.prototype.interfaces_=function(){return[E]},Gn.prototype.getClass=function(){return Gn};var qn=function(t,e,n){this.p0=t||null,this.p1=e||null,this.p2=n||null};qn.prototype.area=function(){return qn.area(this.p0,this.p1,this.p2)},qn.prototype.signedArea=function(){return qn.signedArea(this.p0,this.p1,this.p2)},qn.prototype.interpolateZ=function(t){if(null===t)throw new m("Supplied point is null.");return qn.interpolateZ(t,this.p0,this.p1,this.p2)},qn.prototype.longestSideLength=function(){return qn.longestSideLength(this.p0,this.p1,this.p2)},qn.prototype.isAcute=function(){return qn.isAcute(this.p0,this.p1,this.p2)},qn.prototype.circumcentre=function(){return qn.circumcentre(this.p0,this.p1,this.p2)},qn.prototype.area3D=function(){return qn.area3D(this.p0,this.p1,this.p2)},qn.prototype.centroid=function(){return qn.centroid(this.p0,this.p1,this.p2)},qn.prototype.inCentre=function(){return qn.inCentre(this.p0,this.p1,this.p2)},qn.prototype.interfaces_=function(){return[]},qn.prototype.getClass=function(){return qn},qn.area=function(t,e,n){return Math.abs(((n.x-t.x)*(e.y-t.y)-(e.x-t.x)*(n.y-t.y))/2)},qn.signedArea=function(t,e,n){return((n.x-t.x)*(e.y-t.y)-(e.x-t.x)*(n.y-t.y))/2},qn.det=function(t,e,n,i){return t*i-e*n},qn.interpolateZ=function(t,e,n,i){var r=e.x,o=e.y,s=n.x-r,a=i.x-r,u=n.y-o,l=i.y-o,c=s*l-a*u,p=t.x-r,h=t.y-o,f=(l*p-a*h)/c,g=(-u*p+s*h)/c;return e.z+f*(n.z-e.z)+g*(i.z-e.z)},qn.longestSideLength=function(t,e,n){var i=t.distance(e),r=e.distance(n),o=n.distance(t),s=i;return r>s&&(s=r),o>s&&(s=o),s},qn.isAcute=function(t,e,n){return!!Tn.isAcute(t,e,n)&&(!!Tn.isAcute(e,n,t)&&!!Tn.isAcute(n,t,e))},qn.circumcentre=function(t,e,n){var i=n.x,r=n.y,o=t.x-i,s=t.y-r,a=e.x-i,u=e.y-r,l=2*qn.det(o,s,a,u),c=qn.det(s,o*o+s*s,u,a*a+u*u),p=qn.det(o,o*o+s*s,a,a*a+u*u);return new C(i-c/l,r+p/l)},qn.perpendicularBisector=function(t,e){var n=e.x-t.x,i=e.y-t.y,r=new k(t.x+n/2,t.y+i/2,1),o=new k(t.x-i+n/2,t.y+n+i/2,1);return new k(r,o)},qn.angleBisector=function(t,e,n){var i=e.distance(t),r=i/(i+e.distance(n)),o=n.x-t.x,s=n.y-t.y;return new C(t.x+r*o,t.y+r*s)},qn.area3D=function(t,e,n){var i=e.x-t.x,r=e.y-t.y,o=e.z-t.z,s=n.x-t.x,a=n.y-t.y,u=n.z-t.z,l=r*u-o*a,c=o*s-i*u,p=i*a-r*s,h=l*l+c*c+p*p,f=Math.sqrt(h)/2;return f},qn.centroid=function(t,e,n){var i=(t.x+e.x+n.x)/3,r=(t.y+e.y+n.y)/3;return new C(i,r)},qn.inCentre=function(t,e,n){var i=e.distance(n),r=t.distance(n),o=t.distance(e),s=i+r+o,a=(i*t.x+r*e.x+o*n.x)/s,u=(i*t.y+r*e.y+o*n.y)/s;return new C(a,u)};var Bn=function(){this._inputGeom=null,this._distance=null,this._curveBuilder=null,this._curveList=new Nt;var t=arguments[0],e=arguments[1],n=arguments[2];this._inputGeom=t,this._distance=e,this._curveBuilder=n};Bn.prototype.addPoint=function(t){if(this._distance<=0)return null;var e=t.getCoordinates(),n=this._curveBuilder.getLineCurve(e,this._distance);this.addCurve(n,w.EXTERIOR,w.INTERIOR)},Bn.prototype.addPolygon=function(t){var e=this._distance,n=Se.LEFT;this._distance<0&&(e=-this._distance,n=Se.RIGHT);var i=t.getExteriorRing(),r=Lt.removeRepeatedPoints(i.getCoordinates());if(this._distance<0&&this.isErodedCompletely(i,this._distance))return null;if(this._distance<=0&&r.length<3)return null;this.addPolygonRing(r,e,n,w.EXTERIOR,w.INTERIOR);for(var o=0;o<t.getNumInteriorRing();o++){var s=t.getInteriorRingN(o),a=Lt.removeRepeatedPoints(s.getCoordinates());this._distance>0&&this.isErodedCompletely(s,-this._distance)||this.addPolygonRing(a,e,Se.opposite(n),w.INTERIOR,w.EXTERIOR)}},Bn.prototype.isTriangleErodedCompletely=function(t,e){var n=new qn(t[0],t[1],t[2]),i=n.inCentre();return at.distancePointLine(i,n.p0,n.p1)<Math.abs(e)},Bn.prototype.addLineString=function(t){if(this._distance<=0&&!this._curveBuilder.getBufferParameters().isSingleSided())return null;var e=Lt.removeRepeatedPoints(t.getCoordinates()),n=this._curveBuilder.getLineCurve(e,this._distance);this.addCurve(n,w.EXTERIOR,w.INTERIOR)},Bn.prototype.addCurve=function(t,e,n){if(null===t||t.length<2)return null;var i=new gn(t,new Pe(0,w.BOUNDARY,e,n));this._curveList.add(i)},Bn.prototype.getCurves=function(){return this.add(this._inputGeom),this._curveList},Bn.prototype.addPolygonRing=function(t,e,n,i,r){if(0===e&&t.length<ee.MINIMUM_VALID_SIZE)return null;var o=i,s=r;t.length>=ee.MINIMUM_VALID_SIZE&&at.isCCW(t)&&(o=r,s=i,n=Se.opposite(n));var a=this._curveBuilder.getRingCurve(t,n,e);this.addCurve(a,o,s)},Bn.prototype.add=function(t){if(t.isEmpty())return null;t instanceof $t?this.addPolygon(t):t instanceof Kt?this.addLineString(t):t instanceof Qt?this.addPoint(t):t instanceof te?this.addCollection(t):t instanceof Xt?this.addCollection(t):t instanceof ne?this.addCollection(t):t instanceof zt&&this.addCollection(t)},Bn.prototype.isErodedCompletely=function(t,e){var n=t.getCoordinates();if(n.length<4)return e<0;if(4===n.length)return this.isTriangleErodedCompletely(n,e);var i=t.getEnvelopeInternal(),r=Math.min(i.getHeight(),i.getWidth());return e<0&&2*Math.abs(e)>r},Bn.prototype.addCollection=function(t){for(var e=0;e<t.getNumGeometries();e++){var n=t.getGeometryN(e);this.add(n)}},Bn.prototype.interfaces_=function(){return[]},Bn.prototype.getClass=function(){return Bn};var Vn=function(){};Vn.prototype.locate=function(t){},Vn.prototype.interfaces_=function(){return[]},Vn.prototype.getClass=function(){return Vn};var Un=function(){this._parent=null,this._atStart=null,this._max=null,this._index=null,this._subcollectionIterator=null;var t=arguments[0];this._parent=t,this._atStart=!0,this._index=0,this._max=t.getNumGeometries()};Un.prototype.next=function(){if(this._atStart)return this._atStart=!1,Un.isAtomic(this._parent)&&this._index++,this._parent;if(null!==this._subcollectionIterator){if(this._subcollectionIterator.hasNext())return this._subcollectionIterator.next();this._subcollectionIterator=null}if(this._index>=this._max)throw new i;var t=this._parent.getGeometryN(this._index++);return t instanceof zt?(this._subcollectionIterator=new Un(t),this._subcollectionIterator.next()):t},Un.prototype.remove=function(){throw new Error(this.getClass().getName())},Un.prototype.hasNext=function(){if(this._atStart)return!0;if(null!==this._subcollectionIterator){if(this._subcollectionIterator.hasNext())return!0;this._subcollectionIterator=null}return!(this._index>=this._max)},Un.prototype.interfaces_=function(){return[Et]},Un.prototype.getClass=function(){return Un},Un.isAtomic=function(t){return!(t instanceof zt)};var zn=function(){this._geom=null;var t=arguments[0];this._geom=t};zn.prototype.locate=function(t){return zn.locate(t,this._geom)},zn.prototype.interfaces_=function(){return[Vn]},zn.prototype.getClass=function(){return zn},zn.isPointInRing=function(t,e){return!!e.getEnvelopeInternal().intersects(t)&&at.isPointInRing(t,e.getCoordinates())},zn.containsPointInPolygon=function(t,e){if(e.isEmpty())return!1;var n=e.getExteriorRing();if(!zn.isPointInRing(t,n))return!1;for(var i=0;i<e.getNumInteriorRing();i++){var r=e.getInteriorRingN(i);if(zn.isPointInRing(t,r))return!1}return!0},zn.containsPoint=function(t,e){if(e instanceof $t)return zn.containsPointInPolygon(t,e);if(e instanceof zt)for(var n=new Un(e);n.hasNext();){var i=n.next();if(i!==e&&zn.containsPoint(t,i))return!0}return!1},zn.locate=function(t,e){return e.isEmpty()?w.EXTERIOR:zn.containsPoint(t,e)?w.INTERIOR:w.EXTERIOR};var Xn=function(){this._edgeMap=new p,this._edgeList=null,this._ptInAreaLocation=[w.NONE,w.NONE]};Xn.prototype.getNextCW=function(t){this.getEdges();var e=this._edgeList.indexOf(t),n=e-1;return 0===e&&(n=this._edgeList.size()-1),this._edgeList.get(n)},Xn.prototype.propagateSideLabels=function(t){for(var e=w.NONE,n=this.iterator();n.hasNext();){var i=n.next().getLabel();i.isArea(t)&&i.getLocation(t,Se.LEFT)!==w.NONE&&(e=i.getLocation(t,Se.LEFT))}if(e===w.NONE)return null;for(var r=e,o=this.iterator();o.hasNext();){var s=o.next(),a=s.getLabel();if(a.getLocation(t,Se.ON)===w.NONE&&a.setLocation(t,Se.ON,r),a.isArea(t)){var u=a.getLocation(t,Se.LEFT),l=a.getLocation(t,Se.RIGHT);if(l!==w.NONE){if(l!==r)throw new we("side location conflict",s.getCoordinate());u===w.NONE&&et.shouldNeverReachHere("found single null side (at "+s.getCoordinate()+")"),r=u}else et.isTrue(a.getLocation(t,Se.LEFT)===w.NONE,"found single null side"),a.setLocation(t,Se.RIGHT,r),a.setLocation(t,Se.LEFT,r)}}},Xn.prototype.getCoordinate=function(){var t=this.iterator();if(!t.hasNext())return null;return t.next().getCoordinate()},Xn.prototype.print=function(t){Y.out.println("EdgeEndStar:   "+this.getCoordinate());for(var e=this.iterator();e.hasNext();){e.next().print(t)}},Xn.prototype.isAreaLabelsConsistent=function(t){return this.computeEdgeEndLabels(t.getBoundaryNodeRule()),this.checkAreaLabelsConsistent(0)},Xn.prototype.checkAreaLabelsConsistent=function(t){var e=this.getEdges();if(e.size()<=0)return!0;var n=e.size()-1,i=e.get(n).getLabel().getLocation(t,Se.LEFT);et.isTrue(i!==w.NONE,"Found unlabelled area edge");for(var r=i,o=this.iterator();o.hasNext();){var s=o.next().getLabel();et.isTrue(s.isArea(t),"Found non-area edge");var a=s.getLocation(t,Se.LEFT),u=s.getLocation(t,Se.RIGHT);if(a===u)return!1;if(u!==r)return!1;r=a}return!0},Xn.prototype.findIndex=function(t){this.iterator();for(var e=0;e<this._edgeList.size();e++){if(this._edgeList.get(e)===t)return e}return-1},Xn.prototype.iterator=function(){return this.getEdges().iterator()},Xn.prototype.getEdges=function(){return null===this._edgeList&&(this._edgeList=new Nt(this._edgeMap.values())),this._edgeList},Xn.prototype.getLocation=function(t,e,n){return this._ptInAreaLocation[t]===w.NONE&&(this._ptInAreaLocation[t]=zn.locate(e,n[t].getGeometry())),this._ptInAreaLocation[t]},Xn.prototype.toString=function(){var t=new D;t.append("EdgeEndStar:   "+this.getCoordinate()),t.append("\n");for(var e=this.iterator();e.hasNext();){var n=e.next();t.append(n),t.append("\n")}return t.toString()},Xn.prototype.computeEdgeEndLabels=function(t){for(var e=this.iterator();e.hasNext();){e.next().computeLabel(t)}},Xn.prototype.computeLabelling=function(t){this.computeEdgeEndLabels(t[0].getBoundaryNodeRule()),this.propagateSideLabels(0),this.propagateSideLabels(1);for(var e=[!1,!1],n=this.iterator();n.hasNext();)for(var i=n.next().getLabel(),r=0;r<2;r++)i.isLine(r)&&i.getLocation(r)===w.BOUNDARY&&(e[r]=!0);for(var o=this.iterator();o.hasNext();)for(var s=o.next(),a=s.getLabel(),u=0;u<2;u++)if(a.isAnyNull(u)){var l=w.NONE;if(e[u])l=w.EXTERIOR;else{var c=s.getCoordinate();l=this.getLocation(u,c,t)}a.setAllLocationsIfNull(u,l)}},Xn.prototype.getDegree=function(){return this._edgeMap.size()},Xn.prototype.insertEdgeEnd=function(t,e){this._edgeMap.put(t,e),this._edgeList=null},Xn.prototype.interfaces_=function(){return[]},Xn.prototype.getClass=function(){return Xn};var Yn=function(t){function e(){t.call(this),this._resultAreaEdgeList=null,this._label=null,this._SCANNING_FOR_INCOMING=1,this._LINKING_TO_OUTGOING=2}return t&&(e.__proto__=t),e.prototype=Object.create(t&&t.prototype),e.prototype.constructor=e,e.prototype.linkResultDirectedEdges=function(){this.getResultAreaEdges();for(var t=null,e=null,n=this._SCANNING_FOR_INCOMING,i=0;i<this._resultAreaEdgeList.size();i++){var r=this._resultAreaEdgeList.get(i),o=r.getSym();if(r.getLabel().isArea())switch(null===t&&r.isInResult()&&(t=r),n){case this._SCANNING_FOR_INCOMING:if(!o.isInResult())continue;e=o,n=this._LINKING_TO_OUTGOING;break;case this._LINKING_TO_OUTGOING:if(!r.isInResult())continue;e.setNext(r),n=this._SCANNING_FOR_INCOMING}}if(n===this._LINKING_TO_OUTGOING){if(null===t)throw new we("no outgoing dirEdge found",this.getCoordinate());et.isTrue(t.isInResult(),"unable to link last incoming dirEdge"),e.setNext(t)}},e.prototype.insert=function(t){var e=t;this.insertEdgeEnd(e,e)},e.prototype.getRightmostEdge=function(){var t=this.getEdges(),e=t.size();if(e<1)return null;var n=t.get(0);if(1===e)return n;var i=t.get(e-1),r=n.getQuadrant(),o=i.getQuadrant();return Be.isNorthern(r)&&Be.isNorthern(o)?n:Be.isNorthern(r)||Be.isNorthern(o)?0!==n.getDy()?n:0!==i.getDy()?i:(et.shouldNeverReachHere("found two horizontal edges incident on node"),null):i},e.prototype.print=function(t){Y.out.println("DirectedEdgeStar: "+this.getCoordinate());for(var e=this.iterator();e.hasNext();){var n=e.next();t.print("out "),n.print(t),t.println(),t.print("in "),n.getSym().print(t),t.println()}},e.prototype.getResultAreaEdges=function(){if(null!==this._resultAreaEdgeList)return this._resultAreaEdgeList;this._resultAreaEdgeList=new Nt;for(var t=this.iterator();t.hasNext();){var e=t.next();(e.isInResult()||e.getSym().isInResult())&&this._resultAreaEdgeList.add(e)}return this._resultAreaEdgeList},e.prototype.updateLabelling=function(t){for(var e=this.iterator();e.hasNext();){var n=e.next().getLabel();n.setAllLocationsIfNull(0,t.getLocation(0)),n.setAllLocationsIfNull(1,t.getLocation(1))}},e.prototype.linkAllDirectedEdges=function(){this.getEdges();for(var t=null,e=null,n=this._edgeList.size()-1;n>=0;n--){var i=this._edgeList.get(n),r=i.getSym();null===e&&(e=r),null!==t&&r.setNext(t),t=i}e.setNext(t)},e.prototype.computeDepths=function(){if(1===arguments.length){var t=arguments[0],e=this.findIndex(t),n=t.getDepth(Se.LEFT),i=t.getDepth(Se.RIGHT),r=this.computeDepths(e+1,this._edgeList.size(),n);if(this.computeDepths(0,e,r)!==i)throw new we("depth mismatch at "+t.getCoordinate())}else if(3===arguments.length){for(var o=arguments[0],s=arguments[1],a=arguments[2],u=o;u<s;u++){var l=this._edgeList.get(u);l.setEdgeDepths(Se.RIGHT,a),a=l.getDepth(Se.LEFT)}return a}},e.prototype.mergeSymLabels=function(){for(var t=this.iterator();t.hasNext();){var e=t.next();e.getLabel().merge(e.getSym().getLabel())}},e.prototype.linkMinimalDirectedEdges=function(t){for(var e=null,n=null,i=this._SCANNING_FOR_INCOMING,r=this._resultAreaEdgeList.size()-1;r>=0;r--){var o=this._resultAreaEdgeList.get(r),s=o.getSym();switch(null===e&&o.getEdgeRing()===t&&(e=o),i){case this._SCANNING_FOR_INCOMING:if(s.getEdgeRing()!==t)continue;n=s,i=this._LINKING_TO_OUTGOING;break;case this._LINKING_TO_OUTGOING:if(o.getEdgeRing()!==t)continue;n.setNextMin(o),i=this._SCANNING_FOR_INCOMING}}i===this._LINKING_TO_OUTGOING&&(et.isTrue(null!==e,"found null for first outgoing dirEdge"),et.isTrue(e.getEdgeRing()===t,"unable to link last incoming dirEdge"),n.setNextMin(e))},e.prototype.getOutgoingDegree=function(){if(0===arguments.length){for(var t=0,e=this.iterator();e.hasNext();){e.next().isInResult()&&t++}return t}if(1===arguments.length){for(var n=arguments[0],i=0,r=this.iterator();r.hasNext();){r.next().getEdgeRing()===n&&i++}return i}},e.prototype.getLabel=function(){return this._label},e.prototype.findCoveredLineEdges=function(){for(var t=w.NONE,e=this.iterator();e.hasNext();){var n=e.next(),i=n.getSym();if(!n.isLineEdge()){if(n.isInResult()){t=w.INTERIOR;break}if(i.isInResult()){t=w.EXTERIOR;break}}}if(t===w.NONE)return null;for(var r=t,o=this.iterator();o.hasNext();){var s=o.next(),a=s.getSym();s.isLineEdge()?s.getEdge().setCovered(r===w.INTERIOR):(s.isInResult()&&(r=w.EXTERIOR),a.isInResult()&&(r=w.INTERIOR))}},e.prototype.computeLabelling=function(e){t.prototype.computeLabelling.call(this,e),this._label=new Pe(w.NONE);for(var n=this.iterator();n.hasNext();)for(var i=n.next().getEdge().getLabel(),r=0;r<2;r++){var o=i.getLocation(r);o!==w.INTERIOR&&o!==w.BOUNDARY||this._label.setLocation(r,w.INTERIOR)}},e.prototype.interfaces_=function(){return[]},e.prototype.getClass=function(){return e},e}(Xn),kn=function(t){function e(){t.apply(this,arguments)}return t&&(e.__proto__=t),e.prototype=Object.create(t&&t.prototype),e.prototype.constructor=e,e.prototype.createNode=function(t){return new Ge(t,new Yn)},e.prototype.interfaces_=function(){return[]},e.prototype.getClass=function(){return e},e}(Xe),jn=function t(){this._pts=null,this._orientation=null;var e=arguments[0];this._pts=e,this._orientation=t.orientation(e)};jn.prototype.compareTo=function(t){var e=t;return jn.compareOriented(this._pts,this._orientation,e._pts,e._orientation)},jn.prototype.interfaces_=function(){return[E]},jn.prototype.getClass=function(){return jn},jn.orientation=function(t){return 1===Lt.increasingDirection(t)},jn.compareOriented=function(t,e,n,i){for(var r=e?1:-1,o=i?1:-1,s=e?t.length:-1,a=i?n.length:-1,u=e?0:t.length-1,l=i?0:n.length-1;;){var c=t[u].compareTo(n[l]);if(0!==c)return c;var p=(u+=r)===s,h=(l+=o)===a;if(p&&!h)return-1;if(!p&&h)return 1;if(p&&h)return 0}};var Hn=function(){this._edges=new Nt,this._ocaMap=new p};Hn.prototype.print=function(t){t.print("MULTILINESTRING ( ");for(var e=0;e<this._edges.size();e++){var n=this._edges.get(e);e>0&&t.print(","),t.print("(");for(var i=n.getCoordinates(),r=0;r<i.length;r++)r>0&&t.print(","),t.print(i[r].x+" "+i[r].y);t.println(")")}t.print(")  ")},Hn.prototype.addAll=function(t){for(var e=t.iterator();e.hasNext();)this.add(e.next())},Hn.prototype.findEdgeIndex=function(t){for(var e=0;e<this._edges.size();e++)if(this._edges.get(e).equals(t))return e;return-1},Hn.prototype.iterator=function(){return this._edges.iterator()},Hn.prototype.getEdges=function(){return this._edges},Hn.prototype.get=function(t){return this._edges.get(t)},Hn.prototype.findEqualEdge=function(t){var e=new jn(t.getCoordinates());return this._ocaMap.get(e)},Hn.prototype.add=function(t){this._edges.add(t);var e=new jn(t.getCoordinates());this._ocaMap.put(e,t)},Hn.prototype.interfaces_=function(){return[]},Hn.prototype.getClass=function(){return Hn};var Wn=function(){};Wn.prototype.processIntersections=function(t,e,n,i){},Wn.prototype.isDone=function(){},Wn.prototype.interfaces_=function(){return[]},Wn.prototype.getClass=function(){return Wn};var Kn=function(){this._hasIntersection=!1,this._hasProper=!1,this._hasProperInterior=!1,this._hasInterior=!1,this._properIntersectionPoint=null,this._li=null,this._isSelfIntersection=null,this.numIntersections=0,this.numInteriorIntersections=0,this.numProperIntersections=0,this.numTests=0;var t=arguments[0];this._li=t};Kn.prototype.isTrivialIntersection=function(t,e,n,i){if(t===n&&1===this._li.getIntersectionNum()){if(Kn.isAdjacentSegments(e,i))return!0;if(t.isClosed()){var r=t.size()-1;if(0===e&&i===r||0===i&&e===r)return!0}}return!1},Kn.prototype.getProperIntersectionPoint=function(){return this._properIntersectionPoint},Kn.prototype.hasProperInteriorIntersection=function(){return this._hasProperInterior},Kn.prototype.getLineIntersector=function(){return this._li},Kn.prototype.hasProperIntersection=function(){return this._hasProper},Kn.prototype.processIntersections=function(t,e,n,i){if(t===n&&e===i)return null;this.numTests++;var r=t.getCoordinates()[e],o=t.getCoordinates()[e+1],s=n.getCoordinates()[i],a=n.getCoordinates()[i+1];this._li.computeIntersection(r,o,s,a),this._li.hasIntersection()&&(this.numIntersections++,this._li.isInteriorIntersection()&&(this.numInteriorIntersections++,this._hasInterior=!0),this.isTrivialIntersection(t,e,n,i)||(this._hasIntersection=!0,t.addIntersections(this._li,e,0),n.addIntersections(this._li,i,1),this._li.isProper()&&(this.numProperIntersections++,this._hasProper=!0,this._hasProperInterior=!0)))},Kn.prototype.hasIntersection=function(){return this._hasIntersection},Kn.prototype.isDone=function(){return!1},Kn.prototype.hasInteriorIntersection=function(){return this._hasInterior},Kn.prototype.interfaces_=function(){return[Wn]},Kn.prototype.getClass=function(){return Kn},Kn.isAdjacentSegments=function(t,e){return 1===Math.abs(t-e)};var Jn=function(){this.coord=null,this.segmentIndex=null,this.dist=null;var t=arguments[0],e=arguments[1],n=arguments[2];this.coord=new C(t),this.segmentIndex=e,this.dist=n};Jn.prototype.getSegmentIndex=function(){return this.segmentIndex},Jn.prototype.getCoordinate=function(){return this.coord},Jn.prototype.print=function(t){t.print(this.coord),t.print(" seg # = "+this.segmentIndex),t.println(" dist = "+this.dist)},Jn.prototype.compareTo=function(t){var e=t;return this.compare(e.segmentIndex,e.dist)},Jn.prototype.isEndPoint=function(t){return 0===this.segmentIndex&&0===this.dist||this.segmentIndex===t},Jn.prototype.toString=function(){return this.coord+" seg # = "+this.segmentIndex+" dist = "+this.dist},Jn.prototype.getDistance=function(){return this.dist},Jn.prototype.compare=function(t,e){return this.segmentIndex<t?-1:this.segmentIndex>t?1:this.dist<e?-1:this.dist>e?1:0},Jn.prototype.interfaces_=function(){return[E]},Jn.prototype.getClass=function(){return Jn};var Qn=function(){this._nodeMap=new p,this.edge=null;var t=arguments[0];this.edge=t};Qn.prototype.print=function(t){t.println("Intersections:");for(var e=this.iterator();e.hasNext();){e.next().print(t)}},Qn.prototype.iterator=function(){return this._nodeMap.values().iterator()},Qn.prototype.addSplitEdges=function(t){this.addEndpoints();for(var e=this.iterator(),n=e.next();e.hasNext();){var i=e.next(),r=this.createSplitEdge(n,i);t.add(r),n=i}},Qn.prototype.addEndpoints=function(){var t=this.edge.pts.length-1;this.add(this.edge.pts[0],0,0),this.add(this.edge.pts[t],t,0)},Qn.prototype.createSplitEdge=function(t,e){var n=e.segmentIndex-t.segmentIndex+2,i=this.edge.pts[e.segmentIndex],r=e.dist>0||!e.coord.equals2D(i);r||n--;var o=new Array(n).fill(null),s=0;o[s++]=new C(t.coord);for(var a=t.segmentIndex+1;a<=e.segmentIndex;a++)o[s++]=this.edge.pts[a];return r&&(o[s]=e.coord),new ni(o,new Pe(this.edge._label))},Qn.prototype.add=function(t,e,n){var i=new Jn(t,e,n),r=this._nodeMap.get(i);return null!==r?r:(this._nodeMap.put(i,i),i)},Qn.prototype.isIntersection=function(t){for(var e=this.iterator();e.hasNext();){if(e.next().coord.equals(t))return!0}return!1},Qn.prototype.interfaces_=function(){return[]},Qn.prototype.getClass=function(){return Qn};var Zn=function(){};Zn.prototype.getChainStartIndices=function(t){var e=0,n=new Nt;n.add(new M(e));do{var i=this.findChainEnd(t,e);n.add(new M(i)),e=i}while(e<t.length-1);return Zn.toIntArray(n)},Zn.prototype.findChainEnd=function(t,e){for(var n=Be.quadrant(t[e],t[e+1]),i=e+1;i<t.length;){if(Be.quadrant(t[i-1],t[i])!==n)break;i++}return i-1},Zn.prototype.interfaces_=function(){return[]},Zn.prototype.getClass=function(){return Zn},Zn.toIntArray=function(t){for(var e=new Array(t.size()).fill(null),n=0;n<e.length;n++)e[n]=t.get(n).intValue();return e};var $n=function(){this.e=null,this.pts=null,this.startIndex=null,this.env1=new j,this.env2=new j;var t=arguments[0];this.e=t,this.pts=t.getCoordinates();var e=new Zn;this.startIndex=e.getChainStartIndices(this.pts)};$n.prototype.getCoordinates=function(){return this.pts},$n.prototype.getMaxX=function(t){var e=this.pts[this.startIndex[t]].x,n=this.pts[this.startIndex[t+1]].x;return e>n?e:n},$n.prototype.getMinX=function(t){var e=this.pts[this.startIndex[t]].x,n=this.pts[this.startIndex[t+1]].x;return e<n?e:n},$n.prototype.computeIntersectsForChain=function(){if(4===arguments.length){var t=arguments[0],e=arguments[1],n=arguments[2],i=arguments[3];this.computeIntersectsForChain(this.startIndex[t],this.startIndex[t+1],e,e.startIndex[n],e.startIndex[n+1],i)}else if(6===arguments.length){var r=arguments[0],o=arguments[1],s=arguments[2],a=arguments[3],u=arguments[4],l=arguments[5],c=this.pts[r],p=this.pts[o],h=s.pts[a],f=s.pts[u];if(o-r==1&&u-a==1)return l.addIntersections(this.e,r,s.e,a),null;if(this.env1.init(c,p),this.env2.init(h,f),!this.env1.intersects(this.env2))return null;var g=Math.trunc((r+o)/2),d=Math.trunc((a+u)/2);r<g&&(a<d&&this.computeIntersectsForChain(r,g,s,a,d,l),d<u&&this.computeIntersectsForChain(r,g,s,d,u,l)),g<o&&(a<d&&this.computeIntersectsForChain(g,o,s,a,d,l),d<u&&this.computeIntersectsForChain(g,o,s,d,u,l))}},$n.prototype.getStartIndexes=function(){return this.startIndex},$n.prototype.computeIntersects=function(t,e){for(var n=0;n<this.startIndex.length-1;n++)for(var i=0;i<t.startIndex.length-1;i++)this.computeIntersectsForChain(n,t,i,e)},$n.prototype.interfaces_=function(){return[]},$n.prototype.getClass=function(){return $n};var ti=function t(){this._depth=Array(2).fill().map(function(){return Array(3)});for(var e=0;e<2;e++)for(var n=0;n<3;n++)this._depth[e][n]=t.NULL_VALUE},ei={NULL_VALUE:{configurable:!0}};ti.prototype.getDepth=function(t,e){return this._depth[t][e]},ti.prototype.setDepth=function(t,e,n){this._depth[t][e]=n},ti.prototype.isNull=function(){if(0===arguments.length){for(var t=0;t<2;t++)for(var e=0;e<3;e++)if(this._depth[t][e]!==ti.NULL_VALUE)return!1;return!0}if(1===arguments.length){var n=arguments[0];return this._depth[n][1]===ti.NULL_VALUE}if(2===arguments.length){var i=arguments[0],r=arguments[1];return this._depth[i][r]===ti.NULL_VALUE}},ti.prototype.normalize=function(){for(var t=0;t<2;t++)if(!this.isNull(t)){var e=this._depth[t][1];this._depth[t][2]<e&&(e=this._depth[t][2]),e<0&&(e=0);for(var n=1;n<3;n++){var i=0;this._depth[t][n]>e&&(i=1),this._depth[t][n]=i}}},ti.prototype.getDelta=function(t){return this._depth[t][Se.RIGHT]-this._depth[t][Se.LEFT]},ti.prototype.getLocation=function(t,e){return this._depth[t][e]<=0?w.EXTERIOR:w.INTERIOR},ti.prototype.toString=function(){return"A: "+this._depth[0][1]+","+this._depth[0][2]+" B: "+this._depth[1][1]+","+this._depth[1][2]},ti.prototype.add=function(){if(1===arguments.length)for(var t=arguments[0],e=0;e<2;e++)for(var n=1;n<3;n++){var i=t.getLocation(e,n);i!==w.EXTERIOR&&i!==w.INTERIOR||(this.isNull(e,n)?this._depth[e][n]=ti.depthAtLocation(i):this._depth[e][n]+=ti.depthAtLocation(i))}else if(3===arguments.length){var r=arguments[0],o=arguments[1];arguments[2]===w.INTERIOR&&this._depth[r][o]++}},ti.prototype.interfaces_=function(){return[]},ti.prototype.getClass=function(){return ti},ti.depthAtLocation=function(t){return t===w.EXTERIOR?0:t===w.INTERIOR?1:ti.NULL_VALUE},ei.NULL_VALUE.get=function(){return-1},Object.defineProperties(ti,ei);var ni=function(t){function e(){if(t.call(this),this.pts=null,this._env=null,this.eiList=new Qn(this),this._name=null,this._mce=null,this._isIsolated=!0,this._depth=new ti,this._depthDelta=0,1===arguments.length){var n=arguments[0];e.call(this,n,null)}else if(2===arguments.length){var i=arguments[0],r=arguments[1];this.pts=i,this._label=r}}return t&&(e.__proto__=t),e.prototype=Object.create(t&&t.prototype),e.prototype.constructor=e,e.prototype.getDepth=function(){return this._depth},e.prototype.getCollapsedEdge=function(){var t=new Array(2).fill(null);t[0]=this.pts[0],t[1]=this.pts[1];return new e(t,Pe.toLineLabel(this._label))},e.prototype.isIsolated=function(){return this._isIsolated},e.prototype.getCoordinates=function(){return this.pts},e.prototype.setIsolated=function(t){this._isIsolated=t},e.prototype.setName=function(t){this._name=t},e.prototype.equals=function(t){if(!(t instanceof e))return!1;var n=t;if(this.pts.length!==n.pts.length)return!1;for(var i=!0,r=!0,o=this.pts.length,s=0;s<this.pts.length;s++)if(this.pts[s].equals2D(n.pts[s])||(i=!1),this.pts[s].equals2D(n.pts[--o])||(r=!1),!i&&!r)return!1;return!0},e.prototype.getCoordinate=function(){if(0===arguments.length)return this.pts.length>0?this.pts[0]:null;if(1===arguments.length){var t=arguments[0];return this.pts[t]}},e.prototype.print=function(t){t.print("edge "+this._name+": "),t.print("LINESTRING (");for(var e=0;e<this.pts.length;e++)e>0&&t.print(","),t.print(this.pts[e].x+" "+this.pts[e].y);t.print(")  "+this._label+" "+this._depthDelta)},e.prototype.computeIM=function(t){e.updateIM(this._label,t)},e.prototype.isCollapsed=function(){return!!this._label.isArea()&&(3===this.pts.length&&!!this.pts[0].equals(this.pts[2]))},e.prototype.isClosed=function(){return this.pts[0].equals(this.pts[this.pts.length-1])},e.prototype.getMaximumSegmentIndex=function(){return this.pts.length-1},e.prototype.getDepthDelta=function(){return this._depthDelta},e.prototype.getNumPoints=function(){return this.pts.length},e.prototype.printReverse=function(t){t.print("edge "+this._name+": ");for(var e=this.pts.length-1;e>=0;e--)t.print(this.pts[e]+" ");t.println("")},e.prototype.getMonotoneChainEdge=function(){return null===this._mce&&(this._mce=new $n(this)),this._mce},e.prototype.getEnvelope=function(){if(null===this._env){this._env=new j;for(var t=0;t<this.pts.length;t++)this._env.expandToInclude(this.pts[t])}return this._env},e.prototype.addIntersection=function(t,e,n,i){var r=new C(t.getIntersection(i)),o=e,s=t.getEdgeDistance(n,i),a=o+1;if(a<this.pts.length){var u=this.pts[a];r.equals2D(u)&&(o=a,s=0)}this.eiList.add(r,o,s)},e.prototype.toString=function(){var t=new D;t.append("edge "+this._name+": "),t.append("LINESTRING (");for(var e=0;e<this.pts.length;e++)e>0&&t.append(","),t.append(this.pts[e].x+" "+this.pts[e].y);return t.append(")  "+this._label+" "+this._depthDelta),t.toString()},e.prototype.isPointwiseEqual=function(t){if(this.pts.length!==t.pts.length)return!1;for(var e=0;e<this.pts.length;e++)if(!this.pts[e].equals2D(t.pts[e]))return!1;return!0},e.prototype.setDepthDelta=function(t){this._depthDelta=t},e.prototype.getEdgeIntersectionList=function(){return this.eiList},e.prototype.addIntersections=function(t,e,n){for(var i=0;i<t.getIntersectionNum();i++)this.addIntersection(t,e,n,i)},e.prototype.interfaces_=function(){return[]},e.prototype.getClass=function(){return e},e.updateIM=function(){if(2!==arguments.length)return t.prototype.updateIM.apply(this,arguments);var e=arguments[0],n=arguments[1];n.setAtLeastIfValid(e.getLocation(0,Se.ON),e.getLocation(1,Se.ON),1),e.isArea()&&(n.setAtLeastIfValid(e.getLocation(0,Se.LEFT),e.getLocation(1,Se.LEFT),2),n.setAtLeastIfValid(e.getLocation(0,Se.RIGHT),e.getLocation(1,Se.RIGHT),2))},e}(Fe),ii=function(t){this._workingPrecisionModel=null,this._workingNoder=null,this._geomFact=null,this._graph=null,this._edgeList=new Hn,this._bufParams=t||null};ii.prototype.setWorkingPrecisionModel=function(t){this._workingPrecisionModel=t},ii.prototype.insertUniqueEdge=function(t){var e=this._edgeList.findEqualEdge(t);if(null!==e){var n=e.getLabel(),i=t.getLabel();e.isPointwiseEqual(t)||(i=new Pe(t.getLabel())).flip(),n.merge(i);var r=ii.depthDelta(i),o=e.getDepthDelta()+r;e.setDepthDelta(o)}else this._edgeList.add(t),t.setDepthDelta(ii.depthDelta(t.getLabel()))},ii.prototype.buildSubgraphs=function(t,e){for(var n=new Nt,i=t.iterator();i.hasNext();){var r=i.next(),o=r.getRightmostCoordinate(),s=new An(n).getDepth(o);r.computeDepth(s),r.findResultEdges(),n.add(r),e.add(r.getDirectedEdges(),r.getNodes())}},ii.prototype.createSubgraphs=function(t){for(var e=new Nt,n=t.getNodes().iterator();n.hasNext();){var i=n.next();if(!i.isVisited()){var r=new Te;r.create(i),e.add(r)}}return $e.sort(e,$e.reverseOrder()),e},ii.prototype.createEmptyResultGeometry=function(){return this._geomFact.createPolygon()},ii.prototype.getNoder=function(t){if(null!==this._workingNoder)return this._workingNoder;var e=new xn,n=new rt;return n.setPrecisionModel(t),e.setSegmentIntersector(new Kn(n)),e},ii.prototype.buffer=function(t,e){var n=this._workingPrecisionModel;null===n&&(n=t.getPrecisionModel()),this._geomFact=t.getFactory();var i=new Mn(n,this._bufParams),r=new Bn(t,e,i).getCurves();if(r.size()<=0)return this.createEmptyResultGeometry();this.computeNodedEdges(r,n),this._graph=new Ye(new kn),this._graph.addEdges(this._edgeList.getEdges());var o=this.createSubgraphs(this._graph),s=new ke(this._geomFact);this.buildSubgraphs(o,s);var a=s.getPolygons();if(a.size()<=0)return this.createEmptyResultGeometry();return this._geomFact.buildGeometry(a)},ii.prototype.computeNodedEdges=function(t,e){var n=this.getNoder(e);n.computeNodes(t);for(var i=n.getNodedSubstrings().iterator();i.hasNext();){var r=i.next(),o=r.getCoordinates();if(2!==o.length||!o[0].equals2D(o[1])){var s=r.getData(),a=new ni(r.getCoordinates(),new Pe(s));this.insertUniqueEdge(a)}}},ii.prototype.setNoder=function(t){this._workingNoder=t},ii.prototype.interfaces_=function(){return[]},ii.prototype.getClass=function(){return ii},ii.depthDelta=function(t){var e=t.getLocation(0,Se.LEFT),n=t.getLocation(0,Se.RIGHT);return e===w.INTERIOR&&n===w.EXTERIOR?1:e===w.EXTERIOR&&n===w.INTERIOR?-1:0},ii.convertSegStrings=function(t){for(var e=new _e,n=new Nt;t.hasNext();){var i=t.next(),r=e.createLineString(i.getCoordinates());n.add(r)}return e.buildGeometry(n)};var ri=function(){if(this._noder=null,this._scaleFactor=null,this._offsetX=null,this._offsetY=null,this._isScaled=!1,2===arguments.length){var t=arguments[0],e=arguments[1];this._noder=t,this._scaleFactor=e,this._offsetX=0,this._offsetY=0,this._isScaled=!this.isIntegerPrecision()}else if(4===arguments.length){var n=arguments[0],i=arguments[1],r=arguments[2],o=arguments[3];this._noder=n,this._scaleFactor=i,this._offsetX=r,this._offsetY=o,this._isScaled=!this.isIntegerPrecision()}};ri.prototype.rescale=function(){if(T(arguments[0],It))for(var t=arguments[0].iterator();t.hasNext();){var e=t.next();this.rescale(e.getCoordinates())}else if(arguments[0]instanceof Array){for(var n=arguments[0],i=0;i<n.length;i++)n[i].x=n[i].x/this._scaleFactor+this._offsetX,n[i].y=n[i].y/this._scaleFactor+this._offsetY;2===n.length&&n[0].equals2D(n[1])&&Y.out.println(n)}},ri.prototype.scale=function(){if(T(arguments[0],It)){for(var t=arguments[0],e=new Nt,n=t.iterator();n.hasNext();){var i=n.next();e.add(new gn(this.scale(i.getCoordinates()),i.getData()))}return e}if(arguments[0]instanceof Array){for(var r=arguments[0],o=new Array(r.length).fill(null),s=0;s<r.length;s++)o[s]=new C(Math.round((r[s].x-this._offsetX)*this._scaleFactor),Math.round((r[s].y-this._offsetY)*this._scaleFactor),r[s].z);return Lt.removeRepeatedPoints(o)}},ri.prototype.isIntegerPrecision=function(){return 1===this._scaleFactor},ri.prototype.getNodedSubstrings=function(){var t=this._noder.getNodedSubstrings();return this._isScaled&&this.rescale(t),t},ri.prototype.computeNodes=function(t){var e=t;this._isScaled&&(e=this.scale(t)),this._noder.computeNodes(e)},ri.prototype.interfaces_=function(){return[In]},ri.prototype.getClass=function(){return ri};var oi=function(){this._li=new rt,this._segStrings=null;var t=arguments[0];this._segStrings=t},si={fact:{configurable:!0}};oi.prototype.checkEndPtVertexIntersections=function(){if(0===arguments.length)for(var t=this._segStrings.iterator();t.hasNext();){var e=t.next().getCoordinates();this.checkEndPtVertexIntersections(e[0],this._segStrings),this.checkEndPtVertexIntersections(e[e.length-1],this._segStrings)}else if(2===arguments.length)for(var n=arguments[0],i=arguments[1].iterator();i.hasNext();)for(var r=i.next().getCoordinates(),o=1;o<r.length-1;o++)if(r[o].equals(n))throw new $("found endpt/interior pt intersection at index "+o+" :pt "+n)},oi.prototype.checkInteriorIntersections=function(){if(0===arguments.length)for(var t=this._segStrings.iterator();t.hasNext();)for(var e=t.next(),n=this._segStrings.iterator();n.hasNext();){var i=n.next();this.checkInteriorIntersections(e,i)}else if(2===arguments.length)for(var r=arguments[0],o=arguments[1],s=r.getCoordinates(),a=o.getCoordinates(),u=0;u<s.length-1;u++)for(var l=0;l<a.length-1;l++)this.checkInteriorIntersections(r,u,o,l);else if(4===arguments.length){var c=arguments[0],p=arguments[1],h=arguments[2],f=arguments[3];if(c===h&&p===f)return null;var g=c.getCoordinates()[p],d=c.getCoordinates()[p+1],y=h.getCoordinates()[f],_=h.getCoordinates()[f+1];if(this._li.computeIntersection(g,d,y,_),this._li.hasIntersection()&&(this._li.isProper()||this.hasInteriorIntersection(this._li,g,d)||this.hasInteriorIntersection(this._li,y,_)))throw new $("found non-noded intersection at "+g+"-"+d+" and "+y+"-"+_)}},oi.prototype.checkValid=function(){this.checkEndPtVertexIntersections(),this.checkInteriorIntersections(),this.checkCollapses()},oi.prototype.checkCollapses=function(){if(0===arguments.length)for(var t=this._segStrings.iterator();t.hasNext();){var e=t.next();this.checkCollapses(e)}else if(1===arguments.length)for(var n=arguments[0].getCoordinates(),i=0;i<n.length-2;i++)this.checkCollapse(n[i],n[i+1],n[i+2])},oi.prototype.hasInteriorIntersection=function(t,e,n){for(var i=0;i<t.getIntersectionNum();i++){var r=t.getIntersection(i);if(!r.equals(e)&&!r.equals(n))return!0}return!1},oi.prototype.checkCollapse=function(t,e,n){if(t.equals(n))throw new $("found non-noded collapse at "+oi.fact.createLineString([t,e,n]))},oi.prototype.interfaces_=function(){return[]},oi.prototype.getClass=function(){return oi},si.fact.get=function(){return new _e},Object.defineProperties(oi,si);var ai=function(){this._li=null,this._pt=null,this._originalPt=null,this._ptScaled=null,this._p0Scaled=null,this._p1Scaled=null,this._scaleFactor=null,this._minx=null,this._maxx=null,this._miny=null,this._maxy=null,this._corner=new Array(4).fill(null),this._safeEnv=null;var t=arguments[0],e=arguments[1],n=arguments[2];if(this._originalPt=t,this._pt=t,this._scaleFactor=e,this._li=n,e<=0)throw new m("Scale factor must be non-zero");1!==e&&(this._pt=new C(this.scale(t.x),this.scale(t.y)),this._p0Scaled=new C,this._p1Scaled=new C),this.initCorners(this._pt)},ui={SAFE_ENV_EXPANSION_FACTOR:{configurable:!0}};ai.prototype.intersectsScaled=function(t,e){var n=Math.min(t.x,e.x),i=Math.max(t.x,e.x),r=Math.min(t.y,e.y),o=Math.max(t.y,e.y),s=this._maxx<n||this._minx>i||this._maxy<r||this._miny>o;if(s)return!1;var a=this.intersectsToleranceSquare(t,e);return et.isTrue(!(s&&a),"Found bad envelope test"),a},ai.prototype.initCorners=function(t){this._minx=t.x-.5,this._maxx=t.x+.5,this._miny=t.y-.5,this._maxy=t.y+.5,this._corner[0]=new C(this._maxx,this._maxy),this._corner[1]=new C(this._minx,this._maxy),this._corner[2]=new C(this._minx,this._miny),this._corner[3]=new C(this._maxx,this._miny)},ai.prototype.intersects=function(t,e){return 1===this._scaleFactor?this.intersectsScaled(t,e):(this.copyScaled(t,this._p0Scaled),this.copyScaled(e,this._p1Scaled),this.intersectsScaled(this._p0Scaled,this._p1Scaled))},ai.prototype.scale=function(t){return Math.round(t*this._scaleFactor)},ai.prototype.getCoordinate=function(){return this._originalPt},ai.prototype.copyScaled=function(t,e){e.x=this.scale(t.x),e.y=this.scale(t.y)},ai.prototype.getSafeEnvelope=function(){if(null===this._safeEnv){var t=ai.SAFE_ENV_EXPANSION_FACTOR/this._scaleFactor;this._safeEnv=new j(this._originalPt.x-t,this._originalPt.x+t,this._originalPt.y-t,this._originalPt.y+t)}return this._safeEnv},ai.prototype.intersectsPixelClosure=function(t,e){return this._li.computeIntersection(t,e,this._corner[0],this._corner[1]),!!this._li.hasIntersection()||(this._li.computeIntersection(t,e,this._corner[1],this._corner[2]),!!this._li.hasIntersection()||(this._li.computeIntersection(t,e,this._corner[2],this._corner[3]),!!this._li.hasIntersection()||(this._li.computeIntersection(t,e,this._corner[3],this._corner[0]),!!this._li.hasIntersection())))},ai.prototype.intersectsToleranceSquare=function(t,e){var n=!1,i=!1;return this._li.computeIntersection(t,e,this._corner[0],this._corner[1]),!!this._li.isProper()||(this._li.computeIntersection(t,e,this._corner[1],this._corner[2]),!!this._li.isProper()||(this._li.hasIntersection()&&(n=!0),this._li.computeIntersection(t,e,this._corner[2],this._corner[3]),!!this._li.isProper()||(this._li.hasIntersection()&&(i=!0),this._li.computeIntersection(t,e,this._corner[3],this._corner[0]),!!this._li.isProper()||(!(!n||!i)||(!!t.equals(this._pt)||!!e.equals(this._pt))))))},ai.prototype.addSnappedNode=function(t,e){var n=t.getCoordinate(e),i=t.getCoordinate(e+1);return!!this.intersects(n,i)&&(t.addIntersection(this.getCoordinate(),e),!0)},ai.prototype.interfaces_=function(){return[]},ai.prototype.getClass=function(){return ai},ui.SAFE_ENV_EXPANSION_FACTOR.get=function(){return.75},Object.defineProperties(ai,ui);var li=function(){this.tempEnv1=new j,this.selectedSegment=new dn};li.prototype.select=function(){if(1===arguments.length);else if(2===arguments.length){var t=arguments[0],e=arguments[1];t.getLineSegment(e,this.selectedSegment),this.select(this.selectedSegment)}},li.prototype.interfaces_=function(){return[]},li.prototype.getClass=function(){return li};var ci=function(){this._index=null;var t=arguments[0];this._index=t},pi={HotPixelSnapAction:{configurable:!0}};ci.prototype.snap=function(){if(1===arguments.length){var t=arguments[0];return this.snap(t,null,-1)}if(3===arguments.length){var e=arguments[0],n=arguments[1],i=arguments[2],r=e.getSafeEnvelope(),o=new hi(e,n,i);return this._index.query(r,{interfaces_:function(){return[Ke]},visitItem:function(t){t.select(r,o)}}),o.isNodeAdded()}},ci.prototype.interfaces_=function(){return[]},ci.prototype.getClass=function(){return ci},pi.HotPixelSnapAction.get=function(){return hi},Object.defineProperties(ci,pi);var hi=function(t){function e(){t.call(this),this._hotPixel=null,this._parentEdge=null,this._hotPixelVertexIndex=null,this._isNodeAdded=!1;var e=arguments[0],n=arguments[1],i=arguments[2];this._hotPixel=e,this._parentEdge=n,this._hotPixelVertexIndex=i}return t&&(e.__proto__=t),e.prototype=Object.create(t&&t.prototype),e.prototype.constructor=e,e.prototype.isNodeAdded=function(){return this._isNodeAdded},e.prototype.select=function(){if(2!==arguments.length)return t.prototype.select.apply(this,arguments);var e=arguments[0],n=arguments[1],i=e.getContext();if(null!==this._parentEdge&&i===this._parentEdge&&n===this._hotPixelVertexIndex)return null;this._isNodeAdded=this._hotPixel.addSnappedNode(i,n)},e.prototype.interfaces_=function(){return[]},e.prototype.getClass=function(){return e},e}(li),fi=function(){this._li=null,this._interiorIntersections=null;var t=arguments[0];this._li=t,this._interiorIntersections=new Nt};fi.prototype.processIntersections=function(t,e,n,i){if(t===n&&e===i)return null;var r=t.getCoordinates()[e],o=t.getCoordinates()[e+1],s=n.getCoordinates()[i],a=n.getCoordinates()[i+1];if(this._li.computeIntersection(r,o,s,a),this._li.hasIntersection()&&this._li.isInteriorIntersection()){for(var u=0;u<this._li.getIntersectionNum();u++)this._interiorIntersections.add(this._li.getIntersection(u));t.addIntersections(this._li,e,0),n.addIntersections(this._li,i,1)}},fi.prototype.isDone=function(){return!1},fi.prototype.getInteriorIntersections=function(){return this._interiorIntersections},fi.prototype.interfaces_=function(){return[Wn]},fi.prototype.getClass=function(){return fi};var gi=function(){this._pm=null,this._li=null,this._scaleFactor=null,this._noder=null,this._pointSnapper=null,this._nodedSegStrings=null;var t=arguments[0];this._pm=t,this._li=new rt,this._li.setPrecisionModel(t),this._scaleFactor=t.getScale()};gi.prototype.checkCorrectness=function(t){var e=gn.getNodedSubstrings(t),n=new oi(e);try{n.checkValid()}catch(t){if(!(t instanceof z))throw t;t.printStackTrace()}},gi.prototype.getNodedSubstrings=function(){return gn.getNodedSubstrings(this._nodedSegStrings)},gi.prototype.snapRound=function(t,e){var n=this.findInteriorIntersections(t,e);this.computeIntersectionSnaps(n),this.computeVertexSnaps(t)},gi.prototype.findInteriorIntersections=function(t,e){var n=new fi(e);return this._noder.setSegmentIntersector(n),this._noder.computeNodes(t),n.getInteriorIntersections()},gi.prototype.computeVertexSnaps=function(){if(T(arguments[0],It))for(var t=arguments[0].iterator();t.hasNext();){var e=t.next();this.computeVertexSnaps(e)}else if(arguments[0]instanceof gn)for(var n=arguments[0],i=n.getCoordinates(),r=0;r<i.length;r++){var o=new ai(i[r],this._scaleFactor,this._li);this._pointSnapper.snap(o,n,r)&&n.addIntersection(i[r],r)}},gi.prototype.computeNodes=function(t){this._nodedSegStrings=t,this._noder=new xn,this._pointSnapper=new ci(this._noder.getIndex()),this.snapRound(t,this._li)},gi.prototype.computeIntersectionSnaps=function(t){for(var e=t.iterator();e.hasNext();){var n=e.next(),i=new ai(n,this._scaleFactor,this._li);this._pointSnapper.snap(i)}},gi.prototype.interfaces_=function(){return[In]},gi.prototype.getClass=function(){return gi};var di=function(){if(this._argGeom=null,this._distance=null,this._bufParams=new Cn,this._resultGeometry=null,this._saveException=null,1===arguments.length){var t=arguments[0];this._argGeom=t}else if(2===arguments.length){var e=arguments[0],n=arguments[1];this._argGeom=e,this._bufParams=n}},yi={CAP_ROUND:{configurable:!0},CAP_BUTT:{configurable:!0},CAP_FLAT:{configurable:!0},CAP_SQUARE:{configurable:!0},MAX_PRECISION_DIGITS:{configurable:!0}};di.prototype.bufferFixedPrecision=function(t){var e=new ri(new gi(new fe(1)),t.getScale()),n=new ii(this._bufParams);n.setWorkingPrecisionModel(t),n.setNoder(e),this._resultGeometry=n.buffer(this._argGeom,this._distance)},di.prototype.bufferReducedPrecision=function(){var t=this;if(0===arguments.length){for(var e=di.MAX_PRECISION_DIGITS;e>=0;e--){try{t.bufferReducedPrecision(e)}catch(e){if(!(e instanceof we))throw e;t._saveException=e}if(null!==t._resultGeometry)return null}throw this._saveException}if(1===arguments.length){var n=arguments[0],i=di.precisionScaleFactor(this._argGeom,this._distance,n),r=new fe(i);this.bufferFixedPrecision(r)}},di.prototype.computeGeometry=function(){if(this.bufferOriginalPrecision(),null!==this._resultGeometry)return null;var t=this._argGeom.getFactory().getPrecisionModel();t.getType()===fe.FIXED?this.bufferFixedPrecision(t):this.bufferReducedPrecision()},di.prototype.setQuadrantSegments=function(t){this._bufParams.setQuadrantSegments(t)},di.prototype.bufferOriginalPrecision=function(){try{var t=new ii(this._bufParams);this._resultGeometry=t.buffer(this._argGeom,this._distance)}catch(t){if(!(t instanceof $))throw t;this._saveException=t}},di.prototype.getResultGeometry=function(t){return this._distance=t,this.computeGeometry(),this._resultGeometry},di.prototype.setEndCapStyle=function(t){this._bufParams.setEndCapStyle(t)},di.prototype.interfaces_=function(){return[]},di.prototype.getClass=function(){return di},di.bufferOp=function(){if(2===arguments.length){var t=arguments[0],e=arguments[1];return new di(t).getResultGeometry(e)}if(3===arguments.length){if(Number.isInteger(arguments[2])&&arguments[0]instanceof ct&&"number"==typeof arguments[1]){var n=arguments[0],i=arguments[1],r=arguments[2],o=new di(n);o.setQuadrantSegments(r);return o.getResultGeometry(i)}if(arguments[2]instanceof Cn&&arguments[0]instanceof ct&&"number"==typeof arguments[1]){var s=arguments[0],a=arguments[1],u=arguments[2];return new di(s,u).getResultGeometry(a)}}else if(4===arguments.length){var l=arguments[0],c=arguments[1],p=arguments[2],h=arguments[3],f=new di(l);f.setQuadrantSegments(p),f.setEndCapStyle(h);return f.getResultGeometry(c)}},di.precisionScaleFactor=function(t,e,n){var i=t.getEnvelopeInternal(),r=R.max(Math.abs(i.getMaxX()),Math.abs(i.getMaxY()),Math.abs(i.getMinX()),Math.abs(i.getMinY()))+2*(e>0?e:0),o=n-Math.trunc(Math.log(r)/Math.log(10)+1);return Math.pow(10,o)},yi.CAP_ROUND.get=function(){return Cn.CAP_ROUND},yi.CAP_BUTT.get=function(){return Cn.CAP_FLAT},yi.CAP_FLAT.get=function(){return Cn.CAP_FLAT},yi.CAP_SQUARE.get=function(){return Cn.CAP_SQUARE},yi.MAX_PRECISION_DIGITS.get=function(){return 12},Object.defineProperties(di,yi);var _i=function(){this._pt=[new C,new C],this._distance=v.NaN,this._isNull=!0};_i.prototype.getCoordinates=function(){return this._pt},_i.prototype.getCoordinate=function(t){return this._pt[t]},_i.prototype.setMinimum=function(){if(1===arguments.length){var t=arguments[0];this.setMinimum(t._pt[0],t._pt[1])}else if(2===arguments.length){var e=arguments[0],n=arguments[1];if(this._isNull)return this.initialize(e,n),null;var i=e.distance(n);i<this._distance&&this.initialize(e,n,i)}},_i.prototype.initialize=function(){if(0===arguments.length)this._isNull=!0;else if(2===arguments.length){var t=arguments[0],e=arguments[1];this._pt[0].setCoordinate(t),this._pt[1].setCoordinate(e),this._distance=t.distance(e),this._isNull=!1}else if(3===arguments.length){var n=arguments[0],i=arguments[1],r=arguments[2];this._pt[0].setCoordinate(n),this._pt[1].setCoordinate(i),this._distance=r,this._isNull=!1}},_i.prototype.getDistance=function(){return this._distance},_i.prototype.setMaximum=function(){if(1===arguments.length){var t=arguments[0];this.setMaximum(t._pt[0],t._pt[1])}else if(2===arguments.length){var e=arguments[0],n=arguments[1];if(this._isNull)return this.initialize(e,n),null;var i=e.distance(n);i>this._distance&&this.initialize(e,n,i)}},_i.prototype.interfaces_=function(){return[]},_i.prototype.getClass=function(){return _i};var mi=function(){};mi.prototype.interfaces_=function(){return[]},mi.prototype.getClass=function(){return mi},mi.computeDistance=function(){if(arguments[2]instanceof _i&&arguments[0]instanceof Kt&&arguments[1]instanceof C)for(var t=arguments[0],e=arguments[1],n=arguments[2],i=t.getCoordinates(),r=new dn,o=0;o<i.length-1;o++){r.setCoordinates(i[o],i[o+1]);var s=r.closestPoint(e);n.setMinimum(s,e)}else if(arguments[2]instanceof _i&&arguments[0]instanceof $t&&arguments[1]instanceof C){var a=arguments[0],u=arguments[1],l=arguments[2];mi.computeDistance(a.getExteriorRing(),u,l);for(var c=0;c<a.getNumInteriorRing();c++)mi.computeDistance(a.getInteriorRingN(c),u,l)}else if(arguments[2]instanceof _i&&arguments[0]instanceof ct&&arguments[1]instanceof C){var p=arguments[0],h=arguments[1],f=arguments[2];if(p instanceof Kt)mi.computeDistance(p,h,f);else if(p instanceof $t)mi.computeDistance(p,h,f);else if(p instanceof zt)for(var g=p,d=0;d<g.getNumGeometries();d++){var y=g.getGeometryN(d);mi.computeDistance(y,h,f)}else f.setMinimum(p.getCoordinate(),h)}else if(arguments[2]instanceof _i&&arguments[0]instanceof dn&&arguments[1]instanceof C){var _=arguments[0],m=arguments[1],v=arguments[2],I=_.closestPoint(m);v.setMinimum(I,m)}};var vi=function(t){this._maxPtDist=new _i,this._inputGeom=t||null},Ii={MaxPointDistanceFilter:{configurable:!0},MaxMidpointDistanceFilter:{configurable:!0}};vi.prototype.computeMaxMidpointDistance=function(t){var e=new xi(this._inputGeom);t.apply(e),this._maxPtDist.setMaximum(e.getMaxPointDistance())},vi.prototype.computeMaxVertexDistance=function(t){var e=new Ei(this._inputGeom);t.apply(e),this._maxPtDist.setMaximum(e.getMaxPointDistance())},vi.prototype.findDistance=function(t){return this.computeMaxVertexDistance(t),this.computeMaxMidpointDistance(t),this._maxPtDist.getDistance()},vi.prototype.getDistancePoints=function(){return this._maxPtDist},vi.prototype.interfaces_=function(){return[]},vi.prototype.getClass=function(){return vi},Ii.MaxPointDistanceFilter.get=function(){return Ei},Ii.MaxMidpointDistanceFilter.get=function(){return xi},Object.defineProperties(vi,Ii);var Ei=function(t){this._maxPtDist=new _i,this._minPtDist=new _i,this._geom=t||null};Ei.prototype.filter=function(t){this._minPtDist.initialize(),mi.computeDistance(this._geom,t,this._minPtDist),this._maxPtDist.setMaximum(this._minPtDist)},Ei.prototype.getMaxPointDistance=function(){return this._maxPtDist},Ei.prototype.interfaces_=function(){return[ft]},Ei.prototype.getClass=function(){return Ei};var xi=function(t){this._maxPtDist=new _i,this._minPtDist=new _i,this._geom=t||null};xi.prototype.filter=function(t,e){if(0===e)return null;var n=t.getCoordinate(e-1),i=t.getCoordinate(e),r=new C((n.x+i.x)/2,(n.y+i.y)/2);this._minPtDist.initialize(),mi.computeDistance(this._geom,r,this._minPtDist),this._maxPtDist.setMaximum(this._minPtDist)},xi.prototype.isDone=function(){return!1},xi.prototype.isGeometryChanged=function(){return!1},xi.prototype.getMaxPointDistance=function(){return this._maxPtDist},xi.prototype.interfaces_=function(){return[Ut]},xi.prototype.getClass=function(){return xi};var Ni=function(t){this._comps=t||null};Ni.prototype.filter=function(t){t instanceof $t&&this._comps.add(t)},Ni.prototype.interfaces_=function(){return[Vt]},Ni.prototype.getClass=function(){return Ni},Ni.getPolygons=function(){if(1===arguments.length){var t=arguments[0];return Ni.getPolygons(t,new Nt)}if(2===arguments.length){var e=arguments[0],n=arguments[1];return e instanceof $t?n.add(e):e instanceof zt&&e.apply(new Ni(n)),n}};var Ci=function(){if(this._lines=null,this._isForcedToLineString=!1,1===arguments.length){var t=arguments[0];this._lines=t}else if(2===arguments.length){var e=arguments[0],n=arguments[1];this._lines=e,this._isForcedToLineString=n}};Ci.prototype.filter=function(t){if(this._isForcedToLineString&&t instanceof ee){var e=t.getFactory().createLineString(t.getCoordinateSequence());return this._lines.add(e),null}t instanceof Kt&&this._lines.add(t)},Ci.prototype.setForceToLineString=function(t){this._isForcedToLineString=t},Ci.prototype.interfaces_=function(){return[lt]},Ci.prototype.getClass=function(){return Ci},Ci.getGeometry=function(){if(1===arguments.length){var t=arguments[0];return t.getFactory().buildGeometry(Ci.getLines(t))}if(2===arguments.length){var e=arguments[0],n=arguments[1];return e.getFactory().buildGeometry(Ci.getLines(e,n))}},Ci.getLines=function(){if(1===arguments.length){var t=arguments[0];return Ci.getLines(t,!1)}if(2===arguments.length){if(T(arguments[0],It)&&T(arguments[1],It)){for(var e=arguments[0],n=arguments[1],i=e.iterator();i.hasNext();){var r=i.next();Ci.getLines(r,n)}return n}if(arguments[0]instanceof ct&&"boolean"==typeof arguments[1]){var o=arguments[0],s=arguments[1],a=new Nt;return o.apply(new Ci(a,s)),a}if(arguments[0]instanceof ct&&T(arguments[1],It)){var u=arguments[0],l=arguments[1];return u instanceof Kt?l.add(u):u.apply(new Ci(l)),l}}else if(3===arguments.length){if("boolean"==typeof arguments[2]&&T(arguments[0],It)&&T(arguments[1],It)){for(var c=arguments[0],p=arguments[1],h=arguments[2],f=c.iterator();f.hasNext();){var g=f.next();Ci.getLines(g,p,h)}return p}if("boolean"==typeof arguments[2]&&arguments[0]instanceof ct&&T(arguments[1],It)){var d=arguments[0],y=arguments[1],_=arguments[2];return d.apply(new Ci(y,_)),y}}};var Si=function(){if(this._boundaryRule=gt.OGC_SFS_BOUNDARY_RULE,this._isIn=null,this._numBoundaries=null,0===arguments.length);else if(1===arguments.length){var t=arguments[0];if(null===t)throw new m("Rule must be non-null");this._boundaryRule=t}};Si.prototype.locateInternal=function(){if(arguments[0]instanceof C&&arguments[1]instanceof $t){var t=arguments[0],e=arguments[1];if(e.isEmpty())return w.EXTERIOR;var n=e.getExteriorRing(),i=this.locateInPolygonRing(t,n);if(i===w.EXTERIOR)return w.EXTERIOR;if(i===w.BOUNDARY)return w.BOUNDARY;for(var r=0;r<e.getNumInteriorRing();r++){var o=e.getInteriorRingN(r),s=this.locateInPolygonRing(t,o);if(s===w.INTERIOR)return w.EXTERIOR;if(s===w.BOUNDARY)return w.BOUNDARY}return w.INTERIOR}if(arguments[0]instanceof C&&arguments[1]instanceof Kt){var a=arguments[0],u=arguments[1];if(!u.getEnvelopeInternal().intersects(a))return w.EXTERIOR;var l=u.getCoordinates();return u.isClosed()||!a.equals(l[0])&&!a.equals(l[l.length-1])?at.isOnLine(a,l)?w.INTERIOR:w.EXTERIOR:w.BOUNDARY}if(arguments[0]instanceof C&&arguments[1]instanceof Qt){var c=arguments[0];return arguments[1].getCoordinate().equals2D(c)?w.INTERIOR:w.EXTERIOR}},Si.prototype.locateInPolygonRing=function(t,e){return e.getEnvelopeInternal().intersects(t)?at.locatePointInRing(t,e.getCoordinates()):w.EXTERIOR},Si.prototype.intersects=function(t,e){return this.locate(t,e)!==w.EXTERIOR},Si.prototype.updateLocationInfo=function(t){t===w.INTERIOR&&(this._isIn=!0),t===w.BOUNDARY&&this._numBoundaries++},Si.prototype.computeLocation=function(t,e){if(e instanceof Qt&&this.updateLocationInfo(this.locateInternal(t,e)),e instanceof Kt)this.updateLocationInfo(this.locateInternal(t,e));else if(e instanceof $t)this.updateLocationInfo(this.locateInternal(t,e));else if(e instanceof Xt)for(var n=e,i=0;i<n.getNumGeometries();i++){var r=n.getGeometryN(i);this.updateLocationInfo(this.locateInternal(t,r))}else if(e instanceof ne)for(var o=e,s=0;s<o.getNumGeometries();s++){var a=o.getGeometryN(s);this.updateLocationInfo(this.locateInternal(t,a))}else if(e instanceof zt)for(var u=new Un(e);u.hasNext();){var l=u.next();l!==e&&this.computeLocation(t,l)}},Si.prototype.locate=function(t,e){return e.isEmpty()?w.EXTERIOR:e instanceof Kt?this.locateInternal(t,e):e instanceof $t?this.locateInternal(t,e):(this._isIn=!1,this._numBoundaries=0,this.computeLocation(t,e),this._boundaryRule.isInBoundary(this._numBoundaries)?w.BOUNDARY:this._numBoundaries>0||this._isIn?w.INTERIOR:w.EXTERIOR)},Si.prototype.interfaces_=function(){return[]},Si.prototype.getClass=function(){return Si};var Li=function t(){if(this._component=null,this._segIndex=null,this._pt=null,2===arguments.length){var e=arguments[0],n=arguments[1];t.call(this,e,t.INSIDE_AREA,n)}else if(3===arguments.length){var i=arguments[0],r=arguments[1],o=arguments[2];this._component=i,this._segIndex=r,this._pt=o}},bi={INSIDE_AREA:{configurable:!0}};Li.prototype.isInsideArea=function(){return this._segIndex===Li.INSIDE_AREA},Li.prototype.getCoordinate=function(){return this._pt},Li.prototype.getGeometryComponent=function(){return this._component},Li.prototype.getSegmentIndex=function(){return this._segIndex},Li.prototype.interfaces_=function(){return[]},Li.prototype.getClass=function(){return Li},bi.INSIDE_AREA.get=function(){return-1},Object.defineProperties(Li,bi);var wi=function(t){this._pts=t||null};wi.prototype.filter=function(t){t instanceof Qt&&this._pts.add(t)},wi.prototype.interfaces_=function(){return[Vt]},wi.prototype.getClass=function(){return wi},wi.getPoints=function(){if(1===arguments.length){var t=arguments[0];return t instanceof Qt?$e.singletonList(t):wi.getPoints(t,new Nt)}if(2===arguments.length){var e=arguments[0],n=arguments[1];return e instanceof Qt?n.add(e):e instanceof zt&&e.apply(new wi(n)),n}};var Oi=function(){this._locations=null;var t=arguments[0];this._locations=t};Oi.prototype.filter=function(t){(t instanceof Qt||t instanceof Kt||t instanceof $t)&&this._locations.add(new Li(t,0,t.getCoordinate()))},Oi.prototype.interfaces_=function(){return[Vt]},Oi.prototype.getClass=function(){return Oi},Oi.getLocations=function(t){var e=new Nt;return t.apply(new Oi(e)),e};var Ti=function(){if(this._geom=null,this._terminateDistance=0,this._ptLocator=new Si,this._minDistanceLocation=null,this._minDistance=v.MAX_VALUE,2===arguments.length){var t=arguments[0],e=arguments[1];this._geom=[t,e],this._terminateDistance=0}else if(3===arguments.length){var n=arguments[0],i=arguments[1],r=arguments[2];this._geom=new Array(2).fill(null),this._geom[0]=n,this._geom[1]=i,this._terminateDistance=r}};Ti.prototype.computeContainmentDistance=function(){if(0===arguments.length){var t=new Array(2).fill(null);if(this.computeContainmentDistance(0,t),this._minDistance<=this._terminateDistance)return null;this.computeContainmentDistance(1,t)}else if(2===arguments.length){var e=arguments[0],n=arguments[1],i=1-e,r=Ni.getPolygons(this._geom[e]);if(r.size()>0){var o=Oi.getLocations(this._geom[i]);if(this.computeContainmentDistance(o,r,n),this._minDistance<=this._terminateDistance)return this._minDistanceLocation[i]=n[0],this._minDistanceLocation[e]=n[1],null}}else if(3===arguments.length)if(arguments[2]instanceof Array&&T(arguments[0],xt)&&T(arguments[1],xt)){for(var s=arguments[0],a=arguments[1],u=arguments[2],l=0;l<s.size();l++)for(var c=s.get(l),p=0;p<a.size();p++)if(this.computeContainmentDistance(c,a.get(p),u),this._minDistance<=this._terminateDistance)return null}else if(arguments[2]instanceof Array&&arguments[0]instanceof Li&&arguments[1]instanceof $t){var h=arguments[0],f=arguments[1],g=arguments[2],d=h.getCoordinate();if(w.EXTERIOR!==this._ptLocator.locate(d,f))return this._minDistance=0,g[0]=h,g[1]=new Li(f,d),null}},Ti.prototype.computeMinDistanceLinesPoints=function(t,e,n){for(var i=0;i<t.size();i++)for(var r=t.get(i),o=0;o<e.size();o++){var s=e.get(o);if(this.computeMinDistance(r,s,n),this._minDistance<=this._terminateDistance)return null}},Ti.prototype.computeFacetDistance=function(){var t=new Array(2).fill(null),e=Ci.getLines(this._geom[0]),n=Ci.getLines(this._geom[1]),i=wi.getPoints(this._geom[0]),r=wi.getPoints(this._geom[1]);return this.computeMinDistanceLines(e,n,t),this.updateMinDistance(t,!1),this._minDistance<=this._terminateDistance?null:(t[0]=null,t[1]=null,this.computeMinDistanceLinesPoints(e,r,t),this.updateMinDistance(t,!1),this._minDistance<=this._terminateDistance?null:(t[0]=null,t[1]=null,this.computeMinDistanceLinesPoints(n,i,t),this.updateMinDistance(t,!0),this._minDistance<=this._terminateDistance?null:(t[0]=null,t[1]=null,this.computeMinDistancePoints(i,r,t),void this.updateMinDistance(t,!1))))},Ti.prototype.nearestLocations=function(){return this.computeMinDistance(),this._minDistanceLocation},Ti.prototype.updateMinDistance=function(t,e){if(null===t[0])return null;e?(this._minDistanceLocation[0]=t[1],this._minDistanceLocation[1]=t[0]):(this._minDistanceLocation[0]=t[0],this._minDistanceLocation[1]=t[1])},Ti.prototype.nearestPoints=function(){this.computeMinDistance();return[this._minDistanceLocation[0].getCoordinate(),this._minDistanceLocation[1].getCoordinate()]},Ti.prototype.computeMinDistance=function(){if(0===arguments.length){if(null!==this._minDistanceLocation)return null;if(this._minDistanceLocation=new Array(2).fill(null),this.computeContainmentDistance(),this._minDistance<=this._terminateDistance)return null;this.computeFacetDistance()}else if(3===arguments.length)if(arguments[2]instanceof Array&&arguments[0]instanceof Kt&&arguments[1]instanceof Qt){var t=arguments[0],e=arguments[1],n=arguments[2];if(t.getEnvelopeInternal().distance(e.getEnvelopeInternal())>this._minDistance)return null;for(var i=t.getCoordinates(),r=e.getCoordinate(),o=0;o<i.length-1;o++){var s=at.distancePointLine(r,i[o],i[o+1]);if(s<this._minDistance){this._minDistance=s;var a=new dn(i[o],i[o+1]).closestPoint(r);n[0]=new Li(t,o,a),n[1]=new Li(e,0,r)}if(this._minDistance<=this._terminateDistance)return null}}else if(arguments[2]instanceof Array&&arguments[0]instanceof Kt&&arguments[1]instanceof Kt){var u=arguments[0],l=arguments[1],c=arguments[2];if(u.getEnvelopeInternal().distance(l.getEnvelopeInternal())>this._minDistance)return null;for(var p=u.getCoordinates(),h=l.getCoordinates(),f=0;f<p.length-1;f++)for(var g=0;g<h.length-1;g++){var d=at.distanceLineLine(p[f],p[f+1],h[g],h[g+1]);if(d<this._minDistance){this._minDistance=d;var y=new dn(p[f],p[f+1]),_=new dn(h[g],h[g+1]),m=y.closestPoints(_);c[0]=new Li(u,f,m[0]),c[1]=new Li(l,g,m[1])}if(this._minDistance<=this._terminateDistance)return null}}},Ti.prototype.computeMinDistancePoints=function(t,e,n){for(var i=0;i<t.size();i++)for(var r=t.get(i),o=0;o<e.size();o++){var s=e.get(o),a=r.getCoordinate().distance(s.getCoordinate());if(a<this._minDistance&&(this._minDistance=a,n[0]=new Li(r,0,r.getCoordinate()),n[1]=new Li(s,0,s.getCoordinate())),this._minDistance<=this._terminateDistance)return null}},Ti.prototype.distance=function(){if(null===this._geom[0]||null===this._geom[1])throw new m("null geometries are not supported");return this._geom[0].isEmpty()||this._geom[1].isEmpty()?0:(this.computeMinDistance(),this._minDistance)},Ti.prototype.computeMinDistanceLines=function(t,e,n){for(var i=0;i<t.size();i++)for(var r=t.get(i),o=0;o<e.size();o++){var s=e.get(o);if(this.computeMinDistance(r,s,n),this._minDistance<=this._terminateDistance)return null}},Ti.prototype.interfaces_=function(){return[]},Ti.prototype.getClass=function(){return Ti},Ti.distance=function(t,e){return new Ti(t,e).distance()},Ti.isWithinDistance=function(t,e,n){return new Ti(t,e,n).distance()<=n},Ti.nearestPoints=function(t,e){return new Ti(t,e).nearestPoints()};var Ri=function(){this._pt=[new C,new C],this._distance=v.NaN,this._isNull=!0};Ri.prototype.getCoordinates=function(){return this._pt},Ri.prototype.getCoordinate=function(t){return this._pt[t]},Ri.prototype.setMinimum=function(){if(1===arguments.length){var t=arguments[0];this.setMinimum(t._pt[0],t._pt[1])}else if(2===arguments.length){var e=arguments[0],n=arguments[1];if(this._isNull)return this.initialize(e,n),null;var i=e.distance(n);i<this._distance&&this.initialize(e,n,i)}},Ri.prototype.initialize=function(){if(0===arguments.length)this._isNull=!0;else if(2===arguments.length){var t=arguments[0],e=arguments[1];this._pt[0].setCoordinate(t),this._pt[1].setCoordinate(e),this._distance=t.distance(e),this._isNull=!1}else if(3===arguments.length){var n=arguments[0],i=arguments[1],r=arguments[2];this._pt[0].setCoordinate(n),this._pt[1].setCoordinate(i),this._distance=r,this._isNull=!1}},Ri.prototype.toString=function(){return Z.toLineString(this._pt[0],this._pt[1])},Ri.prototype.getDistance=function(){return this._distance},Ri.prototype.setMaximum=function(){if(1===arguments.length){var t=arguments[0];this.setMaximum(t._pt[0],t._pt[1])}else if(2===arguments.length){var e=arguments[0],n=arguments[1];if(this._isNull)return this.initialize(e,n),null;var i=e.distance(n);i>this._distance&&this.initialize(e,n,i)}},Ri.prototype.interfaces_=function(){return[]},Ri.prototype.getClass=function(){return Ri};var Pi=function(){};Pi.prototype.interfaces_=function(){return[]},Pi.prototype.getClass=function(){return Pi},Pi.computeDistance=function(){if(arguments[2]instanceof Ri&&arguments[0]instanceof Kt&&arguments[1]instanceof C)for(var t=arguments[0],e=arguments[1],n=arguments[2],i=new dn,r=t.getCoordinates(),o=0;o<r.length-1;o++){i.setCoordinates(r[o],r[o+1]);var s=i.closestPoint(e);n.setMinimum(s,e)}else if(arguments[2]instanceof Ri&&arguments[0]instanceof $t&&arguments[1]instanceof C){var a=arguments[0],u=arguments[1],l=arguments[2];Pi.computeDistance(a.getExteriorRing(),u,l);for(var c=0;c<a.getNumInteriorRing();c++)Pi.computeDistance(a.getInteriorRingN(c),u,l)}else if(arguments[2]instanceof Ri&&arguments[0]instanceof ct&&arguments[1]instanceof C){var p=arguments[0],h=arguments[1],f=arguments[2];if(p instanceof Kt)Pi.computeDistance(p,h,f);else if(p instanceof $t)Pi.computeDistance(p,h,f);else if(p instanceof zt)for(var g=p,d=0;d<g.getNumGeometries();d++){var y=g.getGeometryN(d);Pi.computeDistance(y,h,f)}else f.setMinimum(p.getCoordinate(),h)}else if(arguments[2]instanceof Ri&&arguments[0]instanceof dn&&arguments[1]instanceof C){var _=arguments[0],m=arguments[1],v=arguments[2],I=_.closestPoint(m);v.setMinimum(I,m)}};var Di=function(){this._g0=null,this._g1=null,this._ptDist=new Ri,this._densifyFrac=0;var t=arguments[0],e=arguments[1];this._g0=t,this._g1=e},Mi={MaxPointDistanceFilter:{configurable:!0},MaxDensifiedByFractionDistanceFilter:{configurable:!0}};Di.prototype.getCoordinates=function(){return this._ptDist.getCoordinates()},Di.prototype.setDensifyFraction=function(t){if(t>1||t<=0)throw new m("Fraction is not in range (0.0 - 1.0]");this._densifyFrac=t},Di.prototype.compute=function(t,e){this.computeOrientedDistance(t,e,this._ptDist),this.computeOrientedDistance(e,t,this._ptDist)},Di.prototype.distance=function(){return this.compute(this._g0,this._g1),this._ptDist.getDistance()},Di.prototype.computeOrientedDistance=function(t,e,n){var i=new Ai(e);if(t.apply(i),n.setMaximum(i.getMaxPointDistance()),this._densifyFrac>0){var r=new Fi(e,this._densifyFrac);t.apply(r),n.setMaximum(r.getMaxPointDistance())}},Di.prototype.orientedDistance=function(){return this.computeOrientedDistance(this._g0,this._g1,this._ptDist),this._ptDist.getDistance()},Di.prototype.interfaces_=function(){return[]},Di.prototype.getClass=function(){return Di},Di.distance=function(){if(2===arguments.length){var t=arguments[0],e=arguments[1];return new Di(t,e).distance()}if(3===arguments.length){var n=arguments[0],i=arguments[1],r=arguments[2],o=new Di(n,i);return o.setDensifyFraction(r),o.distance()}},Mi.MaxPointDistanceFilter.get=function(){return Ai},Mi.MaxDensifiedByFractionDistanceFilter.get=function(){return Fi},Object.defineProperties(Di,Mi);var Ai=function(){this._maxPtDist=new Ri,this._minPtDist=new Ri,this._euclideanDist=new Pi,this._geom=null;var t=arguments[0];this._geom=t};Ai.prototype.filter=function(t){this._minPtDist.initialize(),Pi.computeDistance(this._geom,t,this._minPtDist),this._maxPtDist.setMaximum(this._minPtDist)},Ai.prototype.getMaxPointDistance=function(){return this._maxPtDist},Ai.prototype.interfaces_=function(){return[ft]},Ai.prototype.getClass=function(){return Ai};var Fi=function(){this._maxPtDist=new Ri,this._minPtDist=new Ri,this._geom=null,this._numSubSegs=0;var t=arguments[0],e=arguments[1];this._geom=t,this._numSubSegs=Math.trunc(Math.round(1/e))};Fi.prototype.filter=function(t,e){if(0===e)return null;for(var n=t.getCoordinate(e-1),i=t.getCoordinate(e),r=(i.x-n.x)/this._numSubSegs,o=(i.y-n.y)/this._numSubSegs,s=0;s<this._numSubSegs;s++){var a=n.x+s*r,u=n.y+s*o,l=new C(a,u);this._minPtDist.initialize(),Pi.computeDistance(this._geom,l,this._minPtDist),this._maxPtDist.setMaximum(this._minPtDist)}},Fi.prototype.isDone=function(){return!1},Fi.prototype.isGeometryChanged=function(){return!1},Fi.prototype.getMaxPointDistance=function(){return this._maxPtDist},Fi.prototype.interfaces_=function(){return[Ut]},Fi.prototype.getClass=function(){return Fi};var Gi=function(t,e,n){this._minValidDistance=null,this._maxValidDistance=null,this._minDistanceFound=null,this._maxDistanceFound=null,this._isValid=!0,this._errMsg=null,this._errorLocation=null,this._errorIndicator=null,this._input=t||null,this._bufDistance=e||null,this._result=n||null},qi={VERBOSE:{configurable:!0},MAX_DISTANCE_DIFF_FRAC:{configurable:!0}};Gi.prototype.checkMaximumDistance=function(t,e,n){var i=new Di(e,t);if(i.setDensifyFraction(.25),this._maxDistanceFound=i.orientedDistance(),this._maxDistanceFound>n){this._isValid=!1;var r=i.getCoordinates();this._errorLocation=r[1],this._errorIndicator=t.getFactory().createLineString(r),this._errMsg="Distance between buffer curve and input is too large ("+this._maxDistanceFound+" at "+Z.toLineString(r[0],r[1])+")"}},Gi.prototype.isValid=function(){var t=Math.abs(this._bufDistance),e=Gi.MAX_DISTANCE_DIFF_FRAC*t;return this._minValidDistance=t-e,this._maxValidDistance=t+e,!(!this._input.isEmpty()&&!this._result.isEmpty())||(this._bufDistance>0?this.checkPositiveValid():this.checkNegativeValid(),Gi.VERBOSE&&Y.out.println("Min Dist= "+this._minDistanceFound+"  err= "+(1-this._minDistanceFound/this._bufDistance)+"  Max Dist= "+this._maxDistanceFound+"  err= "+(this._maxDistanceFound/this._bufDistance-1)),this._isValid)},Gi.prototype.checkNegativeValid=function(){if(!(this._input instanceof $t||this._input instanceof ne||this._input instanceof zt))return null;var t=this.getPolygonLines(this._input);if(this.checkMinimumDistance(t,this._result,this._minValidDistance),!this._isValid)return null;this.checkMaximumDistance(t,this._result,this._maxValidDistance)},Gi.prototype.getErrorIndicator=function(){return this._errorIndicator},Gi.prototype.checkMinimumDistance=function(t,e,n){var i=new Ti(t,e,n);if(this._minDistanceFound=i.distance(),this._minDistanceFound<n){this._isValid=!1;var r=i.nearestPoints();this._errorLocation=i.nearestPoints()[1],this._errorIndicator=t.getFactory().createLineString(r),this._errMsg="Distance between buffer curve and input is too small ("+this._minDistanceFound+" at "+Z.toLineString(r[0],r[1])+" )"}},Gi.prototype.checkPositiveValid=function(){var t=this._result.getBoundary();if(this.checkMinimumDistance(this._input,t,this._minValidDistance),!this._isValid)return null;this.checkMaximumDistance(this._input,t,this._maxValidDistance)},Gi.prototype.getErrorLocation=function(){return this._errorLocation},Gi.prototype.getPolygonLines=function(t){for(var e=new Nt,n=new Ci(e),i=Ni.getPolygons(t).iterator();i.hasNext();){i.next().apply(n)}return t.getFactory().buildGeometry(e)},Gi.prototype.getErrorMessage=function(){return this._errMsg},Gi.prototype.interfaces_=function(){return[]},Gi.prototype.getClass=function(){return Gi},qi.VERBOSE.get=function(){return!1},qi.MAX_DISTANCE_DIFF_FRAC.get=function(){return.012},Object.defineProperties(Gi,qi);var Bi=function(t,e,n){this._isValid=!0,this._errorMsg=null,this._errorLocation=null,this._errorIndicator=null,this._input=t||null,this._distance=e||null,this._result=n||null},Vi={VERBOSE:{configurable:!0},MAX_ENV_DIFF_FRAC:{configurable:!0}};Bi.prototype.isValid=function(){return this.checkPolygonal(),this._isValid?(this.checkExpectedEmpty(),this._isValid?(this.checkEnvelope(),this._isValid?(this.checkArea(),this._isValid?(this.checkDistance(),this._isValid):this._isValid):this._isValid):this._isValid):this._isValid},Bi.prototype.checkEnvelope=function(){if(this._distance<0)return null;var t=this._distance*Bi.MAX_ENV_DIFF_FRAC;0===t&&(t=.001);var e=new j(this._input.getEnvelopeInternal());e.expandBy(this._distance);var n=new j(this._result.getEnvelopeInternal());n.expandBy(t),n.contains(e)||(this._isValid=!1,this._errorMsg="Buffer envelope is incorrect",this._errorIndicator=this._input.getFactory().toGeometry(n)),this.report("Envelope")},Bi.prototype.checkDistance=function(){var t=new Gi(this._input,this._distance,this._result);t.isValid()||(this._isValid=!1,this._errorMsg=t.getErrorMessage(),this._errorLocation=t.getErrorLocation(),this._errorIndicator=t.getErrorIndicator()),this.report("Distance")},Bi.prototype.checkArea=function(){var t=this._input.getArea(),e=this._result.getArea();this._distance>0&&t>e&&(this._isValid=!1,this._errorMsg="Area of positive buffer is smaller than input",this._errorIndicator=this._result),this._distance<0&&t<e&&(this._isValid=!1,this._errorMsg="Area of negative buffer is larger than input",this._errorIndicator=this._result),this.report("Area")},Bi.prototype.checkPolygonal=function(){this._result instanceof $t||this._result instanceof ne||(this._isValid=!1),this._errorMsg="Result is not polygonal",this._errorIndicator=this._result,this.report("Polygonal")},Bi.prototype.getErrorIndicator=function(){return this._errorIndicator},Bi.prototype.getErrorLocation=function(){return this._errorLocation},Bi.prototype.checkExpectedEmpty=function(){return this._input.getDimension()>=2?null:this._distance>0?null:(this._result.isEmpty()||(this._isValid=!1,this._errorMsg="Result is non-empty",this._errorIndicator=this._result),void this.report("ExpectedEmpty"))},Bi.prototype.report=function(t){if(!Bi.VERBOSE)return null;Y.out.println("Check "+t+": "+(this._isValid?"passed":"FAILED"))},Bi.prototype.getErrorMessage=function(){return this._errorMsg},Bi.prototype.interfaces_=function(){return[]},Bi.prototype.getClass=function(){return Bi},Bi.isValidMsg=function(t,e,n){var i=new Bi(t,e,n);return i.isValid()?null:i.getErrorMessage()},Bi.isValid=function(t,e,n){return!!new Bi(t,e,n).isValid()},Vi.VERBOSE.get=function(){return!1},Vi.MAX_ENV_DIFF_FRAC.get=function(){return.012},Object.defineProperties(Bi,Vi);var Ui=function(){this._pts=null,this._data=null;var t=arguments[0],e=arguments[1];this._pts=t,this._data=e};Ui.prototype.getCoordinates=function(){return this._pts},Ui.prototype.size=function(){return this._pts.length},Ui.prototype.getCoordinate=function(t){return this._pts[t]},Ui.prototype.isClosed=function(){return this._pts[0].equals(this._pts[this._pts.length-1])},Ui.prototype.getSegmentOctant=function(t){return t===this._pts.length-1?-1:pn.octant(this.getCoordinate(t),this.getCoordinate(t+1))},Ui.prototype.setData=function(t){this._data=t},Ui.prototype.getData=function(){return this._data},Ui.prototype.toString=function(){return Z.toLineString(new ue(this._pts))},Ui.prototype.interfaces_=function(){return[hn]},Ui.prototype.getClass=function(){return Ui};var zi=function(){this._findAllIntersections=!1,this._isCheckEndSegmentsOnly=!1,this._li=null,this._interiorIntersection=null,this._intSegments=null,this._intersections=new Nt,this._intersectionCount=0,this._keepIntersections=!0;var t=arguments[0];this._li=t,this._interiorIntersection=null};zi.prototype.getInteriorIntersection=function(){return this._interiorIntersection},zi.prototype.setCheckEndSegmentsOnly=function(t){this._isCheckEndSegmentsOnly=t},zi.prototype.getIntersectionSegments=function(){return this._intSegments},zi.prototype.count=function(){return this._intersectionCount},zi.prototype.getIntersections=function(){return this._intersections},zi.prototype.setFindAllIntersections=function(t){this._findAllIntersections=t},zi.prototype.setKeepIntersections=function(t){this._keepIntersections=t},zi.prototype.processIntersections=function(t,e,n,i){if(!this._findAllIntersections&&this.hasIntersection())return null;if(t===n&&e===i)return null;if(this._isCheckEndSegmentsOnly){if(!(this.isEndSegment(t,e)||this.isEndSegment(n,i)))return null}var r=t.getCoordinates()[e],o=t.getCoordinates()[e+1],s=n.getCoordinates()[i],a=n.getCoordinates()[i+1];this._li.computeIntersection(r,o,s,a),this._li.hasIntersection()&&this._li.isInteriorIntersection()&&(this._intSegments=new Array(4).fill(null),this._intSegments[0]=r,this._intSegments[1]=o,this._intSegments[2]=s,this._intSegments[3]=a,this._interiorIntersection=this._li.getIntersection(0),this._keepIntersections&&this._intersections.add(this._interiorIntersection),this._intersectionCount++)},zi.prototype.isEndSegment=function(t,e){return 0===e||e>=t.size()-2},zi.prototype.hasIntersection=function(){return null!==this._interiorIntersection},zi.prototype.isDone=function(){return!this._findAllIntersections&&null!==this._interiorIntersection},zi.prototype.interfaces_=function(){return[Wn]},zi.prototype.getClass=function(){return zi},zi.createAllIntersectionsFinder=function(t){var e=new zi(t);return e.setFindAllIntersections(!0),e},zi.createAnyIntersectionFinder=function(t){return new zi(t)},zi.createIntersectionCounter=function(t){var e=new zi(t);return e.setFindAllIntersections(!0),e.setKeepIntersections(!1),e};var Xi=function(){this._li=new rt,this._segStrings=null,this._findAllIntersections=!1,this._segInt=null,this._isValid=!0;var t=arguments[0];this._segStrings=t};Xi.prototype.execute=function(){if(null!==this._segInt)return null;this.checkInteriorIntersections()},Xi.prototype.getIntersections=function(){return this._segInt.getIntersections()},Xi.prototype.isValid=function(){return this.execute(),this._isValid},Xi.prototype.setFindAllIntersections=function(t){this._findAllIntersections=t},Xi.prototype.checkInteriorIntersections=function(){this._isValid=!0,this._segInt=new zi(this._li),this._segInt.setFindAllIntersections(this._findAllIntersections);var t=new xn;if(t.setSegmentIntersector(this._segInt),t.computeNodes(this._segStrings),this._segInt.hasIntersection())return this._isValid=!1,null},Xi.prototype.checkValid=function(){if(this.execute(),!this._isValid)throw new we(this.getErrorMessage(),this._segInt.getInteriorIntersection())},Xi.prototype.getErrorMessage=function(){if(this._isValid)return"no intersections found";var t=this._segInt.getIntersectionSegments();return"found non-noded intersection between "+Z.toLineString(t[0],t[1])+" and "+Z.toLineString(t[2],t[3])},Xi.prototype.interfaces_=function(){return[]},Xi.prototype.getClass=function(){return Xi},Xi.computeIntersections=function(t){var e=new Xi(t);return e.setFindAllIntersections(!0),e.isValid(),e.getIntersections()};var Yi=function t(){this._nv=null;var e=arguments[0];this._nv=new Xi(t.toSegmentStrings(e))};Yi.prototype.checkValid=function(){this._nv.checkValid()},Yi.prototype.interfaces_=function(){return[]},Yi.prototype.getClass=function(){return Yi},Yi.toSegmentStrings=function(t){for(var e=new Nt,n=t.iterator();n.hasNext();){var i=n.next();e.add(new Ui(i.getCoordinates(),i))}return e},Yi.checkValid=function(t){new Yi(t).checkValid()};var ki=function(t){this._mapOp=t};ki.prototype.map=function(t){for(var e=new Nt,n=0;n<t.getNumGeometries();n++){var i=this._mapOp.map(t.getGeometryN(n));i.isEmpty()||e.add(i)}return t.getFactory().createGeometryCollection(_e.toGeometryArray(e))},ki.prototype.interfaces_=function(){return[]},ki.prototype.getClass=function(){return ki},ki.map=function(t,e){return new ki(e).map(t)};var ji=function(){this._op=null,this._geometryFactory=null,this._ptLocator=null,this._lineEdgesList=new Nt,this._resultLineList=new Nt;var t=arguments[0],e=arguments[1],n=arguments[2];this._op=t,this._geometryFactory=e,this._ptLocator=n};ji.prototype.collectLines=function(t){for(var e=this._op.getGraph().getEdgeEnds().iterator();e.hasNext();){var n=e.next();this.collectLineEdge(n,t,this._lineEdgesList),this.collectBoundaryTouchEdge(n,t,this._lineEdgesList)}},ji.prototype.labelIsolatedLine=function(t,e){var n=this._ptLocator.locate(t.getCoordinate(),this._op.getArgGeometry(e));t.getLabel().setLocation(e,n)},ji.prototype.build=function(t){return this.findCoveredLineEdges(),this.collectLines(t),this.buildLines(t),this._resultLineList},ji.prototype.collectLineEdge=function(t,e,n){var i=t.getLabel(),r=t.getEdge();t.isLineEdge()&&(t.isVisited()||!Lr.isResultOfOp(i,e)||r.isCovered()||(n.add(r),t.setVisitedEdge(!0)))},ji.prototype.findCoveredLineEdges=function(){for(var t=this._op.getGraph().getNodes().iterator();t.hasNext();){t.next().getEdges().findCoveredLineEdges()}for(var e=this._op.getGraph().getEdgeEnds().iterator();e.hasNext();){var n=e.next(),i=n.getEdge();if(n.isLineEdge()&&!i.isCoveredSet()){var r=this._op.isCoveredByA(n.getCoordinate());i.setCovered(r)}}},ji.prototype.labelIsolatedLines=function(t){for(var e=t.iterator();e.hasNext();){var n=e.next(),i=n.getLabel();n.isIsolated()&&(i.isNull(0)?this.labelIsolatedLine(n,0):this.labelIsolatedLine(n,1))}},ji.prototype.buildLines=function(t){for(var e=this._lineEdgesList.iterator();e.hasNext();){var n=e.next(),i=this._geometryFactory.createLineString(n.getCoordinates());this._resultLineList.add(i),n.setInResult(!0)}},ji.prototype.collectBoundaryTouchEdge=function(t,e,n){var i=t.getLabel();return t.isLineEdge()?null:t.isVisited()?null:t.isInteriorAreaEdge()?null:t.getEdge().isInResult()?null:(et.isTrue(!(t.isInResult()||t.getSym().isInResult())||!t.getEdge().isInResult()),void(Lr.isResultOfOp(i,e)&&e===Lr.INTERSECTION&&(n.add(t.getEdge()),t.setVisitedEdge(!0))))},ji.prototype.interfaces_=function(){return[]},ji.prototype.getClass=function(){return ji};var Hi=function(){this._op=null,this._geometryFactory=null,this._resultPointList=new Nt;var t=arguments[0],e=arguments[1];this._op=t,this._geometryFactory=e};Hi.prototype.filterCoveredNodeToPoint=function(t){var e=t.getCoordinate();if(!this._op.isCoveredByLA(e)){var n=this._geometryFactory.createPoint(e);this._resultPointList.add(n)}},Hi.prototype.extractNonCoveredResultNodes=function(t){for(var e=this._op.getGraph().getNodes().iterator();e.hasNext();){var n=e.next();if(!n.isInResult()&&(!n.isIncidentEdgeInResult()&&(0===n.getEdges().getDegree()||t===Lr.INTERSECTION))){var i=n.getLabel();Lr.isResultOfOp(i,t)&&this.filterCoveredNodeToPoint(n)}}},Hi.prototype.build=function(t){return this.extractNonCoveredResultNodes(t),this._resultPointList},Hi.prototype.interfaces_=function(){return[]},Hi.prototype.getClass=function(){return Hi};var Wi=function(){this._inputGeom=null,this._factory=null,this._pruneEmptyGeometry=!0,this._preserveGeometryCollectionType=!0,this._preserveCollections=!1,this._preserveType=!1};Wi.prototype.transformPoint=function(t,e){return this._factory.createPoint(this.transformCoordinates(t.getCoordinateSequence(),t))},Wi.prototype.transformPolygon=function(t,e){var n=!0,i=this.transformLinearRing(t.getExteriorRing(),t);null!==i&&i instanceof ee&&!i.isEmpty()||(n=!1);for(var r=new Nt,o=0;o<t.getNumInteriorRing();o++){var s=this.transformLinearRing(t.getInteriorRingN(o),t);null===s||s.isEmpty()||(s instanceof ee||(n=!1),r.add(s))}if(n)return this._factory.createPolygon(i,r.toArray([]));var a=new Nt;return null!==i&&a.add(i),a.addAll(r),this._factory.buildGeometry(a)},Wi.prototype.createCoordinateSequence=function(t){return this._factory.getCoordinateSequenceFactory().create(t)},Wi.prototype.getInputGeometry=function(){return this._inputGeom},Wi.prototype.transformMultiLineString=function(t,e){for(var n=new Nt,i=0;i<t.getNumGeometries();i++){var r=this.transformLineString(t.getGeometryN(i),t);null!==r&&(r.isEmpty()||n.add(r))}return this._factory.buildGeometry(n)},Wi.prototype.transformCoordinates=function(t,e){return this.copy(t)},Wi.prototype.transformLineString=function(t,e){return this._factory.createLineString(this.transformCoordinates(t.getCoordinateSequence(),t))},Wi.prototype.transformMultiPoint=function(t,e){for(var n=new Nt,i=0;i<t.getNumGeometries();i++){var r=this.transformPoint(t.getGeometryN(i),t);null!==r&&(r.isEmpty()||n.add(r))}return this._factory.buildGeometry(n)},Wi.prototype.transformMultiPolygon=function(t,e){for(var n=new Nt,i=0;i<t.getNumGeometries();i++){var r=this.transformPolygon(t.getGeometryN(i),t);null!==r&&(r.isEmpty()||n.add(r))}return this._factory.buildGeometry(n)},Wi.prototype.copy=function(t){return t.copy()},Wi.prototype.transformGeometryCollection=function(t,e){for(var n=new Nt,i=0;i<t.getNumGeometries();i++){var r=this.transform(t.getGeometryN(i));null!==r&&(this._pruneEmptyGeometry&&r.isEmpty()||n.add(r))}return this._preserveGeometryCollectionType?this._factory.createGeometryCollection(_e.toGeometryArray(n)):this._factory.buildGeometry(n)},Wi.prototype.transform=function(t){if(this._inputGeom=t,this._factory=t.getFactory(),t instanceof Qt)return this.transformPoint(t,null);if(t instanceof te)return this.transformMultiPoint(t,null);if(t instanceof ee)return this.transformLinearRing(t,null);if(t instanceof Kt)return this.transformLineString(t,null);if(t instanceof Xt)return this.transformMultiLineString(t,null);if(t instanceof $t)return this.transformPolygon(t,null);if(t instanceof ne)return this.transformMultiPolygon(t,null);if(t instanceof zt)return this.transformGeometryCollection(t,null);throw new m("Unknown Geometry subtype: "+t.getClass().getName())},Wi.prototype.transformLinearRing=function(t,e){var n=this.transformCoordinates(t.getCoordinateSequence(),t);if(null===n)return this._factory.createLinearRing(null);var i=n.size();return i>0&&i<4&&!this._preserveType?this._factory.createLineString(n):this._factory.createLinearRing(n)},Wi.prototype.interfaces_=function(){return[]},Wi.prototype.getClass=function(){return Wi};var Ki=function t(){if(this._snapTolerance=0,this._srcPts=null,this._seg=new dn,this._allowSnappingToSourceVertices=!1,this._isClosed=!1,arguments[0]instanceof Kt&&"number"==typeof arguments[1]){var e=arguments[0],n=arguments[1];t.call(this,e.getCoordinates(),n)}else if(arguments[0]instanceof Array&&"number"==typeof arguments[1]){var i=arguments[0],r=arguments[1];this._srcPts=i,this._isClosed=t.isClosed(i),this._snapTolerance=r}};Ki.prototype.snapVertices=function(t,e){for(var n=this._isClosed?t.size()-1:t.size(),i=0;i<n;i++){var r=t.get(i),o=this.findSnapForVertex(r,e);null!==o&&(t.set(i,new C(o)),0===i&&this._isClosed&&t.set(t.size()-1,new C(o)))}},Ki.prototype.findSnapForVertex=function(t,e){for(var n=0;n<e.length;n++){if(t.equals2D(e[n]))return null;if(t.distance(e[n])<this._snapTolerance)return e[n]}return null},Ki.prototype.snapTo=function(t){var e=new St(this._srcPts);this.snapVertices(e,t),this.snapSegments(e,t);return e.toCoordinateArray()},Ki.prototype.snapSegments=function(t,e){if(0===e.length)return null;var n=e.length;e[0].equals2D(e[e.length-1])&&(n=e.length-1);for(var i=0;i<n;i++){var r=e[i],o=this.findSegmentIndexToSnap(r,t);o>=0&&t.add(o+1,new C(r),!1)}},Ki.prototype.findSegmentIndexToSnap=function(t,e){for(var n=v.MAX_VALUE,i=-1,r=0;r<e.size()-1;r++){if(this._seg.p0=e.get(r),this._seg.p1=e.get(r+1),this._seg.p0.equals2D(t)||this._seg.p1.equals2D(t)){if(this._allowSnappingToSourceVertices)continue;return-1}var o=this._seg.distance(t);o<this._snapTolerance&&o<n&&(n=o,i=r)}return i},Ki.prototype.setAllowSnappingToSourceVertices=function(t){this._allowSnappingToSourceVertices=t},Ki.prototype.interfaces_=function(){return[]},Ki.prototype.getClass=function(){return Ki},Ki.isClosed=function(t){return!(t.length<=1)&&t[0].equals2D(t[t.length-1])};var Ji=function(t){this._srcGeom=t||null},Qi={SNAP_PRECISION_FACTOR:{configurable:!0}};Ji.prototype.snapTo=function(t,e){var n=this.extractTargetCoordinates(t);return new Zi(e,n).transform(this._srcGeom)},Ji.prototype.snapToSelf=function(t,e){var n=this.extractTargetCoordinates(this._srcGeom),i=new Zi(t,n,!0).transform(this._srcGeom),r=i;return e&&T(r,Zt)&&(r=i.buffer(0)),r},Ji.prototype.computeSnapTolerance=function(t){return this.computeMinimumSegmentLength(t)/10},Ji.prototype.extractTargetCoordinates=function(t){for(var e=new f,n=t.getCoordinates(),i=0;i<n.length;i++)e.add(n[i]);return e.toArray(new Array(0).fill(null))},Ji.prototype.computeMinimumSegmentLength=function(t){for(var e=v.MAX_VALUE,n=0;n<t.length-1;n++){var i=t[n].distance(t[n+1]);i<e&&(e=i)}return e},Ji.prototype.interfaces_=function(){return[]},Ji.prototype.getClass=function(){return Ji},Ji.snap=function(t,e,n){var i=new Array(2).fill(null),r=new Ji(t);i[0]=r.snapTo(e,n);var o=new Ji(e);return i[1]=o.snapTo(i[0],n),i},Ji.computeOverlaySnapTolerance=function(){if(1===arguments.length){var t=arguments[0],e=Ji.computeSizeBasedSnapTolerance(t),n=t.getPrecisionModel();if(n.getType()===fe.FIXED){var i=1/n.getScale()*2/1.415;i>e&&(e=i)}return e}if(2===arguments.length){var r=arguments[0],o=arguments[1];return Math.min(Ji.computeOverlaySnapTolerance(r),Ji.computeOverlaySnapTolerance(o))}},Ji.computeSizeBasedSnapTolerance=function(t){var e=t.getEnvelopeInternal();return Math.min(e.getHeight(),e.getWidth())*Ji.SNAP_PRECISION_FACTOR},Ji.snapToSelf=function(t,e,n){return new Ji(t).snapToSelf(e,n)},Qi.SNAP_PRECISION_FACTOR.get=function(){return 1e-9},Object.defineProperties(Ji,Qi);var Zi=function(t){function e(e,n,i){t.call(this),this._snapTolerance=e||null,this._snapPts=n||null,this._isSelfSnap=void 0!==i&&i}return t&&(e.__proto__=t),e.prototype=Object.create(t&&t.prototype),e.prototype.constructor=e,e.prototype.snapLine=function(t,e){var n=new Ki(t,this._snapTolerance);return n.setAllowSnappingToSourceVertices(this._isSelfSnap),n.snapTo(e)},e.prototype.transformCoordinates=function(t,e){var n=t.toCoordinateArray(),i=this.snapLine(n,this._snapPts);return this._factory.getCoordinateSequenceFactory().create(i)},e.prototype.interfaces_=function(){return[]},e.prototype.getClass=function(){return e},e}(Wi),$i=function(){this._isFirst=!0,this._commonMantissaBitsCount=53,this._commonBits=0,this._commonSignExp=null};$i.prototype.getCommon=function(){return v.longBitsToDouble(this._commonBits)},$i.prototype.add=function(t){var e=v.doubleToLongBits(t);if(this._isFirst)return this._commonBits=e,this._commonSignExp=$i.signExpBits(this._commonBits),this._isFirst=!1,null;if($i.signExpBits(e)!==this._commonSignExp)return this._commonBits=0,null;this._commonMantissaBitsCount=$i.numCommonMostSigMantissaBits(this._commonBits,e),this._commonBits=$i.zeroLowerBits(this._commonBits,64-(12+this._commonMantissaBitsCount))},$i.prototype.toString=function(){if(1===arguments.length){var t=arguments[0],e=v.longBitsToDouble(t),n="0000000000000000000000000000000000000000000000000000000000000000"+v.toBinaryString(t),i=n.substring(n.length-64);return i.substring(0,1)+"  "+i.substring(1,12)+"(exp) "+i.substring(12)+" [ "+e+" ]"}},$i.prototype.interfaces_=function(){return[]},$i.prototype.getClass=function(){return $i},$i.getBit=function(t,e){return 0!=(t&1<<e)?1:0},$i.signExpBits=function(t){return t>>52},$i.zeroLowerBits=function(t,e){return t&~((1<<e)-1)},$i.numCommonMostSigMantissaBits=function(t,e){for(var n=0,i=52;i>=0;i--){if($i.getBit(t,i)!==$i.getBit(e,i))return n;n++}return 52};var tr=function(){this._commonCoord=null,this._ccFilter=new nr},er={CommonCoordinateFilter:{configurable:!0},Translater:{configurable:!0}};tr.prototype.addCommonBits=function(t){var e=new ir(this._commonCoord);t.apply(e),t.geometryChanged()},tr.prototype.removeCommonBits=function(t){if(0===this._commonCoord.x&&0===this._commonCoord.y)return t;var e=new C(this._commonCoord);e.x=-e.x,e.y=-e.y;var n=new ir(e);return t.apply(n),t.geometryChanged(),t},tr.prototype.getCommonCoordinate=function(){return this._commonCoord},tr.prototype.add=function(t){t.apply(this._ccFilter),this._commonCoord=this._ccFilter.getCommonCoordinate()},tr.prototype.interfaces_=function(){return[]},tr.prototype.getClass=function(){return tr},er.CommonCoordinateFilter.get=function(){return nr},er.Translater.get=function(){return ir},Object.defineProperties(tr,er);var nr=function(){this._commonBitsX=new $i,this._commonBitsY=new $i};nr.prototype.filter=function(t){this._commonBitsX.add(t.x),this._commonBitsY.add(t.y)},nr.prototype.getCommonCoordinate=function(){return new C(this._commonBitsX.getCommon(),this._commonBitsY.getCommon())},nr.prototype.interfaces_=function(){return[ft]},nr.prototype.getClass=function(){return nr};var ir=function(){this.trans=null;var t=arguments[0];this.trans=t};ir.prototype.filter=function(t,e){var n=t.getOrdinate(e,0)+this.trans.x,i=t.getOrdinate(e,1)+this.trans.y;t.setOrdinate(e,0,n),t.setOrdinate(e,1,i)},ir.prototype.isDone=function(){return!1},ir.prototype.isGeometryChanged=function(){return!0},ir.prototype.interfaces_=function(){return[Ut]},ir.prototype.getClass=function(){return ir};var rr=function(t,e){this._geom=new Array(2).fill(null),this._snapTolerance=null,this._cbr=null,this._geom[0]=t,this._geom[1]=e,this.computeSnapTolerance()};rr.prototype.selfSnap=function(t){return new Ji(t).snapTo(t,this._snapTolerance)},rr.prototype.removeCommonBits=function(t){this._cbr=new tr,this._cbr.add(t[0]),this._cbr.add(t[1]);var e=new Array(2).fill(null);return e[0]=this._cbr.removeCommonBits(t[0].copy()),e[1]=this._cbr.removeCommonBits(t[1].copy()),e},rr.prototype.prepareResult=function(t){return this._cbr.addCommonBits(t),t},rr.prototype.getResultGeometry=function(t){var e=this.snap(this._geom),n=Lr.overlayOp(e[0],e[1],t);return this.prepareResult(n)},rr.prototype.checkValid=function(t){t.isValid()||Y.out.println("Snapped geometry is invalid")},rr.prototype.computeSnapTolerance=function(){this._snapTolerance=Ji.computeOverlaySnapTolerance(this._geom[0],this._geom[1])},rr.prototype.snap=function(t){var e=this.removeCommonBits(t);return Ji.snap(e[0],e[1],this._snapTolerance)},rr.prototype.interfaces_=function(){return[]},rr.prototype.getClass=function(){return rr},rr.overlayOp=function(t,e,n){return new rr(t,e).getResultGeometry(n)},rr.union=function(t,e){return rr.overlayOp(t,e,Lr.UNION)},rr.intersection=function(t,e){return rr.overlayOp(t,e,Lr.INTERSECTION)},rr.symDifference=function(t,e){return rr.overlayOp(t,e,Lr.SYMDIFFERENCE)},rr.difference=function(t,e){return rr.overlayOp(t,e,Lr.DIFFERENCE)};var or=function(t,e){this._geom=new Array(2).fill(null),this._geom[0]=t,this._geom[1]=e};or.prototype.getResultGeometry=function(t){var e=null,n=!1,i=null;try{e=Lr.overlayOp(this._geom[0],this._geom[1],t);n=!0}catch(t){if(!(t instanceof $))throw t;i=t}if(!n)try{e=rr.overlayOp(this._geom[0],this._geom[1],t)}catch(t){throw t instanceof $?i:t}return e},or.prototype.interfaces_=function(){return[]},or.prototype.getClass=function(){return or},or.overlayOp=function(t,e,n){return new or(t,e).getResultGeometry(n)},or.union=function(t,e){return or.overlayOp(t,e,Lr.UNION)},or.intersection=function(t,e){return or.overlayOp(t,e,Lr.INTERSECTION)},or.symDifference=function(t,e){return or.overlayOp(t,e,Lr.SYMDIFFERENCE)},or.difference=function(t,e){return or.overlayOp(t,e,Lr.DIFFERENCE)};var sr=function(){this.mce=null,this.chainIndex=null;var t=arguments[0],e=arguments[1];this.mce=t,this.chainIndex=e};sr.prototype.computeIntersections=function(t,e){this.mce.computeIntersectsForChain(this.chainIndex,t.mce,t.chainIndex,e)},sr.prototype.interfaces_=function(){return[]},sr.prototype.getClass=function(){return sr};var ar=function t(){if(this._label=null,this._xValue=null,this._eventType=null,this._insertEvent=null,this._deleteEventIndex=null,this._obj=null,2===arguments.length){var e=arguments[0],n=arguments[1];this._eventType=t.DELETE,this._xValue=e,this._insertEvent=n}else if(3===arguments.length){var i=arguments[0],r=arguments[1],o=arguments[2];this._eventType=t.INSERT,this._label=i,this._xValue=r,this._obj=o}},ur={INSERT:{configurable:!0},DELETE:{configurable:!0}};ar.prototype.isDelete=function(){return this._eventType===ar.DELETE},ar.prototype.setDeleteEventIndex=function(t){this._deleteEventIndex=t},ar.prototype.getObject=function(){return this._obj},ar.prototype.compareTo=function(t){var e=t;return this._xValue<e._xValue?-1:this._xValue>e._xValue?1:this._eventType<e._eventType?-1:this._eventType>e._eventType?1:0},ar.prototype.getInsertEvent=function(){return this._insertEvent},ar.prototype.isInsert=function(){return this._eventType===ar.INSERT},ar.prototype.isSameLabel=function(t){return null!==this._label&&this._label===t._label},ar.prototype.getDeleteEventIndex=function(){return this._deleteEventIndex},ar.prototype.interfaces_=function(){return[E]},ar.prototype.getClass=function(){return ar},ur.INSERT.get=function(){return 1},ur.DELETE.get=function(){return 2},Object.defineProperties(ar,ur);var lr=function(){};lr.prototype.interfaces_=function(){return[]},lr.prototype.getClass=function(){return lr};var cr=function(){this._hasIntersection=!1,this._hasProper=!1,this._hasProperInterior=!1,this._properIntersectionPoint=null,this._li=null,this._includeProper=null,this._recordIsolated=null,this._isSelfIntersection=null,this._numIntersections=0,this.numTests=0,this._bdyNodes=null,this._isDone=!1,this._isDoneWhenProperInt=!1;var t=arguments[0],e=arguments[1],n=arguments[2];this._li=t,this._includeProper=e,this._recordIsolated=n};cr.prototype.isTrivialIntersection=function(t,e,n,i){if(t===n&&1===this._li.getIntersectionNum()){if(cr.isAdjacentSegments(e,i))return!0;if(t.isClosed()){var r=t.getNumPoints()-1;if(0===e&&i===r||0===i&&e===r)return!0}}return!1},cr.prototype.getProperIntersectionPoint=function(){return this._properIntersectionPoint},cr.prototype.setIsDoneIfProperInt=function(t){this._isDoneWhenProperInt=t},cr.prototype.hasProperInteriorIntersection=function(){return this._hasProperInterior},cr.prototype.isBoundaryPointInternal=function(t,e){for(var n=e.iterator();n.hasNext();){var i=n.next().getCoordinate();if(t.isIntersection(i))return!0}return!1},cr.prototype.hasProperIntersection=function(){return this._hasProper},cr.prototype.hasIntersection=function(){return this._hasIntersection},cr.prototype.isDone=function(){return this._isDone},cr.prototype.isBoundaryPoint=function(t,e){return null!==e&&(!!this.isBoundaryPointInternal(t,e[0])||!!this.isBoundaryPointInternal(t,e[1]))},cr.prototype.setBoundaryNodes=function(t,e){this._bdyNodes=new Array(2).fill(null),this._bdyNodes[0]=t,this._bdyNodes[1]=e},cr.prototype.addIntersections=function(t,e,n,i){if(t===n&&e===i)return null;this.numTests++;var r=t.getCoordinates()[e],o=t.getCoordinates()[e+1],s=n.getCoordinates()[i],a=n.getCoordinates()[i+1];this._li.computeIntersection(r,o,s,a),this._li.hasIntersection()&&(this._recordIsolated&&(t.setIsolated(!1),n.setIsolated(!1)),this._numIntersections++,this.isTrivialIntersection(t,e,n,i)||(this._hasIntersection=!0,!this._includeProper&&this._li.isProper()||(t.addIntersections(this._li,e,0),n.addIntersections(this._li,i,1)),this._li.isProper()&&(this._properIntersectionPoint=this._li.getIntersection(0).copy(),this._hasProper=!0,this._isDoneWhenProperInt&&(this._isDone=!0),this.isBoundaryPoint(this._li,this._bdyNodes)||(this._hasProperInterior=!0))))},cr.prototype.interfaces_=function(){return[]},cr.prototype.getClass=function(){return cr},cr.isAdjacentSegments=function(t,e){return 1===Math.abs(t-e)};var pr=function(t){function e(){t.call(this),this.events=new Nt,this.nOverlaps=null}return t&&(e.__proto__=t),e.prototype=Object.create(t&&t.prototype),e.prototype.constructor=e,e.prototype.prepareEvents=function(){$e.sort(this.events);for(var t=0;t<this.events.size();t++){var e=this.events.get(t);e.isDelete()&&e.getInsertEvent().setDeleteEventIndex(t)}},e.prototype.computeIntersections=function(){if(1===arguments.length){var t=arguments[0];this.nOverlaps=0,this.prepareEvents();for(var e=0;e<this.events.size();e++){var n=this.events.get(e);if(n.isInsert()&&this.processOverlaps(e,n.getDeleteEventIndex(),n,t),t.isDone())break}}else if(3===arguments.length)if(arguments[2]instanceof cr&&T(arguments[0],xt)&&T(arguments[1],xt)){var i=arguments[0],r=arguments[1],o=arguments[2];this.addEdges(i,i),this.addEdges(r,r),this.computeIntersections(o)}else if("boolean"==typeof arguments[2]&&T(arguments[0],xt)&&arguments[1]instanceof cr){var s=arguments[0],a=arguments[1];arguments[2]?this.addEdges(s,null):this.addEdges(s),this.computeIntersections(a)}},e.prototype.addEdge=function(t,e){for(var n=t.getMonotoneChainEdge(),i=n.getStartIndexes(),r=0;r<i.length-1;r++){var o=new sr(n,r),s=new ar(e,n.getMinX(r),o);this.events.add(s),this.events.add(new ar(n.getMaxX(r),s))}},e.prototype.processOverlaps=function(t,e,n,i){for(var r=n.getObject(),o=t;o<e;o++){var s=this.events.get(o);if(s.isInsert()){var a=s.getObject();n.isSameLabel(s)||(r.computeIntersections(a,i),this.nOverlaps++)}}},e.prototype.addEdges=function(){if(1===arguments.length)for(var t=arguments[0].iterator();t.hasNext();){var e=t.next();this.addEdge(e,e)}else if(2===arguments.length)for(var n=arguments[0],i=arguments[1],r=n.iterator();r.hasNext();){var o=r.next();this.addEdge(o,i)}},e.prototype.interfaces_=function(){return[]},e.prototype.getClass=function(){return e},e}(lr),hr=function(){this._min=v.POSITIVE_INFINITY,this._max=v.NEGATIVE_INFINITY},fr={NodeComparator:{configurable:!0}};hr.prototype.getMin=function(){return this._min},hr.prototype.intersects=function(t,e){return!(this._min>e||this._max<t)},hr.prototype.getMax=function(){return this._max},hr.prototype.toString=function(){return Z.toLineString(new C(this._min,0),new C(this._max,0))},hr.prototype.interfaces_=function(){return[]},hr.prototype.getClass=function(){return hr},fr.NodeComparator.get=function(){return gr},Object.defineProperties(hr,fr);var gr=function(){};gr.prototype.compare=function(t,e){var n=t,i=e,r=(n._min+n._max)/2,o=(i._min+i._max)/2;return r<o?-1:r>o?1:0},gr.prototype.interfaces_=function(){return[N]},gr.prototype.getClass=function(){return gr};var dr=function(t){function e(){t.call(this),this._item=null;var e=arguments[0],n=arguments[1],i=arguments[2];this._min=e,this._max=n,this._item=i}return t&&(e.__proto__=t),e.prototype=Object.create(t&&t.prototype),e.prototype.constructor=e,e.prototype.query=function(t,e,n){if(!this.intersects(t,e))return null;n.visitItem(this._item)},e.prototype.interfaces_=function(){return[]},e.prototype.getClass=function(){return e},e}(hr),yr=function(t){function e(){t.call(this),this._node1=null,this._node2=null;var e=arguments[0],n=arguments[1];this._node1=e,this._node2=n,this.buildExtent(this._node1,this._node2)}return t&&(e.__proto__=t),e.prototype=Object.create(t&&t.prototype),e.prototype.constructor=e,e.prototype.buildExtent=function(t,e){this._min=Math.min(t._min,e._min),this._max=Math.max(t._max,e._max)},e.prototype.query=function(t,e,n){if(!this.intersects(t,e))return null;null!==this._node1&&this._node1.query(t,e,n),null!==this._node2&&this._node2.query(t,e,n)},e.prototype.interfaces_=function(){return[]},e.prototype.getClass=function(){return e},e}(hr),_r=function(){this._leaves=new Nt,this._root=null,this._level=0};_r.prototype.buildTree=function(){$e.sort(this._leaves,new hr.NodeComparator);for(var t=this._leaves,e=null,n=new Nt;;){if(this.buildLevel(t,n),1===n.size())return n.get(0);e=t,t=n,n=e}},_r.prototype.insert=function(t,e,n){if(null!==this._root)throw new Error("Index cannot be added to once it has been queried");this._leaves.add(new dr(t,e,n))},_r.prototype.query=function(t,e,n){this.init(),this._root.query(t,e,n)},_r.prototype.buildRoot=function(){if(null!==this._root)return null;this._root=this.buildTree()},_r.prototype.printNode=function(t){Y.out.println(Z.toLineString(new C(t._min,this._level),new C(t._max,this._level)))},_r.prototype.init=function(){if(null!==this._root)return null;this.buildRoot()},_r.prototype.buildLevel=function(t,e){this._level++,e.clear();for(var n=0;n<t.size();n+=2){var i=t.get(n);if(null===(n+1<t.size()?t.get(n):null))e.add(i);else{var r=new yr(t.get(n),t.get(n+1));e.add(r)}}},_r.prototype.interfaces_=function(){return[]},_r.prototype.getClass=function(){return _r};var mr=function(){this._items=new Nt};mr.prototype.visitItem=function(t){this._items.add(t)},mr.prototype.getItems=function(){return this._items},mr.prototype.interfaces_=function(){return[Ke]},mr.prototype.getClass=function(){return mr};var vr=function(){this._index=null;var t=arguments[0];if(!T(t,Zt))throw new m("Argument must be Polygonal");this._index=new xr(t)},Ir={SegmentVisitor:{configurable:!0},IntervalIndexedGeometry:{configurable:!0}};vr.prototype.locate=function(t){var e=new st(t),n=new Er(e);return this._index.query(t.y,t.y,n),e.getLocation()},vr.prototype.interfaces_=function(){return[Vn]},vr.prototype.getClass=function(){return vr},Ir.SegmentVisitor.get=function(){return Er},Ir.IntervalIndexedGeometry.get=function(){return xr},Object.defineProperties(vr,Ir);var Er=function(){this._counter=null;var t=arguments[0];this._counter=t};Er.prototype.visitItem=function(t){var e=t;this._counter.countSegment(e.getCoordinate(0),e.getCoordinate(1))},Er.prototype.interfaces_=function(){return[Ke]},Er.prototype.getClass=function(){return Er};var xr=function(){this._index=new _r;var t=arguments[0];this.init(t)};xr.prototype.init=function(t){for(var e=Ci.getLines(t).iterator();e.hasNext();){var n=e.next().getCoordinates();this.addLine(n)}},xr.prototype.addLine=function(t){for(var e=1;e<t.length;e++){var n=new dn(t[e-1],t[e]),i=Math.min(n.p0.y,n.p1.y),r=Math.max(n.p0.y,n.p1.y);this._index.insert(i,r,n)}},xr.prototype.query=function(){if(2===arguments.length){var t=arguments[0],e=arguments[1],n=new mr;return this._index.query(t,e,n),n.getItems()}if(3===arguments.length){var i=arguments[0],r=arguments[1],o=arguments[2];this._index.query(i,r,o)}},xr.prototype.interfaces_=function(){return[]},xr.prototype.getClass=function(){return xr};var Nr=function(t){function e(){if(t.call(this),this._parentGeom=null,this._lineEdgeMap=new he,this._boundaryNodeRule=null,this._useBoundaryDeterminationRule=!0,this._argIndex=null,this._boundaryNodes=null,this._hasTooFewPoints=!1,this._invalidPoint=null,this._areaPtLocator=null,this._ptLocator=new Si,2===arguments.length){var e=arguments[0],n=arguments[1],i=gt.OGC_SFS_BOUNDARY_RULE;this._argIndex=e,this._parentGeom=n,this._boundaryNodeRule=i,null!==n&&this.add(n)}else if(3===arguments.length){var r=arguments[0],o=arguments[1],s=arguments[2];this._argIndex=r,this._parentGeom=o,this._boundaryNodeRule=s,null!==o&&this.add(o)}}return t&&(e.__proto__=t),e.prototype=Object.create(t&&t.prototype),e.prototype.constructor=e,e.prototype.insertBoundaryPoint=function(t,n){var i=this._nodes.addNode(n).getLabel(),r=1;w.NONE;i.getLocation(t,Se.ON)===w.BOUNDARY&&r++;var o=e.determineBoundary(this._boundaryNodeRule,r);i.setLocation(t,o)},e.prototype.computeSelfNodes=function(){if(2===arguments.length){var t=arguments[0],e=arguments[1];return this.computeSelfNodes(t,e,!1)}if(3===arguments.length){var n=arguments[0],i=arguments[1],r=arguments[2],o=new cr(n,!0,!1);o.setIsDoneIfProperInt(r);var s=this.createEdgeSetIntersector(),a=this._parentGeom instanceof ee||this._parentGeom instanceof $t||this._parentGeom instanceof ne,u=i||!a;return s.computeIntersections(this._edges,o,u),this.addSelfIntersectionNodes(this._argIndex),o}},e.prototype.computeSplitEdges=function(t){for(var e=this._edges.iterator();e.hasNext();){e.next().eiList.addSplitEdges(t)}},e.prototype.computeEdgeIntersections=function(t,e,n){var i=new cr(e,n,!0);i.setBoundaryNodes(this.getBoundaryNodes(),t.getBoundaryNodes());return this.createEdgeSetIntersector().computeIntersections(this._edges,t._edges,i),i},e.prototype.getGeometry=function(){return this._parentGeom},e.prototype.getBoundaryNodeRule=function(){return this._boundaryNodeRule},e.prototype.hasTooFewPoints=function(){return this._hasTooFewPoints},e.prototype.addPoint=function(){if(arguments[0]instanceof Qt){var t=arguments[0].getCoordinate();this.insertPoint(this._argIndex,t,w.INTERIOR)}else if(arguments[0]instanceof C){var e=arguments[0];this.insertPoint(this._argIndex,e,w.INTERIOR)}},e.prototype.addPolygon=function(t){this.addPolygonRing(t.getExteriorRing(),w.EXTERIOR,w.INTERIOR);for(var e=0;e<t.getNumInteriorRing();e++){var n=t.getInteriorRingN(e);this.addPolygonRing(n,w.INTERIOR,w.EXTERIOR)}},e.prototype.addEdge=function(t){this.insertEdge(t);var e=t.getCoordinates();this.insertPoint(this._argIndex,e[0],w.BOUNDARY),this.insertPoint(this._argIndex,e[e.length-1],w.BOUNDARY)},e.prototype.addLineString=function(t){var e=Lt.removeRepeatedPoints(t.getCoordinates());if(e.length<2)return this._hasTooFewPoints=!0,this._invalidPoint=e[0],null;var n=new ni(e,new Pe(this._argIndex,w.INTERIOR));this._lineEdgeMap.put(t,n),this.insertEdge(n),et.isTrue(e.length>=2,"found LineString with single point"),this.insertBoundaryPoint(this._argIndex,e[0]),this.insertBoundaryPoint(this._argIndex,e[e.length-1])},e.prototype.getInvalidPoint=function(){return this._invalidPoint},e.prototype.getBoundaryPoints=function(){for(var t=this.getBoundaryNodes(),e=new Array(t.size()).fill(null),n=0,i=t.iterator();i.hasNext();){var r=i.next();e[n++]=r.getCoordinate().copy()}return e},e.prototype.getBoundaryNodes=function(){return null===this._boundaryNodes&&(this._boundaryNodes=this._nodes.getBoundaryNodes(this._argIndex)),this._boundaryNodes},e.prototype.addSelfIntersectionNode=function(t,e,n){if(this.isBoundaryNode(t,e))return null;n===w.BOUNDARY&&this._useBoundaryDeterminationRule?this.insertBoundaryPoint(t,e):this.insertPoint(t,e,n)},e.prototype.addPolygonRing=function(t,e,n){if(t.isEmpty())return null;var i=Lt.removeRepeatedPoints(t.getCoordinates());if(i.length<4)return this._hasTooFewPoints=!0,this._invalidPoint=i[0],null;var r=e,o=n;at.isCCW(i)&&(r=n,o=e);var s=new ni(i,new Pe(this._argIndex,w.BOUNDARY,r,o));this._lineEdgeMap.put(t,s),this.insertEdge(s),this.insertPoint(this._argIndex,i[0],w.BOUNDARY)},e.prototype.insertPoint=function(t,e,n){var i=this._nodes.addNode(e),r=i.getLabel();null===r?i._label=new Pe(t,n):r.setLocation(t,n)},e.prototype.createEdgeSetIntersector=function(){return new pr},e.prototype.addSelfIntersectionNodes=function(t){for(var e=this._edges.iterator();e.hasNext();)for(var n=e.next(),i=n.getLabel().getLocation(t),r=n.eiList.iterator();r.hasNext();){var o=r.next();this.addSelfIntersectionNode(t,o.coord,i)}},e.prototype.add=function(){if(1!==arguments.length)return t.prototype.add.apply(this,arguments);var e=arguments[0];if(e.isEmpty())return null;if(e instanceof ne&&(this._useBoundaryDeterminationRule=!1),e instanceof $t)this.addPolygon(e);else if(e instanceof Kt)this.addLineString(e);else if(e instanceof Qt)this.addPoint(e);else if(e instanceof te)this.addCollection(e);else if(e instanceof Xt)this.addCollection(e);else if(e instanceof ne)this.addCollection(e);else{if(!(e instanceof zt))throw new Error(e.getClass().getName());this.addCollection(e)}},e.prototype.addCollection=function(t){for(var e=0;e<t.getNumGeometries();e++){var n=t.getGeometryN(e);this.add(n)}},e.prototype.locate=function(t){return T(this._parentGeom,Zt)&&this._parentGeom.getNumGeometries()>50?(null===this._areaPtLocator&&(this._areaPtLocator=new vr(this._parentGeom)),this._areaPtLocator.locate(t)):this._ptLocator.locate(t,this._parentGeom)},e.prototype.findEdge=function(){if(1===arguments.length){var e=arguments[0];return this._lineEdgeMap.get(e)}return t.prototype.findEdge.apply(this,arguments)},e.prototype.interfaces_=function(){return[]},e.prototype.getClass=function(){return e},e.determineBoundary=function(t,e){return t.isInBoundary(e)?w.BOUNDARY:w.INTERIOR},e}(Ye),Cr=function(){if(this._li=new rt,this._resultPrecisionModel=null,this._arg=null,1===arguments.length){var t=arguments[0];this.setComputationPrecision(t.getPrecisionModel()),this._arg=new Array(1).fill(null),this._arg[0]=new Nr(0,t)}else if(2===arguments.length){var e=arguments[0],n=arguments[1],i=gt.OGC_SFS_BOUNDARY_RULE;e.getPrecisionModel().compareTo(n.getPrecisionModel())>=0?this.setComputationPrecision(e.getPrecisionModel()):this.setComputationPrecision(n.getPrecisionModel()),this._arg=new Array(2).fill(null),this._arg[0]=new Nr(0,e,i),this._arg[1]=new Nr(1,n,i)}else if(3===arguments.length){var r=arguments[0],o=arguments[1],s=arguments[2];r.getPrecisionModel().compareTo(o.getPrecisionModel())>=0?this.setComputationPrecision(r.getPrecisionModel()):this.setComputationPrecision(o.getPrecisionModel()),this._arg=new Array(2).fill(null),this._arg[0]=new Nr(0,r,s),this._arg[1]=new Nr(1,o,s)}};Cr.prototype.getArgGeometry=function(t){return this._arg[t].getGeometry()},Cr.prototype.setComputationPrecision=function(t){this._resultPrecisionModel=t,this._li.setPrecisionModel(this._resultPrecisionModel)},Cr.prototype.interfaces_=function(){return[]},Cr.prototype.getClass=function(){return Cr};var Sr=function(){};Sr.prototype.interfaces_=function(){return[]},Sr.prototype.getClass=function(){return Sr},Sr.map=function(){if(arguments[0]instanceof ct&&T(arguments[1],Sr.MapOp)){for(var t=arguments[0],e=arguments[1],n=new Nt,i=0;i<t.getNumGeometries();i++){var r=e.map(t.getGeometryN(i));null!==r&&n.add(r)}return t.getFactory().buildGeometry(n)}if(T(arguments[0],It)&&T(arguments[1],Sr.MapOp)){for(var o=arguments[0],s=arguments[1],a=new Nt,u=o.iterator();u.hasNext();){var l=u.next(),c=s.map(l);null!==c&&a.add(c)}return a}},Sr.MapOp=function(){};var Lr=function(t){function e(){var e=arguments[0],n=arguments[1];t.call(this,e,n),this._ptLocator=new Si,this._geomFact=null,this._resultGeom=null,this._graph=null,this._edgeList=new Hn,this._resultPolyList=new Nt,this._resultLineList=new Nt,this._resultPointList=new Nt,this._graph=new Ye(new kn),this._geomFact=e.getFactory()}return t&&(e.__proto__=t),e.prototype=Object.create(t&&t.prototype),e.prototype.constructor=e,e.prototype.insertUniqueEdge=function(t){var e=this._edgeList.findEqualEdge(t);if(null!==e){var n=e.getLabel(),i=t.getLabel();e.isPointwiseEqual(t)||(i=new Pe(t.getLabel())).flip();var r=e.getDepth();r.isNull()&&r.add(n),r.add(i),n.merge(i)}else this._edgeList.add(t)},e.prototype.getGraph=function(){return this._graph},e.prototype.cancelDuplicateResultEdges=function(){for(var t=this._graph.getEdgeEnds().iterator();t.hasNext();){var e=t.next(),n=e.getSym();e.isInResult()&&n.isInResult()&&(e.setInResult(!1),n.setInResult(!1))}},e.prototype.isCoveredByLA=function(t){return!!this.isCovered(t,this._resultLineList)||!!this.isCovered(t,this._resultPolyList)},e.prototype.computeGeometry=function(t,n,i,r){var o=new Nt;return o.addAll(t),o.addAll(n),o.addAll(i),o.isEmpty()?e.createEmptyResult(r,this._arg[0].getGeometry(),this._arg[1].getGeometry(),this._geomFact):this._geomFact.buildGeometry(o)},e.prototype.mergeSymLabels=function(){for(var t=this._graph.getNodes().iterator();t.hasNext();){t.next().getEdges().mergeSymLabels()}},e.prototype.isCovered=function(t,e){for(var n=e.iterator();n.hasNext();){var i=n.next();if(this._ptLocator.locate(t,i)!==w.EXTERIOR)return!0}return!1},e.prototype.replaceCollapsedEdges=function(){for(var t=new Nt,e=this._edgeList.iterator();e.hasNext();){var n=e.next();n.isCollapsed()&&(e.remove(),t.add(n.getCollapsedEdge()))}this._edgeList.addAll(t)},e.prototype.updateNodeLabelling=function(){for(var t=this._graph.getNodes().iterator();t.hasNext();){var e=t.next(),n=e.getEdges().getLabel();e.getLabel().merge(n)}},e.prototype.getResultGeometry=function(t){return this.computeOverlay(t),this._resultGeom},e.prototype.insertUniqueEdges=function(t){for(var e=t.iterator();e.hasNext();){var n=e.next();this.insertUniqueEdge(n)}},e.prototype.computeOverlay=function(t){this.copyPoints(0),this.copyPoints(1),this._arg[0].computeSelfNodes(this._li,!1),this._arg[1].computeSelfNodes(this._li,!1),this._arg[0].computeEdgeIntersections(this._arg[1],this._li,!0);var e=new Nt;this._arg[0].computeSplitEdges(e),this._arg[1].computeSplitEdges(e),this.insertUniqueEdges(e),this.computeLabelsFromDepths(),this.replaceCollapsedEdges(),Yi.checkValid(this._edgeList.getEdges()),this._graph.addEdges(this._edgeList.getEdges()),this.computeLabelling(),this.labelIncompleteNodes(),this.findResultAreaEdges(t),this.cancelDuplicateResultEdges();var n=new ke(this._geomFact);n.add(this._graph),this._resultPolyList=n.getPolygons();var i=new ji(this,this._geomFact,this._ptLocator);this._resultLineList=i.build(t);var r=new Hi(this,this._geomFact,this._ptLocator);this._resultPointList=r.build(t),this._resultGeom=this.computeGeometry(this._resultPointList,this._resultLineList,this._resultPolyList,t)},e.prototype.labelIncompleteNode=function(t,e){var n=this._ptLocator.locate(t.getCoordinate(),this._arg[e].getGeometry());t.getLabel().setLocation(e,n)},e.prototype.copyPoints=function(t){for(var e=this._arg[t].getNodeIterator();e.hasNext();){var n=e.next();this._graph.addNode(n.getCoordinate()).setLabel(t,n.getLabel().getLocation(t))}},e.prototype.findResultAreaEdges=function(t){for(var n=this._graph.getEdgeEnds().iterator();n.hasNext();){var i=n.next(),r=i.getLabel();r.isArea()&&!i.isInteriorAreaEdge()&&e.isResultOfOp(r.getLocation(0,Se.RIGHT),r.getLocation(1,Se.RIGHT),t)&&i.setInResult(!0)}},e.prototype.computeLabelsFromDepths=function(){for(var t=this._edgeList.iterator();t.hasNext();){var e=t.next(),n=e.getLabel(),i=e.getDepth();if(!i.isNull()){i.normalize();for(var r=0;r<2;r++)n.isNull(r)||!n.isArea()||i.isNull(r)||(0===i.getDelta(r)?n.toLine(r):(et.isTrue(!i.isNull(r,Se.LEFT),"depth of LEFT side has not been initialized"),n.setLocation(r,Se.LEFT,i.getLocation(r,Se.LEFT)),et.isTrue(!i.isNull(r,Se.RIGHT),"depth of RIGHT side has not been initialized"),n.setLocation(r,Se.RIGHT,i.getLocation(r,Se.RIGHT))))}}},e.prototype.computeLabelling=function(){for(var t=this._graph.getNodes().iterator();t.hasNext();){t.next().getEdges().computeLabelling(this._arg)}this.mergeSymLabels(),this.updateNodeLabelling()},e.prototype.labelIncompleteNodes=function(){for(var t=this._graph.getNodes().iterator();t.hasNext();){var e=t.next(),n=e.getLabel();e.isIsolated()&&(n.isNull(0)?this.labelIncompleteNode(e,0):this.labelIncompleteNode(e,1)),e.getEdges().updateLabelling(n)}},e.prototype.isCoveredByA=function(t){return!!this.isCovered(t,this._resultPolyList)},e.prototype.interfaces_=function(){return[]},e.prototype.getClass=function(){return e},e}(Cr);Lr.overlayOp=function(t,e,n){return new Lr(t,e).getResultGeometry(n)},Lr.intersection=function(t,e){if(t.isEmpty()||e.isEmpty())return Lr.createEmptyResult(Lr.INTERSECTION,t,e,t.getFactory());if(t.isGeometryCollection()){var n=e;return ki.map(t,{interfaces_:function(){return[Sr.MapOp]},map:function(t){return t.intersection(n)}})}return t.checkNotGeometryCollection(t),t.checkNotGeometryCollection(e),or.overlayOp(t,e,Lr.INTERSECTION)},Lr.symDifference=function(t,e){if(t.isEmpty()||e.isEmpty()){if(t.isEmpty()&&e.isEmpty())return Lr.createEmptyResult(Lr.SYMDIFFERENCE,t,e,t.getFactory());if(t.isEmpty())return e.copy();if(e.isEmpty())return t.copy()}return t.checkNotGeometryCollection(t),t.checkNotGeometryCollection(e),or.overlayOp(t,e,Lr.SYMDIFFERENCE)},Lr.resultDimension=function(t,e,n){var i=e.getDimension(),r=n.getDimension(),o=-1;switch(t){case Lr.INTERSECTION:o=Math.min(i,r);break;case Lr.UNION:o=Math.max(i,r);break;case Lr.DIFFERENCE:o=i;break;case Lr.SYMDIFFERENCE:o=Math.max(i,r)}return o},Lr.createEmptyResult=function(t,e,n,i){var r=null;switch(Lr.resultDimension(t,e,n)){case-1:r=i.createGeometryCollection(new Array(0).fill(null));break;case 0:r=i.createPoint();break;case 1:r=i.createLineString();break;case 2:r=i.createPolygon()}return r},Lr.difference=function(t,e){return t.isEmpty()?Lr.createEmptyResult(Lr.DIFFERENCE,t,e,t.getFactory()):e.isEmpty()?t.copy():(t.checkNotGeometryCollection(t),t.checkNotGeometryCollection(e),or.overlayOp(t,e,Lr.DIFFERENCE))},Lr.isResultOfOp=function(){if(2===arguments.length){var t=arguments[0],e=arguments[1],n=t.getLocation(0),i=t.getLocation(1);return Lr.isResultOfOp(n,i,e)}if(3===arguments.length){var r=arguments[0],o=arguments[1],s=arguments[2];switch(r===w.BOUNDARY&&(r=w.INTERIOR),o===w.BOUNDARY&&(o=w.INTERIOR),s){case Lr.INTERSECTION:return r===w.INTERIOR&&o===w.INTERIOR;case Lr.UNION:return r===w.INTERIOR||o===w.INTERIOR;case Lr.DIFFERENCE:return r===w.INTERIOR&&o!==w.INTERIOR;case Lr.SYMDIFFERENCE:return r===w.INTERIOR&&o!==w.INTERIOR||r!==w.INTERIOR&&o===w.INTERIOR}return!1}},Lr.INTERSECTION=1,Lr.UNION=2,Lr.DIFFERENCE=3,Lr.SYMDIFFERENCE=4;var br=function(){this._g=null,this._boundaryDistanceTolerance=null,this._linework=null,this._ptLocator=new Si,this._seg=new dn;var t=arguments[0],e=arguments[1];this._g=t,this._boundaryDistanceTolerance=e,this._linework=this.extractLinework(t)};br.prototype.isWithinToleranceOfBoundary=function(t){for(var e=0;e<this._linework.getNumGeometries();e++)for(var n=this._linework.getGeometryN(e).getCoordinateSequence(),i=0;i<n.size()-1;i++){n.getCoordinate(i,this._seg.p0),n.getCoordinate(i+1,this._seg.p1);if(this._seg.distance(t)<=this._boundaryDistanceTolerance)return!0}return!1},br.prototype.getLocation=function(t){return this.isWithinToleranceOfBoundary(t)?w.BOUNDARY:this._ptLocator.locate(t,this._g)},br.prototype.extractLinework=function(t){var e=new wr;t.apply(e);var n=e.getLinework(),i=_e.toLineStringArray(n);return t.getFactory().createMultiLineString(i)},br.prototype.interfaces_=function(){return[]},br.prototype.getClass=function(){return br};var wr=function(){this._linework=null,this._linework=new Nt};wr.prototype.getLinework=function(){return this._linework},wr.prototype.filter=function(t){if(t instanceof $t){var e=t;this._linework.add(e.getExteriorRing());for(var n=0;n<e.getNumInteriorRing();n++)this._linework.add(e.getInteriorRingN(n))}},wr.prototype.interfaces_=function(){return[Vt]},wr.prototype.getClass=function(){return wr};var Or=function(){this._g=null,this._doLeft=!0,this._doRight=!0;var t=arguments[0];this._g=t};Or.prototype.extractPoints=function(t,e,n){for(var i=t.getCoordinates(),r=0;r<i.length-1;r++)this.computeOffsetPoints(i[r],i[r+1],e,n)},Or.prototype.setSidesToGenerate=function(t,e){this._doLeft=t,this._doRight=e},Or.prototype.getPoints=function(t){for(var e=new Nt,n=Ci.getLines(this._g).iterator();n.hasNext();){var i=n.next();this.extractPoints(i,t,e)}return e},Or.prototype.computeOffsetPoints=function(t,e,n,i){var r=e.x-t.x,o=e.y-t.y,s=Math.sqrt(r*r+o*o),a=n*r/s,u=n*o/s,l=(e.x+t.x)/2,c=(e.y+t.y)/2;if(this._doLeft){var p=new C(l-u,c+a);i.add(p)}if(this._doRight){var h=new C(l+u,c-a);i.add(h)}},Or.prototype.interfaces_=function(){return[]},Or.prototype.getClass=function(){return Or};var Tr=function t(){this._geom=null,this._locFinder=null,this._location=new Array(3).fill(null),this._invalidLocation=null,this._boundaryDistanceTolerance=t.TOLERANCE,this._testCoords=new Nt;var e=arguments[0],n=arguments[1],i=arguments[2];this._boundaryDistanceTolerance=t.computeBoundaryDistanceTolerance(e,n),this._geom=[e,n,i],this._locFinder=[new br(this._geom[0],this._boundaryDistanceTolerance),new br(this._geom[1],this._boundaryDistanceTolerance),new br(this._geom[2],this._boundaryDistanceTolerance)]},Rr={TOLERANCE:{configurable:!0}};Tr.prototype.reportResult=function(t,e,n){Y.out.println("Overlay result invalid - A:"+w.toLocationSymbol(e[0])+" B:"+w.toLocationSymbol(e[1])+" expected:"+(n?"i":"e")+" actual:"+w.toLocationSymbol(e[2]))},Tr.prototype.isValid=function(t){this.addTestPts(this._geom[0]),this.addTestPts(this._geom[1]);var e=this.checkValid(t);return e},Tr.prototype.checkValid=function(){if(1===arguments.length){for(var t=arguments[0],e=0;e<this._testCoords.size();e++){var n=this._testCoords.get(e);if(!this.checkValid(t,n))return this._invalidLocation=n,!1}return!0}if(2===arguments.length){var i=arguments[0],r=arguments[1];return this._location[0]=this._locFinder[0].getLocation(r),this._location[1]=this._locFinder[1].getLocation(r),this._location[2]=this._locFinder[2].getLocation(r),!!Tr.hasLocation(this._location,w.BOUNDARY)||this.isValidResult(i,this._location)}},Tr.prototype.addTestPts=function(t){var e=new Or(t);this._testCoords.addAll(e.getPoints(5*this._boundaryDistanceTolerance))},Tr.prototype.isValidResult=function(t,e){var n=Lr.isResultOfOp(e[0],e[1],t),i=!(n^e[2]===w.INTERIOR);return i||this.reportResult(t,e,n),i},Tr.prototype.getInvalidLocation=function(){return this._invalidLocation},Tr.prototype.interfaces_=function(){return[]},Tr.prototype.getClass=function(){return Tr},Tr.hasLocation=function(t,e){for(var n=0;n<3;n++)if(t[n]===e)return!0;return!1},Tr.computeBoundaryDistanceTolerance=function(t,e){return Math.min(Ji.computeSizeBasedSnapTolerance(t),Ji.computeSizeBasedSnapTolerance(e))},Tr.isValid=function(t,e,n,i){return new Tr(t,e,i).isValid(n)},Rr.TOLERANCE.get=function(){return 1e-6},Object.defineProperties(Tr,Rr);var Pr=function t(e){this._geomFactory=null,this._skipEmpty=!1,this._inputGeoms=null,this._geomFactory=t.extractFactory(e),this._inputGeoms=e};Pr.prototype.extractElements=function(t,e){if(null===t)return null;for(var n=0;n<t.getNumGeometries();n++){var i=t.getGeometryN(n);this._skipEmpty&&i.isEmpty()||e.add(i)}},Pr.prototype.combine=function(){for(var t=new Nt,e=this._inputGeoms.iterator();e.hasNext();){var n=e.next();this.extractElements(n,t)}return 0===t.size()?null!==this._geomFactory?this._geomFactory.createGeometryCollection(null):null:this._geomFactory.buildGeometry(t)},Pr.prototype.interfaces_=function(){return[]},Pr.prototype.getClass=function(){return Pr},Pr.combine=function(){if(1===arguments.length){var t=arguments[0];return new Pr(t).combine()}if(2===arguments.length){var e=arguments[0],n=arguments[1];return new Pr(Pr.createList(e,n)).combine()}if(3===arguments.length){var i=arguments[0],r=arguments[1],o=arguments[2];return new Pr(Pr.createList(i,r,o)).combine()}},Pr.extractFactory=function(t){return t.isEmpty()?null:t.iterator().next().getFactory()},Pr.createList=function(){if(2===arguments.length){var t=arguments[0],e=arguments[1],n=new Nt;return n.add(t),n.add(e),n}if(3===arguments.length){var i=arguments[0],r=arguments[1],o=arguments[2],s=new Nt;return s.add(i),s.add(r),s.add(o),s}};var Dr=function(){this._inputPolys=null,this._geomFactory=null;var t=arguments[0];this._inputPolys=t,null===this._inputPolys&&(this._inputPolys=new Nt)},Mr={STRTREE_NODE_CAPACITY:{configurable:!0}};Dr.prototype.reduceToGeometries=function(t){for(var e=new Nt,n=t.iterator();n.hasNext();){var i=n.next(),r=null;T(i,xt)?r=this.unionTree(i):i instanceof ct&&(r=i),e.add(r)}return e},Dr.prototype.extractByEnvelope=function(t,e,n){for(var i=new Nt,r=0;r<e.getNumGeometries();r++){var o=e.getGeometryN(r);o.getEnvelopeInternal().intersects(t)?i.add(o):n.add(o)}return this._geomFactory.buildGeometry(i)},Dr.prototype.unionOptimized=function(t,e){var n=t.getEnvelopeInternal(),i=e.getEnvelopeInternal();if(!n.intersects(i)){return Pr.combine(t,e)}if(t.getNumGeometries()<=1&&e.getNumGeometries()<=1)return this.unionActual(t,e);var r=n.intersection(i);return this.unionUsingEnvelopeIntersection(t,e,r)},Dr.prototype.union=function(){if(null===this._inputPolys)throw new Error("union() method cannot be called twice");if(this._inputPolys.isEmpty())return null;this._geomFactory=this._inputPolys.iterator().next().getFactory();for(var t=new sn(Dr.STRTREE_NODE_CAPACITY),e=this._inputPolys.iterator();e.hasNext();){var n=e.next();t.insert(n.getEnvelopeInternal(),n)}this._inputPolys=null;var i=t.itemsTree();return this.unionTree(i)},Dr.prototype.binaryUnion=function(){if(1===arguments.length){var t=arguments[0];return this.binaryUnion(t,0,t.size())}if(3===arguments.length){var e=arguments[0],n=arguments[1],i=arguments[2];if(i-n<=1){var r=Dr.getGeometry(e,n);return this.unionSafe(r,null)}if(i-n==2)return this.unionSafe(Dr.getGeometry(e,n),Dr.getGeometry(e,n+1));var o=Math.trunc((i+n)/2),s=this.binaryUnion(e,n,o),a=this.binaryUnion(e,o,i);return this.unionSafe(s,a)}},Dr.prototype.repeatedUnion=function(t){for(var e=null,n=t.iterator();n.hasNext();){var i=n.next();e=null===e?i.copy():e.union(i)}return e},Dr.prototype.unionSafe=function(t,e){return null===t&&null===e?null:null===t?e.copy():null===e?t.copy():this.unionOptimized(t,e)},Dr.prototype.unionActual=function(t,e){return Dr.restrictToPolygons(t.union(e))},Dr.prototype.unionTree=function(t){var e=this.reduceToGeometries(t);return this.binaryUnion(e)},Dr.prototype.unionUsingEnvelopeIntersection=function(t,e,n){var i=new Nt,r=this.extractByEnvelope(n,t,i),o=this.extractByEnvelope(n,e,i),s=this.unionActual(r,o);i.add(s);return Pr.combine(i)},Dr.prototype.bufferUnion=function(){if(1===arguments.length){var t=arguments[0];return t.get(0).getFactory().buildGeometry(t).buffer(0)}if(2===arguments.length){var e=arguments[0],n=arguments[1];return e.getFactory().createGeometryCollection([e,n]).buffer(0)}},Dr.prototype.interfaces_=function(){return[]},Dr.prototype.getClass=function(){return Dr},Dr.restrictToPolygons=function(t){if(T(t,Zt))return t;var e=Ni.getPolygons(t);return 1===e.size()?e.get(0):t.getFactory().createMultiPolygon(_e.toPolygonArray(e))},Dr.getGeometry=function(t,e){return e>=t.size()?null:t.get(e)},Dr.union=function(t){return new Dr(t).union()},Mr.STRTREE_NODE_CAPACITY.get=function(){return 4},Object.defineProperties(Dr,Mr);var Ar=function(){};Ar.prototype.interfaces_=function(){return[]},Ar.prototype.getClass=function(){return Ar},Ar.union=function(t,e){if(t.isEmpty()||e.isEmpty()){if(t.isEmpty()&&e.isEmpty())return Lr.createEmptyResult(Lr.UNION,t,e,t.getFactory());if(t.isEmpty())return e.copy();if(e.isEmpty())return t.copy()}return t.checkNotGeometryCollection(t),t.checkNotGeometryCollection(e),or.overlayOp(t,e,Lr.UNION)},t.GeoJSONReader=Ne,t.GeoJSONWriter=Ce,t.OverlayOp=Lr,t.UnionOp=Ar,t.BufferOp=di,Object.defineProperty(t,"__esModule",{value:!0})});
 
-},{}],300:[function(require,module,exports){
+},{}],308:[function(require,module,exports){
 // ## twig.async.js
 //
 // This file handles asynchronous tasks within twig.
@@ -51287,7 +55866,7 @@ module.exports = function (Twig) {
     return Twig;
 };
 
-},{}],301:[function(require,module,exports){
+},{}],309:[function(require,module,exports){
 // ## twig.compiler.js
 //
 // This file handles compiling templates into JS
@@ -51338,7 +55917,7 @@ module.exports = function (Twig) {
     return Twig;
 };
 
-},{}],302:[function(require,module,exports){
+},{}],310:[function(require,module,exports){
 // ## twig.core.js
 //
 // This file handles template level tokenizing, compiling and parsing.
@@ -51666,9 +56245,8 @@ module.exports = function (Twig) {
      */
     Twig.tokenize = function (template) {
         const tokens = [];
-        // An offset for reporting errors locations in the template.
-        let errorOffset = 0;
-
+        // An offset for reporting errors locations and the position of the nodes in the template.
+        let currentPosition = 0;
         // The start and type of the first token found in the template.
         let foundToken = null;
         // The end position of the matched token.
@@ -51684,7 +56262,11 @@ module.exports = function (Twig) {
                 // No more tokens -> add the rest of the template as a raw-type token
                 tokens.push({
                     type: Twig.token.type.raw,
-                    value: template
+                    value: template,
+                    position: {
+                        start: currentPosition,
+                        end: currentPosition + foundToken.position
+                    }
                 });
                 template = '';
             } else {
@@ -51692,21 +56274,29 @@ module.exports = function (Twig) {
                 if (foundToken.position > 0) {
                     tokens.push({
                         type: Twig.token.type.raw,
-                        value: template.slice(0, Math.max(0, foundToken.position))
+                        value: template.slice(0, Math.max(0, foundToken.position)),
+                        position: {
+                            start: currentPosition,
+                            end: currentPosition + Math.max(0, foundToken.position)
+                        }
                     });
                 }
 
                 template = template.slice(foundToken.position + foundToken.def.open.length);
-                errorOffset += foundToken.position + foundToken.def.open.length;
+                currentPosition += foundToken.position + foundToken.def.open.length;
 
                 // Find the end of the token
-                end = Twig.token.findEnd(template, foundToken.def, errorOffset);
+                end = Twig.token.findEnd(template, foundToken.def, currentPosition);
 
                 Twig.log.trace('Twig.tokenize: ', 'Token ends at ', end);
 
                 tokens.push({
                     type: foundToken.def.type,
-                    value: template.slice(0, Math.max(0, end)).trim()
+                    value: template.slice(0, Math.max(0, end)).trim(),
+                    position: {
+                        start: currentPosition - foundToken.def.open.length,
+                        end: currentPosition + end + foundToken.def.close.length
+                    }
                 });
 
                 if (template.slice(end + foundToken.def.close.length, end + foundToken.def.close.length + 1) === '\n') {
@@ -51726,7 +56316,7 @@ module.exports = function (Twig) {
                 template = template.slice(end + foundToken.def.close.length);
 
                 // Increment the position in the template
-                errorOffset += end + foundToken.def.close.length;
+                currentPosition += end + foundToken.def.close.length;
             }
         }
 
@@ -51775,6 +56365,7 @@ module.exports = function (Twig) {
             const compileLogic = function (token) {
                 // Compile the logic token
                 logicToken = Twig.logic.compile.call(self, token);
+                logicToken.position = token.position;
 
                 type = logicToken.type;
                 open = Twig.logic.handler[type].open;
@@ -51799,8 +56390,13 @@ module.exports = function (Twig) {
 
                     tokOutput = {
                         type: Twig.token.type.logic,
-                        token: prevToken
+                        token: prevToken,
+                        position: {
+                            open: prevToken.position,
+                            close: token.position
+                        }
                     };
+
                     if (stack.length > 0) {
                         intermediateOutput.push(tokOutput);
                     } else {
@@ -51827,7 +56423,8 @@ module.exports = function (Twig) {
                 } else if (open !== undefined && open) {
                     tokOutput = {
                         type: Twig.token.type.logic,
-                        token: logicToken
+                        token: logicToken,
+                        position: logicToken.position
                     };
                     // Standalone token (like {% set ... %}
                     if (stack.length > 0) {
@@ -52799,7 +57396,7 @@ module.exports = function (Twig) {
     return Twig;
 };
 
-},{}],303:[function(require,module,exports){
+},{}],311:[function(require,module,exports){
 // ## twig.exports.js
 //
 // This file provides extension points and other hooks into the twig functionality.
@@ -53040,7 +57637,7 @@ module.exports = function (Twig) {
     return Twig;
 };
 
-},{}],304:[function(require,module,exports){
+},{}],312:[function(require,module,exports){
 // ## twig.expression.js
 //
 // This file handles tokenizing, compiling and parsing expressions.
@@ -53255,9 +57852,9 @@ module.exports = function (Twig) {
         },
         {
             type: Twig.expression.type.operator.binary,
-            // Match any of ??, ?:, +, *, /, -, %, ~, <, <=, >, >=, !=, ==, **, ?, :, and, b-and, or, b-or, b-xor, in, not in
+            // Match any of ??, ?:, +, *, /, -, %, ~, <=>, <, <=, >, >=, !=, ==, **, ?, :, and, b-and, or, b-or, b-xor, in, not in
             // and, or, in, not in, matches, starts with, ends with can be followed by a space or parenthesis
-            regex: /(^\?\?|^\?:|^(b-and)|^(b-or)|^(b-xor)|^[+\-~%?]|^[:](?!\d\])|^[!=]==?|^[!<>]=?|^\*\*?|^\/\/?|^(and)[(|\s+]|^(or)[(|\s+]|^(in)[(|\s+]|^(not in)[(|\s+]|^(matches)|^(starts with)|^(ends with)|^\.\.)/,
+            regex: /(^\?\?|^\?:|^(b-and)|^(b-or)|^(b-xor)|^[+\-~%?]|^(<=>)|^[:](?!\d\])|^[!=]==?|^[!<>]=?|^\*\*?|^\/\/?|^(and)[(|\s+]|^(or)[(|\s+]|^(in)[(|\s+]|^(not in)[(|\s+]|^(matches)|^(starts with)|^(ends with)|^\.\.)/,
             next: Twig.expression.set.expressions,
             transform(match, tokens) {
                 switch (match[0]) {
@@ -53619,14 +58216,14 @@ module.exports = function (Twig) {
         },
         {
             type: Twig.expression.type.slice,
-            regex: /^\[(\d*:\d*)\]/,
+            regex: /^\[(-?\w*:-?\w*)\]/,
             next: Twig.expression.set.operationsExtended,
             compile(token, stack, output) {
                 const sliceRange = token.match[1].split(':');
 
                 // SliceStart can be undefined when we pass parameters to the slice filter later
-                const sliceStart = (sliceRange[0]) ? parseInt(sliceRange[0], 10) : undefined;
-                const sliceEnd = (sliceRange[1]) ? parseInt(sliceRange[1], 10) : undefined;
+                const sliceStart = sliceRange[0];
+                const sliceEnd = sliceRange[1];
 
                 token.value = 'slice';
                 token.params = [sliceStart, sliceEnd];
@@ -53639,10 +58236,38 @@ module.exports = function (Twig) {
 
                 output.push(token);
             },
-            parse(token, stack) {
+            parse(token, stack, context) {
                 const input = stack.pop();
-                const {params} = token;
+                let {params} = token;
                 const state = this;
+
+                if (parseInt(params[0], 10).toString() === params[0]) {
+                    params[0] = parseInt(params[0], 10);
+                } else {
+                    const value = context[params[0]];
+                    if (state.template.options.strictVariables && value === undefined) {
+                        throw new Twig.Error('Variable "' + params[0] + '" does not exist.');
+                    }
+
+                    params[0] = value;
+                }
+
+                if (params[1]) {
+                    if (parseInt(params[1], 10).toString() === params[1]) {
+                        params[1] = parseInt(params[1], 10);
+                    } else {
+                        const value = context[params[1]];
+                        if (state.template.options.strictVariables && value === undefined) {
+                            throw new Twig.Error('Variable "' + params[1] + '" does not exist.');
+                        }
+
+                        if (value === undefined) {
+                            params = [params[0]];
+                        } else {
+                            params[1] = value;
+                        }
+                    }
+                }
 
                 stack.push(Twig.filter.call(state, token.value, input, params));
             }
@@ -53956,7 +58581,7 @@ module.exports = function (Twig) {
         },
         {
             type: Twig.expression.type.key.brackets,
-            regex: /^\[([^\]:]*)\]/,
+            regex: /^\[([^\]]*)\]/,
             next: Twig.expression.set.operationsExtended.concat([
                 Twig.expression.type.parameter.start
             ]),
@@ -54161,11 +58786,12 @@ module.exports = function (Twig) {
     /**
      * Break an expression into tokens defined in Twig.expression.definitions.
      *
-     * @param {string} expression The string to tokenize.
+     * @param {Object} rawToken The string to tokenize.
      *
      * @return {Array} An array of tokens.
      */
-    Twig.expression.tokenize = function (expression) {
+    Twig.expression.tokenize = function (rawToken) {
+        let expression = rawToken.value;
         const tokens = [];
         // Keep an offset of the location in the expression for error messages.
         let expOffset = 0;
@@ -54213,11 +58839,17 @@ module.exports = function (Twig) {
 
             invalidMatches = [];
 
-            tokens.push({
+            const token = {
                 type,
                 value: match[0],
                 match
-            });
+            };
+
+            if (rawToken.position) {
+                token.position = rawToken.position;
+            }
+
+            tokens.push(token);
 
             matchFound = true;
             next = tokenNext;
@@ -54283,15 +58915,14 @@ module.exports = function (Twig) {
      * @return {Object} The compiled token.
      */
     Twig.expression.compile = function (rawToken) {
-        const expression = rawToken.value;
         // Tokenize expression
-        const tokens = Twig.expression.tokenize(expression);
+        const tokens = Twig.expression.tokenize(rawToken);
         let token = null;
         const output = [];
         const stack = [];
         let tokenTemplate = null;
 
-        Twig.log.trace('Twig.expression.compile: ', 'Compiling ', expression);
+        Twig.log.trace('Twig.expression.compile: ', 'Compiling ', rawToken.value);
 
         // Push tokens into RPN stack using the Shunting-yard algorithm
         // See http://en.wikipedia.org/wiki/Shunting_yard_algorithm
@@ -54403,7 +59034,7 @@ module.exports = function (Twig) {
     return Twig;
 };
 
-},{"./twig.expression.operator":305}],305:[function(require,module,exports){
+},{"./twig.expression.operator":313}],313:[function(require,module,exports){
 // ## twig.expression.operator.js
 //
 // This file handles operator lookups and parsing.
@@ -54495,6 +59126,11 @@ module.exports = function (Twig) {
 
             case '==':
             case '!=':
+                token.precidence = 9;
+                token.associativity = Twig.expression.operator.leftToRight;
+                break;
+
+            case '<=>':
                 token.precidence = 9;
                 token.associativity = Twig.expression.operator.leftToRight;
                 break;
@@ -54681,6 +59317,10 @@ module.exports = function (Twig) {
                 stack.push(!Twig.lib.boolval(b));
                 break;
 
+            case '<=>':
+                stack.push(a === b ? 0 : (a < b ? -1 : 1));
+                break;
+
             case '<':
                 stack.push(a < b);
                 break;
@@ -54771,13 +59411,13 @@ module.exports = function (Twig) {
     return Twig;
 };
 
-},{}],306:[function(require,module,exports){
+},{}],314:[function(require,module,exports){
 // ## twig.factory.js
 //
 // This file handles creating the Twig library
 module.exports = function factory() {
     const Twig = {
-        VERSION: '1.16.0'
+        VERSION: '1.17.1'
     };
 
     require('./twig.core')(Twig);
@@ -54801,7 +59441,7 @@ module.exports = function factory() {
     return Twig.exports;
 };
 
-},{"./twig.async":300,"./twig.compiler":301,"./twig.core":302,"./twig.exports":303,"./twig.expression":304,"./twig.filters":307,"./twig.functions":308,"./twig.lib":310,"./twig.loader.ajax":311,"./twig.loader.fs":312,"./twig.logic":313,"./twig.parser.source":314,"./twig.parser.twig":315,"./twig.path":316,"./twig.tests":317}],307:[function(require,module,exports){
+},{"./twig.async":308,"./twig.compiler":309,"./twig.core":310,"./twig.exports":311,"./twig.expression":312,"./twig.filters":315,"./twig.functions":316,"./twig.lib":318,"./twig.loader.ajax":319,"./twig.loader.fs":320,"./twig.logic":321,"./twig.parser.source":322,"./twig.parser.twig":323,"./twig.path":324,"./twig.tests":325}],315:[function(require,module,exports){
 // ## twig.filters.js
 //
 // This file handles parsing filters.
@@ -55448,9 +60088,13 @@ module.exports = function (Twig) {
             // Default to start of string
             const start = params[0] || 0;
             // Default to length of string
-            const length = params.length > 1 ? params[1] : value.length;
+            let length = params.length > 1 ? params[1] : value.length;
             // Handle negative start values
             const startIndex = start >= 0 ? start : Math.max(value.length + start, 0);
+            // Handle negative length values
+            if (length < 0) {
+                length = value.length - startIndex + length;
+            }
 
             if (Twig.lib.is('Array', value)) {
                 const output = [];
@@ -55644,7 +60288,7 @@ module.exports = function (Twig) {
     return Twig;
 };
 
-},{}],308:[function(require,module,exports){
+},{}],316:[function(require,module,exports){
 // ## twig.functions.js
 //
 // This file handles parsing filters.
@@ -55983,7 +60627,7 @@ module.exports = function (Twig) {
     return Twig;
 };
 
-},{}],309:[function(require,module,exports){
+},{}],317:[function(require,module,exports){
 /**
  * Twig.js
  *
@@ -55994,7 +60638,7 @@ module.exports = function (Twig) {
 
 module.exports = require('./twig.factory')();
 
-},{"./twig.factory":306}],310:[function(require,module,exports){
+},{"./twig.factory":314}],318:[function(require,module,exports){
 // ## twig.lib.js
 //
 // This file contains 3rd party libraries used within twig.
@@ -56068,7 +60712,7 @@ module.exports = function (Twig) {
     return Twig;
 };
 
-},{"locutus/php/datetime/date":84,"locutus/php/datetime/strtotime":85,"locutus/php/math/max":86,"locutus/php/math/min":87,"locutus/php/math/round":88,"locutus/php/strings/sprintf":89,"locutus/php/strings/strip_tags":90,"locutus/php/strings/vsprintf":91,"locutus/php/var/boolval":92}],311:[function(require,module,exports){
+},{"locutus/php/datetime/date":87,"locutus/php/datetime/strtotime":88,"locutus/php/math/max":89,"locutus/php/math/min":90,"locutus/php/math/round":91,"locutus/php/strings/sprintf":92,"locutus/php/strings/strip_tags":93,"locutus/php/strings/vsprintf":94,"locutus/php/var/boolval":95}],319:[function(require,module,exports){
 module.exports = function (Twig) {
     'use strict';
 
@@ -56123,7 +60767,7 @@ module.exports = function (Twig) {
     });
 };
 
-},{}],312:[function(require,module,exports){
+},{}],320:[function(require,module,exports){
 module.exports = function (Twig) {
     'use strict';
 
@@ -56206,7 +60850,7 @@ module.exports = function (Twig) {
     });
 };
 
-},{"fs":55,"path":293}],313:[function(require,module,exports){
+},{"fs":56,"path":301}],321:[function(require,module,exports){
 // ## twig.logic.js
 //
 // This file handles tokenizing, compiling and parsing logic tokens. {% ... %}
@@ -56331,7 +60975,7 @@ module.exports = function (Twig) {
              *  Format: {% elseif expression %}
              */
             type: Twig.logic.type.elseif,
-            regex: /^elseif\s?([^\s].*)$/,
+            regex: /^elseif\s*([^\s].*)$/,
             next: [
                 Twig.logic.type.else_,
                 Twig.logic.type.elseif,
@@ -57762,7 +62406,7 @@ module.exports = function (Twig) {
     return Twig;
 };
 
-},{}],314:[function(require,module,exports){
+},{}],322:[function(require,module,exports){
 module.exports = function (Twig) {
     'use strict';
 
@@ -57771,7 +62415,7 @@ module.exports = function (Twig) {
     });
 };
 
-},{}],315:[function(require,module,exports){
+},{}],323:[function(require,module,exports){
 module.exports = function (Twig) {
     'use strict';
 
@@ -57780,7 +62424,7 @@ module.exports = function (Twig) {
     });
 };
 
-},{}],316:[function(require,module,exports){
+},{}],324:[function(require,module,exports){
 // ## twig.path.js
 //
 // This file handles path parsing
@@ -57899,7 +62543,7 @@ module.exports = function (Twig) {
     return Twig;
 };
 
-},{"path":293}],317:[function(require,module,exports){
+},{"path":301}],325:[function(require,module,exports){
 // ## twig.tests.js
 //
 // This file handles expression tests. (is empty, is not defined, etc...)
@@ -57907,6 +62551,12 @@ module.exports = function (Twig) {
     'use strict';
     Twig.tests = {
         empty(value) {
+            // Handle boolean true
+            if (value === true) {
+                return false;
+            }
+
+            // Handle null or undefined
             if (value === null || value === undefined) {
                 return true;
             }
@@ -57982,7 +62632,7 @@ module.exports = function (Twig) {
     return Twig;
 };
 
-},{}],318:[function(require,module,exports){
+},{}],326:[function(require,module,exports){
 "use strict";
 
 var isPrototype = require("../prototype/is");
@@ -58003,7 +62653,7 @@ module.exports = function (value) {
 	return !isPrototype(value);
 };
 
-},{"../prototype/is":321}],319:[function(require,module,exports){
+},{"../prototype/is":329}],327:[function(require,module,exports){
 "use strict";
 
 var isValue = require("../value/is");
@@ -58016,7 +62666,7 @@ module.exports = function (value) {
 	return hasOwnProperty.call(possibleTypes, typeof value);
 };
 
-},{"../value/is":322}],320:[function(require,module,exports){
+},{"../value/is":330}],328:[function(require,module,exports){
 "use strict";
 
 var isFunction = require("../function/is");
@@ -58029,7 +62679,7 @@ module.exports = function (value) {
 	return true;
 };
 
-},{"../function/is":318}],321:[function(require,module,exports){
+},{"../function/is":326}],329:[function(require,module,exports){
 "use strict";
 
 var isObject = require("../object/is");
@@ -58044,7 +62694,7 @@ module.exports = function (value) {
 	}
 };
 
-},{"../object/is":319}],322:[function(require,module,exports){
+},{"../object/is":327}],330:[function(require,module,exports){
 "use strict";
 
 // ES3 safe
@@ -58052,7 +62702,36 @@ var _undefined = void 0;
 
 module.exports = function (value) { return value !== _undefined && value !== null; };
 
-},{}],323:[function(require,module,exports){
+},{}],331:[function(require,module,exports){
+/*global define */
+
+// Detecting data URLs
+// data URI - MDN https://developer.mozilla.org/en-US/docs/data_URIs
+// The "data" URL scheme: http://tools.ietf.org/html/rfc2397
+// Valid URL Characters: http://tools.ietf.org/html/rfc2396#section2
+
+(function (root, factory) {
+  // https://github.com/gotwarlost/istanbul/blob/master/ignoring-code-for-coverage.md#ignore-a-umd-wrapper
+  /* istanbul ignore next */
+  if (typeof define === 'function' && define.amd) {
+    define([], factory);
+  } else if (typeof module === 'object' && module.exports) {
+    module.exports = factory();
+  } else {
+    root.validDataUrl = factory();
+  }
+}(this, function () {
+  'use strict';
+
+  function validDataUrl(s) {
+    return validDataUrl.regex.test((s || '').trim());
+  }
+  validDataUrl.regex = /^data:([a-z]+\/[a-z0-9-+.]+(;[a-z0-9-.!#$%*+.{}|~`]+=[a-z0-9-.!#$%*+.{}()_|~`]+)*)?(;base64)?,([a-z0-9!$&',()*+;=\-._~:@\/?%\s<>]*?)$/i;
+
+  return validDataUrl;
+}));
+
+},{}],332:[function(require,module,exports){
 // weightSort(arr, [options | weightKey])
 // Parameters:
 // arr ... an array of form [ [ weight, var], ... ]
@@ -58203,7 +62882,7 @@ if (typeof window !== 'undefined') {
   window.weight_sort = weightSort // legacy
 }
 
-},{}],324:[function(require,module,exports){
+},{}],333:[function(require,module,exports){
 /* global L */
 
 const isTrue = require('./isTrue')
@@ -58340,7 +63019,7 @@ class DecoratorPattern {
 
 module.exports = DecoratorPattern
 
-},{"./isTrue":335,"./parseLength":336,"./styleToLeaflet":339}],325:[function(require,module,exports){
+},{"./isTrue":344,"./parseLength":345,"./styleToLeaflet":348}],334:[function(require,module,exports){
 const SublayerFeature = require('./SublayerFeature')
 
 class MemberFeature extends SublayerFeature {
@@ -58381,7 +63060,7 @@ class MemberFeature extends SublayerFeature {
 
 module.exports = MemberFeature
 
-},{"./SublayerFeature":332}],326:[function(require,module,exports){
+},{"./SublayerFeature":341}],335:[function(require,module,exports){
 const Sublayer = require('./Sublayer')
 const MemberFeature = require('./MemberFeature')
 
@@ -58420,9 +63099,9 @@ class Memberlayer extends Sublayer {
 
 module.exports = Memberlayer
 
-},{"./MemberFeature":325,"./Sublayer":331}],327:[function(require,module,exports){
+},{"./MemberFeature":334,"./Sublayer":340}],336:[function(require,module,exports){
 var css = ".leaflet-popup-content {\n  max-height: 250px;\n  overflow: auto;\n}\n.leaflet-popup-content pre {\n  font-size: 8px;\n}\n.overpass-layer-icon > img,\n.overpass-layer-icon > svg {\n  display: block;\n}\n.overpass-layer-icon div.sign {\n  position: relative;\n  font-size: 12px;\n  text-align: center;\n  transform: translate(-50%, -50%);\n  display: flex;\n  justify-content: center;\n}\n/*  top: -37px; */\n"; (require("browserify-css").createStyle(css, { "href": "src/OverpassLayer.css" }, { "insertAt": "bottom" })); module.exports = css;
-},{"browserify-css":56}],328:[function(require,module,exports){
+},{"browserify-css":57}],337:[function(require,module,exports){
 (function (global){(function (){
 /* eslint camelcase: 0 */
 require('./OverpassLayer.css')
@@ -58652,9 +63331,11 @@ class OverpassLayer {
       this.lastFilter = this.filter
     }
 
+    // update global twig data
+    this.calcGlobalTwigData()
+
     // When zoom level changed, update visible objects
     if (this.lastZoom !== this.map.getZoom()) {
-      this.calcGlobalTwigData()
       for (const k in this.subLayers) {
         this.subLayers[k].zoomChange()
       }
@@ -58806,9 +63487,9 @@ OverpassLayer.twig = twig
 module.exports = OverpassLayer
 
 }).call(this)}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./Memberlayer":326,"./OverpassLayer.css":327,"./Sublayer":331,"./compileFeature":333,"./compileTemplate":334,"@turf/intersect":31,"boundingbox":54,"event-emitter":76,"html-escape":80,"overpass-frontend":232,"twig":309}],329:[function(require,module,exports){
+},{"./Memberlayer":335,"./OverpassLayer.css":336,"./Sublayer":340,"./compileFeature":342,"./compileTemplate":343,"@turf/intersect":31,"boundingbox":55,"event-emitter":78,"html-escape":82,"overpass-frontend":235,"twig":317}],338:[function(require,module,exports){
 var css = "ul.overpass-layer-list {\n  margin-top: 0;\n  margin-bottom: 0;\n  padding-left: 0;\n}\nul.overpass-layer-list > li {\n  position: relative;\n  list-style: none;\n  min-height: 30px;\n  padding-left: 40px;\n}\nul.overpass-layer-list > li.selected {\n  background: #e0e0e0;\n}\nul.overpass-layer-list > li > .marker {\n  position: absolute;\n  margin-left: -35px;\n  width: 30px;\n  height: 30px;\n  text-align: center;\n  display: block;\n  color: black;\n  text-decoration: none;\n}\n\nul.overpass-layer-list > li > .marker > .sign {\n  text-align: center;\n  position: absolute;\n  top: 3px;\n  font-size: 15px;\n  left: 0;\n  right: 0;\n  z-index: 1;\n  display: inline-block;\n}\nul.overpass-layer-list > li > .content > a.title {\n  display: inline-block;\n  color: black;\n  text-decoration: none;\n}\nul.overpass-layer-list > li > .content > a.title:hover,\nul.overpass-layer-list > li > .content > a.title:active {\n  text-decoration: underline;\n}\nul.overpass-layer-list > li > .content > div.description {\n  font-style: italic;\n  color: #707070;\n  float: right;\n  text-align: right;\n}\nul.overpass-layer-list > li:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n.hoverable {\n  cursor: pointer;\n}\n"; (require("browserify-css").createStyle(css, { "href": "src/OverpassLayerList.css" }, { "insertAt": "bottom" })); module.exports = css;
-},{"browserify-css":56}],330:[function(require,module,exports){
+},{"browserify-css":57}],339:[function(require,module,exports){
 /* eslint camelcase: 0 */
 
 require('./OverpassLayerList.css')
@@ -58860,7 +63541,7 @@ class OverpassLayerList {
       layer.on('update', (ob, data) => this.updateObject(data))
       layer.on('remove', (ob, data) => this.delObject(data))
       layer.on('selectObject', (ob, data) => {
-        this.selectedId = ob.id
+        this.selectedId = ob.id + ':' + ob.sublayer_id
         this.updateObject(data)
       })
       layer.on('unselectObject', (ob, data) => {
@@ -58881,6 +63562,8 @@ class OverpassLayerList {
   }
 
   addObject (ob) {
+    const id = ob.id + ':' + ob.sublayer_id
+
     const listExclude = isTrue(ob.data[this.options.prefix + 'Exclude']) ||
       (!(this.options.prefix + 'Exclude' in ob.data) && isTrue(ob.data.exclude))
 
@@ -58888,17 +63571,17 @@ class OverpassLayerList {
       return
     }
 
-    if (ob.id in this.items) { // already added
+    if (id in this.items) { // already added
       return
     }
 
     const div = document.createElement('li')
 
-    if (this.selectedId === ob.id) {
+    if (this.selectedId === id) {
       div.classList.add('selected')
     }
 
-    this.items[ob.id] = div
+    this.items[id] = div
     ob[this.options.prefix + 'Item'] = div
 
     // CONTENT
@@ -58951,10 +63634,12 @@ class OverpassLayerList {
   }
 
   updateObject (ob) {
+    const id = ob.id + ':' + ob.sublayer_id
+
     const listExclude = isTrue(ob.data[this.options.prefix + 'Exclude']) ||
       (!(this.options.prefix + 'Exclude' in ob.data) && isTrue(ob.data.exclude))
 
-    if (!(ob.id in this.items) && !listExclude) {
+    if (!(id in this.items) && !listExclude) {
       return this.addObject(ob)
     }
 
@@ -58962,9 +63647,9 @@ class OverpassLayerList {
       return this.delObject(ob)
     }
 
-    const div = this.items[ob.id]
+    const div = this.items[id]
 
-    if (this.selectedId === ob.id) {
+    if (this.selectedId === id) {
       div.classList.add('selected')
     } else {
       div.classList.remove('selected')
@@ -58981,13 +63666,15 @@ class OverpassLayerList {
   }
 
   delObject (ob) {
-    const div = this.items[ob.id]
+    const id = ob.id + ':' + ob.sublayer_id
+
+    const div = this.items[id]
 
     if (div) {
       this.dom.removeChild(div)
     }
 
-    delete this.items[ob.id]
+    delete this.items[id]
     delete ob[this.options.prefix + 'Item']
   }
 
@@ -59006,7 +63693,7 @@ class OverpassLayerList {
 
 module.exports = OverpassLayerList
 
-},{"./OverpassLayerList.css":329,"./isTrue":335}],331:[function(require,module,exports){
+},{"./OverpassLayerList.css":338,"./isTrue":344}],340:[function(require,module,exports){
 (function (global){(function (){
 /* eslint-disable new-cap */
 const ee = require('event-emitter')
@@ -59497,6 +64184,10 @@ class Sublayer {
       })
     }
 
+    // Fix LeafletJS ^1.8. _source points to wrong object, so it won't open on
+    // FeatureGroups (e.g. Multipolygons)
+    ob.feature._popup._source = ob.feature
+
     // When object is quite smaller than current view, show popup on feature
     const viewBounds = new BoundingBox(this.map.getBounds())
     const obBounds = new BoundingBox(ob.object.bounds)
@@ -59531,7 +64222,7 @@ ee(Sublayer.prototype)
 module.exports = Sublayer
 
 }).call(this)}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./DecoratorPattern":324,"./SublayerFeature":332,"boundingbox":54,"event-emitter":76,"nearest-point-on-geometry":220,"overpass-frontend":232}],332:[function(require,module,exports){
+},{"./DecoratorPattern":333,"./SublayerFeature":341,"boundingbox":55,"event-emitter":78,"nearest-point-on-geometry":223,"overpass-frontend":235}],341:[function(require,module,exports){
 (function (global){(function (){
 /* global L:false */
 const styleToLeaflet = require('./styleToLeaflet')
@@ -59596,6 +64287,10 @@ class SublayerFeature {
       if (m) {
         const styleId = typeof m[2] === 'undefined' ? 'default' : m[2]
         const style = styleToLeaflet(objectData[k], this.sublayer.master.globalTwigData)
+
+        if (!('attribution' in style)) {
+          style.attribution = this.sublayer.options.attribution
+        }
 
         if (this.features[styleId]) {
           this.features[styleId].setStyle(style)
@@ -59945,7 +64640,7 @@ class SublayerFeature {
 module.exports = SublayerFeature
 
 }).call(this)}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./isTrue":335,"./pointOnFeature":337,"./strToStyle":338,"./styleToLeaflet":339}],333:[function(require,module,exports){
+},{"./isTrue":344,"./pointOnFeature":346,"./strToStyle":347,"./styleToLeaflet":348}],342:[function(require,module,exports){
 const compileTemplate = require('./compileTemplate')
 
 function compileFeature (feature, twig, options = {}) {
@@ -59989,7 +64684,7 @@ function compileFeature (feature, twig, options = {}) {
 
 module.exports = compileFeature
 
-},{"./compileTemplate":334}],334:[function(require,module,exports){
+},{"./compileTemplate":343}],343:[function(require,module,exports){
 module.exports = function compileTemplate (template, twig, options = {}) {
   if (typeof template === 'string' && template.search('{') !== -1) {
     let result
@@ -60015,7 +64710,7 @@ module.exports = function compileTemplate (template, twig, options = {}) {
   return template
 }
 
-},{}],335:[function(require,module,exports){
+},{}],344:[function(require,module,exports){
 function isTrue (value) {
   if (value === null || typeof value === 'undefined') {
     return false
@@ -60045,7 +64740,7 @@ function isTrue (value) {
 window.isTrue = isTrue
 module.exports = isTrue
 
-},{}],336:[function(require,module,exports){
+},{}],345:[function(require,module,exports){
 module.exports = function parseLength (value, metersPerPixel) {
   const m = ('' + value).trim().match(/^([+-]?[0-9]+(?:\.[0-9]+)?)\s*(px|m|%)$/)
 
@@ -60064,7 +64759,7 @@ module.exports = function parseLength (value, metersPerPixel) {
   return parseFloat(value)
 }
 
-},{}],337:[function(require,module,exports){
+},{}],346:[function(require,module,exports){
 const turf = {
   along: require('@turf/along').default,
   length: require('@turf/length').default,
@@ -60089,7 +64784,7 @@ module.exports = function pointOnFeature (ob, leafletFeatureOptions) {
   }
 }
 
-},{"@turf/along":3,"@turf/length":33,"@turf/point-on-feature":43}],338:[function(require,module,exports){
+},{"@turf/along":3,"@turf/length":33,"@turf/point-on-feature":43}],347:[function(require,module,exports){
 function strToStyle (style) {
   try {
     return JSON.parse(style)
@@ -60118,7 +64813,7 @@ function strToStyle (style) {
 
 module.exports = strToStyle
 
-},{}],339:[function(require,module,exports){
+},{}],348:[function(require,module,exports){
 const isTrue = require('./isTrue')
 const parseLength = require('./parseLength')
 
@@ -60260,4 +64955,4 @@ function styleToLeaflet (style, twigData) {
 
 module.exports = styleToLeaflet
 
-},{"./isTrue":335,"./parseLength":336}]},{},[1]);
+},{"./isTrue":344,"./parseLength":345}]},{},[1]);
